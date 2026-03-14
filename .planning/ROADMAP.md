@@ -11,8 +11,8 @@
 
 | Phase | Status | Plans | Progress |
 |-------|--------|-------|----------|
-| 1 | ◆ | 0/3 | 0% |
-| 2 | ○ | 0/0 | 0% |
+| 1 | ✓ | 3/3 | 100% |
+| 2 | ○ | 0/4 | 0% |
 | 3 | ○ | 0/0 | 0% |
 | 4 | ○ | 0/0 | 0% |
 | 5 | ○ | 0/0 | 0% |
@@ -28,7 +28,7 @@
 
 **预计时长：** 2-3 weeks
 
-**Plans:** 3 个计划
+**Plans:** 3/3 plans complete
 
 **关联需求：**
 - CORE-01, CORE-02, CORE-03, CORE-04
@@ -36,9 +36,9 @@
 - AIRE-02, AIRE-04
 
 Plans:
-- [ ] 01-01-PLAN.md — Go 项目骨架与数据库 Schema
-- [ ] 01-02-PLAN.md — RESTful API 框架
-- [ ] 01-03-PLAN.md — 图片扫描、监控与异步任务
+- [x] 01-01-PLAN.md — Go 项目骨架与数据库 Schema
+- [x] 01-02-PLAN.md — RESTful API 框架
+- [x] 01-03-PLAN.md — 图片扫描、监控与异步任务
 
 **成功标准：**
 1. Go 后端项目结构初始化完成，可编译运行
@@ -68,9 +68,17 @@ Plans:
 
 **预计时长：** 2-3 weeks
 
+**Plans:** 4 plans
+
 **关联需求：**
 - IMPT-05, IMPT-06, IMPT-07
 - GALR-01, GALR-02, GALR-03, GALR-04, GALR-05
+
+Plans:
+- [ ] 02-01-PLAN.md — 缩略图生成服务与 COS 集成
+- [ ] 02-02-PLAN.md — 感知哈希计算服务
+- [ ] 02-03-PLAN.md — 图片浏览 API 端点
+- [ ] 02-04-PLAN.md — Flutter 图片浏览界面
 
 **成功标准：**
 1. 缩略图生成服务可批量处理导入图片
