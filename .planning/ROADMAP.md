@@ -1,128 +1,142 @@
-# Roadmap: ACGWarehouse（二次元图片库）
+# 路线图：ACGWarehouse（二次元图片库）
 
-**Created:** 2026-03-14
-**Granularity:** Fine (细粒度)
-**Total Phases:** 6
-**Total Requirements:** 47
+**创建时间：** 2026-03-14
+**粒度：** 细粒度
+**阶段总数：** 6
+**需求总数：** 47
 
 ---
 
-## Progress Overview
+## 进度总览
 
 | Phase | Status | Plans | Progress |
 |-------|--------|-------|----------|
-| 1 | ○ | 0/0 | 0% |
+| 1 | ◆ | 0/3 | 0% |
 | 2 | ○ | 0/0 | 0% |
 | 3 | ○ | 0/0 | 0% |
 | 4 | ○ | 0/0 | 0% |
 | 5 | ○ | 0/0 | 0% |
 | 6 | ○ | 0/0 | 0% |
 
-**Status:** ○ Pending | ◆ In Progress | ✓ Complete
+**状态说明：** ○ Pending（待开始） | ◆ In Progress（进行中） | ✓ Complete（已完成）
 
 ---
 
-## Phase 1: 基础架构与图片扫描
+## Phase 1: 基础架构、图片扫描与标签基础层
 
-**Goal:** 建立项目骨架、数据库设计、图片扫描入库基础功能
+**目标：** 建立项目骨架、图片导入链路、标签治理基础 schema 与异步任务基础设施
 
-**Duration Estimate:** 2-3 weeks
+**预计时长：** 2-3 weeks
 
-**Requirements:**
+**Plans:** 3 个计划
+
+**关联需求：**
 - CORE-01, CORE-02, CORE-03, CORE-04
 - IMPT-01, IMPT-02, IMPT-03, IMPT-04
+- AIRE-02, AIRE-04
 
-**Success Criteria:**
+Plans:
+- [ ] 01-01-PLAN.md — Go 项目骨架与数据库 Schema
+- [ ] 01-02-PLAN.md — RESTful API 框架
+- [ ] 01-03-PLAN.md — 图片扫描、监控与异步任务
+
+**成功标准：**
 1. Go 后端项目结构初始化完成，可编译运行
-2. SQLite 数据库 schema 创建完成（images, tags, collections 表）
+2. SQLite 数据库 schema 创建完成，至少包含 images、tags、tag_aliases、tag_observations、image_tags、collections 表
 3. RESTful API 框架搭建完成（健康检查端点可访问）
 4. 图片扫描命令可扫描指定文件夹并导入图片元数据
 5. 文件夹监控功能可检测新增图片并自动入库
+6. 异步任务基础设施可将“图片已导入”事件排队，并为后续 AI 标签任务保留状态记录
 
-**Deliverables:**
+**交付物：**
 - Go 后端项目骨架
 - 数据库 schema 和迁移脚本
 - 图片扫描服务
 - 文件夹监控服务
 - API 基础端点
+- 标签治理基础数据表与仓储接口
+- 异步任务状态记录 / 队列脚手架
 
-**Pitfalls Addressed:**
+**重点规避：**
 - Pitfall 1: 数据库存 BLOB — 数据库只存元数据，图片存文件系统
 
 ---
 
-## Phase 2: 缩略图与图片浏览
+## Phase 2: 缩略图、基础浏览与 AI 复核界面底座
 
-**Goal:** 实现缩略图生成、Flutter 前端基础、图片浏览功能
+**目标：** 实现缩略图生成、Flutter 前端基础、最小图片浏览与标签复核承载界面
 
-**Duration Estimate:** 2-3 weeks
+**预计时长：** 2-3 weeks
 
-**Requirements:**
+**关联需求：**
 - IMPT-05, IMPT-06, IMPT-07
 - GALR-01, GALR-02, GALR-03, GALR-04, GALR-05
 
-**Success Criteria:**
+**成功标准：**
 1. 缩略图生成服务可批量处理导入图片
 2. 感知哈希计算服务可计算图片相似度哈希
 3. Flutter 前端可显示图片网格视图
 4. Flutter 前端可显示瀑布流视图
 5. 用户可查看图片详情和元数据
 6. 用户可按时间/名称/大小排序浏览
+7. 图片详情页可展示 AI 标签状态占位信息，为后续确认 / 合并流程提供入口
 
-**Deliverables:**
+**交付物：**
 - 缩略图生成服务
 - 感知哈希计算服务
 - Flutter 图片网格组件
 - Flutter 瀑布流组件
 - 图片详情页面
+- 标签状态占位组件 / 复核入口骨架
 
-**Pitfalls Addressed:**
+**重点规避：**
 - Pitfall 3: Flutter 内存爆炸 — 使用缩略图和正确的图片回收
 
 ---
 
-## Phase 3: AI 角色识别与标签
+## Phase 3: AI 开放标签与治理
 
-**Goal:** 集成 DeepDanbooru 实现 AI 自动打标签，完成标签管理功能
+**目标：** 集成千问 / 豆包等多模态 AI 生成开放描述标签，并建立标签治理能力
 
-**Duration Estimate:** 3-4 weeks
+**预计时长：** 3-4 weeks
 
-**Requirements:**
-- AIRE-01, AIRE-02, AIRE-03, AIRE-04, AIRE-05, AIRE-06
+**关联需求：**
+- AIRE-01, AIRE-03, AIRE-05, AIRE-06
 - TAGS-01, TAGS-02, TAGS-03, TAGS-04, TAGS-05
 
-**Success Criteria:**
-1. DeepDanbooru 服务部署并可访问
-2. AI 识别服务可异步处理图片并生成标签
-3. 标签带有置信度分数
-4. 用户可查看/确认/修改 AI 生成的标签
-5. 用户可手动添加/修改/删除标签
-6. 用户可按标签筛选图片
+**成功标准：**
+1. 千问 / 豆包 AI 标签服务接入完成，支持异步处理图片并生成开放描述标签
+2. 系统基于 Phase 1 的 schema 保存 AI 原始标签观测结果、模型信息、提示词版本与置信度分数
+3. 系统可将 AI 原始标签归并为标准标签，并维护别名 / 近义表达
+4. 用户可查看 / 确认 / 修改 / 合并 AI 生成的标签
+5. 用户可手动维护标准标签、别名与标签分类
+6. 用户可按标准标签筛选图片，并对待复核标签进行管理
 
-**Deliverables:**
-- DeepDanbooru 微服务部署
-- AI 识别集成服务
+**交付物：**
+- 千问 / 豆包 AI 集成服务
+- AI 标签观测存储层
+- 标签归并与别名管理逻辑
 - 标签管理 API
 - Flutter 标签筛选组件
-- 标签确认界面
+- 标签确认 / 合并界面
 
-**Pitfalls Addressed:**
+**重点规避：**
 - Pitfall 4: AI API 速率限制 — 异步队列处理
-- Pitfall 5: 角色识别误判 — 置信度阈值
+- Pitfall 5: 开放标签漂移与幻觉 — 标签归并、复核状态、解释性标签分层
 
 ---
 
 ## Phase 4: 重复检测与搜索
 
-**Goal:** 实现相似图片检测、去重、以图搜图功能
+**目标：** 实现相似图片检测、去重、以图搜图功能
 
-**Duration Estimate:** 2-3 weeks
+**预计时长：** 2-3 weeks
 
-**Requirements:**
+**关联需求：**
 - DUPD-01, DUPD-02, DUPD-03, DUPD-04, DUPD-05
 - SRCH-01, SRCH-02, SRCH-03, SRCH-04, SRCH-05
 
-**Success Criteria:**
+**成功标准：**
 1. 系统可检测完全相同的图片（文件哈希）
 2. 系统可检测相似图片（感知哈希）
 3. 用户可设置相似度阈值
@@ -130,29 +144,29 @@
 5. 用户可按文件名/标签搜索图片
 6. 用户可上传图片进行以图搜图
 
-**Deliverables:**
+**交付物：**
 - 重复检测服务
 - 搜索服务（全文 + 标签）
 - 以图搜图服务
 - Flutter 搜索界面
 - 重复图片管理界面
 
-**Pitfalls Addressed:**
+**重点规避：**
 - Pitfall 2: 感知哈希误判 — 多种哈希算法组合
 
 ---
 
 ## Phase 5: 收藏夹与批量操作
 
-**Goal:** 实现收藏夹/相册管理、批量操作功能
+**目标：** 实现收藏夹/相册管理、批量操作功能
 
-**Duration Estimate:** 1-2 weeks
+**预计时长：** 1-2 weeks
 
-**Requirements:**
+**关联需求：**
 - COLL-01, COLL-02, COLL-03, COLL-04, COLL-05
 - BTCH-01, BTCH-02, BTCH-03, BTCH-04
 
-**Success Criteria:**
+**成功标准：**
 1. 用户可创建/重命名/删除收藏夹
 2. 用户可添加/移除收藏夹中的图片
 3. 用户可设置收藏夹封面
@@ -160,7 +174,7 @@
 5. 用户可批量添加/删除标签
 6. 用户可批量移动到收藏夹或删除
 
-**Deliverables:**
+**交付物：**
 - 收藏夹管理 API
 - 批量操作 API
 - Flutter 收藏夹界面
@@ -170,40 +184,40 @@
 
 ## Phase 6: 优化与部署
 
-**Goal:** 性能优化、PostgreSQL 迁移支持、Docker 部署
+**目标：** 性能优化、PostgreSQL 迁移支持、Docker 部署
 
-**Duration Estimate:** 2 weeks
+**预计时长：** 2 weeks
 
-**Requirements:**
+**关联需求：**
 - (优化类需求，无新功能需求)
 
-**Success Criteria:**
+**成功标准：**
 1. PostgreSQL 数据库迁移脚本完成
 2. Docker Compose 配置文件完成
 3. 基础 Web 管理后台可访问
 4. 性能测试通过（支持 10k+ 图片）
 5. 部署文档完成
 
-**Deliverables:**
+**交付物：**
 - PostgreSQL 迁移脚本
 - Docker Compose 配置
 - 基础 Web 管理后台
 - 性能优化报告
 - 部署文档
 
-**Pitfalls Addressed:**
+**重点规避：**
 - Pitfall 6: 扩展性问题 — PostgreSQL 支持大型库
 
 ---
 
-## Phase Dependencies
+## 阶段依赖关系
 
 ```
-Phase 1 (基础架构)
+Phase 1 (基础架构/导入/标签基础层)
     ↓
-Phase 2 (缩略图/浏览) ← depends on Phase 1 数据模型
+Phase 2 (缩略图/基础浏览) ← depends on Phase 1 数据模型与图片导入
     ↓
-Phase 3 (AI/标签) ← depends on Phase 1-2 图片已导入
+Phase 3 (AI/标签治理) ← depends on Phase 1 标签 schema/异步任务 + Phase 2 复核界面底座
     ↓
 Phase 4 (去重/搜索) ← depends on Phase 2-3 哈希和标签
     ↓
@@ -214,18 +228,19 @@ Phase 6 (优化/部署) ← depends on Phase 1-5 功能完整
 
 ---
 
-## Research Flags
+## 研究提示
 
-Phases needing deeper research during planning:
+以下阶段在正式规划时建议继续深入研究：
 
-| Phase | Research Needed |
+| Phase | 需要补充研究的内容 |
 |-------|-----------------|
-| Phase 3 | DeepDanbooru 部署方式和 API 集成细节 |
+| Phase 1 | 标签治理基础 schema、异步任务状态模型、导入事件与 AI 任务衔接方式 |
+| Phase 3 | 千问 / 豆包提示词设计、标签归并策略、别名治理细节 |
 | Phase 4 | 向量索引实现（如果图片量 > 100k） |
 
-Phases with standard patterns (skip research-phase):
+以下阶段已有成熟模式，可减少额外研究：
 
-| Phase | Reason |
+| Phase | 原因 |
 |-------|--------|
 | Phase 1 | Go 项目结构和数据库 schema 有成熟模式 |
 | Phase 2 | Flutter 图片网格有成熟组件 |
@@ -233,5 +248,5 @@ Phases with standard patterns (skip research-phase):
 
 ---
 
-*Roadmap created: 2026-03-14*
-*Last updated: 2026-03-14*
+*路线图创建时间：2026-03-14*
+*最后更新：2026-03-14*
