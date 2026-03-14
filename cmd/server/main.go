@@ -1,14 +1,14 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 
-	_ "github.com/ncruces/go-sqlite3/driver"
-	_ "github.com/ncruces/go-sqlite3/embed"
-
+	"github.com/gin-gonic/gin"
 	"github.com/yourusername/acgwarehouse-backend/internal/config"
+	"github.com/yourusername/acgwarehouse-backend/internal/handler"
+	"github.com/yourusername/acgwarehouse-backend/internal/middleware"
 )
 
 func main() {
@@ -17,17 +17,20 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	if cfg.Database.Type == "sqlite" {
-		db, err := sql.Open("sqlite3", cfg.Database.Path)
-		if err != nil {
-			log.Fatalf("failed to open sqlite database: %v", err)
-		}
-		defer db.Close()
-
-		if err := db.Ping(); err != nil {
-			log.Fatalf("failed to connect sqlite database: %v", err)
-		}
+	if strings.EqualFold(cfg.Server.Env, "production") {
+		gin.SetMode(gin.ReleaseMode)
 	}
 
-	fmt.Println("ACGWarehouse starting...")
+	r := gin.New()
+	r.Use(middleware.Logger())
+	r.Use(middleware.CORS())
+	r.Use(gin.Recovery())
+
+	handler.SetupRoutes(r)
+
+	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	log.Printf("ACGWarehouse server starting on %s", addr)
+	if err := r.Run(addr); err != nil {
+		log.Fatalf("failed to start server: %v", err)
+	}
 }
