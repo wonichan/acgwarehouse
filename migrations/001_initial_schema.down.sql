@@ -1,0 +1,8 @@
+DROP TABLE IF EXISTS collection_images;
+DROP TABLE IF EXISTS collections;
+DROP TABLE IF EXISTS image_tags;
+DROP TABLE IF EXISTS tag_observations;
+DROP TABLE IF EXISTS tag_aliases;
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS images;
+DROP TABLE IF EXISTS async_jobs;

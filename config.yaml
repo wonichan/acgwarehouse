@@ -1,0 +1,18 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  env: "development"
+
+database:
+  type: "sqlite"
+  path: "./data/acgwarehouse.db"
+  connection_string: ""
+
+storage:
+  scan_roots:
+    - "/path/to/your/images"
+
+ai:
+  provider: "qwen"
+  api_key: ""
+  model: "qwen-vl-max"
