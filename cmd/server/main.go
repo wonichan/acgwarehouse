@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yourusername/acgwarehouse-backend/internal/config"
-	"github.com/yourusername/acgwarehouse-backend/internal/handler"
-	"github.com/yourusername/acgwarehouse-backend/internal/middleware"
+	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/handler"
+	"github.com/wonichan/acgwarehouse-backend/internal/middleware"
 )
 
 func main() {

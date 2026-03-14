@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/yourusername/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 )
 
 type JobRepository interface {

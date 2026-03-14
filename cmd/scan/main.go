@@ -10,9 +10,9 @@ import (
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 
-	"github.com/yourusername/acgwarehouse-backend/internal/config"
-	"github.com/yourusername/acgwarehouse-backend/internal/repository"
-	"github.com/yourusername/acgwarehouse-backend/internal/service"
+	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
 
 func main() {

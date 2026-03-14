@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yourusername/acgwarehouse-backend/internal/domain"
-	"github.com/yourusername/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
 type ScanResult struct {

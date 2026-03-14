@@ -14,7 +14,7 @@ import (
 	"github.com/evanoberholster/imagemeta"
 	_ "golang.org/x/image/webp"
 
-	"github.com/yourusername/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 )
 
 var SupportedFormats = map[string]bool{

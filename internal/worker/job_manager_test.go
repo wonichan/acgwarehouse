@@ -9,7 +9,7 @@ import (
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
-	"github.com/yourusername/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
 func TestManagerProcessesJobsSequentially(t *testing.T) {
