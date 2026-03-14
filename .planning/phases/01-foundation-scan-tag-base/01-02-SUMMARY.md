@@ -59,7 +59,7 @@ completed: 2026-03-14
 
 1. **task 1-2: Gin 框架搭建 + 健康检查端点与路由结构** - `8a776bc` (feat)
 
-**Plan metadata:** pending docs commit for summary/tracker updates.
+**Plan metadata:** `c4286b1` (docs: summary artifact)
 
 ## Files Created/Modified
 - `cmd/server/main.go` - Switched to Gin runtime startup with middleware and centralized route registration.
