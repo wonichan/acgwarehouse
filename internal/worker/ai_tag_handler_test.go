@@ -2,11 +2,18 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"path/filepath"
 	"testing"
+	"time"
 
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/wonichan/acgwarehouse-backend/internal/ai"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
 
 func TestRegisterAITagHandler_Registration(t *testing.T) {
@@ -22,7 +29,7 @@ func TestRegisterAITagHandler_Registration(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo)
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{})
 
 	// 验证处理器已注册
 	if _, ok := manager.handlers["ai_tag_generation"]; !ok {
@@ -43,7 +50,8 @@ func TestAITagHandler_ParsesPayload(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo)
+	governance := &mockTagGovernanceService{}
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, governance)
 
 	// 创建测试 payload
 	payload := AITagPayload{
@@ -71,6 +79,18 @@ func TestAITagHandler_ParsesPayload(t *testing.T) {
 	if mockObsRepo.savedObservation.ImageID != 123 {
 		t.Errorf("expected image ID 123, got %d", mockObsRepo.savedObservation.ImageID)
 	}
+	if !governance.called {
+		t.Fatal("expected governance merge to be called")
+	}
+	if governance.imageID != 123 {
+		t.Errorf("expected governance image ID 123, got %d", governance.imageID)
+	}
+	if governance.observationID != 1 {
+		t.Errorf("expected observation ID 1, got %d", governance.observationID)
+	}
+	if governance.confidence != 0.9 {
+		t.Errorf("expected confidence 0.9, got %f", governance.confidence)
+	}
 }
 
 func TestAITagHandler_SavesObservation(t *testing.T) {
@@ -87,7 +107,7 @@ func TestAITagHandler_SavesObservation(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo)
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{})
 
 	payload := AITagPayload{
 		ImageID: 456,
@@ -122,6 +142,57 @@ func TestAITagHandler_SavesObservation(t *testing.T) {
 	}
 }
 
+func TestAITagHandler_PersistsPendingImageTagsForReview(t *testing.T) {
+	db := mustOpenAIWorkerDB(t)
+	seedAIWorkerImage(t, db, 456)
+
+	obsRepo := repository.NewTagObservationRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	aliasRepo := repository.NewTagAliasRepository(db)
+	imageTagRepo := repository.NewImageTagRepository(db)
+	governance := service.NewTagGovernanceService(tagRepo, aliasRepo, obsRepo, imageTagRepo)
+	mockClient := &mockAIClient{
+		result: &ai.TagResult{
+			Tags:       []string{"blue hair", "girl", "outdoors"},
+			Confidence: 0.95,
+			ModelName:  "doubao-vision-pro",
+		},
+	}
+
+	manager := NewManager(&mockJobRepoForAI{})
+	RegisterAITagHandler(manager, mockClient, obsRepo, governance)
+
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 456, Path: "/test/image.png"})
+	handler := manager.handlers["ai_tag_generation"]
+	if err := handler(context.Background(), 2, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+
+	observations, err := obsRepo.FindByImageID(context.Background(), 456)
+	if err != nil {
+		t.Fatalf("FindByImageID() observations error = %v", err)
+	}
+	if len(observations) != 1 {
+		t.Fatalf("expected 1 observation, got %d", len(observations))
+	}
+
+	imageTags, err := imageTagRepo.FindByImageID(context.Background(), 456)
+	if err != nil {
+		t.Fatalf("FindByImageID() image tags error = %v", err)
+	}
+	if len(imageTags) != 3 {
+		t.Fatalf("expected 3 image tags, got %d", len(imageTags))
+	}
+	for _, imageTag := range imageTags {
+		if imageTag.ReviewState != "pending" {
+			t.Fatalf("image tag review state = %q, want pending", imageTag.ReviewState)
+		}
+		if imageTag.SourceObservationID == nil || *imageTag.SourceObservationID != observations[0].ID {
+			t.Fatalf("image tag source observation = %v, want %d", imageTag.SourceObservationID, observations[0].ID)
+		}
+	}
+}
+
 func TestAITagHandler_InvalidPayload(t *testing.T) {
 	// Test: 处理无效 payload
 	mockJobRepo := &mockJobRepoForAI{}
@@ -129,7 +200,7 @@ func TestAITagHandler_InvalidPayload(t *testing.T) {
 	mockClient := &mockAIClient{}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo)
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{})
 
 	handler := manager.handlers["ai_tag_generation"]
 	err := handler(context.Background(), 1, "invalid json")
@@ -147,7 +218,7 @@ func TestAITagHandler_AIServiceError(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo)
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{})
 
 	payload := AITagPayload{
 		ImageID: 1,
@@ -201,6 +272,24 @@ func (m *mockTagObservationRepo) FindByID(ctx context.Context, id int64) (*domai
 	return nil, nil
 }
 
+type mockTagGovernanceService struct {
+	called        bool
+	imageID       int64
+	tags          []string
+	observationID int64
+	confidence    float64
+	err           error
+}
+
+func (m *mockTagGovernanceService) MergeTags(ctx context.Context, imageID int64, tags []string, observationID int64, confidence float64) error {
+	m.called = true
+	m.imageID = imageID
+	m.tags = append([]string(nil), tags...)
+	m.observationID = observationID
+	m.confidence = confidence
+	return m.err
+}
+
 type mockAIClient struct {
 	result       *ai.TagResult
 	err          error
@@ -214,4 +303,32 @@ func (m *mockAIClient) Name() string {
 func (m *mockAIClient) GenerateTags(ctx interface{}, imageURL, prompt string) (*ai.TagResult, error) {
 	m.lastImageURL = imageURL
 	return m.result, m.err
+}
+
+func mustOpenAIWorkerDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "ai-worker.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	return db
+}
+
+func seedAIWorkerImage(t *testing.T, db *sql.DB, imageID int64) {
+	t.Helper()
+
+	_, err := db.Exec(`
+		INSERT INTO images (id, path, filename, source_root, file_size, width, height, format, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, imageID, "/images/test.png", "test.png", "/images", 100, 100, 100, "png", time.Now(), time.Now())
+	if err != nil {
+		t.Fatalf("seed images: %v", err)
+	}
 }
