@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-03-15T09:19:42.197Z"
+last_updated: "2026-03-15T12:13:19.399Z"
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 11
-  completed_plans: 7
+  total_plans: 14
+  completed_plans: 9
   percent: 64
 ---
 
@@ -18,8 +18,8 @@ progress:
 project: ACGWarehouse
 milestone: v1.0
 phase: 3
-plan: 3
-progress: "Phase 3: 75% (3/4 plans)"
+plan: 5
+progress: "Phase 3: 71% (5/7 plans)"
 status: in-progress
 created: 2026-03-14
 updated: 2026-03-15
@@ -31,14 +31,14 @@ updated: 2026-03-15
 
 **核心价值：** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
 
-**当前重点：** Phase 3 - AI 开放标签与治理
+**当前重点：** Phase 3 - AI 开放标签与治理（gap closure 进行中）
 
 ## 进度摘要
 
 ```
 Phase 1: ✓ 基础架构、图片扫描与标签基础层    (100%)
 Phase 2: ✓ 缩略图、基础浏览与 AI 复核界面底座 (100%)
-Phase 3: ◆ AI 开放标签与治理                (75%)
+Phase 3: ◆ AI 开放标签与治理                (验证发现缺口)
 Phase 4: ○ 重复检测与搜索         (0%)
 Phase 5: ○ 收藏夹与批量操作       (0%)
 Phase 6: ○ 优化与部署             (0%)
@@ -48,18 +48,18 @@ Phase 6: ○ 优化与部署             (0%)
 
 ## 当前状态
 
-**Phase：** 3（进行中）
-**Plan：** 03 已完成
-**Wave：** 3
+**Phase：** 3（gap closure 进行中）
+**Plan：** 05 已完成，待继续执行 03-06
+**Wave：** 4
 
-**下一步操作：** 执行 Phase 3 Plan 04（Flutter 标签前端层）
+**下一步操作：** 继续执行 `.planning/phases/03-ai/03-06-PLAN.md`，补齐标签筛选与剩余 Phase 3 gaps
 
 ## 指标
 
 | 指标 | 数值 |
 |--------|-------|
 | 需求总数 | 47 |
-| 已完成需求 | 19 |
+| 已完成需求 | 25 |
 | 阶段总数 | 6 |
 | 已完成阶段 | 2 |
 | 预计总时长 | 12-17 周 |
@@ -81,6 +81,11 @@ Phase 6: ○ 优化与部署             (0%)
 | 可选依赖注入路由装配 | 兼容既有 `SetupRoutes(r)` 调用，同时支持真实仓储和服务注入 | ✓ Phase 3 Plan 03 已在路由层落地 |
 | 服务器启动时完成标签 API 装配 | 避免新端点只注册不工作，确保 REST API 可直接供前端调用 | ✓ Phase 3 Plan 03 已接入 repository/service/job manager |
 | 删除标签时显式清理关联记录 | 保证 tag/image_tag/alias 删除语义稳定，不依赖运行时外键配置 | ✓ Phase 3 Plan 03 已实现 |
+| Flutter Provider 模式管理标签状态 | 与现有架构保持一致，提供响应式 UI 更新 | ✓ Phase 3 Plan 04 TagProvider 已实现 |
+| 标签过滤 UI 先于后端实现 | 前端抽屉组件已就绪，待后端支持 tag 筛选查询 | ◆ UI 完成，待后端 `/api/v1/images?tags=` 支持 |
+| Phase 3 目标验证优先于阶段推进 | 计划执行完成不等于目标达成，必须以 `03-VERIFICATION.md` 为准 | ✓ 发现 4 个 gaps，需先补齐再进入 Phase 4 |
+| AI 标签治理按 exact→alias→new 顺序归并 | 保持 Phase 3 无模糊匹配约束，同时复用已治理标签与别名 | ✓ 03-05 已接入 normalized alias lookup |
+| AI 归并输出保持 pending image_tags | 即使命中已确认标准标签，也要给复核界面真实待处理数据 | ✓ 03-05 后台任务现会写入待复核 image_tags |
 
 ## 阻塞项
 
@@ -100,6 +105,9 @@ Phase 6: ○ 优化与部署             (0%)
 | 2026-03-15 | 3 | Plan 03-01 已执行 | 已完成 AI 提供商抽象层、千问/豆包实现、限流客户端、异步任务处理器 |
 | 2026-03-15 | 3 | Plan 03-02 已执行 | 已完成标签 Repository 层、ImageTag 模型、标签归并服务与 `03-02-SUMMARY.md` |
 | 2026-03-15 | 3 | Plan 03-03 已执行 | 已完成标签 CRUD / 图片标签复核 / AI 标签触发 API 与 `03-03-SUMMARY.md` |
+| 2026-03-15 | 3 | Plan 03-04 已执行 | 已完成 Flutter 标签前端层：筛选抽屉、确认界面、管理组件、40 个测试通过 |
+| 2026-03-15 | 3 | Phase 3 已验证 | `03-VERIFICATION.md` 判定 gaps_found，需补齐 AI 归并链路、标签筛选、AI 结果展示与标签统计 |
+| 2026-03-15 | 3 | Plan 03-05 已执行 | 已完成 AI worker → governance merge 接线、alias-aware reuse 与 `03-05-SUMMARY.md` |
 
 ---
 
@@ -107,3 +115,6 @@ Phase 6: ○ 优化与部署             (0%)
 *Phase 3 Plan 01 已完成：2026-03-15*
 *Phase 3 Plan 02 已完成：2026-03-15*
 *Phase 3 Plan 03 已完成：2026-03-15*
+*Phase 3 Plan 04 已完成：2026-03-15*
+*Phase 3 Plan 05 已完成：2026-03-15*
+*Phase 3 验证完成（gaps_found）：2026-03-15*
