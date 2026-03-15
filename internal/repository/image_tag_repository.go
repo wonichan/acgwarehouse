@@ -16,6 +16,18 @@ type ImageTagRepository interface {
 	UpdateReviewState(ctx context.Context, imageID, tagID int64, state string) error
 	Delete(ctx context.Context, imageID, tagID int64) error
 	BatchUpdateReviewState(ctx context.Context, imageID int64, tagIDs []int64, state string) error
+	MergeImageTag(ctx context.Context, imageID, sourceTagID, targetTagID int64) error
+	GetTagStats(ctx context.Context, tagID int64) (*TagStats, error)
+}
+
+type TagStats struct {
+	TagID          int64
+	UsageCount     int64
+	ConfirmedCount int64
+	PendingCount   int64
+	RejectedCount  int64
+	AICount        int64
+	ManualCount    int64
 }
 
 type imageTagRepository struct {
@@ -108,4 +120,63 @@ func scanImageTags(rows *sql.Rows) ([]*domain.ImageTag, error) {
 	}
 
 	return imageTags, rows.Err()
+}
+
+// MergeImageTag reassigns an image's tag from sourceTagID to targetTagID.
+// It removes the old image-tag association and creates a new one with the target tag.
+func (r *imageTagRepository) MergeImageTag(ctx context.Context, imageID, sourceTagID, targetTagID int64) error {
+	// Get the existing image-tag to preserve confidence and review_state
+	var confidence float64
+	var reviewState string
+	var sourceObsID *int64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT confidence, review_state, source_observation_id
+		FROM image_tags WHERE image_id = ? AND tag_id = ?
+	`, imageID, sourceTagID).Scan(&confidence, &reviewState, &sourceObsID)
+	if err != nil {
+		return err
+	}
+
+	// Delete the old association
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM image_tags WHERE image_id = ? AND tag_id = ?`, imageID, sourceTagID); err != nil {
+		return err
+	}
+
+	// Create new association with target tag
+	_, err = r.db.ExecContext(ctx, `
+		INSERT OR REPLACE INTO image_tags (image_id, tag_id, source_observation_id, confidence, review_state)
+		VALUES (?, ?, ?, ?, ?)
+	`, imageID, targetTagID, sourceObsID, confidence, reviewState)
+	return err
+}
+
+// GetTagStats returns usage statistics for a tag including counts by review state and source.
+func (r *imageTagRepository) GetTagStats(ctx context.Context, tagID int64) (*TagStats, error) {
+	stats := &TagStats{TagID: tagID}
+
+	// Get total usage count and counts by review state
+	err := r.db.QueryRowContext(ctx, `
+		SELECT 
+			COUNT(*) as usage_count,
+			SUM(CASE WHEN review_state = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count,
+			SUM(CASE WHEN review_state = 'pending' THEN 1 ELSE 0 END) as pending_count,
+			SUM(CASE WHEN review_state = 'rejected' THEN 1 ELSE 0 END) as rejected_count
+		FROM image_tags WHERE tag_id = ?
+	`, tagID).Scan(&stats.UsageCount, &stats.ConfirmedCount, &stats.PendingCount, &stats.RejectedCount)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get AI count (associations with source_observation_id set)
+	err = r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM image_tags WHERE tag_id = ? AND source_observation_id IS NOT NULL
+	`, tagID).Scan(&stats.AICount)
+	if err != nil {
+		return nil, err
+	}
+
+	// Manual count = total - AI count
+	stats.ManualCount = stats.UsageCount - stats.AICount
+
+	return stats, nil
 }
