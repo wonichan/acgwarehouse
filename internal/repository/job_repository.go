@@ -11,6 +11,7 @@ type JobRepository interface {
 	Save(job *domain.AsyncJob) error
 	FindByID(id int64) (*domain.AsyncJob, error)
 	FindByStatus(status string) ([]domain.AsyncJob, error)
+	FindByType(jobType string) ([]domain.AsyncJob, error)
 	Update(job *domain.AsyncJob) error
 }
 
@@ -54,10 +55,21 @@ func (r *sqliteJobRepository) FindByID(id int64) (*domain.AsyncJob, error) {
 }
 
 func (r *sqliteJobRepository) FindByStatus(status string) ([]domain.AsyncJob, error) {
-	rows, err := r.db.Query(`
+	return r.findMany(`
 		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
 		FROM async_jobs WHERE status = ? ORDER BY id
 	`, status)
+}
+
+func (r *sqliteJobRepository) FindByType(jobType string) ([]domain.AsyncJob, error) {
+	return r.findMany(`
+		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
+		FROM async_jobs WHERE type = ? ORDER BY id DESC
+	`, jobType)
+}
+
+func (r *sqliteJobRepository) findMany(query string, args ...any) ([]domain.AsyncJob, error) {
+	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
