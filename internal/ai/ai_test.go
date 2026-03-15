@@ -332,3 +332,164 @@ func TestQwenProvider_ParseTags(t *testing.T) {
 		})
 	}
 }
+
+// ========== DoubaoProvider Tests ==========
+
+func TestDoubaoProvider_BuildRequest(t *testing.T) {
+	// Test 1: DoubaoProvider 正确构建 HTTP 请求
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 验证请求方法和路径
+		if r.Method != "POST" {
+			t.Errorf("expected POST method, got %s", r.Method)
+		}
+		if !strings.HasSuffix(r.URL.Path, "/chat/completions") {
+			t.Errorf("expected /chat/completions path, got %s", r.URL.Path)
+		}
+
+		// 验证请求头
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		}
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") {
+			t.Errorf("expected Bearer token, got %s", auth)
+		}
+
+		// 验证请求体
+		var req doubaoRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Model != "doubao-vision-pro" {
+			t.Errorf("expected model doubao-vision-pro, got %s", req.Model)
+		}
+		if len(req.Messages) != 1 {
+			t.Errorf("expected 1 message, got %d", len(req.Messages))
+		}
+
+		// 返回模拟响应
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(doubaoResponse{
+			Choices: []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			}{
+				{Message: struct {
+					Content string `json:"content"`
+				}{Content: "girl, outdoors, sunny"}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &DoubaoProvider{
+		apiKey:     "test-api-key",
+		model:      "doubao-vision-pro",
+		endpoint:   server.URL,
+		httpClient: server.Client(),
+	}
+
+	_, err := provider.GenerateTags(context.Background(), "https://example.com/image.jpg", "generate tags")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestDoubaoProvider_ParseResponse(t *testing.T) {
+	// Test 2: DoubaoProvider 正确解析响应
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(doubaoResponse{
+			Choices: []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			}{
+				{Message: struct {
+					Content string `json:"content"`
+				}{Content: "anime, girl, blue hair, illustration"}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &DoubaoProvider{
+		apiKey:     "test-api-key",
+		model:      "doubao-vision-pro",
+		endpoint:   server.URL,
+		httpClient: server.Client(),
+	}
+
+	result, err := provider.GenerateTags(context.Background(), "https://example.com/image.jpg", "generate tags")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(result.Tags) != 4 {
+		t.Errorf("expected 4 tags, got %d: %v", len(result.Tags), result.Tags)
+	}
+	expectedTags := []string{"anime", "girl", "blue hair", "illustration"}
+	for i, tag := range expectedTags {
+		if result.Tags[i] != tag {
+			t.Errorf("expected tag %s at position %d, got %s", tag, i, result.Tags[i])
+		}
+	}
+	if result.ModelName != "doubao-vision-pro" {
+		t.Errorf("expected model name doubao-vision-pro, got %s", result.ModelName)
+	}
+}
+
+func TestDoubaoProvider_VolcanoEndpoint(t *testing.T) {
+	// Test 3: DoubaoProvider 使用火山引擎端点
+	provider := &DoubaoProvider{
+		apiKey:     "test-api-key",
+		model:      "doubao-vision-pro",
+		endpoint:   "https://ark.cn-beijing.volces.com/api/v3",
+		httpClient: &http.Client{},
+	}
+
+	// 验证端点正确
+	if provider.endpoint != "https://ark.cn-beijing.volces.com/api/v3" {
+		t.Errorf("expected volcano engine endpoint, got %s", provider.endpoint)
+	}
+	if provider.Name() != "doubao" {
+		t.Errorf("expected provider name 'doubao', got %s", provider.Name())
+	}
+}
+
+func TestDoubaoProvider_HandleErrors(t *testing.T) {
+	// Test: DoubaoProvider 处理错误状态码
+	tests := []struct {
+		name        string
+		statusCode  int
+		expectError bool
+	}{
+		{"rate limit 429", http.StatusTooManyRequests, true},
+		{"server error 500", http.StatusInternalServerError, true},
+		{"server error 503", http.StatusServiceUnavailable, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.statusCode)
+			}))
+			defer server.Close()
+
+			provider := &DoubaoProvider{
+				apiKey:     "test-api-key",
+				model:      "doubao-vision-pro",
+				endpoint:   server.URL,
+				httpClient: server.Client(),
+			}
+
+			_, err := provider.GenerateTags(context.Background(), "https://example.com/image.jpg", "generate tags")
+			if tt.expectError && err == nil {
+				t.Error("expected error, got nil")
+			}
+		})
+	}
+}
