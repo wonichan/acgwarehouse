@@ -12,17 +12,20 @@ import (
 
 type TagGovernanceService struct {
 	tagRepo      repository.TagRepository
+	aliasRepo    repository.TagAliasRepository
 	obsRepo      repository.TagObservationRepository
 	imageTagRepo repository.ImageTagRepository
 }
 
 func NewTagGovernanceService(
 	tagRepo repository.TagRepository,
+	aliasRepo repository.TagAliasRepository,
 	obsRepo repository.TagObservationRepository,
 	imageTagRepo repository.ImageTagRepository,
 ) *TagGovernanceService {
 	return &TagGovernanceService{
 		tagRepo:      tagRepo,
+		aliasRepo:    aliasRepo,
 		obsRepo:      obsRepo,
 		imageTagRepo: imageTagRepo,
 	}
@@ -47,6 +50,20 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 				return err
 			}
 
+			if s.aliasRepo != nil {
+				alias, aliasErr := s.aliasRepo.FindByNormalizedLabel(ctx, normalized)
+				if aliasErr == nil {
+					tag, err = s.tagRepo.FindByID(ctx, alias.TagID)
+					if err != nil {
+						return err
+					}
+				} else if !errors.Is(aliasErr, sql.ErrNoRows) {
+					return aliasErr
+				}
+			}
+		}
+
+		if tag == nil {
 			tag = &domain.Tag{
 				PreferredLabel: normalized,
 				Slug:           slugify(normalized),
@@ -73,7 +90,7 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 			TagID:               tag.ID,
 			SourceObservationID: sourceObservationID,
 			Confidence:          confidence,
-			ReviewState:         tag.ReviewState,
+			ReviewState:         "pending",
 		}); err != nil {
 			return err
 		}
