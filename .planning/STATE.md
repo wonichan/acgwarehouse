@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-03-15T08:46:47.567Z"
+last_updated: "2026-03-15T09:19:42.197Z"
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 11
-  completed_plans: 6
-  percent: 55
+  completed_plans: 7
+  percent: 64
 ---
 
 # STATE.md
@@ -18,8 +18,8 @@ progress:
 project: ACGWarehouse
 milestone: v1.0
 phase: 3
-plan: 2
-progress: "Phase 3: 50% (2/4 plans)"
+plan: 3
+progress: "Phase 3: 75% (3/4 plans)"
 status: in-progress
 created: 2026-03-14
 updated: 2026-03-15
@@ -38,7 +38,7 @@ updated: 2026-03-15
 ```
 Phase 1: ✓ 基础架构、图片扫描与标签基础层    (100%)
 Phase 2: ✓ 缩略图、基础浏览与 AI 复核界面底座 (100%)
-Phase 3: ◆ AI 开放标签与治理                (50%)
+Phase 3: ◆ AI 开放标签与治理                (75%)
 Phase 4: ○ 重复检测与搜索         (0%)
 Phase 5: ○ 收藏夹与批量操作       (0%)
 Phase 6: ○ 优化与部署             (0%)
@@ -49,17 +49,17 @@ Phase 6: ○ 优化与部署             (0%)
 ## 当前状态
 
 **Phase：** 3（进行中）
-**Plan：** 02 已完成
-**Wave：** 2
+**Plan：** 03 已完成
+**Wave：** 3
 
-**下一步操作：** 执行 Phase 3 Plan 03（标签管理 API）
+**下一步操作：** 执行 Phase 3 Plan 04（Flutter 标签前端层）
 
 ## 指标
 
 | 指标 | 数值 |
 |--------|-------|
 | 需求总数 | 47 |
-| 已完成需求 | 15 |
+| 已完成需求 | 19 |
 | 阶段总数 | 6 |
 | 已完成阶段 | 2 |
 | 预计总时长 | 12-17 周 |
@@ -78,6 +78,9 @@ Phase 6: ○ 优化与部署             (0%)
 | Repository 测试共用 SQLite schema | 让数据层测试与运行时表结构保持一致 | ✓ Phase 3 Plan 02 已扩展 tag/alias/image_tag 表 |
 | 标签归并采用精确匹配优先 | 避免开放标签阶段过早引入模糊治理误判 | ✓ 现有标签复用，否则创建 pending 新标签 |
 | 别名统一归一化存储 | 保证别名精确检索稳定且不受大小写/空白影响 | ✓ trim + lower 持久化 normalized_label |
+| 可选依赖注入路由装配 | 兼容既有 `SetupRoutes(r)` 调用，同时支持真实仓储和服务注入 | ✓ Phase 3 Plan 03 已在路由层落地 |
+| 服务器启动时完成标签 API 装配 | 避免新端点只注册不工作，确保 REST API 可直接供前端调用 | ✓ Phase 3 Plan 03 已接入 repository/service/job manager |
+| 删除标签时显式清理关联记录 | 保证 tag/image_tag/alias 删除语义稳定，不依赖运行时外键配置 | ✓ Phase 3 Plan 03 已实现 |
 
 ## 阻塞项
 
@@ -96,9 +99,11 @@ Phase 6: ○ 优化与部署             (0%)
 | 2026-03-14 | 2 | 上下文已收集 | 已创建 `.planning/phases/02-ai/02-CONTEXT.md`，可进入规划 |
 | 2026-03-15 | 3 | Plan 03-01 已执行 | 已完成 AI 提供商抽象层、千问/豆包实现、限流客户端、异步任务处理器 |
 | 2026-03-15 | 3 | Plan 03-02 已执行 | 已完成标签 Repository 层、ImageTag 模型、标签归并服务与 `03-02-SUMMARY.md` |
+| 2026-03-15 | 3 | Plan 03-03 已执行 | 已完成标签 CRUD / 图片标签复核 / AI 标签触发 API 与 `03-03-SUMMARY.md` |
 
 ---
 
 *状态初始化时间：2026-03-14*
 *Phase 3 Plan 01 已完成：2026-03-15*
 *Phase 3 Plan 02 已完成：2026-03-15*
+*Phase 3 Plan 03 已完成：2026-03-15*
