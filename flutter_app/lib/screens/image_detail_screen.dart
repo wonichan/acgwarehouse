@@ -1,38 +1,204 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
+import 'package:provider/provider.dart';
 import '../models/image.dart';
+import '../models/tag.dart';
+import '../providers/tag_provider.dart';
+import '../services/tag_service.dart';
+import '../widgets/tag_chip.dart';
+import '../widgets/add_tag_dialog.dart';
 
-class ImageDetailScreen extends StatelessWidget {
+class ImageDetailScreen extends StatefulWidget {
   final ImageModel image;
   
   const ImageDetailScreen({super.key, required this.image});
   
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(image.filename),
+  State<ImageDetailScreen> createState() => _ImageDetailScreenState();
+}
+
+class _ImageDetailScreenState extends State<ImageDetailScreen> {
+  late TagProvider _tagProvider;
+  Timer? _pollTimer;
+  String? _aiStatus;
+  bool _isAITriggered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tagProvider = TagProvider(TagService());
+    _loadImageTags();
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _tagProvider.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadImageTags() async {
+    await _tagProvider.loadImageTags(widget.image.id);
+  }
+
+  Future<void> _triggerAITags() async {
+    try {
+      await _tagProvider.triggerAITags(widget.image.id);
+      setState(() {
+        _isAITriggered = true;
+        _aiStatus = '队列中';
+      });
+      _startPolling();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('触发 AI 标签失败: $e')),
+        );
+      }
+    }
+  }
+
+  void _startPolling() {
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      try {
+        final status = await _tagProvider.getAITagStatus(widget.image.id);
+        final statusStr = status['status'] as String? ?? 'unknown';
+        
+        if (mounted) {
+          setState(() {
+            _aiStatus = _translateStatus(statusStr);
+          });
+        }
+
+        if (statusStr == 'completed' || statusStr == 'failed') {
+          timer.cancel();
+          if (statusStr == 'completed') {
+            await _loadImageTags();
+          }
+        }
+      } catch (e) {
+        debugPrint('Error polling AI status: $e');
+      }
+    });
+  }
+
+  String _translateStatus(String status) {
+    switch (status) {
+      case 'queued':
+        return '队列中';
+      case 'running':
+        return '分析中...';
+      case 'completed':
+        return '已完成';
+      case 'failed':
+        return '失败';
+      default:
+        return status;
+    }
+  }
+
+  Future<void> _confirmTag(int tagId) async {
+    try {
+      await _tagProvider.confirmImageTag(widget.image.id, tagId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('确认标签失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectTag(int tagId) async {
+    try {
+      await _tagProvider.rejectImageTag(widget.image.id, tagId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('拒绝标签失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showMergeDialog(Tag pendingTag) async {
+    final targetTag = await showDialog<Tag>(
+      context: context,
+      builder: (context) => _MergeTagDialog(
+        tagProvider: _tagProvider,
+        sourceTag: pendingTag,
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image viewer with zoom
-            _buildImageViewer(),
-            
-            // Metadata section
-            _buildMetadataSection(context),
-            
-            // AI Tag placeholder
-            _buildAITagPlaceholder(context),
+    );
+
+    if (targetTag != null && mounted) {
+      try {
+        await _tagProvider.removeImageTag(widget.image.id, pendingTag.id);
+        await _tagProvider.addImageTag(widget.image.id, tagId: targetTag.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已合并到 ${targetTag.preferredLabel}')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('合并失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _addTag() async {
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => AddTagDialog(imageId: widget.image.id),
+    );
+    // Reload tags after dialog closes
+    await _loadImageTags();
+  }
+
+  Future<void> _removeTag(int tagId) async {
+    try {
+      await _tagProvider.removeImageTag(widget.image.id, tagId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('移除标签失败: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: _tagProvider,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.image.filename),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _addTag,
+              tooltip: '添加标签',
+            ),
           ],
+        ),
+        body: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildImageViewer(),
+              _buildMetadataSection(context),
+              _buildAITagSection(context),
+              _buildTagsSection(context),
+            ],
+          ),
         ),
       ),
     );
   }
   
   Widget _buildImageViewer() {
-    final largeUrl = image.thumbnailLargeUrl;
+    final largeUrl = widget.image.thumbnailLargeUrl;
     
     if (largeUrl == null || largeUrl.isEmpty) {
       return Container(
@@ -81,12 +247,12 @@ class ImageDetailScreen extends StatelessWidget {
         children: [
           Text('元数据', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          _buildMetadataRow('文件名', image.filename),
-          _buildMetadataRow('尺寸', image.displaySize),
-          _buildMetadataRow('格式', image.format.toUpperCase()),
-          _buildMetadataRow('大小', image.displayFileSize),
-          _buildMetadataRow('路径', image.path),
-          _buildMetadataRow('导入时间', image.createdAt.toString()),
+          _buildMetadataRow('文件名', widget.image.filename),
+          _buildMetadataRow('尺寸', widget.image.displaySize),
+          _buildMetadataRow('格式', widget.image.format.toUpperCase()),
+          _buildMetadataRow('大小', widget.image.displayFileSize),
+          _buildMetadataRow('路径', widget.image.path),
+          _buildMetadataRow('导入时间', widget.image.createdAt.toString()),
         ],
       ),
     );
@@ -109,8 +275,8 @@ class ImageDetailScreen extends StatelessWidget {
       ),
     );
   }
-  
-  Widget _buildAITagPlaceholder(BuildContext context) {
+
+  Widget _buildAITagSection(BuildContext context) {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -126,35 +292,232 @@ class ImageDetailScreen extends StatelessWidget {
               const Icon(Icons.auto_awesome, color: Colors.blue),
               const SizedBox(width: 8),
               Text('AI 标签', style: Theme.of(context).textTheme.titleMedium),
+              const Spacer(),
+              if (!_isAITriggered)
+                FilledButton.icon(
+                  onPressed: _triggerAITags,
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: const Text('生成'),
+                ),
+              if (_aiStatus != null) ...[
+                const SizedBox(width: 8),
+                Chip(label: Text(_aiStatus!)),
+              ],
             ],
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'AI 标签生成中...',
-            style: TextStyle(color: Colors.grey),
-          ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: List.generate(
-              3,
-              (i) => Container(
-                width: 60 + i * 20,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            '标签将在 AI 分析完成后显示，您可以在此确认或修改。',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
+          Text(
+            '点击"生成"触发 AI 分析，标签将自动添加到待确认列表。',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTagsSection(BuildContext context) {
+    return Consumer<TagProvider>(
+      builder: (context, provider, child) {
+        final confirmed = provider.imageTags['confirmed'] ?? [];
+        final pending = provider.imageTags['pending'] ?? [];
+        final rejected = provider.imageTags['rejected'] ?? [];
+
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Confirmed tags
+              if (confirmed.isNotEmpty) ...[
+                Text('已确认', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: confirmed.map((tag) => TagChip(
+                    tag: tag,
+                    style: TagChipStyle.confirmed,
+                    onDelete: () => _removeTag(tag.id),
+                  )).toList(),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Pending tags
+              if (pending.isNotEmpty) ...[
+                Text('待确认', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: pending.map((tag) => _buildPendingTagChip(tag)).toList(),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Rejected tags
+              if (rejected.isNotEmpty) ...[
+                Text('已拒绝', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Colors.grey,
+                )),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: rejected.map((tag) => TagChip(
+                    tag: tag,
+                    style: TagChipStyle.rejected,
+                  )).toList(),
+                ),
+              ],
+
+              if (confirmed.isEmpty && pending.isEmpty && rejected.isEmpty)
+                const Text('暂无标签'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPendingTagChip(Tag tag) {
+    return Card(
+      margin: const EdgeInsets.only(right: 8, bottom: 4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(tag.preferredLabel),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () => _confirmTag(tag.id),
+              child: const Icon(Icons.check, size: 18, color: Colors.green),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: () => _rejectTag(tag.id),
+              child: const Icon(Icons.close, size: 18, color: Colors.red),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: () => _showMergeDialog(tag),
+              child: const Icon(Icons.merge_type, size: 18, color: Colors.blue),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dialog for selecting a target tag to merge into
+class _MergeTagDialog extends StatefulWidget {
+  final TagProvider tagProvider;
+  final Tag sourceTag;
+
+  const _MergeTagDialog({
+    required this.tagProvider,
+    required this.sourceTag,
+  });
+
+  @override
+  State<_MergeTagDialog> createState() => _MergeTagDialogState();
+}
+
+class _MergeTagDialogState extends State<_MergeTagDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Tag> _searchResults = [];
+  bool _isSearching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_onSearch);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onSearch() async {
+    final query = _searchController.text;
+    if (query.isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+
+    setState(() => _isSearching = true);
+    try {
+      // Use TagProvider's search which updates filteredTags
+      await widget.tagProvider.searchTags(query);
+      // Get results from filteredTags, filtering out the source tag
+      if (mounted) {
+        setState(() {
+          _searchResults = widget.tagProvider.filteredTags
+              .where((t) => t.id != widget.sourceTag.id)
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Search error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isSearching = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('合并标签'),
+      content: SizedBox(
+        width: 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('将 "${widget.sourceTag.preferredLabel}" 合并到:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                hintText: '搜索标签...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_isSearching)
+              const Center(child: CircularProgressIndicator())
+            else if (_searchResults.isNotEmpty)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _searchResults.length,
+                  itemBuilder: (context, index) {
+                    final tag = _searchResults[index];
+                    return ListTile(
+                      title: Text(tag.preferredLabel),
+                      subtitle: Text('${tag.usageCount} 张图片'),
+                      onTap: () => Navigator.pop(context, tag),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+      ],
     );
   }
 }
