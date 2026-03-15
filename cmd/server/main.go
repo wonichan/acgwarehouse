@@ -19,6 +19,8 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
+var registerAITagHandler = worker.RegisterAITagHandler
+
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -50,7 +52,7 @@ func main() {
 	aliasRepo := repository.NewTagAliasRepository(db)
 	obsRepo := repository.NewTagObservationRepository(db)
 	imageTagRepo := repository.NewImageTagRepository(db)
-	governanceSvc := service.NewTagGovernanceService(tagRepo, obsRepo, imageTagRepo)
+	governanceSvc := service.NewTagGovernanceService(tagRepo, aliasRepo, obsRepo, imageTagRepo)
 	jobManager := worker.NewManager(jobRepo)
 	jobManager.Start(context.Background())
 	defer jobManager.Stop()
@@ -58,7 +60,7 @@ func main() {
 	provider, err := ai.NewProvider(&cfg.AI)
 	if err == nil {
 		client := ai.NewRateLimitedClient(provider, cfg.AI.RequestsPerMinute)
-		worker.RegisterAITagHandler(jobManager, client, obsRepo)
+		registerAIWorker(jobManager, client, obsRepo, governanceSvc)
 	} else {
 		log.Printf("AI provider not configured for background processing: %v", err)
 	}
@@ -86,4 +88,8 @@ func openDatabase(cfg *config.Config) (*sql.DB, error) {
 		return nil, fmt.Errorf("postgres server bootstrap is not implemented yet")
 	}
 	return sql.Open("sqlite3", cfg.Database.Path)
+}
+
+func registerAIWorker(manager *worker.Manager, client ai.AIProvider, obsRepo repository.TagObservationRepository, governanceSvc worker.TagGovernanceMerger) {
+	registerAITagHandler(manager, client, obsRepo, governanceSvc)
 }

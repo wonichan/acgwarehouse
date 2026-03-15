@@ -248,6 +248,9 @@ func (m *mockJobRepoForAI) FindByID(id int64) (*domain.AsyncJob, error) { return
 func (m *mockJobRepoForAI) FindByStatus(status string) ([]domain.AsyncJob, error) {
 	return nil, nil
 }
+func (m *mockJobRepoForAI) FindByType(jobType string) ([]domain.AsyncJob, error) {
+	return nil, nil
+}
 func (m *mockJobRepoForAI) Update(job *domain.AsyncJob) error {
 	m.AsyncJob = *job
 	return nil
