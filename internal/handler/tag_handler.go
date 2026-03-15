@@ -287,6 +287,40 @@ func (h *TagHandler) DeleteAlias(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
+// GetTagStats handles GET /api/v1/tags/stats
+// It returns governance statistics for tags including usage, source, and pending-review counts.
+func (h *TagHandler) GetTagStats(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Get all tags
+	tags, err := h.tagRepo.FindAll(ctx, 100, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	stats := make([]gin.H, 0, len(tags))
+	for _, tag := range tags {
+		tagStats, err := h.imageTagRepo.GetTagStats(ctx, tag.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		stats = append(stats, gin.H{
+			"tag_id":          tag.ID,
+			"preferred_label": tag.PreferredLabel,
+			"usage_count":     tagStats.UsageCount,
+			"pending_count":   tagStats.PendingCount,
+			"confirmed_count": tagStats.ConfirmedCount,
+			"rejected_count":  tagStats.RejectedCount,
+			"ai_count":        tagStats.AICount,
+			"manual_count":    tagStats.ManualCount,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"stats": stats})
+}
+
 func parseIDParam(c *gin.Context, name string) (int64, bool) {
 	id, err := strconv.ParseInt(c.Param(name), 10, 64)
 	if err != nil || id <= 0 {
