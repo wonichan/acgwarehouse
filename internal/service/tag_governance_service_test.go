@@ -16,7 +16,7 @@ import (
 func TestTagGovernanceMergeTagsUsesExistingExactMatch(t *testing.T) {
 	t.Parallel()
 
-	service, tagRepo, imageTagRepo := newTagGovernanceServiceForTest(t)
+	service, tagRepo, _, imageTagRepo := newTagGovernanceServiceForTest(t)
 	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "blue sky", Slug: "blue-sky", ReviewState: "confirmed", UsageCount: 2})
 
 	if err := service.MergeTags(context.Background(), 1, []string{"blue sky"}, 1, 0.9); err != nil {
@@ -30,12 +30,46 @@ func TestTagGovernanceMergeTagsUsesExistingExactMatch(t *testing.T) {
 	if len(items) != 1 || items[0].TagID != existing.ID {
 		t.Fatalf("unexpected image tag association: %+v", items)
 	}
+	if items[0].ReviewState != "pending" {
+		t.Fatalf("image tag review state = %q, want pending", items[0].ReviewState)
+	}
+}
+
+func TestTagGovernanceMergeTagsUsesAliasMatch(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, aliasRepo, imageTagRepo := newTagGovernanceServiceForTest(t)
+	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "rainy night", Slug: "rainy-night", ReviewState: "confirmed", UsageCount: 4})
+	mustSaveGovernanceAlias(t, aliasRepo, &domain.TagAlias{TagID: existing.ID, Label: " Night Rain ", AliasType: "synonym"})
+
+	if err := service.MergeTags(context.Background(), 1, []string{"night rain"}, 1, 0.88); err != nil {
+		t.Fatalf("MergeTags() error = %v", err)
+	}
+
+	tag, err := tagRepo.FindByID(context.Background(), existing.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if tag.UsageCount != 5 {
+		t.Fatalf("UsageCount = %d, want 5", tag.UsageCount)
+	}
+
+	items, err := imageTagRepo.FindByImageID(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	if len(items) != 1 || items[0].TagID != existing.ID {
+		t.Fatalf("unexpected image tag association: %+v", items)
+	}
+	if items[0].ReviewState != "pending" {
+		t.Fatalf("image tag review state = %q, want pending", items[0].ReviewState)
+	}
 }
 
 func TestTagGovernanceMergeTagsCreatesMissingTag(t *testing.T) {
 	t.Parallel()
 
-	service, tagRepo, _ := newTagGovernanceServiceForTest(t)
+	service, tagRepo, _, imageTagRepo := newTagGovernanceServiceForTest(t)
 
 	if err := service.MergeTags(context.Background(), 1, []string{"night rain"}, 1, 0.75); err != nil {
 		t.Fatalf("MergeTags() error = %v", err)
@@ -48,12 +82,23 @@ func TestTagGovernanceMergeTagsCreatesMissingTag(t *testing.T) {
 	if tag.ID == 0 {
 		t.Fatal("expected created tag to have ID")
 	}
+
+	items, err := imageTagRepo.FindByImageID(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	if len(items) != 1 || items[0].TagID != tag.ID {
+		t.Fatalf("unexpected image tag association: %+v", items)
+	}
+	if items[0].ReviewState != "pending" {
+		t.Fatalf("image tag review state = %q, want pending", items[0].ReviewState)
+	}
 }
 
 func TestTagGovernanceMergeTagsCreatesPendingTagsByDefault(t *testing.T) {
 	t.Parallel()
 
-	service, tagRepo, imageTagRepo := newTagGovernanceServiceForTest(t)
+	service, tagRepo, _, imageTagRepo := newTagGovernanceServiceForTest(t)
 
 	if err := service.MergeTags(context.Background(), 1, []string{"sun beam"}, 1, 0.82); err != nil {
 		t.Fatalf("MergeTags() error = %v", err)
@@ -79,7 +124,7 @@ func TestTagGovernanceMergeTagsCreatesPendingTagsByDefault(t *testing.T) {
 func TestTagGovernanceMergeTagsIncrementsUsageCount(t *testing.T) {
 	t.Parallel()
 
-	service, tagRepo, _ := newTagGovernanceServiceForTest(t)
+	service, tagRepo, _, _ := newTagGovernanceServiceForTest(t)
 	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "forest", Slug: "forest", ReviewState: "confirmed", UsageCount: 3})
 
 	if err := service.MergeTags(context.Background(), 1, []string{"forest"}, 1, 0.9); err != nil {
@@ -95,7 +140,7 @@ func TestTagGovernanceMergeTagsIncrementsUsageCount(t *testing.T) {
 	}
 }
 
-func newTagGovernanceServiceForTest(t *testing.T) (*TagGovernanceService, repository.TagRepository, repository.ImageTagRepository) {
+func newTagGovernanceServiceForTest(t *testing.T) (*TagGovernanceService, repository.TagRepository, repository.TagAliasRepository, repository.ImageTagRepository) {
 	t.Helper()
 
 	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "tag-governance.db"))
@@ -111,10 +156,11 @@ func newTagGovernanceServiceForTest(t *testing.T) (*TagGovernanceService, reposi
 	mustSeedGovernanceData(t, db)
 
 	tagRepo := repository.NewTagRepository(db)
+	aliasRepo := repository.NewTagAliasRepository(db)
 	obsRepo := repository.NewTagObservationRepository(db)
 	imageTagRepo := repository.NewImageTagRepository(db)
 
-	return NewTagGovernanceService(tagRepo, obsRepo, imageTagRepo), tagRepo, imageTagRepo
+	return NewTagGovernanceService(tagRepo, aliasRepo, obsRepo, imageTagRepo), tagRepo, aliasRepo, imageTagRepo
 }
 
 func mustSeedGovernanceData(t *testing.T, db *sql.DB) {
@@ -145,4 +191,14 @@ func mustSaveGovernanceTag(t *testing.T, repo repository.TagRepository, tag *dom
 	}
 
 	return tag
+}
+
+func mustSaveGovernanceAlias(t *testing.T, repo repository.TagAliasRepository, alias *domain.TagAlias) *domain.TagAlias {
+	t.Helper()
+
+	if err := repo.Save(context.Background(), alias); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	return alias
 }
