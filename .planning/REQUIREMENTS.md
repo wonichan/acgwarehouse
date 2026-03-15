@@ -1,30 +1,30 @@
-# Requirements: ACGWarehouse（二次元图片库）
+# 需求文档：ACGWarehouse（二次元图片库）
 
-**Defined:** 2026-03-14
-**Core Value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
+**定义时间：** 2026-03-14
+**核心价值：** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
 
-## v1 Requirements
+## v1 需求
 
-Requirements for initial release. Each maps to roadmap phases.
+以下为首个可交付版本的需求。每一项都会映射到路线图阶段。
 
-### 核心架构 (Core Infrastructure)
+### 核心架构
 
-- [ ] **CORE-01**: 系统支持 Go 后端项目结构初始化
-- [ ] **CORE-02**: 系统支持 SQLite 数据库（开发/单用户）和 PostgreSQL（生产/多用户）双模式
-- [ ] **CORE-03**: 系统支持 RESTful API 基础框架（Gin）
-- [ ] **CORE-04**: 系统支持配置文件管理（数据库连接、存储路径、AI 服务配置）
+- [x] **CORE-01**: 系统支持 Go 后端项目结构初始化, go 1.26版本
+- [x] **CORE-02**: 系统支持 SQLite 数据库（开发/单用户）和 PostgreSQL（生产/多用户）双模式
+- [x] **CORE-03**: 系统支持 RESTful API 基础框架（Gin）
+- [x] **CORE-04**: 系统支持配置文件管理（数据库连接、存储路径、AI 服务配置）
 
-### 图片扫描入库 (Image Import)
+### 图片扫描入库
 
-- [ ] **IMPT-01**: 用户可以扫描指定文件夹并导入图片
-- [ ] **IMPT-02**: 用户可以监控指定文件夹，自动导入新增图片
-- [ ] **IMPT-03**: 系统支持常见图片格式（JPG、PNG、WebP、GIF）
-- [ ] **IMPT-04**: 系统提取图片元数据（尺寸、格式、创建时间、EXIF）
+- [x] **IMPT-01**: 用户可以扫描指定文件夹并导入图片
+- [x] **IMPT-02**: 用户可以监控指定文件夹，自动导入新增图片
+- [x] **IMPT-03**: 系统支持常见图片格式（JPG、PNG、WebP、GIF）
+- [x] **IMPT-04**: 系统提取图片元数据（尺寸、格式、创建时间、EXIF）
 - [ ] **IMPT-05**: 系统生成并存储缩略图（多种尺寸）
 - [ ] **IMPT-06**: 系统计算并存储图片感知哈希（用于相似检测）
 - [ ] **IMPT-07**: 用户可以查看导入进度和状态
 
-### 图片浏览 (Gallery)
+### 图片浏览
 
 - [ ] **GALR-01**: 用户可以以网格视图浏览图片
 - [ ] **GALR-02**: 用户可以以瀑布流视图浏览图片
@@ -32,24 +32,24 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **GALR-04**: 用户可以按时间/名称/大小排序
 - [ ] **GALR-05**: 用户可以分页浏览大型图片库
 
-### AI 角色识别 (AI Recognition)
+### AI 开放标签生成
 
-- [ ] **AIRE-01**: 系统自动识别动漫角色并生成角色标签
-- [ ] **AIRE-02**: 系统自动识别画师并生成画师标签
-- [ ] **AIRE-03**: 系统自动识别原作/系列并生成原作标签
-- [ ] **AIRE-04**: 系统为每个标签提供置信度分数
-- [ ] **AIRE-05**: 用户可以查看 AI 识别结果并确认/修改
-- [ ] **AIRE-06**: 系统异步处理 AI 识别任务，不阻塞用户操作
+- [x] **AIRE-01**: 系统调用千问 / 豆包等多模态 AI 为图片生成开放描述标签
+- [x] **AIRE-02**: 系统完整保存每次 AI 标签观测结果（原始标签、模型、提示词版本、时间）
+- [ ] **AIRE-03**: 系统将 AI 原始标签归并为可管理标准标签，并支持别名 / 近义表达关联
+- [x] **AIRE-04**: 系统为 AI 标签观测结果和图片标签关联提供置信度分数
+- [ ] **AIRE-05**: 用户可以查看 AI 标签结果，并对标签进行确认 / 修改 / 合并
+- [x] **AIRE-06**: 系统异步处理 AI 标签任务，不阻塞用户操作
 
-### 标签管理 (Tags)
+### 标签管理
 
-- [ ] **TAGS-01**: 用户可以手动添加/修改/删除标签
-- [ ] **TAGS-02**: 系统支持标签分类（角色、画师、原作、通用、元数据）
-- [ ] **TAGS-03**: 用户可以按标签筛选图片
-- [ ] **TAGS-04**: 系统支持标签搜索（模糊匹配）
-- [ ] **TAGS-05**: 用户可以查看标签统计（使用次数）
+- [ ] **TAGS-01**: 用户可以手动添加 / 修改 / 删除标准标签与别名
+- [ ] **TAGS-02**: 系统支持宽松标签分类（人物关系、服装外观、姿态动作、场景环境、氛围情绪、美术风格、道具元素、内容分级等）
+- [ ] **TAGS-03**: 用户可以按标准标签筛选图片，并兼容 AI 原始标签归并结果
+- [ ] **TAGS-04**: 系统支持标签搜索（模糊匹配、别名、近义表达）
+- [ ] **TAGS-05**: 用户可以查看标签统计（使用次数、来源、待复核状态）
 
-### 重复检测 (Duplicate Detection)
+### 重复检测
 
 - [ ] **DUPD-01**: 系统检测完全相同的图片（文件哈希）
 - [ ] **DUPD-02**: 系统检测相似图片（感知哈希）
@@ -57,15 +57,15 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **DUPD-04**: 用户可以查看重复图片组
 - [ ] **DUPD-05**: 用户可以手动选择保留/删除重复图片
 
-### 搜索功能 (Search)
+### 搜索功能
 
 - [ ] **SRCH-01**: 用户可以按文件名搜索图片
-- [ ] **SRCH-02**: 用户可以按标签搜索图片
-- [ ] **SRCH-03**: 用户可以组合多个标签搜索（AND/OR）
+- [ ] **SRCH-02**: 用户可以按标准标签、别名或 AI 观测标签搜索图片
+- [ ] **SRCH-03**: 用户可以组合多个标签搜索（AND/OR），并解析到标准标签实体
 - [ ] **SRCH-04**: 用户可以上传图片进行以图搜图
 - [ ] **SRCH-05**: 搜索结果支持排序和分页
 
-### 收藏夹/相册 (Collections)
+### 收藏夹/相册
 
 - [ ] **COLL-01**: 用户可以创建收藏夹/相册
 - [ ] **COLL-02**: 用户可以添加/移除收藏夹中的图片
@@ -73,44 +73,44 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **COLL-04**: 用户可以设置收藏夹封面
 - [ ] **COLL-05**: 系统显示收藏夹统计（图片数量）
 
-### 批量操作 (Batch Operations)
+### 批量操作
 
 - [ ] **BTCH-01**: 用户可以批量选择图片
 - [ ] **BTCH-02**: 用户可以批量添加/删除标签
 - [ ] **BTCH-03**: 用户可以批量移动到收藏夹
 - [ ] **BTCH-04**: 用户可以批量删除图片
 
-## v2 Requirements
+## v2 需求
 
-Deferred to future release. Tracked but not in current roadmap.
+以下需求延后到后续版本，不纳入当前路线图。
 
-### 高级搜索 (Advanced Search)
+### 高级搜索
 
 - **ASRC-01**: 用户可以保存搜索条件为智能收藏夹
 - **ASRC-02**: 用户可以按图片尺寸范围搜索
 - **ASRC-03**: 用户可以按创建时间范围搜索
 
-### Booru 集成 (Booru Integration)
+### Booru 集成
 
 - **BOOR-01**: 系统可以从 Danbooru/Gelbooru 同步标签
 - **BOOR-02**: 用户可以手动触发标签同步
 
-### 高级管理 (Advanced Management)
+### 高级管理
 
 - **ADVM-01**: 系统支持图片评分功能
 - **ADVM-02**: 系统支持图片备注功能
 - **ADVM-03**: 系统支持 NSFW/SFW 内容过滤
 
-### 部署 (Deployment)
+### 部署
 
 - **DEPL-01**: 系统支持 Docker 部署
 - **DEPL-02**: 系统提供 Web 管理后台
 
-## Out of Scope
+## 暂不纳入范围
 
-Explicitly excluded. Documented to prevent scope creep.
+以下内容明确不纳入当前范围，避免后续范围失控。
 
-| Feature | Reason |
+| 功能 | 原因 |
 |---------|--------|
 | 社交功能（分享/关注） | 违反隐私优先的个人图库定位；复杂性爆炸 |
 | 云同步/云存储 | 成本高、复杂度高、隐私顾虑 |
@@ -120,20 +120,20 @@ Explicitly excluded. Documented to prevent scope creep.
 | 插件系统（v1） | 过早抽象；API 不稳定 |
 | 多用户账户 | 增加认证复杂性；不是主要用例 |
 
-## Traceability
+## 需求追踪
 
-Which phases cover which requirements. Updated during roadmap creation.
+下表用于记录需求与阶段的映射。为兼容工作流工具，`Requirement / Phase / Status` 列名与 `Phase 1 / Pending` 等值保留英文。
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1 | Pending |
-| CORE-02 | Phase 1 | Pending |
-| CORE-03 | Phase 1 | Pending |
-| CORE-04 | Phase 1 | Pending |
-| IMPT-01 | Phase 1 | Pending |
-| IMPT-02 | Phase 1 | Pending |
-| IMPT-03 | Phase 1 | Pending |
-| IMPT-04 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | Complete |
+| CORE-02 | Phase 1 | Complete |
+| CORE-03 | Phase 1 | Complete |
+| CORE-04 | Phase 1 | Complete |
+| IMPT-01 | Phase 1 | Complete |
+| IMPT-02 | Phase 1 | Complete |
+| IMPT-03 | Phase 1 | Complete |
+| IMPT-04 | Phase 1 | Complete |
 | IMPT-05 | Phase 2 | Pending |
 | IMPT-06 | Phase 2 | Pending |
 | IMPT-07 | Phase 2 | Pending |
@@ -142,12 +142,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GALR-03 | Phase 2 | Pending |
 | GALR-04 | Phase 2 | Pending |
 | GALR-05 | Phase 2 | Pending |
-| AIRE-01 | Phase 3 | Pending |
-| AIRE-02 | Phase 3 | Pending |
+| AIRE-01 | Phase 3 | Complete |
+| AIRE-02 | Phase 1 | Complete |
 | AIRE-03 | Phase 3 | Pending |
-| AIRE-04 | Phase 3 | Pending |
+| AIRE-04 | Phase 1 | Complete |
 | AIRE-05 | Phase 3 | Pending |
-| AIRE-06 | Phase 3 | Pending |
+| AIRE-06 | Phase 3 | Complete |
 | TAGS-01 | Phase 3 | Pending |
 | TAGS-02 | Phase 3 | Pending |
 | TAGS-03 | Phase 3 | Pending |
@@ -173,11 +173,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BTCH-03 | Phase 5 | Pending |
 | BTCH-04 | Phase 5 | Pending |
 
-**Coverage:**
-- v1 requirements: 47 total
-- Mapped to phases: 47
-- Unmapped: 0 ✓
+**覆盖情况：**
+- v1 需求：共 47 项
+- 已映射到阶段：47 项
+- 未映射：0 项 ✓
 
 ---
-*Requirements defined: 2026-03-14*
-*Last updated: 2026-03-14 after initial definition*
+*需求定义时间：2026-03-14*
+*最后更新：2026-03-14（首次定义后）*
