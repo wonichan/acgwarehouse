@@ -186,15 +186,18 @@ type mockTagObservationRepo struct {
 	savedObservation *domain.TagObservation
 }
 
-func (m *mockTagObservationRepo) Save(obs *domain.TagObservation) error {
+func (m *mockTagObservationRepo) Save(ctx context.Context, obs *domain.TagObservation) error {
 	m.savedObservation = obs
 	obs.ID = 1
 	return nil
 }
-func (m *mockTagObservationRepo) FindByImageID(imageID int64) ([]domain.TagObservation, error) {
+func (m *mockTagObservationRepo) FindByImageID(ctx context.Context, imageID int64) ([]*domain.TagObservation, error) {
 	return nil, nil
 }
-func (m *mockTagObservationRepo) FindByID(id int64) (*domain.TagObservation, error) {
+func (m *mockTagObservationRepo) FindByProvider(ctx context.Context, provider string, limit int) ([]*domain.TagObservation, error) {
+	return nil, nil
+}
+func (m *mockTagObservationRepo) FindByID(ctx context.Context, id int64) (*domain.TagObservation, error) {
 	return nil, nil
 }
 
