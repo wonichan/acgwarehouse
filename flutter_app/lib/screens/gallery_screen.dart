@@ -4,7 +4,9 @@ import '../providers/image_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/image_grid.dart';
 import '../widgets/image_masonry.dart';
+import '../widgets/tag_filter_drawer.dart';
 import 'image_detail_screen.dart';
+import 'tag_management_screen.dart';
 
 class GalleryScreen extends StatelessWidget {
   const GalleryScreen({super.key});
@@ -27,9 +29,17 @@ class _GalleryContent extends StatelessWidget {
       appBar: AppBar(
         title: const Text('ACGWarehouse'),
         actions: [
+          _buildTagFilterButton(context),
           _buildViewModeToggle(context),
           _buildSortButton(context),
+          _buildManageTagsButton(context),
         ],
+      ),
+      drawer: TagFilterDrawer(
+        initialSelectedIds: context.watch<ImageListProvider>().selectedTagIds,
+        onFilterChanged: (tagIds) {
+          context.read<ImageListProvider>().setTagFilter(tagIds);
+        },
       ),
       body: Consumer<ImageListProvider>(
         builder: (context, provider, child) {
@@ -57,6 +67,14 @@ class _GalleryContent extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+  
+  Widget _buildTagFilterButton(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.filter_list),
+      onPressed: () => Scaffold.of(context).openDrawer(),
+      tooltip: '标签筛选',
     );
   }
   
@@ -107,11 +125,28 @@ class _GalleryContent extends StatelessWidget {
     );
   }
   
+  Widget _buildManageTagsButton(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.label_outline),
+      onPressed: () => _navigateToTagManagement(context),
+      tooltip: '标签管理',
+    );
+  }
+  
   void _navigateToDetail(BuildContext context, image) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ImageDetailScreen(image: image),
+      ),
+    );
+  }
+  
+  void _navigateToTagManagement(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const TagManagementScreen(),
       ),
     );
   }
