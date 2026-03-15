@@ -34,8 +34,15 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api := r.Group("/api/v1")
 
 	images := api.Group("/images")
-	images.GET("", placeholderHandler)
-	images.GET("/:id", placeholderHandler)
+	imageList := gin.HandlerFunc(placeholderHandler)
+	imageGet := gin.HandlerFunc(placeholderHandler)
+	if deps != nil && deps.ImageRepo != nil && deps.TagRepo != nil && deps.ImageTagRepo != nil {
+		imageHandler := NewImageHandler(deps.ImageRepo, deps.TagRepo, deps.ImageTagRepo)
+		imageList = imageHandler.ListImages
+		imageGet = imageHandler.GetImage
+	}
+	images.GET("", imageList)
+	images.GET("/:id", imageGet)
 	images.POST("/scan", placeholderHandler)
 
 	tagGet := gin.HandlerFunc(placeholderHandler)
