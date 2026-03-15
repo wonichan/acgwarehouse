@@ -9,6 +9,7 @@ import (
 
 type ImageRepository interface {
 	SaveImage(image *domain.Image) error
+	FindByID(id int64) (*domain.Image, error)
 	FindByPath(path string) (*domain.Image, error)
 	FindAll(limit, offset int) ([]domain.Image, error)
 	Count() (int64, error)
@@ -50,11 +51,22 @@ func (r *sqliteImageRepository) SaveImage(image *domain.Image) error {
 }
 
 func (r *sqliteImageRepository) FindByPath(path string) (*domain.Image, error) {
-	image := &domain.Image{}
-	err := r.db.QueryRow(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, phash, created_at, updated_at
+	return r.queryOne(`
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), created_at, updated_at
 		FROM images WHERE path = ?
-	`, path).Scan(
+	`, path)
+}
+
+func (r *sqliteImageRepository) FindByID(id int64) (*domain.Image, error) {
+	return r.queryOne(`
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), created_at, updated_at
+		FROM images WHERE id = ?
+	`, id)
+}
+
+func (r *sqliteImageRepository) queryOne(query string, args ...any) (*domain.Image, error) {
+	image := &domain.Image{}
+	err := r.db.QueryRow(query, args...).Scan(
 		&image.ID,
 		&image.Path,
 		&image.Filename,
@@ -79,7 +91,7 @@ func (r *sqliteImageRepository) FindByPath(path string) (*domain.Image, error) {
 
 func (r *sqliteImageRepository) FindAll(limit, offset int) ([]domain.Image, error) {
 	rows, err := r.db.Query(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, phash, created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), created_at, updated_at
 		FROM images ORDER BY id LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
