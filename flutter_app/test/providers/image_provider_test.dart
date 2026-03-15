@@ -19,14 +19,20 @@ void main() {
 
   group('ImageListProvider', () {
     group('setTagFilter', () {
-      test('stores selected tag IDs', () {
+      test('stores selected tag IDs', () async {
         // Arrange
-        when(mockApiService.fetchImages(any)).thenAnswer((_) async => 
+        when(mockApiService.fetchImages(
+          cursor: anyNamed('cursor'),
+          limit: anyNamed('limit'),
+          sortBy: anyNamed('sortBy'),
+          sortDir: anyNamed('sortDir'),
+          tagIds: anyNamed('tagIds'),
+        )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: [], nextCursor: null, hasMore: false)
         );
 
         // Act
-        provider.setTagFilter([1, 2, 3]);
+        await provider.setTagFilter([1, 2, 3]);
 
         // Assert
         expect(provider.selectedTagIds, [1, 2, 3]);

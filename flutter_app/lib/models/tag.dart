@@ -1,151 +1,97 @@
-/// Represents a tag in the system
 class Tag {
   final int id;
-  final String label;
-  final String? category;
-  final String? normalizedLabel;
-  final int? usageCount;
+  final String preferredLabel;
+  final String slug;
+  final String? primaryCategory;
+  final String reviewState;
+  final double trustScore;
+  final int usageCount;
   final DateTime createdAt;
-  final DateTime updatedAt;
 
   const Tag({
     required this.id,
-    required this.label,
-    this.category,
-    this.normalizedLabel,
-    this.usageCount,
+    required this.preferredLabel,
+    required this.slug,
+    this.primaryCategory,
+    required this.reviewState,
+    required this.trustScore,
+    required this.usageCount,
     required this.createdAt,
-    required this.updatedAt,
   });
 
   factory Tag.fromJson(Map<String, dynamic> json) {
     return Tag(
       id: json['id'] as int,
-      label: json['label'] as String,
-      category: json['category'] as String?,
-      normalizedLabel: json['normalized_label'] as String?,
-      usageCount: json['usage_count'] as int?,
+      preferredLabel: json['preferred_label'] as String,
+      slug: json['slug'] as String,
+      primaryCategory: json['primary_category'] as String?,
+      reviewState: json['review_state'] as String,
+      trustScore: (json['trust_score'] as num).toDouble(),
+      usageCount: json['usage_count'] as int,
       createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+
+  factory Tag.fromImageTagJson(Map<String, dynamic> json) {
+    final label = (json['preferred_label'] as String?) ?? '';
+    return Tag(
+      id: (json['tag_id'] ?? json['id']) as int,
+      preferredLabel: label,
+      slug: _slugFromLabel(label),
+      primaryCategory: null,
+      reviewState: (json['review_state'] as String?) ?? 'pending',
+      trustScore: (json['confidence'] as num?)?.toDouble() ?? 0,
+      usageCount: 0,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'label': label,
-      'category': category,
-      'normalized_label': normalizedLabel,
+      'preferred_label': preferredLabel,
+      'slug': slug,
+      'primary_category': primaryCategory,
+      'review_state': reviewState,
+      'trust_score': trustScore,
       'usage_count': usageCount,
       'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
     };
   }
-}
 
-/// Represents an image-tag association with review state
-class ImageTag {
-  final int id;
-  final int imageId;
-  final int tagId;
-  final Tag tag;
-  final String reviewState; // 'pending', 'confirmed', 'rejected'
-  final double? confidence;
-  final int? sourceObservationId;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-
-  const ImageTag({
-    required this.id,
-    required this.imageId,
-    required this.tagId,
-    required this.tag,
-    this.reviewState = 'pending',
-    this.confidence,
-    this.sourceObservationId,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-
-  factory ImageTag.fromJson(Map<String, dynamic> json) {
-    return ImageTag(
-      id: json['id'] as int,
-      imageId: json['image_id'] as int,
-      tagId: json['tag_id'] as int,
-      tag: Tag.fromJson(json['tag'] as Map<String, dynamic>),
-      reviewState: json['review_state'] as String? ?? 'pending',
-      confidence: (json['confidence'] as num?)?.toDouble(),
-      sourceObservationId: json['source_observation_id'] as int?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+  Tag copyWith({
+    int? id,
+    String? preferredLabel,
+    String? slug,
+    String? primaryCategory,
+    String? reviewState,
+    double? trustScore,
+    int? usageCount,
+    DateTime? createdAt,
+  }) {
+    return Tag(
+      id: id ?? this.id,
+      preferredLabel: preferredLabel ?? this.preferredLabel,
+      slug: slug ?? this.slug,
+      primaryCategory: primaryCategory ?? this.primaryCategory,
+      reviewState: reviewState ?? this.reviewState,
+      trustScore: trustScore ?? this.trustScore,
+      usageCount: usageCount ?? this.usageCount,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
-  bool get isPending => reviewState == 'pending';
-  bool get isConfirmed => reviewState == 'confirmed';
-  bool get isRejected => reviewState == 'rejected';
-  bool get isAIGenerated => sourceObservationId != null;
-}
+  @override
+  String toString() {
+    return 'Tag(id: $id, label: $preferredLabel, state: $reviewState)';
+  }
 
-/// AI tag job status
-enum AIJobStatus {
-  queued,
-  running,
-  completed,
-  failed,
-}
-
-/// AI tag job status response
-class AITagStatus {
-  final int imageId;
-  final AIJobStatus status;
-  final int? observationId;
-  final String? error;
-  final List<Tag>? generatedTags;
-  final DateTime? completedAt;
-
-  AITagStatus({
-    required this.imageId,
-    required this.status,
-    this.observationId,
-    this.error,
-    this.generatedTags,
-    this.completedAt,
-  });
-
-  factory AITagStatus.fromJson(Map<String, dynamic> json) {
-    AIJobStatus status;
-    final statusStr = json['status'] as String? ?? 'queued';
-    switch (statusStr) {
-      case 'running':
-        status = AIJobStatus.running;
-        break;
-      case 'completed':
-        status = AIJobStatus.completed;
-        break;
-      case 'failed':
-        status = AIJobStatus.failed;
-        break;
-      default:
-        status = AIJobStatus.queued;
-    }
-
-    return AITagStatus(
-      imageId: json['image_id'] as int,
-      status: status,
-      observationId: json['observation_id'] as int?,
-      error: json['error'] as String?,
-      generatedTags: (json['generated_tags'] as List?)
-          ?.map((t) => Tag.fromJson(t as Map<String, dynamic>))
-          .toList(),
-      completedAt: json['completed_at'] != null
-          ? DateTime.parse(json['completed_at'] as String)
-          : null,
-    );
+  static String _slugFromLabel(String label) {
+    return label.trim().toLowerCase().replaceAll(' ', '-');
   }
 }
 
-/// Tag governance statistics
+/// Tag statistics for governance display
 class TagStatistics {
   final int tagId;
   final String label;
@@ -168,7 +114,7 @@ class TagStatistics {
   factory TagStatistics.fromJson(Map<String, dynamic> json) {
     return TagStatistics(
       tagId: json['tag_id'] as int,
-      label: json['label'] as String,
+      label: json['label'] as String? ?? json['preferred_label'] as String? ?? '',
       usageCount: json['usage_count'] as int? ?? 0,
       pendingCount: json['pending_count'] as int? ?? 0,
       confirmedCount: json['confirmed_count'] as int? ?? 0,

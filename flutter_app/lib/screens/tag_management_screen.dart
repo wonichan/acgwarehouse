@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/tag.dart';
 import '../providers/tag_provider.dart';
 import '../services/tag_service.dart';
 
@@ -34,7 +35,7 @@ class _TagManagementContent extends StatelessWidget {
       ),
       body: Consumer<TagProvider>(
         builder: (context, provider, child) {
-          if (provider.isLoading && provider.statistics.isEmpty) {
+          if (provider.isLoadingStatistics && provider.statistics.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -155,10 +156,10 @@ class _TagManagementContent extends StatelessWidget {
     );
   }
 
-  Widget _buildStatTile(dynamic stat) {
+  Widget _buildStatTile(TagStatistics stat) {
     return ListTile(
       leading: CircleAvatar(
-        child: Text(stat.label[0].toUpperCase()),
+        child: Text(stat.label.isNotEmpty ? stat.label[0].toUpperCase() : '?'),
       ),
       title: Text(stat.label),
       subtitle: Text(
