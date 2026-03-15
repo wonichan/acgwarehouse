@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-03-15T12:13:19.399Z"
+last_updated: "2026-03-15T12:40:57.136Z"
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 14
-  completed_plans: 9
-  percent: 64
+  completed_plans: 10
+  percent: 86
 ---
 
 # STATE.md
@@ -18,8 +18,8 @@ progress:
 project: ACGWarehouse
 milestone: v1.0
 phase: 3
-plan: 5
-progress: "Phase 3: 71% (5/7 plans)"
+plan: 6
+progress: "Phase 3: 86% (6/7 plans)"
 status: in-progress
 created: 2026-03-14
 updated: 2026-03-15
@@ -49,10 +49,10 @@ Phase 6: ○ 优化与部署             (0%)
 ## 当前状态
 
 **Phase：** 3（gap closure 进行中）
-**Plan：** 05 已完成，待继续执行 03-06
-**Wave：** 4
+**Plan：** 06 已完成，待继续执行 03-07
+**Wave：** 5
 
-**下一步操作：** 继续执行 `.planning/phases/03-ai/03-06-PLAN.md`，补齐标签筛选与剩余 Phase 3 gaps
+**下一步操作：** 继续执行 `.planning/phases/03-ai/03-07-PLAN.md`，补齐 AI 结果展示 gap
 
 ## 指标
 
@@ -82,10 +82,12 @@ Phase 6: ○ 优化与部署             (0%)
 | 服务器启动时完成标签 API 装配 | 避免新端点只注册不工作，确保 REST API 可直接供前端调用 | ✓ Phase 3 Plan 03 已接入 repository/service/job manager |
 | 删除标签时显式清理关联记录 | 保证 tag/image_tag/alias 删除语义稳定，不依赖运行时外键配置 | ✓ Phase 3 Plan 03 已实现 |
 | Flutter Provider 模式管理标签状态 | 与现有架构保持一致，提供响应式 UI 更新 | ✓ Phase 3 Plan 04 TagProvider 已实现 |
-| 标签过滤 UI 先于后端实现 | 前端抽屉组件已就绪，待后端支持 tag 筛选查询 | ◆ UI 完成，待后端 `/api/v1/images?tags=` 支持 |
+| 标签过滤 UI 先于后端实现 | 前端抽屉组件已就绪，待后端支持 tag 筛选查询 | ✓ 03-06 已实现 `/api/v1/images?tag_ids=` 端点 |
 | Phase 3 目标验证优先于阶段推进 | 计划执行完成不等于目标达成，必须以 `03-VERIFICATION.md` 为准 | ✓ 发现 4 个 gaps，需先补齐再进入 Phase 4 |
 | AI 标签治理按 exact→alias→new 顺序归并 | 保持 Phase 3 无模糊匹配约束，同时复用已治理标签与别名 | ✓ 03-05 已接入 normalized alias lookup |
 | AI 归并输出保持 pending image_tags | 即使命中已确认标准标签，也要给复核界面真实待处理数据 | ✓ 03-05 后台任务现会写入待复核 image_tags |
+| 图片筛选采用 AND 语义 | 确保只有同时拥有所有请求标签的图片被返回 | ✓ 03-06 已实现 GROUP BY HAVING 过滤逻辑 |
+| AI 与手动标签区分基于 source_observation_id | 统计时区分来源，支持治理分析 | ✓ 03-06 已实现 TagStats 接口 |
 
 ## 阻塞项
 
@@ -108,6 +110,7 @@ Phase 6: ○ 优化与部署             (0%)
 | 2026-03-15 | 3 | Plan 03-04 已执行 | 已完成 Flutter 标签前端层：筛选抽屉、确认界面、管理组件、40 个测试通过 |
 | 2026-03-15 | 3 | Phase 3 已验证 | `03-VERIFICATION.md` 判定 gaps_found，需补齐 AI 归并链路、标签筛选、AI 结果展示与标签统计 |
 | 2026-03-15 | 3 | Plan 03-05 已执行 | 已完成 AI worker → governance merge 接线、alias-aware reuse 与 `03-05-SUMMARY.md` |
+| 2026-03-15 | 3 | Plan 03-06 已执行 | 已完成图片筛选 API、标签归并端点、统计接口与 `03-06-SUMMARY.md` |
 
 ---
 
@@ -117,4 +120,5 @@ Phase 6: ○ 优化与部署             (0%)
 *Phase 3 Plan 03 已完成：2026-03-15*
 *Phase 3 Plan 04 已完成：2026-03-15*
 *Phase 3 Plan 05 已完成：2026-03-15*
+*Phase 3 Plan 06 已完成：2026-03-15*
 *Phase 3 验证完成（gaps_found）：2026-03-15*
