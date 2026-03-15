@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-03-14T13:40:58.152Z"
+last_updated: "2026-03-15T08:30:00.000Z"
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  completed_phases: 2
+  total_plans: 1
+  completed_plans: 1
+  percent: 25
 ---
 
 # STATE.md
@@ -17,12 +17,12 @@ progress:
 ---
 project: ACGWarehouse
 milestone: v1.0
-phase: 1
-plan: 3
-progress: "Phase 1: 100% (3/3 plans)"
+phase: 3
+plan: 1
+progress: "Phase 3: 25% (1/4 plans)"
 status: in-progress
 created: 2026-03-14
-updated: 2026-03-14
+updated: 2026-03-15
 ---
 
 ## 项目引用
@@ -31,14 +31,14 @@ updated: 2026-03-14
 
 **核心价值：** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
 
-**当前重点：** Phase 2 - 缩略图、基础浏览与 AI 复核界面底座
+**当前重点：** Phase 3 - AI 开放标签与治理
 
 ## 进度摘要
 
 ```
 Phase 1: ✓ 基础架构、图片扫描与标签基础层    (100%)
-Phase 2: ○ 缩略图、基础浏览与 AI 复核界面底座 (0%)
-Phase 3: ○ AI 开放标签与治理                (0%)
+Phase 2: ✓ 缩略图、基础浏览与 AI 复核界面底座 (100%)
+Phase 3: ◆ AI 开放标签与治理                (25%)
 Phase 4: ○ 重复检测与搜索         (0%)
 Phase 5: ○ 收藏夹与批量操作       (0%)
 Phase 6: ○ 优化与部署             (0%)
@@ -48,20 +48,20 @@ Phase 6: ○ 优化与部署             (0%)
 
 ## 当前状态
 
-**Phase：** 2（上下文已收集）
-**Plan：** Not started
-**Wave：** 0
+**Phase：** 3（进行中）
+**Plan：** 01 已完成
+**Wave：** 1
 
-**下一步操作：** 规划 Phase 2（缩略图、基础浏览与 AI 复核界面底座）
+**下一步操作：** 执行 Phase 3 Plan 02（标签数据层）
 
 ## 指标
 
 | 指标 | 数值 |
 |--------|-------|
 | 需求总数 | 47 |
-| 已完成需求 | 10 |
+| 已完成需求 | 12 |
 | 阶段总数 | 6 |
-| 已完成阶段 | 1 |
+| 已完成阶段 | 2 |
 | 预计总时长 | 12-17 周 |
 
 ## 关键决策
@@ -73,6 +73,8 @@ Phase 6: ○ 优化与部署             (0%)
 | AI 外部服务 + 标签治理层 | 以开放生成标签替代固定词表，保留后续治理能力 | ✓ 已落地观测/标准标签/别名分层 schema |
 | 细粒度阶段划分 | 用户选择，更适合迭代开发 | — 待验证 |
 | 腾讯云 COS 缩略图存储 | CDN 加速、多端访问、存储桶已就绪 | ◆ Phase 2 将集成 COS SDK |
+| OpenAI 兼容 AI API 格式 | 千问和豆包都支持 OpenAI 格式，简化实现 | ✓ Phase 3 Plan 01 已验证 |
+| Token Bucket 限流 | 严格限制 AI API 调用频率 | ✓ Phase 3 Plan 01 已实现 |
 
 ## 阻塞项
 
@@ -89,8 +91,9 @@ Phase 6: ○ 优化与部署             (0%)
 | 2026-03-14 | 1 | Plan 01-03 已执行 | 已完成扫描 CLI、递归 watcher、异步任务队列与 `01-03-SUMMARY.md` |
 | 2026-03-14 | 1 | Phase 1 已验证完成 | 已生成 `01-VERIFICATION.md` 并推进到 Phase 2 |
 | 2026-03-14 | 2 | 上下文已收集 | 已创建 `.planning/phases/02-ai/02-CONTEXT.md`，可进入规划 |
+| 2026-03-15 | 3 | Plan 03-01 已执行 | 已完成 AI 提供商抽象层、千问/豆包实现、限流客户端、异步任务处理器 |
 
 ---
 
 *状态初始化时间：2026-03-14*
-*Phase 2 上下文已收集：2026-03-14*
+*Phase 3 Plan 01 已完成：2026-03-15*
