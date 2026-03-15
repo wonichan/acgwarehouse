@@ -61,7 +61,7 @@ func handleAITagGeneration(ctx context.Context, id int64, payload string, client
 		CreatedAt:     time.Now(),
 	}
 
-	if err := obsRepo.Save(obs); err != nil {
+	if err := obsRepo.Save(ctx, obs); err != nil {
 		return fmt.Errorf("save observation: %w", err)
 	}
 
