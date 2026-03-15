@@ -13,7 +13,7 @@
 |-------|--------|-------|----------|
 | 1 | ✓ | 3/3 | 100% |
 | 2 | ✓ | 4/4 | 100% |
-| 3 | ◆ | 5/7 | 71% |
+| 3 | ◆ | 6/7 | 86% |
 | 4 | ○ | 0/0 | 0% |
 | 5 | ○ | 0/0 | 0% |
 | 6 | ○ | 0/0 | 0% |
@@ -108,7 +108,7 @@ Plans:
 
 **预计时长：** 3-4 weeks
 
-**Plans:** 5/7 plans executed
+**Plans:** 6/7 plans executed
 
 **关联需求：**
 - AIRE-01, AIRE-03, AIRE-05, AIRE-06
@@ -120,10 +120,10 @@ Plans:
 - [x] 03-03-PLAN.md — 标签管理 API 层
 - [x] 03-04-PLAN.md — Flutter 标签前端层
 - [x] 03-05-PLAN.md — AI worker 归并接线与 alias-aware gap closure
-- [ ] 03-06-PLAN.md — 标签筛选后端接线
+- [x] 03-06-PLAN.md — 标签筛选后端接线
 - [ ] 03-07-PLAN.md — AI 结果展示与标签统计 gap closure
 
-**验证状态：** 已完成 03-05 的 AI 归并链路 gap closure，但 `03-VERIFICATION.md` 中的标签筛选、AI 结果展示与标签统计 gaps 仍待补齐；本阶段继续保持 In Progress。
+**验证状态：** 已完成 03-05 的 AI 归并链路 gap closure 和 03-06 的标签筛选/归并端点/统计接口；剩余 AI 结果展示 gap 待 03-07 补齐。
 
 **成功标准：**
 1. 千问 / 豆包 AI 标签服务接入完成，支持异步处理图片并生成开放描述标签

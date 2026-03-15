@@ -45,9 +45,9 @@
 
 - [x] **TAGS-01**: 用户可以手动添加 / 修改 / 删除标准标签与别名
 - [x] **TAGS-02**: 系统支持宽松标签分类（人物关系、服装外观、姿态动作、场景环境、氛围情绪、美术风格、道具元素、内容分级等）
-- [ ] **TAGS-03**: 用户可以按标准标签筛选图片，并兼容 AI 原始标签归并结果
+- [x] **TAGS-03**: 用户可以按标准标签筛选图片，并兼容 AI 原始标签归并结果
 - [x] **TAGS-04**: 系统支持标签搜索（模糊匹配、别名、近义表达）
-- [ ] **TAGS-05**: 用户可以查看标签统计（使用次数、来源、待复核状态）
+- [x] **TAGS-05**: 用户可以查看标签统计（使用次数、来源、待复核状态）
 
 ### 重复检测
 
@@ -150,9 +150,9 @@
 | AIRE-06 | Phase 3 | Complete |
 | TAGS-01 | Phase 3 | Complete |
 | TAGS-02 | Phase 3 | Complete |
-| TAGS-03 | Phase 3 | Pending |
+| TAGS-03 | Phase 3 | Complete |
 | TAGS-04 | Phase 3 | Complete |
-| TAGS-05 | Phase 3 | Pending |
+| TAGS-05 | Phase 3 | Complete |
 | DUPD-01 | Phase 4 | Pending |
 | DUPD-02 | Phase 4 | Pending |
 | DUPD-03 | Phase 4 | Pending |
