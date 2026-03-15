@@ -1,212 +1,200 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../models/tag.dart';
-import 'api_service.dart';
 
-/// Service for tag-related API operations
 class TagService {
   final http.Client _client;
-  final String baseUrl;
 
-  TagService({
-    http.Client? client,
-    this.baseUrl = 'http://localhost:8080',
-  }) : _client = client ?? http.Client();
+  TagService({http.Client? client}) : _client = client ?? http.Client();
 
-  /// Fetches all tags
-  Future<List<Tag>> fetchTags() async {
-    final uri = Uri.parse('$baseUrl/api/v1/tags');
-    
-    final response = await _client.get(
-      uri,
-      headers: {'Content-Type': 'application/json'},
+  /// 获取标签列表
+  Future<List<Tag>> fetchTags({String? search, int limit = 50, int offset = 0}) async {
+    final uri = Uri.parse(ApiConfig.tags).replace(
+      queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      },
     );
 
+    final response = await _client.get(uri);
     if (response.statusCode != 200) {
-      throw ApiException('Failed to fetch tags: ${response.statusCode}', response.statusCode);
-    }
-
-    final json = jsonDecode(response.body) as List;
-    return json.map((t) => Tag.fromJson(t as Map<String, dynamic>)).toList();
-  }
-
-  /// Searches tags by query string
-  Future<List<Tag>> searchTags(String query) async {
-    final uri = Uri.parse('$baseUrl/api/v1/tags/search').replace(
-      queryParameters: {'q': query},
-    );
-    
-    final response = await _client.get(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-    );
-
-    if (response.statusCode != 200) {
-      throw ApiException('Failed to search tags: ${response.statusCode}', response.statusCode);
-    }
-
-    final json = jsonDecode(response.body) as List;
-    return json.map((t) => Tag.fromJson(t as Map<String, dynamic>)).toList();
-  }
-
-  /// Gets all tags for an image grouped by review state
-  Future<Map<String, List<ImageTag>>> getImageTags(int imageId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/images/$imageId/tags');
-    
-    final response = await _client.get(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-    );
-
-    if (response.statusCode != 200) {
-      throw ApiException('Failed to fetch image tags: ${response.statusCode}', response.statusCode);
+      throw Exception('Failed to fetch tags: ${response.statusCode}');
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final result = <String, List<ImageTag>>{
-      'pending': [],
-      'confirmed': [],
-      'rejected': [],
-    };
-
-    for (final state in ['pending', 'confirmed', 'rejected']) {
-      if (json[state] != null) {
-        result[state] = (json[state] as List)
-            .map((t) => ImageTag.fromJson(t as Map<String, dynamic>))
-            .toList();
-      }
-    }
-
-    return result;
+    final tags = (json['tags'] as List)
+        .map((e) => Tag.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return tags;
   }
 
-  /// Triggers AI tag generation for an image
-  /// Returns the observation/job ID
-  Future<int> triggerAITags(int imageId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/images/$imageId/ai-tags');
-    
+  /// 搜索标签（支持别名匹配）
+  Future<List<Tag>> searchTags(String query) async {
+    return fetchTags(search: query);
+  }
+
+  /// 获取图片的标签
+  Future<Map<String, List<Tag>>> getImageTags(int imageId) async {
+    final response = await _client.get(Uri.parse(ApiConfig.imageTags(imageId)));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch image tags: ${response.statusCode}');
+    }
+
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return {
+      'confirmed': (json['confirmed'] as List? ?? [])
+          .map((e) => Tag.fromImageTagJson(e as Map<String, dynamic>))
+          .toList(),
+      'pending': (json['pending'] as List? ?? [])
+          .map((e) => Tag.fromImageTagJson(e as Map<String, dynamic>))
+          .toList(),
+      'rejected': (json['rejected'] as List? ?? [])
+          .map((e) => Tag.fromImageTagJson(e as Map<String, dynamic>))
+          .toList(),
+    };
+  }
+
+  /// 为图片添加标签
+  Future<Tag> addImageTag(int imageId, {int? tagId, String? tagLabel}) async {
+    if (tagId == null && tagLabel == null) {
+      throw ArgumentError('Either tagId or tagLabel must be provided');
+    }
+
     final response = await _client.post(
-      uri,
+      Uri.parse(ApiConfig.imageTags(imageId)),
       headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        if (tagId != null) 'tag_id': tagId,
+        if (tagLabel != null) 'tag_label': tagLabel,
+      }),
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
-      throw ApiException('Failed to trigger AI tags: ${response.statusCode}', response.statusCode);
+      throw Exception('Failed to add tag: ${response.statusCode}');
     }
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return json['observation_id'] as int;
+    return Tag.fromImageTagJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  /// Gets the status of an AI tag generation job
-  Future<AITagStatus> getAITagStatus(int imageId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/images/$imageId/ai-tags/status');
-    
-    final response = await _client.get(
-      uri,
-      headers: {'Content-Type': 'application/json'},
+  /// 移除图片标签
+  Future<void> removeImageTag(int imageId, int tagId) async {
+    final response = await _client.delete(
+      Uri.parse(ApiConfig.imageTag(imageId, tagId)),
     );
-
     if (response.statusCode != 200) {
-      throw ApiException('Failed to get AI tag status: ${response.statusCode}', response.statusCode);
+      throw Exception('Failed to remove tag: ${response.statusCode}');
     }
-
-    return AITagStatus.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  /// Merges a pending AI tag into an existing governed tag
-  Future<void> mergeImageTag(int imageTagId, int targetTagId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/image-tags/$imageTagId/merge');
-    
+  /// 确认标签
+  Future<void> confirmTag(int imageId, int tagId) async {
     final response = await _client.post(
-      uri,
+      Uri.parse(ApiConfig.tagReview(imageId, tagId)),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'action': 'confirm'}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to confirm tag: ${response.statusCode}');
+    }
+  }
+
+  /// 拒绝标签
+  Future<void> rejectTag(int imageId, int tagId) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.tagReview(imageId, tagId)),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'action': 'reject'}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to reject tag: ${response.statusCode}');
+    }
+  }
+
+  /// 批量确认标签
+  Future<void> batchConfirmTags(int imageId, List<int> tagIds) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.batchTagReview(imageId)),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'tag_ids': tagIds, 'action': 'confirm'}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to batch confirm: ${response.statusCode}');
+    }
+  }
+
+  /// 批量拒绝标签
+  Future<void> batchRejectTags(int imageId, List<int> tagIds) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.batchTagReview(imageId)),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'tag_ids': tagIds, 'action': 'reject'}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to batch reject: ${response.statusCode}');
+    }
+  }
+
+  /// 触发 AI 标签生成
+  Future<int> triggerAITags(int imageId) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.triggerAITags(imageId)),
+    );
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      throw Exception('Failed to trigger AI tags: ${response.statusCode}');
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return json['job_id'] as int;
+  }
+
+  /// 获取 AI 任务状态
+  Future<Map<String, dynamic>> getAITagStatus(int imageId) async {
+    final response = await _client.get(
+      Uri.parse(ApiConfig.aiTagStatus(imageId)),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get AI status: ${response.statusCode}');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// 批量触发 AI 标签生成
+  Future<Map<String, dynamic>> batchTriggerAITags(List<int> imageIds) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.batchAITags),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'image_ids': imageIds}),
+    );
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      throw Exception('Failed to batch trigger AI tags: ${response.statusCode}');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// 获取标签统计数据
+  Future<List<TagStatistics>> getTagStatistics() async {
+    final response = await _client.get(
+      Uri.parse('${ApiConfig.baseUrl}/tags/statistics'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get tag statistics: ${response.statusCode}');
+    }
+    final json = jsonDecode(response.body) as List;
+    return json
+        .map((e) => TagStatistics.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 合并图片标签到目标标签
+  Future<void> mergeImageTag(int imageId, int tagId, int targetTagId) async {
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrl}/images/$imageId/tags/$tagId/merge'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'target_tag_id': targetTagId}),
     );
-
     if (response.statusCode != 200) {
-      throw ApiException('Failed to merge tag: ${response.statusCode}', response.statusCode);
+      throw Exception('Failed to merge tag: ${response.statusCode}');
     }
-  }
-
-  /// Confirms a pending image tag
-  Future<void> confirmImageTag(int imageTagId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/image-tags/$imageTagId/confirm');
-    
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-    );
-
-    if (response.statusCode != 200) {
-      throw ApiException('Failed to confirm tag: ${response.statusCode}', response.statusCode);
-    }
-  }
-
-  /// Rejects a pending image tag
-  Future<void> rejectImageTag(int imageTagId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/image-tags/$imageTagId/reject');
-    
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-    );
-
-    if (response.statusCode != 200) {
-      throw ApiException('Failed to reject tag: ${response.statusCode}', response.statusCode);
-    }
-  }
-
-  /// Adds a manual tag to an image
-  Future<ImageTag> addImageTag(int imageId, int tagId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/images/$imageId/tags');
-    
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'tag_id': tagId}),
-    );
-
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw ApiException('Failed to add tag: ${response.statusCode}', response.statusCode);
-    }
-
-    return ImageTag.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  /// Removes a tag from an image
-  Future<void> removeImageTag(int imageTagId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/image-tags/$imageTagId');
-    
-    final response = await _client.delete(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-    );
-
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      throw ApiException('Failed to remove tag: ${response.statusCode}', response.statusCode);
-    }
-  }
-
-  /// Gets tag governance statistics
-  Future<List<TagStatistics>> getTagStatistics() async {
-    final uri = Uri.parse('$baseUrl/api/v1/tags/statistics');
-    
-    final response = await _client.get(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-    );
-
-    if (response.statusCode != 200) {
-      throw ApiException('Failed to get tag statistics: ${response.statusCode}', response.statusCode);
-    }
-
-    final json = jsonDecode(response.body) as List;
-    return json.map((s) => TagStatistics.fromJson(s as Map<String, dynamic>)).toList();
-  }
-
-  void dispose() {
-    _client.close();
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/image_provider.dart';
+import '../providers/tag_provider.dart';
 import '../services/api_service.dart';
+import '../services/tag_service.dart';
 import '../widgets/image_grid.dart';
 import '../widgets/image_masonry.dart';
 import '../widgets/tag_filter_drawer.dart';
@@ -13,8 +15,11 @@ class GalleryScreen extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ImageListProvider(ApiService())..loadImages(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ImageListProvider(ApiService())..loadImages()),
+        ChangeNotifierProvider(create: (_) => TagProvider(TagService())),
+      ],
       child: const _GalleryContent(),
     );
   }
@@ -36,8 +41,8 @@ class _GalleryContent extends StatelessWidget {
         ],
       ),
       drawer: TagFilterDrawer(
-        initialSelectedIds: context.watch<ImageListProvider>().selectedTagIds,
         onFilterChanged: (tagIds) {
+          // Update both providers
           context.read<ImageListProvider>().setTagFilter(tagIds);
         },
       ),
