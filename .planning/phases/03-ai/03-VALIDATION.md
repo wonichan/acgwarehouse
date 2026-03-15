@@ -1,15 +1,16 @@
 ---
 phase: 03
 slug: ai
-status: draft
-nyquist_compliant: false
+status: revised-gap-closure
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-03-15
+updated: 2026-03-15
 ---
 
 # Phase 3 — Validation Strategy
 
-> Per-phase validation contract for feedback sampling during execution.
+> Per-phase validation contract for feedback sampling during execution, revised for the Phase 03 gap-closure plan set (`03-05`..`03-07`).
 
 ---
 
@@ -17,20 +18,33 @@ created: 2026-03-15
 
 | Property | Value |
 |----------|-------|
-| **Framework** | go test |
-| **Config file** | none — existing infrastructure |
-| **Quick run command** | `go test -v ./internal/ai/... ./internal/repository/... ./internal/service/...` |
-| **Full suite command** | `go test -v ./...` |
-| **Estimated runtime** | ~30 seconds |
+| **Go framework** | `go test` |
+| **Flutter framework** | `flutter test` |
+| **Quick run command** | `go test ./internal/service/... ./internal/worker/... ./internal/repository/... ./internal/handler/...` |
+| **Frontend quick run command** | `flutter test test/services/tag_service_test.dart test/providers/tag_provider_test.dart` |
+| **Full backend suite** | `go test ./...` |
+| **Full frontend suite** | `flutter test` |
+| **Estimated runtime** | backend ~45s, frontend ~60s |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `go test -v ./internal/ai/... ./internal/repository/...`
-- **After every plan wave:** Run `go test -v ./...`
-- **Before `/gsd-verify-work`:** Full suite must be green
-- **Max feedback latency:** 30 seconds
+- **After every task commit:** run the task's `<automated>` command.
+- **After every backend gap-closure plan:** run `go test ./internal/service/... ./internal/worker/... ./internal/repository/... ./internal/handler/...`.
+- **After the frontend gap-closure plan:** run `flutter test` and `flutter analyze`.
+- **Before `/gsd-verify-work`:** run `go test ./...` and `flutter test`.
+- **Max feedback latency:** 60 seconds.
+
+---
+
+## Revised Gap-Closure Plan Inventory
+
+| Plan | Wave | Depends On | Scope | Requirements |
+|------|------|------------|-------|--------------|
+| `03-05-PLAN.md` | 4 | `03-01`, `03-02`, `03-03` | AI worker -> governance merge wiring, alias-aware merge | `AIRE-03`, `AIRE-05` |
+| `03-06-PLAN.md` | 5 | `03-03`, `03-05` | governed image filtering + merge/stats APIs | `AIRE-05`, `TAGS-03`, `TAGS-05` |
+| `03-07-PLAN.md` | 6 | `03-04`, `03-05`, `03-06` | Flutter filter wiring, AI status/merge UI, governance screen | `AIRE-05`, `TAGS-03`, `TAGS-05` |
 
 ---
 
@@ -38,15 +52,13 @@ created: 2026-03-15
 
 | task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 03-01-01 | 01 | 1 | AIRE-01 | unit | `go test -v ./internal/ai/...` | ❌ W0 | ⬜ pending |
-| 03-01-02 | 01 | 1 | AIRE-01 | unit | `go test -v ./internal/ai/... -run TestRateLimited` | ❌ W0 | ⬜ pending |
-| 03-01-03 | 01 | 1 | AIRE-06 | unit | `go test -v ./internal/worker/... -run TestAI` | ✅ | ⬜ pending |
-| 03-02-01 | 02 | 2 | TAGS-01 | unit | `go test -v ./internal/repository/... -run TestTag` | ❌ W0 | ⬜ pending |
-| 03-02-02 | 02 | 2 | TAGS-03 | unit | `go test -v ./internal/service/... -run TestTagGovernance` | ❌ W0 | ⬜ pending |
-| 03-03-01 | 03 | 3 | TAGS-02 | integration | `go test -v ./internal/handler/... -run TestTag` | ❌ W0 | ⬜ pending |
-| 03-03-02 | 03 | 3 | TAGS-04 | integration | `go test -v ./internal/handler/... -run TestSearch` | ❌ W0 | ⬜ pending |
-| 03-04-01 | 04 | 4 | AIRE-05 | unit | `flutter test test/widgets/tag_filter_test.dart` | ❌ W0 | ⬜ pending |
-| 03-04-02 | 04 | 4 | TAGS-05 | unit | `flutter test test/screens/tag_confirm_test.dart` | ❌ W0 | ⬜ pending |
+| 03-05-01 | 05 | 4 | AIRE-03 | unit | `go test ./internal/service/... -run TestTagGovernance` | ✅ | ⬜ pending |
+| 03-05-02 | 05 | 4 | AIRE-03, AIRE-05 | unit | `go test ./internal/worker/... -run TestAITagHandler` | ✅ | ⬜ pending |
+| 03-06-01 | 06 | 5 | TAGS-03 | integration | `go test ./internal/repository/... ./internal/handler/... -run "Test(ImageRepository|ImageHandler)"` | ❌ W0 | ⬜ pending |
+| 03-06-02 | 06 | 5 | AIRE-05, TAGS-05 | integration | `go test ./internal/repository/... ./internal/handler/... -run "Test(ImageTagRepository|ImageTagHandler|TagHandler)"` | ✅ | ⬜ pending |
+| 03-07-01 | 07 | 6 | TAGS-03 | unit/widget | `flutter test test/services/api_service_test.dart test/providers/image_provider_test.dart` | ❌ W0 | ⬜ pending |
+| 03-07-02 | 07 | 6 | AIRE-05 | widget | `flutter test test/services/tag_service_test.dart test/screens/image_detail_screen_test.dart` | ❌ W0 | ⬜ pending |
+| 03-07-03 | 07 | 6 | TAGS-05 | widget | `flutter test test/providers/tag_provider_test.dart test/screens/tag_management_screen_test.dart` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -54,21 +66,29 @@ created: 2026-03-15
 
 ## Wave 0 Requirements
 
+These test scaffolds do not exist yet, so execution must create them before claiming the corresponding task is complete.
+
 ### Go Backend
 
-- [ ] `internal/ai/ai_test.go` — AI provider tests
-- [ ] `internal/ai/rate_limiter_test.go` — Rate limiter tests
-- [ ] `internal/repository/tag_repository_test.go` — Tag repository tests
-- [ ] `internal/repository/tag_alias_repository_test.go` — Alias repository tests
-- [ ] `internal/repository/image_tag_repository_test.go` — Image-tag relation tests
-- [ ] `internal/service/tag_governance_service_test.go` — Tag governance tests
-- [ ] `internal/handler/tag_handler_test.go` — Tag API handler tests
+- [ ] `internal/repository/image_repository_test.go` — governed image filtering repository coverage for `03-06-01`
+- [ ] `internal/handler/image_handler_test.go` — image list/detail handler coverage for `03-06-01`
 
 ### Flutter Frontend
 
-- [ ] `flutter_app/test/widgets/tag_filter_test.dart` — Tag filter widget tests
-- [ ] `flutter_app/test/providers/tag_provider_test.dart` — Tag provider tests
-- [ ] `flutter_app/test/screens/tag_confirm_test.dart` — Tag confirmation screen tests
+- [ ] `flutter_app/test/services/api_service_test.dart` — image query serialization coverage for `03-07-01`
+- [ ] `flutter_app/test/providers/image_provider_test.dart` — provider filter-state coverage for `03-07-01`
+- [ ] `flutter_app/test/screens/image_detail_screen_test.dart` — AI polling / merge UI coverage for `03-07-02`
+- [ ] `flutter_app/test/screens/tag_management_screen_test.dart` — governance screen coverage for `03-07-03`
+
+### Already Present and Reused
+
+- [x] `internal/worker/ai_tag_handler_test.go`
+- [x] `internal/service/tag_governance_service_test.go`
+- [x] `internal/repository/image_tag_repository_test.go`
+- [x] `internal/handler/image_tag_handler_test.go`
+- [x] `internal/handler/tag_handler_test.go`
+- [x] `flutter_app/test/services/tag_service_test.dart`
+- [x] `flutter_app/test/providers/tag_provider_test.dart`
 
 ---
 
@@ -76,19 +96,19 @@ created: 2026-03-15
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| AI 实际调用返回有效标签 | AIRE-01 | 需要 API 密钥和网络 | 1. 配置 AI_API_KEY 2. 运行 `go run ./cmd/server` 3. POST /api/v1/images/1/ai-tags 4. 检查返回标签 |
-| Flutter 标签确认 UI 交互 | AIRE-05 | 视觉验证 | 1. 启动 Flutter 应用 2. 打开图片详情页 3. 确认/拒绝标签按钮正常工作 |
-| 标签筛选结果正确 | TAGS-03 | 需要 UI + 数据集成 | 1. 选择多个标签 2. 验证结果为 AND 交集 |
+| AI job creates reviewable pending tags after completion | `AIRE-05` | Requires live provider credentials and async processing | 1. Configure AI provider keys. 2. Run server. 3. Trigger `POST /api/v1/images/:id/ai-tags`. 4. Wait for completion. 5. Verify the image detail UI shows new pending tags without reopening the page. |
+| Gallery filter returns the expected AND-intersection result set | `TAGS-03` | Requires integrated dataset + UI behavior confirmation | 1. Seed images with overlapping governed tags. 2. Select two tags in the drawer. 3. Confirm only images containing both tags remain visible. |
+| Governance screen metrics match backend state | `TAGS-05` | Visual verification against realistic data | 1. Open the governance screen. 2. Compare usage/pending/source counts against API responses from `/api/v1/tags/stats`. |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All revised gap-closure tasks have `<automated>` verify commands or explicit Wave 0 file scaffolds.
+- [x] Sampling continuity is maintained across the revised plan set.
+- [x] Wave 0 covers every missing revised test file.
+- [x] No watch-mode commands are used.
+- [x] The revised plan set stays within the verification gaps only.
+- [ ] `wave_0_complete: true` can only be set after the missing scaffolds exist.
 
-**Approval:** pending
+**Approval:** pending execution
