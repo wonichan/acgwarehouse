@@ -16,6 +16,7 @@ class ImageListProvider extends ChangeNotifier {
   ViewMode _viewMode = ViewMode.grid;
   SortField _sortField = SortField.createdAt;
   bool _sortAsc = false;
+  List<int> _selectedTagIds = [];
   
   ImageListProvider(this._apiService);
   
@@ -25,6 +26,7 @@ class ImageListProvider extends ChangeNotifier {
   ViewMode get viewMode => _viewMode;
   SortField get sortField => _sortField;
   bool get sortAsc => _sortAsc;
+  List<int> get selectedTagIds => _selectedTagIds;
   
   Future<void> loadImages({bool refresh = false}) async {
     if (_isLoading) return;
@@ -39,6 +41,7 @@ class ImageListProvider extends ChangeNotifier {
         sortBy: _sortField.name == 'createdAt' ? 'created_at' : 
                 _sortField.name == 'fileSize' ? 'file_size' : 'filename',
         sortDir: _sortAsc ? 'asc' : 'desc',
+        tagIds: _selectedTagIds.isNotEmpty ? _selectedTagIds : null,
       );
       
       if (refresh) {
@@ -65,5 +68,15 @@ class ImageListProvider extends ChangeNotifier {
     _sortField = field;
     _sortAsc = asc;
     loadImages(refresh: true);
+  }
+  
+  /// Sets the tag filter and reloads images with the new filter
+  /// Preserves current sort settings and resets pagination
+  Future<void> setTagFilter(List<int> tagIds) async {
+    _selectedTagIds = List.unmodifiable(tagIds);
+    _nextCursor = null;
+    _hasMore = true;
+    await loadImages(refresh: true);
+    notifyListeners();
   }
 }
