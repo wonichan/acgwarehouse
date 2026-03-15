@@ -3,7 +3,6 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:http/http.dart' as http;
 import 'package:gallery/services/api_service.dart';
-import 'package:gallery/models/image.dart';
 
 import 'api_service_test.mocks.dart';
 
