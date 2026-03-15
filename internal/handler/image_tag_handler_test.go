@@ -216,7 +216,7 @@ func newImageTagHandlerTestRouter(t *testing.T) (*gin.Engine, *imageTagHandlerTe
 		imageRepo:    repository.NewImageRepository(db),
 		db:           db,
 	}
-	repos.governance = service.NewTagGovernanceService(repos.tagRepo, repos.obsRepo, repos.imageTagRepo)
+	repos.governance = service.NewTagGovernanceService(repos.tagRepo, nil, repos.obsRepo, repos.imageTagRepo)
 	h := NewImageTagHandler(repos.imageTagRepo, repos.tagRepo, repos.imageRepo, repos.governance)
 
 	router := gin.New()
