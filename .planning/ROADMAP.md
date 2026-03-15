@@ -12,8 +12,8 @@
 | Phase | Status | Plans | Progress |
 |-------|--------|-------|----------|
 | 1 | ✓ | 3/3 | 100% |
-| 2 | ○ | 0/4 | 0% |
-| 3 | ◆ | 3/4 | 75% |
+| 2 | ✓ | 4/4 | 100% |
+| 3 | ◆ | 5/7 | 71% |
 | 4 | ○ | 0/0 | 0% |
 | 5 | ○ | 0/0 | 0% |
 | 6 | ○ | 0/0 | 0% |
@@ -68,17 +68,17 @@ Plans:
 
 **预计时长：** 2-3 weeks
 
-**Plans:** 2/4 plans complete
+**Plans:** 4/4 plans executed
 
 **关联需求：**
 - IMPT-05, IMPT-06, IMPT-07
 - GALR-01, GALR-02, GALR-03, GALR-04, GALR-05
 
 Plans:
-- [ ] 02-01-PLAN.md — 缩略图生成服务与 COS 集成
-- [ ] 02-02-PLAN.md — 感知哈希计算服务
-- [ ] 02-03-PLAN.md — 图片浏览 API 端点
-- [ ] 02-04-PLAN.md — Flutter 图片浏览界面
+- [x] 02-01-PLAN.md — 缩略图生成服务与 COS 集成
+- [x] 02-02-PLAN.md — 感知哈希计算服务
+- [x] 02-03-PLAN.md — 图片浏览 API 端点
+- [x] 02-04-PLAN.md — Flutter 图片浏览界面
 
 **成功标准：**
 1. 缩略图生成服务可批量处理导入图片
@@ -108,7 +108,7 @@ Plans:
 
 **预计时长：** 3-4 weeks
 
-**Plans:** 4 plans
+**Plans:** 5/7 plans executed
 
 **关联需求：**
 - AIRE-01, AIRE-03, AIRE-05, AIRE-06
@@ -118,7 +118,12 @@ Plans:
 - [x] 03-01-PLAN.md — AI 服务基础层（提供商抽象、限流、异步任务）
 - [x] 03-02-PLAN.md — 标签数据层（Repository、归并服务）
 - [x] 03-03-PLAN.md — 标签管理 API 层
-- [ ] 03-04-PLAN.md — Flutter 标签前端层
+- [x] 03-04-PLAN.md — Flutter 标签前端层
+- [x] 03-05-PLAN.md — AI worker 归并接线与 alias-aware gap closure
+- [ ] 03-06-PLAN.md — 标签筛选后端接线
+- [ ] 03-07-PLAN.md — AI 结果展示与标签统计 gap closure
+
+**验证状态：** 已完成 03-05 的 AI 归并链路 gap closure，但 `03-VERIFICATION.md` 中的标签筛选、AI 结果展示与标签统计 gaps 仍待补齐；本阶段继续保持 In Progress。
 
 **成功标准：**
 1. 千问 / 豆包 AI 标签服务接入完成，支持异步处理图片并生成开放描述标签
@@ -265,4 +270,4 @@ Phase 6 (优化/部署) ← depends on Phase 1-5 功能完整
 ---
 
 *路线图创建时间：2026-03-14*
-*最后更新：2026-03-14*
+*最后更新：2026-03-15*
