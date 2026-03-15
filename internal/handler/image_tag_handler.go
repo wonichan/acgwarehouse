@@ -227,3 +227,69 @@ func reviewActionToState(action string) (string, bool) {
 		return "", false
 	}
 }
+
+// MergeImageTag handles POST /api/v1/images/:id/tags/:tag_id/merge
+// It reassigns a pending AI tag on an image to an existing target tag.
+func (h *ImageTagHandler) MergeImageTag(c *gin.Context) {
+	imageID, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	sourceTagID, ok := parseIDParam(c, "tag_id")
+	if !ok {
+		return
+	}
+
+	var req struct {
+		TargetTagID int64  `json:"target_tag_id"`
+		TargetLabel string `json:"target_label"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	targetTagID := req.TargetTagID
+	if targetTagID == 0 {
+		label := strings.TrimSpace(req.TargetLabel)
+		if label == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target_tag_id or target_label is required"})
+			return
+		}
+		tag, err := h.tagRepo.FindByLabel(c.Request.Context(), label)
+		if err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			// Create new tag if not found
+			tag = &domain.Tag{PreferredLabel: label, Slug: makeSlug(label), ReviewState: "confirmed", UsageCount: 0}
+			if err := h.tagRepo.Save(c.Request.Context(), tag); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+		targetTagID = tag.ID
+	}
+
+	// Verify target tag exists
+	targetTag, err := h.tagRepo.FindByID(c.Request.Context(), targetTagID)
+	if err != nil {
+		respondRepoError(c, err)
+		return
+	}
+
+	// Perform the merge
+	if err := h.imageTagRepo.MergeImageTag(c.Request.Context(), imageID, sourceTagID, targetTagID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":                true,
+		"image_id":               imageID,
+		"source_tag_id":          sourceTagID,
+		"target_tag_id":          targetTagID,
+		"target_preferred_label": targetTag.PreferredLabel,
+	})
+}

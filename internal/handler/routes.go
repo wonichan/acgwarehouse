@@ -52,6 +52,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	tagGetAliases := gin.HandlerFunc(placeholderHandler)
 	tagAddAlias := gin.HandlerFunc(placeholderHandler)
 	tagDeleteAlias := gin.HandlerFunc(placeholderHandler)
+	tagGetStats := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.TagRepo != nil && deps.AliasRepo != nil && deps.ImageTagRepo != nil {
 		tagHandler := NewTagHandler(deps.TagRepo, deps.AliasRepo, deps.ImageTagRepo)
 		tagGet = tagHandler.GetTags
@@ -61,6 +62,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		tagGetAliases = tagHandler.GetAliases
 		tagAddAlias = tagHandler.AddAlias
 		tagDeleteAlias = tagHandler.DeleteAlias
+		tagGetStats = tagHandler.GetTagStats
 	}
 	api.GET("/tags", tagGet)
 	api.POST("/tags", tagCreate)
@@ -69,12 +71,14 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.GET("/tags/:id/aliases", tagGetAliases)
 	api.POST("/tags/:id/aliases", tagAddAlias)
 	api.DELETE("/tags/:id/aliases/:alias_id", tagDeleteAlias)
+	api.GET("/tags/stats", tagGetStats)
 
 	imageTagGet := gin.HandlerFunc(placeholderHandler)
 	imageTagAdd := gin.HandlerFunc(placeholderHandler)
 	imageTagRemove := gin.HandlerFunc(placeholderHandler)
 	imageTagReview := gin.HandlerFunc(placeholderHandler)
 	imageTagBatchReview := gin.HandlerFunc(placeholderHandler)
+	imageTagMerge := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.ImageTagRepo != nil && deps.TagRepo != nil && deps.ImageRepo != nil && deps.GovernanceSvc != nil {
 		imageTagHandler := NewImageTagHandler(deps.ImageTagRepo, deps.TagRepo, deps.ImageRepo, deps.GovernanceSvc)
 		imageTagGet = imageTagHandler.GetImageTags
@@ -82,12 +86,14 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		imageTagRemove = imageTagHandler.RemoveImageTag
 		imageTagReview = imageTagHandler.ReviewTag
 		imageTagBatchReview = imageTagHandler.BatchReview
+		imageTagMerge = imageTagHandler.MergeImageTag
 	}
 	api.GET("/images/:id/tags", imageTagGet)
 	api.POST("/images/:id/tags", imageTagAdd)
 	api.DELETE("/images/:id/tags/:tag_id", imageTagRemove)
 	api.POST("/images/:id/tags/:tag_id/review", imageTagReview)
 	api.POST("/images/:id/tags/batch-review", imageTagBatchReview)
+	api.POST("/images/:id/tags/:tag_id/merge", imageTagMerge)
 
 	aiTrigger := gin.HandlerFunc(placeholderHandler)
 	aiStatus := gin.HandlerFunc(placeholderHandler)
