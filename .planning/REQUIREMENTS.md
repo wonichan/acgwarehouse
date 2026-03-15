@@ -36,16 +36,16 @@
 
 - [x] **AIRE-01**: 系统调用千问 / 豆包等多模态 AI 为图片生成开放描述标签
 - [x] **AIRE-02**: 系统完整保存每次 AI 标签观测结果（原始标签、模型、提示词版本、时间）
-- [ ] **AIRE-03**: 系统将 AI 原始标签归并为可管理标准标签，并支持别名 / 近义表达关联
+- [x] **AIRE-03**: 系统将 AI 原始标签归并为可管理标准标签，并支持别名 / 近义表达关联
 - [x] **AIRE-04**: 系统为 AI 标签观测结果和图片标签关联提供置信度分数
 - [ ] **AIRE-05**: 用户可以查看 AI 标签结果，并对标签进行确认 / 修改 / 合并
 - [x] **AIRE-06**: 系统异步处理 AI 标签任务，不阻塞用户操作
 
 ### 标签管理
 
-- [ ] **TAGS-01**: 用户可以手动添加 / 修改 / 删除标准标签与别名
+- [x] **TAGS-01**: 用户可以手动添加 / 修改 / 删除标准标签与别名
 - [ ] **TAGS-02**: 系统支持宽松标签分类（人物关系、服装外观、姿态动作、场景环境、氛围情绪、美术风格、道具元素、内容分级等）
-- [ ] **TAGS-03**: 用户可以按标准标签筛选图片，并兼容 AI 原始标签归并结果
+- [x] **TAGS-03**: 用户可以按标准标签筛选图片，并兼容 AI 原始标签归并结果
 - [ ] **TAGS-04**: 系统支持标签搜索（模糊匹配、别名、近义表达）
 - [ ] **TAGS-05**: 用户可以查看标签统计（使用次数、来源、待复核状态）
 
@@ -144,13 +144,13 @@
 | GALR-05 | Phase 2 | Pending |
 | AIRE-01 | Phase 3 | Complete |
 | AIRE-02 | Phase 1 | Complete |
-| AIRE-03 | Phase 3 | Pending |
+| AIRE-03 | Phase 3 | Complete |
 | AIRE-04 | Phase 1 | Complete |
 | AIRE-05 | Phase 3 | Pending |
 | AIRE-06 | Phase 3 | Complete |
-| TAGS-01 | Phase 3 | Pending |
+| TAGS-01 | Phase 3 | Complete |
 | TAGS-02 | Phase 3 | Pending |
-| TAGS-03 | Phase 3 | Pending |
+| TAGS-03 | Phase 3 | Complete |
 | TAGS-04 | Phase 3 | Pending |
 | TAGS-05 | Phase 3 | Pending |
 | DUPD-01 | Phase 4 | Pending |
