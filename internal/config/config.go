@@ -13,6 +13,7 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	Storage  StorageConfig  `yaml:"storage"`
 	AI       AIConfig       `yaml:"ai"`
+	COS      COSConfig      `yaml:"cos"`
 }
 
 type ServerConfig struct {
@@ -32,9 +33,16 @@ type StorageConfig struct {
 }
 
 type AIConfig struct {
-	Provider string `yaml:"provider"`
-	APIKey   string `yaml:"api_key"`
-	Model    string `yaml:"model"`
+	Provider          string `yaml:"provider"`
+	APIKey            string `yaml:"api_key"`
+	Model             string `yaml:"model"`
+	RequestsPerMinute int    `yaml:"requests_per_minute"` // 限流：每分钟请求数，默认 60
+}
+
+type COSConfig struct {
+	BucketURL string `yaml:"bucket_url"`
+	SecretID  string `yaml:"secret_id"`
+	SecretKey string `yaml:"secret_key"`
 }
 
 func LoadConfig(paths ...string) (*Config, error) {
@@ -94,5 +102,19 @@ func applyEnvOverrides(cfg *Config) {
 
 	if v := os.Getenv("AI_MODEL"); v != "" {
 		cfg.AI.Model = v
+	}
+
+	if v := os.Getenv("AI_REQUESTS_PER_MINUTE"); v != "" {
+		if rpm, err := strconv.Atoi(v); err == nil {
+			cfg.AI.RequestsPerMinute = rpm
+		}
+	}
+
+	// COS 环境变量覆盖
+	if v := os.Getenv("COS_SECRET_ID"); v != "" {
+		cfg.COS.SecretID = v
+	}
+	if v := os.Getenv("COS_SECRET_KEY"); v != "" {
+		cfg.COS.SecretKey = v
 	}
 }
