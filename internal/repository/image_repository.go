@@ -1,8 +1,11 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 )
@@ -12,6 +15,8 @@ type ImageRepository interface {
 	FindByID(id int64) (*domain.Image, error)
 	FindByPath(path string) (*domain.Image, error)
 	FindAll(limit, offset int) ([]domain.Image, error)
+	FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int) ([]domain.Image, error)
+	CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
 	Count() (int64, error)
 }
 
@@ -126,5 +131,96 @@ func (r *sqliteImageRepository) FindAll(limit, offset int) ([]domain.Image, erro
 func (r *sqliteImageRepository) Count() (int64, error) {
 	var count int64
 	err := r.db.QueryRow(`SELECT COUNT(*) FROM images`).Scan(&count)
+	return count, err
+}
+
+// FindByTagIDs returns images that have ALL the specified tag IDs (AND semantics).
+// It joins images with image_tags and counts matched tags per image, returning only
+// images where the matched count equals the number of requested tags.
+func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int) ([]domain.Image, error) {
+	if len(tagIDs) == 0 {
+		return []domain.Image{}, nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := make([]string, len(tagIDs))
+	args := make([]any, 0, len(tagIDs)+2)
+	for i, id := range tagIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	// Query images where matched tag count equals the number of requested tags (AND semantics)
+	query := fmt.Sprintf(`
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.created_at, i.updated_at
+		FROM images i
+		INNER JOIN image_tags it ON it.image_id = i.id
+		WHERE it.tag_id IN (%s)
+		GROUP BY i.id
+		HAVING COUNT(DISTINCT it.tag_id) = ?
+		ORDER BY i.id
+		LIMIT ? OFFSET ?
+	`, strings.Join(placeholders, ", "))
+
+	args = append(args, int64(len(tagIDs)), int64(limit), int64(offset))
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	images := make([]domain.Image, 0)
+	for rows.Next() {
+		var image domain.Image
+		if err := rows.Scan(
+			&image.ID,
+			&image.Path,
+			&image.Filename,
+			&image.SourceRoot,
+			&image.FileSize,
+			&image.Width,
+			&image.Height,
+			&image.Format,
+			&image.PHash,
+			&image.CreatedAt,
+			&image.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		images = append(images, image)
+	}
+
+	return images, rows.Err()
+}
+
+// CountByTagIDs returns the count of images that have ALL the specified tag IDs (AND semantics).
+func (r *sqliteImageRepository) CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error) {
+	if len(tagIDs) == 0 {
+		return 0, nil
+	}
+
+	placeholders := make([]string, len(tagIDs))
+	args := make([]any, 0, len(tagIDs)+1)
+	for i, id := range tagIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT COUNT(DISTINCT sub.image_id)
+		FROM (
+			SELECT it.image_id
+			FROM image_tags it
+			WHERE it.tag_id IN (%s)
+			GROUP BY it.image_id
+			HAVING COUNT(DISTINCT it.tag_id) = ?
+		) sub
+	`, strings.Join(placeholders, ", "))
+
+	args = append(args, int64(len(tagIDs)))
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
 }
