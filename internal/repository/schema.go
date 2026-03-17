@@ -141,6 +141,34 @@ CREATE TABLE IF NOT EXISTS duplicate_relations (
 
 CREATE INDEX IF NOT EXISTS idx_duplicate_relations_image ON duplicate_relations(image_id);
 CREATE INDEX IF NOT EXISTS idx_duplicate_relations_file_hash ON duplicate_relations(file_hash);
+
+-- 收藏夹表
+CREATE TABLE IF NOT EXISTS collections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    cover_image_id INTEGER,
+    image_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cover_image_id) REFERENCES images(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_collections_name ON collections(name);
+CREATE INDEX IF NOT EXISTS idx_collections_created_at ON collections(created_at);
+
+-- 收藏夹-图片关联表
+CREATE TABLE IF NOT EXISTS collection_images (
+    collection_id INTEGER NOT NULL,
+    image_id INTEGER NOT NULL,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (collection_id, image_id),
+    FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+    FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_images_image_id ON collection_images(image_id);
+CREATE INDEX IF NOT EXISTS idx_collection_images_added_at ON collection_images(added_at);
 `
 
 func EnsureScanSchema(db *sql.DB) error {
