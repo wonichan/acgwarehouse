@@ -91,6 +91,30 @@ CREATE TABLE IF NOT EXISTS image_tags (
 );
 
 CREATE INDEX IF NOT EXISTS idx_image_tags_tag ON image_tags(tag_id);
+
+-- FTS5 全文索引虚拟表
+CREATE VIRTUAL TABLE IF NOT EXISTS images_fts USING fts5(
+    image_id UNINDEXED,
+    filename,
+    tags,
+    tokenize = 'unicode61'
+);
+
+-- 同步触发器：插入图片时自动添加 FTS 记录
+CREATE TRIGGER IF NOT EXISTS images_ai AFTER INSERT ON images BEGIN
+    INSERT INTO images_fts(image_id, filename, tags)
+    VALUES (new.id, new.filename, '');
+END;
+
+-- 同步触发器：删除图片时自动清理 FTS 记录
+CREATE TRIGGER IF NOT EXISTS images_ad AFTER DELETE ON images BEGIN
+    DELETE FROM images_fts WHERE image_id = old.id;
+END;
+
+-- 同步触发器：更新图片时自动更新 FTS 记录
+CREATE TRIGGER IF NOT EXISTS images_au AFTER UPDATE ON images BEGIN
+    UPDATE images_fts SET filename = new.filename WHERE image_id = old.id;
+END;
 `
 
 func EnsureScanSchema(db *sql.DB) error {
