@@ -16,7 +16,9 @@ type Dependencies struct {
 	AliasRepo      repository.TagAliasRepository
 	ObsRepo        repository.TagObservationRepository
 	ImageTagRepo   repository.ImageTagRepository
+	DuplicateRepo  repository.DuplicateRepository
 	GovernanceSvc  *service.TagGovernanceService
+	DuplicateSvc   *service.DuplicateService
 	JobManager     *worker.Manager
 	AITagProcessor gin.HandlerFunc
 }
@@ -107,6 +109,23 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.POST("/images/:id/ai-tags", aiTrigger)
 	api.GET("/images/:id/ai-tags/status", aiStatus)
 	api.POST("/images/batch-ai-tags", aiBatch)
+
+	// Duplicate detection routes
+	duplicateDetect := gin.HandlerFunc(placeholderHandler)
+	duplicateList := gin.HandlerFunc(placeholderHandler)
+	duplicateGet := gin.HandlerFunc(placeholderHandler)
+	duplicateDelete := gin.HandlerFunc(placeholderHandler)
+	if deps != nil && deps.DuplicateSvc != nil {
+		duplicateHandler := NewDuplicateHandler(deps.DuplicateSvc)
+		duplicateDetect = duplicateHandler.DetectDuplicates
+		duplicateList = duplicateHandler.ListDuplicates
+		duplicateGet = duplicateHandler.GetDuplicate
+		duplicateDelete = duplicateHandler.DeleteDuplicate
+	}
+	api.POST("/duplicates/detect", duplicateDetect)
+	api.GET("/duplicates", duplicateList)
+	api.GET("/duplicates/:id", duplicateGet)
+	api.DELETE("/duplicates/:id", duplicateDelete)
 
 	collections := api.Group("/collections")
 	collections.GET("", placeholderHandler)
