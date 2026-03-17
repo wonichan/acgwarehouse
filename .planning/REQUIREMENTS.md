@@ -51,27 +51,27 @@
 
 ### 重复检测
 
-- [ ] **DUPD-01**: 系统检测完全相同的图片（文件哈希）
-- [ ] **DUPD-02**: 系统检测相似图片（感知哈希）
-- [ ] **DUPD-03**: 用户可以设置相似度阈值
-- [ ] **DUPD-04**: 用户可以查看重复图片组
-- [ ] **DUPD-05**: 用户可以手动选择保留/删除重复图片
+- [x] **DUPD-01**: 系统检测完全相同的图片（文件哈希）
+- [x] **DUPD-02**: 系统检测相似图片（感知哈希）
+- [x] **DUPD-03**: 用户可以设置相似度阈值
+- [x] **DUPD-04**: 用户可以查看重复图片组
+- [x] **DUPD-05**: 用户可以手动选择保留/删除重复图片
 
 ### 搜索功能
 
-- [ ] **SRCH-01**: 用户可以按文件名搜索图片
-- [ ] **SRCH-02**: 用户可以按标准标签、别名或 AI 观测标签搜索图片
-- [ ] **SRCH-03**: 用户可以组合多个标签搜索（AND/OR），并解析到标准标签实体
-- [ ] **SRCH-04**: 用户可以上传图片进行以图搜图
-- [ ] **SRCH-05**: 搜索结果支持排序和分页
+- [x] **SRCH-01**: 用户可以按文件名搜索图片
+- [x] **SRCH-02**: 用户可以按标准标签、别名或 AI 观测标签搜索图片
+- [x] **SRCH-03**: 用户可以组合多个标签搜索（AND/OR），并解析到标准标签实体
+- [x] **SRCH-04**: 用户可以上传图片进行以图搜图
+- [x] **SRCH-05**: 搜索结果支持排序和分页
 
 ### 收藏夹/相册
 
-- [ ] **COLL-01**: 用户可以创建收藏夹/相册
-- [ ] **COLL-02**: 用户可以添加/移除收藏夹中的图片
-- [ ] **COLL-03**: 用户可以重命名/删除收藏夹
-- [ ] **COLL-04**: 用户可以设置收藏夹封面
-- [ ] **COLL-05**: 系统显示收藏夹统计（图片数量）
+- [x] **COLL-01**: 用户可以创建收藏夹/相册
+- [x] **COLL-02**: 用户可以添加/移除收藏夹中的图片
+- [x] **COLL-03**: 用户可以重命名/删除收藏夹
+- [x] **COLL-04**: 用户可以设置收藏夹封面
+- [x] **COLL-05**: 系统显示收藏夹统计（图片数量）
 
 ### 批量操作
 
@@ -153,21 +153,21 @@
 | TAGS-03 | Phase 3 | Complete |
 | TAGS-04 | Phase 3 | Complete |
 | TAGS-05 | Phase 3 | Complete |
-| DUPD-01 | Phase 4 | Pending |
-| DUPD-02 | Phase 4 | Pending |
-| DUPD-03 | Phase 4 | Pending |
-| DUPD-04 | Phase 4 | Pending |
-| DUPD-05 | Phase 4 | Pending |
-| SRCH-01 | Phase 4 | Pending |
-| SRCH-02 | Phase 4 | Pending |
-| SRCH-03 | Phase 4 | Pending |
-| SRCH-04 | Phase 4 | Pending |
-| SRCH-05 | Phase 4 | Pending |
-| COLL-01 | Phase 5 | Pending |
-| COLL-02 | Phase 5 | Pending |
-| COLL-03 | Phase 5 | Pending |
-| COLL-04 | Phase 5 | Pending |
-| COLL-05 | Phase 5 | Pending |
+| DUPD-01 | Phase 4 | Complete |
+| DUPD-02 | Phase 4 | Complete |
+| DUPD-03 | Phase 4 | Complete |
+| DUPD-04 | Phase 4 | Complete |
+| DUPD-05 | Phase 4 | Complete |
+| SRCH-01 | Phase 4 | Complete |
+| SRCH-02 | Phase 4 | Complete |
+| SRCH-03 | Phase 4 | Complete |
+| SRCH-04 | Phase 4 | Complete |
+| SRCH-05 | Phase 4 | Complete |
+| COLL-01 | Phase 5 | Complete |
+| COLL-02 | Phase 5 | Complete |
+| COLL-03 | Phase 5 | Complete |
+| COLL-04 | Phase 5 | Complete |
+| COLL-05 | Phase 5 | Complete |
 | BTCH-01 | Phase 5 | Pending |
 | BTCH-02 | Phase 5 | Pending |
 | BTCH-03 | Phase 5 | Pending |
@@ -179,5 +179,6 @@
 - 未映射：0 项 ✓
 
 ---
+
 *需求定义时间：2026-03-14*
-*最后更新：2026-03-15*
+*最后更新：2026-03-17*
