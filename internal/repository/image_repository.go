@@ -18,6 +18,7 @@ type ImageRepository interface {
 	FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int) ([]domain.Image, error)
 	CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
 	Count() (int64, error)
+	Delete(id int64) error
 }
 
 type sqliteImageRepository struct {
@@ -223,4 +224,11 @@ func (r *sqliteImageRepository) CountByTagIDs(ctx context.Context, tagIDs []int6
 	var count int64
 	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
+}
+
+// Delete removes an image by ID. Due to ON DELETE CASCADE in the schema,
+// this will also remove related records in image_tags and collection_images.
+func (r *sqliteImageRepository) Delete(id int64) error {
+	_, err := r.db.Exec(`DELETE FROM images WHERE id = ?`, id)
+	return err
 }
