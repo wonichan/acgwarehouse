@@ -14,8 +14,8 @@
 | 1 | ✓ | 3/3 | 100% |
 | 2 | ✓ | 4/4 | 100% |
 | 3 | ✓ | 7/7 | 100% |
-| 4 | ◆ | 0/5 | 0% |
-| 5 | ○ | 0/0 | 0% |
+| 4 | ◆ | 1/5 | 20% |
+| 5 | ○ | 0/4 | 0% |
 | 6 | ○ | 0/0 | 0% |
 
 **状态说明：** ○ Pending（待开始） | ◆ In Progress（进行中） | ✓ Complete（已完成）
@@ -192,9 +192,17 @@ Plans:
 
 **预计时长：** 1-2 weeks
 
+**Plans:** 4 plans
+
 **关联需求：**
 - COLL-01, COLL-02, COLL-03, COLL-04, COLL-05
 - BTCH-01, BTCH-02, BTCH-03, BTCH-04
+
+Plans:
+- [ ] 05-01-PLAN.md — 数据模型与 Repository 层
+- [ ] 05-02-PLAN.md — Service 与 Handler 层
+- [ ] 05-03-PLAN.md — Flutter Provider 与服务层
+- [ ] 05-04-PLAN.md — Flutter UI 组件
 
 **成功标准：**
 1. 用户可创建/重命名/删除收藏夹
