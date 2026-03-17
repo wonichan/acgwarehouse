@@ -115,6 +115,32 @@ END;
 CREATE TRIGGER IF NOT EXISTS images_au AFTER UPDATE ON images BEGIN
     UPDATE images_fts SET filename = new.filename WHERE image_id = old.id;
 END;
+
+-- 重复组表
+CREATE TABLE IF NOT EXISTS duplicate_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recommended_image_id INTEGER NOT NULL,
+    similarity_threshold INTEGER DEFAULT 10,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recommended_image_id) REFERENCES images(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_duplicate_groups_recommended ON duplicate_groups(recommended_image_id);
+
+-- 重复关系表
+CREATE TABLE IF NOT EXISTS duplicate_relations (
+    group_id INTEGER NOT NULL,
+    image_id INTEGER NOT NULL,
+    is_recommended INTEGER DEFAULT 0,
+    file_hash TEXT,
+    phash_distance INTEGER,
+    PRIMARY KEY (group_id, image_id),
+    FOREIGN KEY (group_id) REFERENCES duplicate_groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_duplicate_relations_image ON duplicate_relations(image_id);
+CREATE INDEX IF NOT EXISTS idx_duplicate_relations_file_hash ON duplicate_relations(file_hash);
 `
 
 func EnsureScanSchema(db *sql.DB) error {
