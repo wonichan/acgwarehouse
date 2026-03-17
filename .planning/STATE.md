@@ -3,39 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-03-17T14:36:48.666Z"
+last_updated: "2026-03-17T15:46:54Z"
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 19
-  completed_plans: 16
----
-
----
-gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: in-progress
-last_updated: "2026-03-15T13:34:40.016Z"
-progress:
-  total_phases: 6
-  completed_phases: 2
-  total_plans: 14
-  completed_plans: 11
----
-
----
-gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: in-progress
-last_updated: "2026-03-15T13:35:00.000Z"
-progress:
-  total_phases: 6
-  completed_phases: 2
-  total_plans: 14
-  completed_plans: 11
-  percent: 93
+  total_plans: 20
+  completed_plans: 18
 ---
 
 # STATE.md
@@ -43,9 +16,9 @@ progress:
 ---
 project: ACGWarehouse
 milestone: v1.0
-phase: 4
+phase: 5
 plan: 1
-progress: "Phase 4: 20% (1/5 plans)"
+progress: "Phase 5: 20% (1/5 plans)"
 status: in-progress
 created: 2026-03-14
 updated: 2026-03-17
@@ -57,7 +30,7 @@ updated: 2026-03-17
 
 **核心价值：** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
 
-**当前重点：** Phase 4 - 重复检测与搜索（进行中）
+**当前重点：** Phase 5 - 收藏夹与批量操作（进行中）
 
 ## 进度摘要
 
@@ -65,8 +38,8 @@ updated: 2026-03-17
 Phase 1: ✓ 基础架构、图片扫描与标签基础层    (100%)
 Phase 2: ✓ 缩略图、基础浏览与 AI 复核界面底座 (100%)
 Phase 3: ✓ AI 开放标签与治理                (100%)
-Phase 4: ◆ 重复检测与搜索         (20%)
-Phase 5: ○ 收藏夹与批量操作       (0%)
+Phase 4: ✓ 重复检测与搜索                   (100%)
+Phase 5: ◆ 收藏夹与批量操作       (20%)
 Phase 6: ○ 优化与部署             (0%)
 ```
 
@@ -74,20 +47,20 @@ Phase 6: ○ 优化与部署             (0%)
 
 ## 当前状态
 
-**Phase：** 4（进行中）
+**Phase：** 5（进行中）
 **Plan：** 01 已完成，继续执行 02
 **Wave：** 1
 
-**下一步操作：** 执行 Plan 04-02
+**下一步操作：** 执行 Plan 05-02
 
 ## 指标
 
 | 指标 | 数值 |
 |--------|-------|
 | 需求总数 | 47 |
-| 已完成需求 | 29 |
+| 已完成需求 | 34 |
 | 阶段总数 | 6 |
-| 已完成阶段 | 3 |
+| 已完成阶段 | 4 |
 | 预计总时长 | 12-17 周 |
 
 ## 关键决策
@@ -116,6 +89,8 @@ Phase 6: ○ 优化与部署             (0%)
 | AI 与手动标签区分基于 source_observation_id | 统计时区分来源，支持治理分析 | ✓ 03-06 已实现 TagStats 接口 |
 | Union-Find 传递性分组算法 | 处理相似图片的传递性关系（A~B, B~C → {A,B,C}） | ✓ 04-01 已实现重复检测核心算法 |
 | 双重哈希检测策略 | SHA256 检测完全相同，pHash 检测相似 | ✓ 04-01 已实现哈希计算服务 |
+| 收藏夹使用复合主键 | (collection_id, image_id) 确保唯一性和高效查询 | ✓ 05-01 已实现收藏夹数据层 |
+| 自动维护 image_count | AddImage/RemoveImage 时自动更新收藏夹图片计数 | ✓ 05-01 已实现计数自动维护 |
 
 ## 阻塞项
 
@@ -142,6 +117,7 @@ Phase 6: ○ 优化与部署             (0%)
 | 2026-03-15 | 3 | Plan 03-07 已执行 | 已完成 Flutter gap closure：gallery 过滤、AI 状态轮询、merge UI、治理统计页面与 `03-07-SUMMARY.md` |
 | 2026-03-16 | 4 | 上下文已收集 | 已创建 `.planning/phases/04-duplicate-detection-search/04-CONTEXT.md`，可进入规划 |
 | 2026-03-17 | 4 | Plan 04-01 已执行 | 已完成哈希服务、数据模型、检测服务、API 端点与 `04-01-SUMMARY.md` |
+| 2026-03-17 | 5 | Plan 05-01 已执行 | 已完成收藏夹数据模型、Schema 扩展、Repository 层与 `05-01-SUMMARY.md` |
 
 ---
 
@@ -157,3 +133,4 @@ Phase 6: ○ 优化与部署             (0%)
 *Phase 3 gap closure 完成：2026-03-15*
 *Phase 4 上下文已收集：2026-03-16*
 *Phase 4 Plan 01 已完成：2026-03-17*
+*Phase 5 Plan 01 已完成：2026-03-17*

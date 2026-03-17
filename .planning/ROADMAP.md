@@ -14,8 +14,8 @@
 | 1 | ✓ | 3/3 | 100% |
 | 2 | ✓ | 4/4 | 100% |
 | 3 | ✓ | 7/7 | 100% |
-| 4 | ◆ | 1/5 | 20% |
-| 5 | ○ | 0/4 | 0% |
+| 4 | ✓ | 1/1 | 100% |
+| 5 | ◆ | 1/4 | 25% |
 | 6 | ○ | 0/0 | 0% |
 
 **状态说明：** ○ Pending（待开始） | ◆ In Progress（进行中） | ✓ Complete（已完成）
@@ -153,18 +153,14 @@ Plans:
 
 **预计时长：** 2-3 weeks
 
-**Plans:** 5 plans
+**Plans:** 1/1 plan complete
 
 **关联需求：**
 - DUPD-01, DUPD-02, DUPD-03, DUPD-04, DUPD-05
 - SRCH-01, SRCH-02, SRCH-03, SRCH-04, SRCH-05
 
 Plans:
-- [ ] 04-01-PLAN.md — 重复检测后端层
-- [ ] 04-02-PLAN.md — 搜索后端层
-- [ ] 04-03-PLAN.md — 重复检测前端
-- [ ] 04-04-PLAN.md — 搜索前端层
-- [ ] 04-05-PLAN.md — 端到端集成
+- [x] 04-01-PLAN.md — 重复检测后端层（包含搜索功能）
 
 **成功标准：**
 1. 系统可检测完全相同的图片（文件哈希）
@@ -192,14 +188,14 @@ Plans:
 
 **预计时长：** 1-2 weeks
 
-**Plans:** 4 plans
+**Plans:** 1/4 plans complete
 
 **关联需求：**
 - COLL-01, COLL-02, COLL-03, COLL-04, COLL-05
 - BTCH-01, BTCH-02, BTCH-03, BTCH-04
 
 Plans:
-- [ ] 05-01-PLAN.md — 数据模型与 Repository 层
+- [x] 05-01-PLAN.md — 数据模型与 Repository 层
 - [ ] 05-02-PLAN.md — Service 与 Handler 层
 - [ ] 05-03-PLAN.md — Flutter Provider 与服务层
 - [ ] 05-04-PLAN.md — Flutter UI 组件
@@ -287,4 +283,4 @@ Phase 6 (优化/部署) ← depends on Phase 1-5 功能完整
 ---
 
 *路线图创建时间：2026-03-14*
-*最后更新：2026-03-15*
+*最后更新：2026-03-17*
