@@ -18,10 +18,13 @@ type Dependencies struct {
 	ImageTagRepo   repository.ImageTagRepository
 	DuplicateRepo  repository.DuplicateRepository
 	SearchRepo     repository.SearchRepository
+	CollectionRepo repository.CollectionRepository
 	GovernanceSvc  *service.TagGovernanceService
 	DuplicateSvc   *service.DuplicateService
 	SearchSvc      *service.SearchService
 	HashSvc        *service.HashService
+	CollectionSvc  *service.CollectionService
+	BatchSvc       *service.BatchService
 	JobManager     *worker.Manager
 	AITagProcessor gin.HandlerFunc
 }
@@ -141,9 +144,57 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.GET("/search", searchHandler)
 	api.GET("/search/filename", searchByFilename)
 
-	collections := api.Group("/collections")
-	collections.GET("", placeholderHandler)
-	collections.POST("", placeholderHandler)
+	// Collection routes
+	collectionList := gin.HandlerFunc(placeholderHandler)
+	collectionGet := gin.HandlerFunc(placeholderHandler)
+	collectionCreate := gin.HandlerFunc(placeholderHandler)
+	collectionUpdate := gin.HandlerFunc(placeholderHandler)
+	collectionDelete := gin.HandlerFunc(placeholderHandler)
+	collectionAddImage := gin.HandlerFunc(placeholderHandler)
+	collectionRemoveImage := gin.HandlerFunc(placeholderHandler)
+	collectionSetCover := gin.HandlerFunc(placeholderHandler)
+	collectionGetImages := gin.HandlerFunc(placeholderHandler)
+	if deps != nil && deps.CollectionSvc != nil {
+		collectionHandler := NewCollectionHandler(deps.CollectionSvc)
+		collectionList = collectionHandler.ListCollections
+		collectionGet = collectionHandler.GetCollection
+		collectionCreate = collectionHandler.CreateCollection
+		collectionUpdate = collectionHandler.UpdateCollection
+		collectionDelete = collectionHandler.DeleteCollection
+		collectionAddImage = collectionHandler.AddImageToCollection
+		collectionRemoveImage = collectionHandler.RemoveImageFromCollection
+		collectionSetCover = collectionHandler.SetCoverImage
+		collectionGetImages = collectionHandler.GetCollectionImages
+	}
+	api.GET("/collections", collectionList)
+	api.GET("/collections/:id", collectionGet)
+	api.POST("/collections", collectionCreate)
+	api.PUT("/collections/:id", collectionUpdate)
+	api.DELETE("/collections/:id", collectionDelete)
+	api.POST("/collections/:id/images", collectionAddImage)
+	api.DELETE("/collections/:id/images/:image_id", collectionRemoveImage)
+	api.PUT("/collections/:id/cover", collectionSetCover)
+	api.GET("/collections/:id/images", collectionGetImages)
+
+	// Batch operation routes
+	batchAddTags := gin.HandlerFunc(placeholderHandler)
+	batchRemoveTags := gin.HandlerFunc(placeholderHandler)
+	batchMoveToCollection := gin.HandlerFunc(placeholderHandler)
+	batchRemoveFromCollection := gin.HandlerFunc(placeholderHandler)
+	batchDeleteImages := gin.HandlerFunc(placeholderHandler)
+	if deps != nil && deps.BatchSvc != nil {
+		batchHandler := NewBatchHandler(deps.BatchSvc)
+		batchAddTags = batchHandler.BatchAddTags
+		batchRemoveTags = batchHandler.BatchRemoveTags
+		batchMoveToCollection = batchHandler.BatchMoveToCollection
+		batchRemoveFromCollection = batchHandler.BatchRemoveFromCollection
+		batchDeleteImages = batchHandler.BatchDeleteImages
+	}
+	api.POST("/batch/tags/add", batchAddTags)
+	api.POST("/batch/tags/remove", batchRemoveTags)
+	api.POST("/batch/collections/move", batchMoveToCollection)
+	api.POST("/batch/collections/remove", batchRemoveFromCollection)
+	api.POST("/batch/images/delete", batchDeleteImages)
 }
 
 func placeholderHandler(c *gin.Context) {
