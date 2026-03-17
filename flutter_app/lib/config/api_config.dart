@@ -21,4 +21,13 @@ class ApiConfig {
   static String triggerAITags(int imageId) => '$baseUrl/images/$imageId/ai-tags';
   static String aiTagStatus(int imageId) => '$baseUrl/images/$imageId/ai-tags/status';
   static String get batchAITags => '$baseUrl/images/batch-ai-tags';
+
+  // Duplicate detection endpoints
+  static String get duplicates => '$baseUrl/duplicates';
+  static String duplicateDetail(int id) => '$baseUrl/duplicates/$id';
+  static String get detectDuplicates => '$baseUrl/duplicates/detect';
+
+  // Search endpoints
+  static String get search => '$baseUrl/search';
+  static String get searchByFilename => '$baseUrl/search/filename';
 }
