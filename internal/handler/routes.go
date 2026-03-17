@@ -17,8 +17,11 @@ type Dependencies struct {
 	ObsRepo        repository.TagObservationRepository
 	ImageTagRepo   repository.ImageTagRepository
 	DuplicateRepo  repository.DuplicateRepository
+	SearchRepo     repository.SearchRepository
 	GovernanceSvc  *service.TagGovernanceService
 	DuplicateSvc   *service.DuplicateService
+	SearchSvc      *service.SearchService
+	HashSvc        *service.HashService
 	JobManager     *worker.Manager
 	AITagProcessor gin.HandlerFunc
 }
@@ -126,6 +129,17 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.GET("/duplicates", duplicateList)
 	api.GET("/duplicates/:id", duplicateGet)
 	api.DELETE("/duplicates/:id", duplicateDelete)
+
+	// Search routes
+	searchHandler := gin.HandlerFunc(placeholderHandler)
+	searchByFilename := gin.HandlerFunc(placeholderHandler)
+	if deps != nil && deps.SearchSvc != nil {
+		searchHdlr := NewSearchHandler(deps.SearchSvc)
+		searchHandler = searchHdlr.Search
+		searchByFilename = searchHdlr.SearchByFilename
+	}
+	api.GET("/search", searchHandler)
+	api.GET("/search/filename", searchByFilename)
 
 	collections := api.Group("/collections")
 	collections.GET("", placeholderHandler)

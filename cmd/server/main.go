@@ -52,7 +52,12 @@ func main() {
 	aliasRepo := repository.NewTagAliasRepository(db)
 	obsRepo := repository.NewTagObservationRepository(db)
 	imageTagRepo := repository.NewImageTagRepository(db)
+	duplicateRepo := repository.NewDuplicateRepository(db)
+	searchRepo := repository.NewSearchRepository(db)
 	governanceSvc := service.NewTagGovernanceService(tagRepo, aliasRepo, obsRepo, imageTagRepo)
+	hashSvc := service.NewHashService()
+	duplicateSvc := service.NewDuplicateService(imageRepo, duplicateRepo, hashSvc)
+	searchSvc := service.NewSearchService(imageRepo, tagRepo, searchRepo)
 	jobManager := worker.NewManager(jobRepo)
 	jobManager.Start(context.Background())
 	defer jobManager.Stop()
@@ -72,7 +77,12 @@ func main() {
 		AliasRepo:     aliasRepo,
 		ObsRepo:       obsRepo,
 		ImageTagRepo:  imageTagRepo,
+		DuplicateRepo: duplicateRepo,
+		SearchRepo:    searchRepo,
 		GovernanceSvc: governanceSvc,
+		DuplicateSvc:  duplicateSvc,
+		SearchSvc:     searchSvc,
+		HashSvc:       hashSvc,
 		JobManager:    jobManager,
 	})
 
