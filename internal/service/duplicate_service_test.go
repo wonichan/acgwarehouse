@@ -359,7 +359,8 @@ func TestHammingDistance(t *testing.T) {
 		{0, 0, 0},
 		{0, 1, 1},
 		{0x1234567890ABCDEF, 0x1234567890ABCDEF, 0},
-		{0x1234567890ABCDEF, 0x1234567890ABCDEF + 1, 1},
+		{0x1234567890ABCDEF, 0x1234567890ABCDEF ^ 1, 1},    // Flip one bit
+		{0x1234567890ABCDEF, 0x1234567890ABCDEF ^ 0xFF, 8}, // Flip 8 bits
 	}
 
 	for _, tt := range tests {
