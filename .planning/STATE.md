@@ -30,12 +30,12 @@ progress:
 ---
 project: ACGWarehouse
 milestone: v1.0
-phase: 3
-plan: 7
-progress: "Phase 3: 100% (7/7 plans)"
+phase: 4
+plan: 1
+progress: "Phase 4: 20% (1/5 plans)"
 status: in-progress
 created: 2026-03-14
-updated: 2026-03-15
+updated: 2026-03-17
 ---
 
 ## 项目引用
@@ -44,15 +44,15 @@ updated: 2026-03-15
 
 **核心价值：** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
 
-**当前重点：** Phase 3 - AI 开放标签与治理（gap closure 进行中）
+**当前重点：** Phase 4 - 重复检测与搜索（进行中）
 
 ## 进度摘要
 
 ```
 Phase 1: ✓ 基础架构、图片扫描与标签基础层    (100%)
 Phase 2: ✓ 缩略图、基础浏览与 AI 复核界面底座 (100%)
-Phase 3: ✓ AI 开放标签与治理                (100% - gap closure 完成)
-Phase 4: ○ 重复检测与搜索         (0%)
+Phase 3: ✓ AI 开放标签与治理                (100%)
+Phase 4: ◆ 重复检测与搜索         (20%)
 Phase 5: ○ 收藏夹与批量操作       (0%)
 Phase 6: ○ 优化与部署             (0%)
 ```
@@ -61,20 +61,20 @@ Phase 6: ○ 优化与部署             (0%)
 
 ## 当前状态
 
-**Phase：** 3（gap closure 已完成）
-**Plan：** 07 已完成，Phase 3 全部执行完毕
-**Wave：** 6
+**Phase：** 4（进行中）
+**Plan：** 01 已完成，继续执行 02
+**Wave：** 1
 
-**下一步操作：** 重新运行 Phase 3 验证，确认所有 gaps 已关闭，然后进入 Phase 4 规划
+**下一步操作：** 执行 Plan 04-02
 
 ## 指标
 
 | 指标 | 数值 |
 |--------|-------|
 | 需求总数 | 47 |
-| 已完成需求 | 25 |
+| 已完成需求 | 29 |
 | 阶段总数 | 6 |
-| 已完成阶段 | 2 |
+| 已完成阶段 | 3 |
 | 预计总时长 | 12-17 周 |
 
 ## 关键决策
@@ -101,6 +101,8 @@ Phase 6: ○ 优化与部署             (0%)
 | AI 归并输出保持 pending image_tags | 即使命中已确认标准标签，也要给复核界面真实待处理数据 | ✓ 03-05 后台任务现会写入待复核 image_tags |
 | 图片筛选采用 AND 语义 | 确保只有同时拥有所有请求标签的图片被返回 | ✓ 03-06 已实现 GROUP BY HAVING 过滤逻辑 |
 | AI 与手动标签区分基于 source_observation_id | 统计时区分来源，支持治理分析 | ✓ 03-06 已实现 TagStats 接口 |
+| Union-Find 传递性分组算法 | 处理相似图片的传递性关系（A~B, B~C → {A,B,C}） | ✓ 04-01 已实现重复检测核心算法 |
+| 双重哈希检测策略 | SHA256 检测完全相同，pHash 检测相似 | ✓ 04-01 已实现哈希计算服务 |
 
 ## 阻塞项
 
@@ -126,6 +128,7 @@ Phase 6: ○ 优化与部署             (0%)
 | 2026-03-15 | 3 | Plan 03-06 已执行 | 已完成图片筛选 API、标签归并端点、统计接口与 `03-06-SUMMARY.md` |
 | 2026-03-15 | 3 | Plan 03-07 已执行 | 已完成 Flutter gap closure：gallery 过滤、AI 状态轮询、merge UI、治理统计页面与 `03-07-SUMMARY.md` |
 | 2026-03-16 | 4 | 上下文已收集 | 已创建 `.planning/phases/04-duplicate-detection-search/04-CONTEXT.md`，可进入规划 |
+| 2026-03-17 | 4 | Plan 04-01 已执行 | 已完成哈希服务、数据模型、检测服务、API 端点与 `04-01-SUMMARY.md` |
 
 ---
 
@@ -140,3 +143,4 @@ Phase 6: ○ 优化与部署             (0%)
 *Phase 3 验证完成（gaps_found）：2026-03-15*
 *Phase 3 gap closure 完成：2026-03-15*
 *Phase 4 上下文已收集：2026-03-16*
+*Phase 4 Plan 01 已完成：2026-03-17*
