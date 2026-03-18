@@ -1,0 +1,75 @@
+# Local data and state
+data/
+library/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Git metadata
+.git/
+.gitignore
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Flutter build output
+flutter_app/build/
+flutter_app/.dart_tool/
+flutter_app/.flutter-plugins
+flutter_app/.flutter-plugins-dependencies
+flutter_app/.pub-cache/
+flutter_app/.pub/
+flutter_app/pubspec.lock
+
+# Go build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test caches and coverage
+*.test
+*.out
+coverage/
+coverage.txt
+
+# Local config variants
+config.local.yaml
+config.*.local.yaml
+
+# Planning and documentation (not needed in container)
+.planning/
+docs/
+*.md
+!README.md
+
+# Docker files (prevent recursion)
+docker-compose*.yml
+.dockerignore
+Dockerfile*
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
