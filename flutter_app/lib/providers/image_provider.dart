@@ -12,7 +12,8 @@ class ImageListProvider extends ChangeNotifier {
   List<ImageModel> _images = [];
   bool _isLoading = false;
   bool _hasMore = true;
-  String? _nextCursor;
+  int _currentOffset = 0;
+  int _total = 0;
   ViewMode _viewMode = ViewMode.grid;
   SortField _sortField = SortField.createdAt;
   bool _sortAsc = false;
@@ -23,21 +24,31 @@ class ImageListProvider extends ChangeNotifier {
   List<ImageModel> get images => _images;
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
+  int get total => _total;
   ViewMode get viewMode => _viewMode;
   SortField get sortField => _sortField;
   bool get sortAsc => _sortAsc;
   List<int> get selectedTagIds => _selectedTagIds;
   
   Future<void> loadImages({bool refresh = false}) async {
+    // Prevent duplicate in-flight loads
     if (_isLoading) return;
+    
+    // Stop at last page
     if (!refresh && !_hasMore) return;
     
     _isLoading = true;
     notifyListeners();
     
     try {
+      // On refresh, reset offset and hasMore
+      if (refresh) {
+        _currentOffset = 0;
+        _hasMore = true;
+      }
+      
       final response = await _apiService.fetchImages(
-        cursor: refresh ? null : _nextCursor,
+        offset: refresh ? 0 : _currentOffset,
         sortBy: _sortField.name == 'createdAt' ? 'created_at' : 
                 _sortField.name == 'fileSize' ? 'file_size' : 'filename',
         sortDir: _sortAsc ? 'asc' : 'desc',
@@ -49,8 +60,19 @@ class ImageListProvider extends ChangeNotifier {
       } else {
         _images.addAll(response.items);
       }
-      _nextCursor = response.nextCursor;
+      
+      _total = response.total;
+      
+      // Update offset for next page based on current loaded count
+      _currentOffset = _images.length;
+      
+      // Update hasMore state from backend response
       _hasMore = response.hasMore;
+      
+      // Safety check: hasMore should also be false if we've loaded all items
+      if (_currentOffset >= _total && _total > 0) {
+        _hasMore = false;
+      }
     } catch (e) {
       debugPrint('Error loading images: $e');
     } finally {
@@ -64,17 +86,21 @@ class ImageListProvider extends ChangeNotifier {
     notifyListeners();
   }
   
-  void setSort(SortField field, bool asc) {
+  Future<void> setSort(SortField field, bool asc) async {
     _sortField = field;
     _sortAsc = asc;
-    loadImages(refresh: true);
+    // Reset pagination when sort changes
+    _currentOffset = 0;
+    _hasMore = true;
+    await loadImages(refresh: true);
   }
   
   /// Sets the tag filter and reloads images with the new filter
   /// Preserves current sort settings and resets pagination
   Future<void> setTagFilter(List<int> tagIds) async {
     _selectedTagIds = List.unmodifiable(tagIds);
-    _nextCursor = null;
+    // Reset pagination when filter changes
+    _currentOffset = 0;
     _hasMore = true;
     await loadImages(refresh: true);
     notifyListeners();
