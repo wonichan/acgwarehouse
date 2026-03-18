@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS images (
     height INTEGER,
     format TEXT,
     phash INTEGER,
+    thumbnail_small_url TEXT,
+    thumbnail_large_url TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

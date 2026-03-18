@@ -15,9 +15,11 @@ test:
 migrate-up:
 	mkdir -p ./data
 	sqlite3 ./data/acgwarehouse.db < ./migrations/001_initial_schema.up.sql
+	sqlite3 ./data/acgwarehouse.db < ./migrations/002_add_thumbnail_fields.up.sql
 
 migrate-down:
 	mkdir -p ./data
+	sqlite3 ./data/acgwarehouse.db < ./migrations/002_add_thumbnail_fields.down.sql
 	sqlite3 ./data/acgwarehouse.db < ./migrations/001_initial_schema.down.sql
 
 # Docker commands

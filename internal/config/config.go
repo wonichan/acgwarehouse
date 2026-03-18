@@ -125,6 +125,9 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("COS_SECRET_KEY"); v != "" {
 		cfg.COS.SecretKey = v
 	}
+	if v := os.Getenv("COS_BUCKET_URL"); v != "" {
+		cfg.COS.BucketURL = v
+	}
 
 	// Admin 环境变量覆盖
 	if v := os.Getenv("ADMIN_USERNAME"); v != "" {
