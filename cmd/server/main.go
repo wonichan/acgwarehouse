@@ -54,6 +54,7 @@ func main() {
 	imageTagRepo := repository.NewImageTagRepository(db)
 	duplicateRepo := repository.NewDuplicateRepository(db)
 	searchRepo := repository.NewSearchRepository(db)
+	collectionRepo := repository.NewCollectionRepository(db)
 	governanceSvc := service.NewTagGovernanceService(tagRepo, aliasRepo, obsRepo, imageTagRepo)
 	hashSvc := service.NewHashService()
 	duplicateSvc := service.NewDuplicateService(imageRepo, duplicateRepo, hashSvc)
@@ -61,6 +62,16 @@ func main() {
 	jobManager := worker.NewManager(jobRepo)
 	jobManager.Start(context.Background())
 	defer jobManager.Stop()
+
+	// Admin service - wrap jobManager to implement the control interface
+	adminSvc := service.NewAdminService(
+		cfg,
+		jobRepo,
+		imageRepo,
+		tagRepo,
+		collectionRepo,
+		jobManager,
+	)
 
 	provider, err := ai.NewProvider(&cfg.AI)
 	if err == nil {
@@ -71,19 +82,22 @@ func main() {
 	}
 
 	handler.SetupRoutes(r, &handler.Dependencies{
-		ImageRepo:     imageRepo,
-		JobRepo:       jobRepo,
-		TagRepo:       tagRepo,
-		AliasRepo:     aliasRepo,
-		ObsRepo:       obsRepo,
-		ImageTagRepo:  imageTagRepo,
-		DuplicateRepo: duplicateRepo,
-		SearchRepo:    searchRepo,
-		GovernanceSvc: governanceSvc,
-		DuplicateSvc:  duplicateSvc,
-		SearchSvc:     searchSvc,
-		HashSvc:       hashSvc,
-		JobManager:    jobManager,
+		ImageRepo:      imageRepo,
+		JobRepo:        jobRepo,
+		TagRepo:        tagRepo,
+		AliasRepo:      aliasRepo,
+		ObsRepo:        obsRepo,
+		ImageTagRepo:   imageTagRepo,
+		DuplicateRepo:  duplicateRepo,
+		SearchRepo:     searchRepo,
+		CollectionRepo: collectionRepo,
+		GovernanceSvc:  governanceSvc,
+		DuplicateSvc:   duplicateSvc,
+		SearchSvc:      searchSvc,
+		HashSvc:        hashSvc,
+		JobManager:     jobManager,
+		AdminSvc:       adminSvc,
+		AdminCfg:       cfg,
 	})
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)

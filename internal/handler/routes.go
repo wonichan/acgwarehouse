@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
@@ -25,7 +26,9 @@ type Dependencies struct {
 	HashSvc        *service.HashService
 	CollectionSvc  *service.CollectionService
 	BatchSvc       *service.BatchService
+	AdminSvc       *service.AdminService
 	JobManager     *worker.Manager
+	AdminCfg       *config.Config
 	AITagProcessor gin.HandlerFunc
 }
 
@@ -40,6 +43,25 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	}
 
 	api := r.Group("/api/v1")
+
+	// Admin routes - protected with Basic Auth
+	var adminHandler *AdminHandler
+	if deps != nil && deps.AdminSvc != nil && deps.AdminCfg != nil {
+		adminHandler = NewAdminHandler(deps.AdminCfg, deps.AdminSvc)
+	}
+
+	admin := r.Group("/admin/api")
+	if adminHandler != nil {
+		admin.Use(adminHandler.AuthMiddleware())
+		{
+			admin.GET("/summary", adminHandler.GetSummary)
+			admin.GET("/jobs", adminHandler.GetJobs)
+			admin.POST("/actions/scan", adminHandler.TriggerScan)
+			admin.POST("/actions/jobs/pause", adminHandler.PauseBackgroundTasks)
+			admin.POST("/actions/jobs/resume", adminHandler.ResumeBackgroundTasks)
+			admin.POST("/actions/jobs/retry-failed", adminHandler.RetryFailedJobs)
+		}
+	}
 
 	images := api.Group("/images")
 	imageList := gin.HandlerFunc(placeholderHandler)
