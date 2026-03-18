@@ -1,0 +1,49 @@
+# ACGWarehouse Docker Compose Configuration
+# Single-machine deployment with SQLite and host-visible persistence
+#
+# Quick Start:
+#   1. Copy deploy/config/config.example.yaml to deploy/config/config.yaml
+#   2. Edit deploy/config/config.yaml with your settings
+#   3. Run: docker compose up -d
+#   4. Check health: curl http://localhost:8080/health
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: acgwarehouse:latest
+    container_name: acgwarehouse
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Configuration file (read-only)
+      - ./deploy/config/config.yaml:/app/config.yaml:ro
+      # SQLite database directory (persistent)
+      - ./data:/data
+      # Image library directory (persistent)
+      - ./library:/library:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    environment:
+      # Optional: Override config via environment variables
+      # - SERVER_HOST=0.0.0.0
+      # - SERVER_PORT=8080
+      # - SERVER_ENV=production
+      # - DATABASE_TYPE=sqlite
+      # - DATABASE_PATH=/data/acgwarehouse.db
+      # - AI_API_KEY=your-api-key-here
+      - TZ=Asia/Shanghai
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# No additional services needed - SQLite is embedded
+# For PostgreSQL deployment, see documentation
