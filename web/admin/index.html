@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACGWarehouse Admin Dashboard</title>
+    <link rel="stylesheet" href="/admin/styles.css">
+</head>
+<body>
+    <div class="dashboard">
+        <header class="dashboard-header">
+            <h1>ACGWarehouse Admin</h1>
+            <div class="header-actions">
+                <button id="refreshBtn" class="btn btn-secondary">Refresh</button>
+                <button id="logoutBtn" class="btn btn-outline">Logout</button>
+            </div>
+        </header>
+
+        <!-- Health & Status Section -->
+        <section class="section">
+            <h2>Service Status</h2>
+            <div class="status-cards">
+                <div class="status-card" id="healthCard">
+                    <div class="card-label">Health</div>
+                    <div class="card-value" id="healthStatus">Loading...</div>
+                    <div class="card-subtitle" id="healthTimestamp">-</div>
+                </div>
+                <div class="status-card" id="configCard">
+                    <div class="card-label">Environment</div>
+                    <div class="card-value" id="envStatus">Loading...</div>
+                    <div class="card-subtitle" id="serverInfo">-</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Task Queue Section -->
+        <section class="section">
+            <h2>Task Queue</h2>
+            <div class="status-cards">
+                <div class="status-card">
+                    <div class="card-label">Total</div>
+                    <div class="card-value" id="taskTotal">-</div>
+                </div>
+                <div class="status-card status-ready">
+                    <div class="card-label">Ready</div>
+                    <div class="card-value" id="taskReady">-</div>
+                </div>
+                <div class="status-card status-running">
+                    <div class="card-label">Running</div>
+                    <div class="card-value" id="taskRunning">-</div>
+                </div>
+                <div class="status-card status-finished">
+                    <div class="card-label">Finished</div>
+                    <div class="card-value" id="taskFinished">-</div>
+                </div>
+                <div class="status-card status-failed">
+                    <div class="card-label">Failed</div>
+                    <div class="card-value" id="taskFailed">-</div>
+                </div>
+            </div>
+            <div class="queue-controls">
+                <button id="pauseBtn" class="btn btn-warning">Pause Queue</button>
+                <button id="resumeBtn" class="btn btn-success">Resume Queue</button>
+                <button id="retryBtn" class="btn btn-danger">Retry Failed</button>
+            </div>
+        </section>
+
+        <!-- Library Stats Section -->
+        <section class="section">
+            <h2>Library Scale</h2>
+            <div class="status-cards">
+                <div class="status-card">
+                    <div class="card-label">Total Images</div>
+                    <div class="card-value" id="totalImages">-</div>
+                </div>
+                <div class="status-card">
+                    <div class="card-label">Total Tags</div>
+                    <div class="card-value" id="totalTags">-</div>
+                </div>
+                <div class="status-card">
+                    <div class="card-label">Collections</div>
+                    <div class="card-value" id="totalCollections">-</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Config Info Section -->
+        <section class="section">
+            <h2>Configuration</h2>
+            <div class="config-grid">
+                <div class="config-item">
+                    <span class="config-label">AI API Key:</span>
+                    <span class="config-value" id="hasAIKey">-</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">COS Storage:</span>
+                    <span class="config-value" id="hasCOSKey">-</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">Admin Username:</span>
+                    <span class="config-value" id="adminUsername">-</span>
+                </div>
+            </div>
+            <div class="scan-control">
+                <button id="scanBtn" class="btn btn-primary">Trigger Scan</button>
+            </div>
+        </section>
+
+        <!-- Recent Jobs Section -->
+        <section class="section">
+            <h2>Recent Jobs</h2>
+            <div class="jobs-table-wrapper">
+                <table class="jobs-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Progress</th>
+                            <th>Created</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobsTableBody">
+                        <tr>
+                            <td colspan="6" class="loading-cell">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Error Log Section -->
+        <section class="section">
+            <h2>Recent Errors</h2>
+            <div class="error-list" id="errorList">
+                <div class="empty-state">No errors to display</div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="/admin/app.js"></script>
+</body>
+</html>

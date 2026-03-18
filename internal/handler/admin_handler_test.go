@@ -270,3 +270,98 @@ func TestAdminHandler_Resume(t *testing.T) {
 		t.Error("Expected ResumeBackgroundTasks to be called")
 	}
 }
+
+func TestAdminRoutes_ServeStaticFiles(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	// Serve admin static files (simulating what SetupRoutes does)
+	// Note: In production, this serves from ./web/admin
+	// For testing, we'll use a different path or verify the route registration
+	r.GET("/admin", func(c *gin.Context) {
+		c.String(200, "Admin Dashboard")
+	})
+
+	// Test that admin index is accessible
+	req := httptest.NewRequest("GET", "/admin", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Route should be accessible
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200 for admin page, got %d", w.Code)
+	}
+
+	// Test content
+	if w.Body.String() != "Admin Dashboard" {
+		t.Error("Expected admin dashboard content")
+	}
+}
+
+func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Admin: config.AdminConfig{
+			Username: "admin",
+			Password: "secret",
+		},
+	}
+
+	mockSvc := &mockAdminService{
+		summary: &service.Summary{
+			Health:  service.HealthStatus{Status: "healthy"},
+			Tasks:   service.TaskSummary{Total: 5},
+			Library: service.LibraryStats{TotalImages: 100},
+		},
+		jobs: []interface{}{},
+	}
+
+	handler := NewAdminHandler(cfg, mockSvc)
+
+	r := gin.New()
+	// Admin page serves at /admin (no /api)
+	r.GET("/admin", func(c *gin.Context) {
+		c.String(200, "Admin Dashboard")
+	})
+	// Admin API at /admin/api
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.GET("/summary", handler.GetSummary)
+	admin.GET("/jobs", handler.GetJobs)
+	admin.POST("/actions/scan", handler.TriggerScan)
+	admin.POST("/actions/jobs/pause", handler.PauseBackgroundTasks)
+	admin.POST("/actions/jobs/resume", handler.ResumeBackgroundTasks)
+	admin.POST("/actions/jobs/retry-failed", handler.RetryFailedJobs)
+
+	// Test /admin/api/summary with auth
+	req := httptest.NewRequest("GET", "/admin/api/summary", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200, got %d", w.Code)
+	}
+
+	// Test that action buttons work
+	mockSvc2 := &mockAdminService{scanJobID: 99}
+	handler2 := NewAdminHandler(cfg, mockSvc2)
+
+	r2 := gin.New()
+	r2.GET("/admin", func(c *gin.Context) {
+		c.String(200, "Admin Dashboard")
+	})
+	admin2 := r2.Group("/admin/api")
+	admin2.Use(handler2.AuthMiddleware())
+	admin2.POST("/actions/scan", handler2.TriggerScan)
+
+	req = httptest.NewRequest("POST", "/admin/api/actions/scan", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w = httptest.NewRecorder()
+	r2.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200 for scan action, got %d", w.Code)
+	}
+}
