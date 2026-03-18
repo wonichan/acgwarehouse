@@ -25,8 +25,36 @@ class GalleryScreen extends StatelessWidget {
   }
 }
 
-class _GalleryContent extends StatelessWidget {
+class _GalleryContent extends StatefulWidget {
   const _GalleryContent();
+  
+  @override
+  State<_GalleryContent> createState() => _GalleryContentState();
+}
+
+class _GalleryContentState extends State<_GalleryContent> {
+  final ScrollController _scrollController = ScrollController();
+  
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+  
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+  
+  void _onScroll() {
+    if (_scrollController.position.pixels >= 
+        _scrollController.position.maxScrollExtent - 200) {
+      // Load more when within 200 pixels of bottom
+      context.read<ImageListProvider>().loadImages();
+    }
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -68,7 +96,21 @@ class _GalleryContent extends StatelessWidget {
           
           return RefreshIndicator(
             onRefresh: () => provider.loadImages(refresh: true),
-            child: widget,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                children: [
+                  widget,
+                  // Loading indicator at bottom when fetching more
+                  if (provider.isLoading && provider.hasMore)
+                    const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                ],
+              ),
+            ),
           );
         },
       ),
