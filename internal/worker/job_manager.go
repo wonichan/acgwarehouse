@@ -11,6 +11,14 @@ import (
 
 type JobFunc func(ctx context.Context, id int64, payload string) error
 
+// Stats holds runtime statistics about the job manager.
+type Stats struct {
+	QueueSize int
+	IsRunning bool
+	IsPaused  bool
+	JobTypes  map[string]int
+}
+
 type Manager struct {
 	jobRepo   repository.JobRepository
 	handlers  map[string]JobFunc
@@ -19,6 +27,8 @@ type Manager struct {
 	stopCh    chan struct{}
 	runningMu sync.Mutex
 	running   bool
+	pausedMu  sync.Mutex
+	paused    bool
 }
 
 func NewManager(jobRepo repository.JobRepository) *Manager {
@@ -52,6 +62,23 @@ func (m *Manager) Start(ctx context.Context) {
 				return
 			case job := <-m.queue:
 				if job != nil {
+					// Check if paused
+					m.pausedMu.Lock()
+					isPaused := m.paused
+					m.pausedMu.Unlock()
+
+					if isPaused {
+						// Re-queue the job and wait
+						go func(j *domain.AsyncJob) {
+							time.Sleep(100 * time.Millisecond)
+							select {
+							case m.queue <- j:
+							default:
+								// Queue full, drop job (it's persisted in DB)
+							}
+						}(job)
+						continue
+					}
 					m.processJob(ctx, job)
 				}
 			}
@@ -120,4 +147,55 @@ func (m *Manager) processJob(ctx context.Context, job *domain.AsyncJob) {
 	finished := time.Now()
 	job.FinishedAt = &finished
 	_ = m.jobRepo.Update(job)
+}
+
+// Pause stops the worker from processing new jobs while preserving the queue.
+func (m *Manager) Pause() {
+	m.pausedMu.Lock()
+	m.paused = true
+	m.pausedMu.Unlock()
+}
+
+// Resume allows the worker to continue processing jobs.
+func (m *Manager) Resume() {
+	m.pausedMu.Lock()
+	m.paused = false
+	m.pausedMu.Unlock()
+}
+
+// IsRunning returns true if the manager has been started and not stopped.
+func (m *Manager) IsRunning() bool {
+	m.runningMu.Lock()
+	defer m.runningMu.Unlock()
+	return m.running
+}
+
+// IsPaused returns true if the manager is paused.
+func (m *Manager) IsPaused() bool {
+	m.pausedMu.Lock()
+	defer m.pausedMu.Unlock()
+	return m.paused
+}
+
+// QueueSize returns the current number of jobs waiting in the queue.
+func (m *Manager) QueueSize() int {
+	return len(m.queue)
+}
+
+// GetStats returns runtime statistics about the job manager.
+func (m *Manager) GetStats() Stats {
+	m.runningMu.Lock()
+	running := m.running
+	m.runningMu.Unlock()
+
+	m.pausedMu.Lock()
+	paused := m.paused
+	m.pausedMu.Unlock()
+
+	return Stats{
+		QueueSize: len(m.queue),
+		IsRunning: running,
+		IsPaused:  paused,
+		JobTypes:  nil, // Not tracking job type counts for now
+	}
 }

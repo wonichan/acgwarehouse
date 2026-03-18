@@ -13,6 +13,11 @@ type JobRepository interface {
 	FindByStatus(status string) ([]domain.AsyncJob, error)
 	FindByType(jobType string) ([]domain.AsyncJob, error)
 	Update(job *domain.AsyncJob) error
+	// Admin dashboard support methods
+	FindRecent(limit int) ([]domain.AsyncJob, error)
+	FindFailed() ([]domain.AsyncJob, error)
+	UpdateStatus(id int64, status string, errorMsg *string) error
+	CountByStatus(status string) (int64, error)
 }
 
 type sqliteJobRepository struct {
@@ -93,4 +98,35 @@ func (r *sqliteJobRepository) Update(job *domain.AsyncJob) error {
 		WHERE id = ?
 	`, job.Status, job.Payload, job.Progress, job.Error, job.StartedAt, job.FinishedAt, job.ID)
 	return err
+}
+
+// FindRecent returns the most recent jobs, ordered by created_at descending.
+func (r *sqliteJobRepository) FindRecent(limit int) ([]domain.AsyncJob, error) {
+	return r.findMany(`
+		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
+		FROM async_jobs ORDER BY created_at DESC LIMIT ?
+	`, limit)
+}
+
+// FindFailed returns all jobs with status 'failed'.
+func (r *sqliteJobRepository) FindFailed() ([]domain.AsyncJob, error) {
+	return r.findMany(`
+		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
+		FROM async_jobs WHERE status = 'failed' ORDER BY created_at DESC
+	`)
+}
+
+// UpdateStatus updates the status and optionally clears the error message of a job.
+func (r *sqliteJobRepository) UpdateStatus(id int64, status string, errorMsg *string) error {
+	_, err := r.db.Exec(`
+		UPDATE async_jobs SET status = ?, error = ? WHERE id = ?
+	`, status, errorMsg, id)
+	return err
+}
+
+// CountByStatus returns the count of jobs with the given status.
+func (r *sqliteJobRepository) CountByStatus(status string) (int64, error) {
+	var count int64
+	err := r.db.QueryRow(`SELECT COUNT(*) FROM async_jobs WHERE status = ?`, status).Scan(&count)
+	return count, err
 }
