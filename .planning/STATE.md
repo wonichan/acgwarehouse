@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-03-17T16:36:24.499Z"
+last_updated: "2026-03-18T15:15:00.000Z"
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 23
-  completed_plans: 18
-  percent: 20
+  completed_plans: 19
+  percent: 25
 ---
 
 # STATE.md
@@ -17,12 +17,12 @@ progress:
 ---
 project: ACGWarehouse
 milestone: v1.0
-phase: 5
+phase: 6
 plan: 1
-progress: "Phase 5: 20% (1/5 plans)"
+progress: "Phase 6: 25% (1/4 plans)"
 status: in-progress
 created: 2026-03-14
-updated: 2026-03-17
+updated: 2026-03-18
 ---
 
 ## 项目引用
@@ -40,28 +40,28 @@ Phase 1: ✓ 基础架构、图片扫描与标签基础层    (100%)
 Phase 2: ✓ 缩略图、基础浏览与 AI 复核界面底座 (100%)
 Phase 3: ✓ AI 开放标签与治理                (100%)
 Phase 4: ✓ 重复检测与搜索                   (100%)
-Phase 5: ◆ 收藏夹与批量操作       (20%)
-Phase 6: ○ 优化与部署             (0%)
+Phase 5: ✓ 收藏夹与批量操作                 (100%)
+Phase 6: ◆ 优化与部署             (25%)
 ```
 
 **状态说明：** ○ Pending（待开始） | ◆ In Progress（进行中） | ✓ Complete（已完成）
 
 ## 当前状态
 
-**Phase：** 5（进行中）
+**Phase：** 6（进行中）
 **Plan：** 01 已完成，继续执行 02
 **Wave：** 1
 
-**下一步操作：** 执行 Plan 05-02
+**下一步操作：** 执行 Plan 06-02
 
 ## 指标
 
 | 指标 | 数值 |
 |--------|-------|
 | 需求总数 | 47 |
-| 已完成需求 | 34 |
+| 已完成需求 | 35 |
 | 阶段总数 | 6 |
-| 已完成阶段 | 4 |
+| 已完成阶段 | 5 |
 | 预计总时长 | 12-17 周 |
 
 ## 关键决策
@@ -92,6 +92,8 @@ Phase 6: ○ 优化与部署             (0%)
 | 双重哈希检测策略 | SHA256 检测完全相同，pHash 检测相似 | ✓ 04-01 已实现哈希计算服务 |
 | 收藏夹使用复合主键 | (collection_id, image_id) 确保唯一性和高效查询 | ✓ 05-01 已实现收藏夹数据层 |
 | 自动维护 image_count | AddImage/RemoveImage 时自动更新收藏夹图片计数 | ✓ 05-01 已实现计数自动维护 |
+| 单机 Docker Compose 部署 | 一次 `docker compose up -d` 启动服务 | ✓ 06-01 已实现 Dockerfile、compose、config.example.yaml |
+| SQLite-only 部署路径 | 不引入 PostgreSQL 服务或迁移 sidecar | ✓ 06-01 已实现单容器 SQLite 部署 |
 
 ## 阻塞项
 
@@ -119,6 +121,8 @@ Phase 6: ○ 优化与部署             (0%)
 | 2026-03-16 | 4 | 上下文已收集 | 已创建 `.planning/phases/04-duplicate-detection-search/04-CONTEXT.md`，可进入规划 |
 | 2026-03-17 | 4 | Plan 04-01 已执行 | 已完成哈希服务、数据模型、检测服务、API 端点与 `04-01-SUMMARY.md` |
 | 2026-03-17 | 5 | Plan 05-01 已执行 | 已完成收藏夹数据模型、Schema 扩展、Repository 层与 `05-01-SUMMARY.md` |
+| 2026-03-18 | 6 | 上下文已收集 | 已创建 `.planning/phases/06-optimization-deployment/06-CONTEXT.md`，并记录 PostgreSQL 正式移出 Phase 6 的范围调整 |
+| 2026-03-18 | 6 | Plan 06-01 已执行 | 已完成 Dockerfile、docker-compose.yml、config.example.yaml 与 `06-01-SUMMARY.md` |
 
 ---
 
@@ -135,3 +139,4 @@ Phase 6: ○ 优化与部署             (0%)
 *Phase 4 上下文已收集：2026-03-16*
 *Phase 4 Plan 01 已完成：2026-03-17*
 *Phase 5 Plan 01 已完成：2026-03-17*
+*Phase 6 Plan 01 已完成：2026-03-18*

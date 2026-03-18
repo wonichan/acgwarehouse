@@ -15,8 +15,8 @@
 | 2 | ✓ | 4/4 | 100% |
 | 3 | ✓ | 7/7 | 100% |
 | 4 | ✓ | 1/1 | 100% |
-| 5 | ◆ | 1/4 | 25% |
-| 6 | ○ | 0/5 | 0% |
+| 5 | ✓ | 1/1 | 100% |
+| 6 | ◆ | 1/5 | 20% |
 
 **状态说明：** ○ Pending（待开始） | ◆ In Progress（进行中） | ✓ Complete（已完成）
 
@@ -188,7 +188,7 @@ Plans:
 
 **预计时长：** 1-2 weeks
 
-**Plans:** 1/4 plans complete
+**Plans:** 1/1 plans complete
 
 **关联需求：**
 - COLL-01, COLL-02, COLL-03, COLL-04, COLL-05
@@ -196,9 +196,6 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md — 数据模型与 Repository 层
-- [ ] 05-02-PLAN.md — Service 与 Handler 层
-- [ ] 05-03-PLAN.md — Flutter Provider 与服务层
-- [ ] 05-04-PLAN.md — Flutter UI 组件
 
 **成功标准：**
 1. 用户可创建/重命名/删除收藏夹
@@ -222,14 +219,14 @@ Plans:
 
 **预计时长：** 2 weeks
 
-**Plans:** 0/5 plans complete
+**Plans:** 1/5 plans complete
 
 **关联需求：**
 - DEPL-01, DEPL-02
 - (优化类需求，无新功能需求)
 
 Plans:
-- [ ] 06-01-PLAN.md — Docker 打包、Compose 部署入口与宿主持久化约定
+- [x] 06-01-PLAN.md — Docker 打包、Compose 部署入口与宿主持久化约定
 - [ ] 06-02-PLAN.md — 管理后台后端契约与安全操作 API
 - [ ] 06-03-PLAN.md — 基础 Web 管理后台单页仪表盘
 - [ ] 06-04-PLAN.md — 大图库浏览链路性能优化
@@ -297,4 +294,4 @@ Phase 6 (优化/部署) ← depends on Phase 1-5 功能完整
 ---
 
 *路线图创建时间：2026-03-14*
-*最后更新：2026-03-17*
+*最后更新：2026-03-18*
