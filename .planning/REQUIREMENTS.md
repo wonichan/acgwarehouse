@@ -103,8 +103,8 @@
 
 ### 部署
 
-- **DEPL-01**: 系统支持 Docker 部署
-- **DEPL-02**: 系统提供 Web 管理后台
+- [x] **DEPL-01**: 系统支持 Docker 部署
+- [ ] **DEPL-02**: 系统提供 Web 管理后台
 
 ## 暂不纳入范围
 
@@ -172,6 +172,8 @@
 | BTCH-02 | Phase 5 | Pending |
 | BTCH-03 | Phase 5 | Pending |
 | BTCH-04 | Phase 5 | Pending |
+| DEPL-01 | Phase 6 | Complete |
+| DEPL-02 | Phase 6 | Pending |
 
 **覆盖情况：**
 - v1 需求：共 47 项
@@ -181,4 +183,4 @@
 ---
 
 *需求定义时间：2026-03-14*
-*最后更新：2026-03-17*
+*最后更新：2026-03-18*
