@@ -13,6 +13,6 @@ storage:
     - "/path/to/your/images"
 
 ai:
-  provider: "qwen"
-  api_key: ""
-  model: "qwen-vl-max"
+  provider: "doubao"
+  api_key: "YOUR_API_KEY_HERE"
+  model: "doubao-seed-2-0-lite-260215"
