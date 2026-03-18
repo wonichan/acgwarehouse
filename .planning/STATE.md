@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-03-18T15:15:00.000Z"
+last_updated: "2026-03-18T15:47:00.000Z"
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 23
-  completed_plans: 19
-  percent: 25
+  completed_plans: 21
+  percent: 91
 ---
 
 # STATE.md
@@ -18,8 +18,8 @@ progress:
 project: ACGWarehouse
 milestone: v1.0
 phase: 6
-plan: 1
-progress: "Phase 6: 25% (1/4 plans)"
+plan: 3
+progress: "Phase 6: 75% (3/4 plans)"
 status: in-progress
 created: 2026-03-14
 updated: 2026-03-18
@@ -31,7 +31,7 @@ updated: 2026-03-18
 
 **核心价值：** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
 
-**当前重点：** Phase 5 - 收藏夹与批量操作（进行中）
+**当前重点：** Phase 6 - 优化与部署（进行中）
 
 ## 进度摘要
 
@@ -41,7 +41,7 @@ Phase 2: ✓ 缩略图、基础浏览与 AI 复核界面底座 (100%)
 Phase 3: ✓ AI 开放标签与治理                (100%)
 Phase 4: ✓ 重复检测与搜索                   (100%)
 Phase 5: ✓ 收藏夹与批量操作                 (100%)
-Phase 6: ◆ 优化与部署             (25%)
+Phase 6: ◆ 优化与部署             (75%)
 ```
 
 **状态说明：** ○ Pending（待开始） | ◆ In Progress（进行中） | ✓ Complete（已完成）
@@ -49,10 +49,10 @@ Phase 6: ◆ 优化与部署             (25%)
 ## 当前状态
 
 **Phase：** 6（进行中）
-**Plan：** 01 已完成，继续执行 02
-**Wave：** 1
+**Plan：** 03 已完成
+**Wave：** 2
 
-**下一步操作：** 执行 Plan 06-02
+**下一步操作：** 执行 Plan 06-04
 
 ## 指标
 
@@ -94,6 +94,9 @@ Phase 6: ◆ 优化与部署             (25%)
 | 自动维护 image_count | AddImage/RemoveImage 时自动更新收藏夹图片计数 | ✓ 05-01 已实现计数自动维护 |
 | 单机 Docker Compose 部署 | 一次 `docker compose up -d` 启动服务 | ✓ 06-01 已实现 Dockerfile、compose、config.example.yaml |
 | SQLite-only 部署路径 | 不引入 PostgreSQL 服务或迁移 sidecar | ✓ 06-01 已实现单容器 SQLite 部署 |
+| Flutter-backend 图片列表契约统一 | 前后端使用相同的字段名和分页语义 | ✓ 06-04 已修复 Flutter 解析 'images' 字段，添加 'total' |
+| 滚动触发分页加载 | ScrollController 在距离底部 200px 时触发下一页 | ✓ 06-04 已在 GalleryScreen 实现无限滚动 |
+| Admin Dashboard 使用单页 Vanilla JS | 运维仪表盘无需复杂框架，直接调用 API 即可 | ✓ 06-03 已实现完整管理后台 UI |
 
 ## 阻塞项
 
@@ -123,6 +126,8 @@ Phase 6: ◆ 优化与部署             (25%)
 | 2026-03-17 | 5 | Plan 05-01 已执行 | 已完成收藏夹数据模型、Schema 扩展、Repository 层与 `05-01-SUMMARY.md` |
 | 2026-03-18 | 6 | 上下文已收集 | 已创建 `.planning/phases/06-optimization-deployment/06-CONTEXT.md`，并记录 PostgreSQL 正式移出 Phase 6 的范围调整 |
 | 2026-03-18 | 6 | Plan 06-01 已执行 | 已完成 Dockerfile、docker-compose.yml、config.example.yaml 与 `06-01-SUMMARY.md` |
+| 2026-03-18 | 6 | Plan 06-03 已执行 | 已完成 Admin Dashboard UI (HTML/CSS/JS)、路由接线与 `06-03-SUMMARY.md` |
+| 2026-03-18 | 6 | Plan 06-04 已执行 | 已完成图片列表契约对齐、Flutter 无限滚动加载与 `06-04-SUMMARY.md` |
 
 ---
 
@@ -140,3 +145,4 @@ Phase 6: ◆ 优化与部署             (25%)
 *Phase 4 Plan 01 已完成：2026-03-17*
 *Phase 5 Plan 01 已完成：2026-03-17*
 *Phase 6 Plan 01 已完成：2026-03-18*
+*Phase 6 Plan 03 已完成：2026-03-18*
