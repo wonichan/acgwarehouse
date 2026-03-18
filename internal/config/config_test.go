@@ -21,6 +21,10 @@ ai:
   provider: "qwen"
   api_key: ""
   model: "qwen-vl-max"
+cos:
+  bucket_url: "https://example.cos.ap-shanghai.myqcloud.com"
+  secret_id: ""
+  secret_key: ""
 `
 
 func TestLoadConfigUsesExplicitPath(t *testing.T) {
@@ -62,6 +66,9 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	t.Setenv("AI_PROVIDER", "doubao")
 	t.Setenv("AI_API_KEY", "secret")
 	t.Setenv("AI_MODEL", "doubao-vision")
+	t.Setenv("COS_SECRET_ID", "cos-id")
+	t.Setenv("COS_SECRET_KEY", "cos-key")
+	t.Setenv("COS_BUCKET_URL", "https://override.cos.test")
 
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
@@ -94,5 +101,14 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	}
 	if cfg.AI.Model != "doubao-vision" {
 		t.Fatalf("expected overridden AI model doubao-vision, got %q", cfg.AI.Model)
+	}
+	if cfg.COS.SecretID != "cos-id" {
+		t.Fatalf("expected overridden COS secret id cos-id, got %q", cfg.COS.SecretID)
+	}
+	if cfg.COS.SecretKey != "cos-key" {
+		t.Fatalf("expected overridden COS secret key cos-key, got %q", cfg.COS.SecretKey)
+	}
+	if cfg.COS.BucketURL != "https://override.cos.test" {
+		t.Fatalf("expected overridden COS bucket url, got %q", cfg.COS.BucketURL)
 	}
 }

@@ -63,6 +63,16 @@ func main() {
 	jobManager.Start(context.Background())
 	defer jobManager.Stop()
 
+	// Thumbnail generation handler
+	thumbnailSvc := service.NewThumbnailService()
+	cosSvc, err := service.NewCOSService(&cfg.COS)
+	if err != nil {
+		log.Printf("thumbnail job handler not registered: %v", err)
+	} else {
+		thumbnailHandler := worker.NewThumbnailHandler(thumbnailSvc, cosSvc, imageRepo)
+		jobManager.RegisterHandler("thumbnail_generate", thumbnailHandler.Handle)
+	}
+
 	// Admin service - wrap jobManager to implement the control interface
 	adminSvc := service.NewAdminService(
 		cfg,

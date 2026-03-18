@@ -14,5 +14,15 @@ storage:
 
 ai:
   provider: "doubao"
-  api_key: "YOUR_API_KEY_HERE"
+  api_key: ""
   model: "doubao-seed-2-0-lite-260215"
+  requests_per_minute: 60
+
+cos:
+  bucket_url: "literal:${COS_BUCKET_URL:-}"
+  secret_id: ""
+  secret_key: ""
+
+admin:
+  username: ""
+  password: ""

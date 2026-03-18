@@ -17,6 +17,7 @@ type ImageRepository interface {
 	FindAll(limit, offset int) ([]domain.Image, error)
 	FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int) ([]domain.Image, error)
 	CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
+	UpdateThumbnails(id int64, smallURL, largeURL string) error
 	Count() (int64, error)
 	Delete(id int64) error
 }
@@ -32,9 +33,9 @@ func NewImageRepository(db *sql.DB) ImageRepository {
 func (r *sqliteImageRepository) SaveImage(image *domain.Image) error {
 	result, err := r.db.Exec(`
 		INSERT OR IGNORE INTO images
-		(path, filename, source_root, file_size, width, height, format, phash, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, image.Path, image.Filename, image.SourceRoot, image.FileSize, image.Width, image.Height, image.Format, image.PHash, image.CreatedAt, image.UpdatedAt)
+		(path, filename, source_root, file_size, width, height, format, phash, thumbnail_small_url, thumbnail_large_url, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, image.Path, image.Filename, image.SourceRoot, image.FileSize, image.Width, image.Height, image.Format, image.PHash, image.ThumbnailSmallUrl, image.ThumbnailLargeUrl, image.CreatedAt, image.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -58,14 +59,14 @@ func (r *sqliteImageRepository) SaveImage(image *domain.Image) error {
 
 func (r *sqliteImageRepository) FindByPath(path string) (*domain.Image, error) {
 	return r.queryOne(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(thumbnail_small_url, ''), COALESCE(thumbnail_large_url, ''), created_at, updated_at
 		FROM images WHERE path = ?
 	`, path)
 }
 
 func (r *sqliteImageRepository) FindByID(id int64) (*domain.Image, error) {
 	return r.queryOne(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(thumbnail_small_url, ''), COALESCE(thumbnail_large_url, ''), created_at, updated_at
 		FROM images WHERE id = ?
 	`, id)
 }
@@ -82,6 +83,8 @@ func (r *sqliteImageRepository) queryOne(query string, args ...any) (*domain.Ima
 		&image.Height,
 		&image.Format,
 		&image.PHash,
+		&image.ThumbnailSmallUrl,
+		&image.ThumbnailLargeUrl,
 		&image.CreatedAt,
 		&image.UpdatedAt,
 	)
@@ -97,7 +100,7 @@ func (r *sqliteImageRepository) queryOne(query string, args ...any) (*domain.Ima
 
 func (r *sqliteImageRepository) FindAll(limit, offset int) ([]domain.Image, error) {
 	rows, err := r.db.Query(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(thumbnail_small_url, ''), COALESCE(thumbnail_large_url, ''), created_at, updated_at
 		FROM images ORDER BY id LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
@@ -118,6 +121,8 @@ func (r *sqliteImageRepository) FindAll(limit, offset int) ([]domain.Image, erro
 			&image.Height,
 			&image.Format,
 			&image.PHash,
+			&image.ThumbnailSmallUrl,
+			&image.ThumbnailLargeUrl,
 			&image.CreatedAt,
 			&image.UpdatedAt,
 		); err != nil {
@@ -127,6 +132,15 @@ func (r *sqliteImageRepository) FindAll(limit, offset int) ([]domain.Image, erro
 	}
 
 	return images, rows.Err()
+}
+
+func (r *sqliteImageRepository) UpdateThumbnails(id int64, smallURL, largeURL string) error {
+	_, err := r.db.Exec(`
+		UPDATE images
+		SET thumbnail_small_url = ?, thumbnail_large_url = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, smallURL, largeURL, id)
+	return err
 }
 
 func (r *sqliteImageRepository) Count() (int64, error) {
@@ -153,7 +167,7 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 
 	// Query images where matched tag count equals the number of requested tags (AND semantics)
 	query := fmt.Sprintf(`
-		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.created_at, i.updated_at
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), COALESCE(i.thumbnail_small_url, ''), COALESCE(i.thumbnail_large_url, ''), i.created_at, i.updated_at
 		FROM images i
 		INNER JOIN image_tags it ON it.image_id = i.id
 		WHERE it.tag_id IN (%s)
@@ -184,6 +198,8 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 			&image.Height,
 			&image.Format,
 			&image.PHash,
+			&image.ThumbnailSmallUrl,
+			&image.ThumbnailLargeUrl,
 			&image.CreatedAt,
 			&image.UpdatedAt,
 		); err != nil {

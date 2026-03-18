@@ -41,6 +41,8 @@ func newTestAdminDB(t *testing.T) *sql.DB {
 			height INTEGER,
 			format TEXT,
 			phash INTEGER,
+			thumbnail_small_url TEXT,
+			thumbnail_large_url TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
@@ -103,13 +105,18 @@ func TestAdminService_GetSummary(t *testing.T) {
 	_ = jobRepo.Save(job)
 
 	img := &domain.Image{
-		Path:       "/test/image1.jpg",
-		Filename:   "image1.jpg",
-		SourceRoot: "/test",
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		Path:              "/test/image1.jpg",
+		Filename:          "image1.jpg",
+		SourceRoot:        "/test",
+		ThumbnailSmallUrl: "",
+		ThumbnailLargeUrl: "",
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
-	_ = imageRepo.SaveImage(img)
+	err := imageRepo.SaveImage(img)
+	if err != nil {
+		t.Fatalf("Failed to save test image: %v", err)
+	}
 
 	summary, err := svc.GetSummary(context.Background())
 	if err != nil {
