@@ -255,6 +255,18 @@ func (m *mockJobRepoForAI) Update(job *domain.AsyncJob) error {
 	m.AsyncJob = *job
 	return nil
 }
+func (m *mockJobRepoForAI) FindRecent(limit int) ([]domain.AsyncJob, error) {
+	return nil, nil
+}
+func (m *mockJobRepoForAI) FindFailed() ([]domain.AsyncJob, error) {
+	return nil, nil
+}
+func (m *mockJobRepoForAI) UpdateStatus(id int64, status string, errorMsg *string) error {
+	return nil
+}
+func (m *mockJobRepoForAI) CountByStatus(status string) (int64, error) {
+	return 0, nil
+}
 
 type mockTagObservationRepo struct {
 	savedObservation *domain.TagObservation

@@ -14,6 +14,7 @@ type Config struct {
 	Storage  StorageConfig  `yaml:"storage"`
 	AI       AIConfig       `yaml:"ai"`
 	COS      COSConfig      `yaml:"cos"`
+	Admin    AdminConfig    `yaml:"admin"`
 }
 
 type ServerConfig struct {
@@ -43,6 +44,13 @@ type COSConfig struct {
 	BucketURL string `yaml:"bucket_url"`
 	SecretID  string `yaml:"secret_id"`
 	SecretKey string `yaml:"secret_key"`
+}
+
+// AdminConfig holds configuration for the admin dashboard access.
+// It supports simple local/internal protection suitable for personal use.
+type AdminConfig struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 func LoadConfig(paths ...string) (*Config, error) {
@@ -116,5 +124,13 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("COS_SECRET_KEY"); v != "" {
 		cfg.COS.SecretKey = v
+	}
+
+	// Admin 环境变量覆盖
+	if v := os.Getenv("ADMIN_USERNAME"); v != "" {
+		cfg.Admin.Username = v
+	}
+	if v := os.Getenv("ADMIN_PASSWORD"); v != "" {
+		cfg.Admin.Password = v
 	}
 }

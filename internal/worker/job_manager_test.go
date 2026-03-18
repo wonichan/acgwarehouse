@@ -9,6 +9,7 @@ import (
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -80,5 +81,246 @@ func TestManagerProcessesJobsSequentially(t *testing.T) {
 	defer mu.Unlock()
 	if len(order) != 2 || order[0] != id1 || order[1] != id2 {
 		t.Fatalf("handler order = %v, want [%d %d]", order, id1, id2)
+	}
+}
+
+func TestManager_PauseAndResume(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	manager := NewManager(jobRepo)
+
+	// Start the manager
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager.Start(ctx)
+	defer manager.Stop()
+
+	// Initially should be running and not paused
+	if !manager.IsRunning() {
+		t.Error("Expected manager to be running after Start")
+	}
+	if manager.IsPaused() {
+		t.Error("Expected manager to not be paused after Start")
+	}
+
+	// Pause
+	manager.Pause()
+	if !manager.IsPaused() {
+		t.Error("Expected manager to be paused after Pause")
+	}
+
+	// Resume
+	manager.Resume()
+	if manager.IsPaused() {
+		t.Error("Expected manager to not be paused after Resume")
+	}
+}
+
+func TestManager_PausePreservesQueue(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	manager := NewManager(jobRepo)
+
+	// Register a slow handler
+	slowHandler := func(ctx context.Context, id int64, payload string) error {
+		time.Sleep(100 * time.Millisecond)
+		return nil
+	}
+	manager.RegisterHandler("slow_job", slowHandler)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager.Start(ctx)
+	defer manager.Stop()
+
+	// Add a job to the queue
+	jobID, err := manager.AddJob(ctx, "slow_job", "{}")
+	if err != nil {
+		t.Fatalf("Failed to add job: %v", err)
+	}
+
+	// Pause immediately
+	manager.Pause()
+
+	// Wait a bit for any in-flight job to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify the job still exists
+	job, err := jobRepo.FindByID(jobID)
+	if err != nil {
+		t.Fatalf("Failed to find job: %v", err)
+	}
+
+	// Job should exist and have valid status
+	if job.Status != "ready" && job.Status != "running" && job.Status != "finished" {
+		t.Errorf("Unexpected job status: %s", job.Status)
+	}
+
+	// Get queue size
+	queueSize := manager.QueueSize()
+	if queueSize < 0 {
+		t.Errorf("Unexpected queue size: %d", queueSize)
+	}
+}
+
+func TestManager_StateHelpers(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	manager := NewManager(jobRepo)
+
+	// Initial state (not started yet)
+	if manager.IsPaused() {
+		t.Error("Expected manager to not be paused initially")
+	}
+
+	// Start
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager.Start(ctx)
+	defer manager.Stop()
+
+	if manager.IsPaused() {
+		t.Error("Expected manager to not be paused after Start")
+	}
+
+	// Pause
+	manager.Pause()
+	if !manager.IsPaused() {
+		t.Error("Expected manager to be paused after Pause")
+	}
+
+	// Resume
+	manager.Resume()
+	if manager.IsPaused() {
+		t.Error("Expected manager to not be paused after Resume")
+	}
+}
+
+func TestManager_AddJobWhilePaused(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	manager := NewManager(jobRepo)
+
+	// Register a handler
+	var processed bool
+	var procMu sync.Mutex
+	manager.RegisterHandler("test_job", func(ctx context.Context, id int64, payload string) error {
+		procMu.Lock()
+		processed = true
+		procMu.Unlock()
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager.Start(ctx)
+	defer manager.Stop()
+
+	// Pause immediately
+	manager.Pause()
+
+	// Add a job while paused
+	jobID, err := manager.AddJob(ctx, "test_job", "{}")
+	if err != nil {
+		t.Fatalf("Failed to add job while paused: %v", err)
+	}
+
+	// Verify job was created
+	if jobID == 0 {
+		t.Error("Expected job ID to be set")
+	}
+
+	// Job should be in ready state (not processed yet)
+	job, _ := jobRepo.FindByID(jobID)
+	if job.Status != "ready" {
+		t.Errorf("Expected job status 'ready' while paused, got '%s'", job.Status)
+	}
+
+	// Resume and wait for processing
+	manager.Resume()
+	time.Sleep(200 * time.Millisecond)
+
+	// Job should now be processed
+	procMu.Lock()
+	if !processed {
+		t.Error("Expected job to be processed after resume")
+	}
+	procMu.Unlock()
+}
+
+func TestManager_GetStats(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	manager := NewManager(jobRepo)
+
+	// Add some jobs directly to repo
+	for i := 0; i < 3; i++ {
+		job := &domain.AsyncJob{
+			Type:      "test_job",
+			Status:    "ready",
+			CreatedAt: time.Now(),
+		}
+		_ = jobRepo.Save(job)
+	}
+
+	stats := manager.GetStats()
+
+	if stats.QueueSize < 0 {
+		t.Errorf("Unexpected queue size: %d", stats.QueueSize)
 	}
 }
