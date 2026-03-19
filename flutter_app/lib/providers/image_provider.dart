@@ -106,7 +106,9 @@ class ImageListProvider extends ChangeNotifier {
     // Reset pagination when filter changes
     _currentOffset = 0;
     _hasMore = true;
-    await loadImages(refresh: true);
+    // Clear images immediately to show empty state while loading
+    _images = [];
     notifyListeners();
+    await loadImages(refresh: true);
   }
 }
