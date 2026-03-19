@@ -270,6 +270,9 @@ func (m *mockJobRepoForAI) UpdateStatus(id int64, status string, errorMsg *strin
 func (m *mockJobRepoForAI) CountByStatus(status string) (int64, error) {
 	return 0, nil
 }
+func (m *mockJobRepoForAI) ResetRunningToReady() (int64, error) {
+	return 0, nil
+}
 
 type mockTagObservationRepo struct {
 	savedObservation *domain.TagObservation
