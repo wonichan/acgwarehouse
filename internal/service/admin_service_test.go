@@ -1,4 +1,4 @@
-package service
+package service_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/service"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
@@ -94,7 +95,7 @@ func TestAdminService_GetSummary(t *testing.T) {
 		},
 	}
 
-	svc := NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
 
 	// Add some test data
 	job := &domain.AsyncJob{
@@ -172,7 +173,7 @@ func TestAdminService_GetSummary_HidesSecrets(t *testing.T) {
 		},
 	}
 
-	svc := NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
 
 	summary, err := svc.GetSummary(context.Background())
 	if err != nil {
@@ -202,7 +203,7 @@ func TestAdminService_GetJobs(t *testing.T) {
 	jobManager := worker.NewManager(jobRepo)
 
 	cfg := &config.Config{}
-	svc := NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
 
 	// Create some jobs
 	for i := 0; i < 5; i++ {
@@ -239,7 +240,7 @@ func TestAdminService_TriggerScan(t *testing.T) {
 			ScanRoots: []string{"/test/path"},
 		},
 	}
-	svc := NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
 
 	jobID, err := svc.TriggerScan(context.Background())
 	if err != nil {
@@ -272,7 +273,7 @@ func TestAdminService_RetryFailedJobs(t *testing.T) {
 	jobManager := worker.NewManager(jobRepo)
 
 	cfg := &config.Config{}
-	svc := NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
 
 	// Create failed jobs
 	var failedJobIDs []int64
@@ -351,7 +352,7 @@ func TestAdminService_PauseResumeBackgroundTasks(t *testing.T) {
 	jobManager := worker.NewManager(jobRepo)
 
 	cfg := &config.Config{}
-	svc := NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
 
 	// Initially running
 	if !svc.IsBackgroundRunning() {

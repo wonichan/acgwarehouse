@@ -204,11 +204,18 @@ class TagService {
   }
 
   /// 合并图片标签到目标标签
-  Future<void> mergeImageTag(int imageId, int tagId, int targetTagId) async {
+  Future<void> mergeImageTag(int imageId, int tagId, {int? targetTagId, String? targetLabel}) async {
+    if (targetTagId == null && targetLabel == null) {
+      throw ArgumentError('Either targetTagId or targetLabel must be provided');
+    }
+
     final response = await _client.post(
       Uri.parse('${ApiConfig.baseUrl}/images/$imageId/tags/$tagId/merge'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'target_tag_id': targetTagId}),
+      body: jsonEncode({
+        if (targetTagId != null) 'target_tag_id': targetTagId,
+        if (targetLabel != null) 'target_label': targetLabel,
+      }),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to merge tag: ${response.statusCode}');
