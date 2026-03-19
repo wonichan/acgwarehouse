@@ -179,10 +179,20 @@ class _GalleryContentState extends State<_GalleryContent> {
         final provider = context.read<ImageListProvider>();
         final asc = value.endsWith('_asc');
         final field = value.replaceAll('_asc', '').replaceAll('_desc', '');
-        provider.setSort(
-          SortField.values.firstWhere((f) => f.name == field),
-          asc,
-        );
+        
+        // 安全地匹配 SortField 枚举
+        SortField? sortField;
+        if (field == 'createdAt') {
+          sortField = SortField.createdAt;
+        } else if (field == 'filename') {
+          sortField = SortField.filename;
+        } else if (field == 'fileSize') {
+          sortField = SortField.fileSize;
+        }
+        
+        if (sortField != null) {
+          provider.setSort(sortField, asc);
+        }
       },
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'createdAt_desc', child: Text('最新导入')),
