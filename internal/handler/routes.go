@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -30,6 +31,7 @@ type Dependencies struct {
 	JobManager     *worker.Manager
 	AdminCfg       *config.Config
 	AITagProcessor gin.HandlerFunc
+	DB             *sql.DB // for FTS rebuild and other direct DB operations
 }
 
 // SetupRoutes registers all HTTP routes.
@@ -60,6 +62,22 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 			admin.POST("/actions/jobs/pause", adminHandler.PauseBackgroundTasks)
 			admin.POST("/actions/jobs/resume", adminHandler.ResumeBackgroundTasks)
 			admin.POST("/actions/jobs/retry-failed", adminHandler.RetryFailedJobs)
+			// FTS rebuild endpoint for fixing search index
+			if deps != nil && deps.DB != nil {
+				admin.POST("/actions/search/rebuild-fts", func(c *gin.Context) {
+					if err := repository.RebuildFTSIndex(deps.DB); err != nil {
+						c.JSON(http.StatusInternalServerError, gin.H{
+							"success": false,
+							"error":   "failed to rebuild FTS index: " + err.Error(),
+						})
+						return
+					}
+					c.JSON(http.StatusOK, gin.H{
+						"success": true,
+						"message": "FTS index rebuilt successfully",
+					})
+				})
+			}
 		}
 	}
 

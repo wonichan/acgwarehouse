@@ -175,6 +175,7 @@ func main() {
 		JobManager:     jobManager,
 		AdminSvc:       adminSvc,
 		AdminCfg:       cfg,
+		DB:             db,
 	})
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
