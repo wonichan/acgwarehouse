@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 Phase: 8 of 10 (Windows UI)
 Plan: 0 of 4 in current phase
 Status: Ready to execute
-Last activity: 2026-03-20 — Completed quick task 30: 添加筛选未打标签图片功能
+Last activity: 2026-03-20 — Completed quick task 31: 标签管理页bug修复和删除功能
 
 Progress: [██████████░░░░░░░░░] 72% (27 plans completed)
 
@@ -83,6 +83,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 31 | 标签管理页bug修复和删除功能 | 2026-03-20 | 56b93ed | [31-2-bug-1-2](./quick/31-2-bug-1-2/) |
 | 30 | 添加筛选未打标签图片功能 | 2026-03-20 | fcd5597 | [30-筛选未打标签图片](./quick/30-筛选未打标签图片/) |
 
 ## Session Continuity
