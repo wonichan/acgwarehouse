@@ -117,7 +117,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 9 | 修复任务加载竞态条件，确保所有处理器注册后再加载任务 | 2026-03-20 | 167e777 | [9-fix-task-loading-race-condition](./quick/9-fix-task-loading-race-condition/) |
 | 10 | 在 scanner_service.go 添加去重检查，避免为已导入的图片重复创建 image_imported 任务 | 2026-03-19 | 81edc17 | [10-scanner-service-go-image-imported](./quick/10-scanner-service-go-image-imported/) |
 | 11 | Fix: Task status FINISHED but progress shows 1% | 2026-03-19 | d62cb90 | [11-fix-task-status-finished-but-progress-sh](./quick/11-fix-task-status-finished-but-progress-sh/) |
-| 12 | flutter程序，点击标签筛选没有任何反应 | 2026-03-19 | - | [12-flutter](./quick/12-flutter/) |
+| 12 | flutter程序，点击标签管理，页面报错 | 2026-03-19 | 322012b | [12-flutter](./quick/12-flutter/) |
 | 13 | 修复Flutter应用标签筛选无响应问题 | 2026-03-20 | 0f7ef11 | [13-flutter](./quick/13-flutter/) |
 
 ## 会话历史
@@ -177,4 +177,4 @@ Phase 6: ✓ 优化与部署                       (100%)
 *Phase 6 Plan 03 已完成：2026-03-18*
 *Phase 6 Plan 05 已完成：2026-03-18*
 
-Last activity: 2026-03-20 - Completed quick task 13: 修复Flutter应用标签筛选无响应问题
+Last activity: 2026-03-20 - Completed quick task 12: flutter程序，点击标签管理，页面报错
