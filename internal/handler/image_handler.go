@@ -33,6 +33,26 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 	limit := parsePositiveInt(c.DefaultQuery("limit", "20"), 20)
 	offset := parsePositiveInt(c.DefaultQuery("offset", "0"), 0)
 
+	// 解析排序参数
+	sortBy := c.DefaultQuery("sort_by", "id")
+	sortDir := c.DefaultQuery("sort_dir", "desc")
+
+	// 验证排序字段
+	validSortFields := map[string]bool{
+		"created_at": true,
+		"filename":   true,
+		"file_size":  true,
+		"id":         true,
+	}
+	if !validSortFields[sortBy] {
+		sortBy = "id"
+	}
+
+	// 验证排序方向
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+
 	tagIDsStr := strings.TrimSpace(c.Query("tag_ids"))
 	var images []interface{}
 	var total int64
@@ -45,7 +65,7 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 			return
 		}
 
-		filteredImages, err := h.imageRepo.FindByTagIDs(ctx, tagIDs, limit, offset)
+		filteredImages, err := h.imageRepo.FindByTagIDs(ctx, tagIDs, limit, offset, sortBy, sortDir)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -60,7 +80,7 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 		}
 	} else {
 		// No filter - return all images
-		allImages, err := h.imageRepo.FindAll(limit, offset)
+		allImages, err := h.imageRepo.FindAll(limit, offset, sortBy, sortDir)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

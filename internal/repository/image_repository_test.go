@@ -58,7 +58,7 @@ func TestImageRepositoryFindByTagIDsFiltersByStandardTags(t *testing.T) {
 	}
 
 	// Test 1: Filter by tag_ids=1,2 should return only img1 (has both tags - AND semantics)
-	filtered, err := repo.FindByTagIDs(ctx, []int64{tags[0].ID, tags[1].ID}, 10, 0)
+	filtered, err := repo.FindByTagIDs(ctx, []int64{tags[0].ID, tags[1].ID}, 10, 0, "id", "asc")
 	if err != nil {
 		t.Fatalf("FindByTagIDs() error = %v", err)
 	}
@@ -70,7 +70,7 @@ func TestImageRepositoryFindByTagIDsFiltersByStandardTags(t *testing.T) {
 	}
 
 	// Test 2: Filter by single tag should return images with that tag
-	filteredSingle, err := repo.FindByTagIDs(ctx, []int64{tags[0].ID}, 10, 0)
+	filteredSingle, err := repo.FindByTagIDs(ctx, []int64{tags[0].ID}, 10, 0, "id", "asc")
 	if err != nil {
 		t.Fatalf("FindByTagIDs() error = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestImageRepositoryFindByTagIDsFiltersByStandardTags(t *testing.T) {
 	}
 
 	// Test 3: Empty tag_ids should return empty (no filter = no results per API contract)
-	filteredEmpty, err := repo.FindByTagIDs(ctx, []int64{}, 10, 0)
+	filteredEmpty, err := repo.FindByTagIDs(ctx, []int64{}, 10, 0, "id", "asc")
 	if err != nil {
 		t.Fatalf("FindByTagIDs() error = %v", err)
 	}
@@ -121,7 +121,7 @@ func TestImageRepositoryFindByTagIDSSupportsPagination(t *testing.T) {
 	}
 
 	// Test pagination: limit 2, offset 0
-	page1, err := repo.FindByTagIDs(ctx, []int64{tag.ID}, 2, 0)
+	page1, err := repo.FindByTagIDs(ctx, []int64{tag.ID}, 2, 0, "id", "asc")
 	if err != nil {
 		t.Fatalf("FindByTagIDs() error = %v", err)
 	}
@@ -130,7 +130,7 @@ func TestImageRepositoryFindByTagIDSSupportsPagination(t *testing.T) {
 	}
 
 	// Test pagination: limit 2, offset 2
-	page2, err := repo.FindByTagIDs(ctx, []int64{tag.ID}, 2, 2)
+	page2, err := repo.FindByTagIDs(ctx, []int64{tag.ID}, 2, 2, "id", "asc")
 	if err != nil {
 		t.Fatalf("FindByTagIDs() error = %v", err)
 	}
