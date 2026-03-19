@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -71,6 +72,37 @@ func main() {
 	} else {
 		thumbnailHandler := worker.NewThumbnailHandler(thumbnailSvc, cosSvc, imageRepo)
 		jobManager.RegisterHandler("thumbnail_generate", thumbnailHandler.Handle)
+
+		// 注册 image_imported 处理器 - 自动触发缩略图生成任务
+		jobManager.RegisterHandler("image_imported", func(ctx context.Context, id int64, payload string) error {
+			// 解析 payload 获取 image_id 和 path
+			var p struct {
+				ImageID int64  `json:"image_id"`
+				Path    string `json:"path"`
+			}
+			if err := json.Unmarshal([]byte(payload), &p); err != nil {
+				return fmt.Errorf("解析 image_imported payload 失败: %w", err)
+			}
+
+			// 创建缩略图生成任务
+			thumbnailPayload, err := json.Marshal(map[string]interface{}{
+				"image_id": p.ImageID,
+				"path":     p.Path,
+			})
+			if err != nil {
+				return err
+			}
+
+			// 添加到任务队列
+			_, err = jobManager.AddJob(ctx, "thumbnail_generate", string(thumbnailPayload))
+			if err != nil {
+				return fmt.Errorf("添加缩略图生成任务失败: %w", err)
+			}
+
+			log.Printf("已为新导入的图片 %d 创建缩略图生成任务", p.ImageID)
+			return nil
+		})
+		log.Printf("已注册 image_imported 处理器 - 将自动触发缩略图生成")
 	}
 
 	// Admin service - wrap jobManager to implement the control interface
