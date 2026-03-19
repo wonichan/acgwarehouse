@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../providers/selection_provider.dart';
 
 class BatchOperationSheet extends StatelessWidget {
+  final SelectionProvider selectionProvider;
   final VoidCallback? onAddTags;
   final VoidCallback? onRemoveTags;
   final VoidCallback? onGenerateAITags;
@@ -11,6 +11,7 @@ class BatchOperationSheet extends StatelessWidget {
 
   const BatchOperationSheet({
     super.key,
+    required this.selectionProvider,
     this.onAddTags,
     this.onRemoveTags,
     this.onGenerateAITags,
@@ -20,88 +21,84 @@ class BatchOperationSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SelectionProvider>(
-      builder: (context, selectionProvider, _) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '已选择 ${selectionProvider.selectedCount} 张图片',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      selectionProvider.exitSelectionMode();
-                      Navigator.pop(context);
-                    },
-                    child: const Text('取消'),
-                  ),
-                ],
+              Text(
+                '已选择 ${selectionProvider.selectedCount} 张图片',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              const Divider(),
-              const SizedBox(height: 8),
-
-              // Operation buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildOperationButton(
-                    context,
-                    icon: Icons.add_circle_outline,
-                    label: '添加标签',
-                    onTap: onAddTags,
-                  ),
-                  _buildOperationButton(
-                    context,
-                    icon: Icons.remove_circle_outline,
-                    label: '移除标签',
-                    onTap: onRemoveTags,
-                  ),
-                ],
+              TextButton(
+                onPressed: () {
+                  selectionProvider.exitSelectionMode();
+                  Navigator.pop(context);
+                },
+                child: const Text('取消'),
               ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildOperationButton(
-                    context,
-                    icon: Icons.folder_outlined,
-                    label: '移至收藏夹',
-                    onTap: onMoveToCollection,
-                  ),
-                  _buildOperationButton(
-                    context,
-                    icon: Icons.delete_outline,
-                    label: '删除',
-                    onTap: onDelete,
-                    isDestructive: true,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildOperationButton(
-                    context,
-                    icon: Icons.auto_awesome,
-                    label: 'AI生成标签',
-                    onTap: onGenerateAITags,
-                    color: const Color(0xFF5E35B1),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
             ],
           ),
-        );
-      },
+          const Divider(),
+          const SizedBox(height: 8),
+
+          // Operation buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildOperationButton(
+                context,
+                icon: Icons.add_circle_outline,
+                label: '添加标签',
+                onTap: onAddTags,
+              ),
+              _buildOperationButton(
+                context,
+                icon: Icons.remove_circle_outline,
+                label: '移除标签',
+                onTap: onRemoveTags,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildOperationButton(
+                context,
+                icon: Icons.folder_outlined,
+                label: '移至收藏夹',
+                onTap: onMoveToCollection,
+              ),
+              _buildOperationButton(
+                context,
+                icon: Icons.delete_outline,
+                label: '删除',
+                onTap: onDelete,
+                isDestructive: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildOperationButton(
+                context,
+                icon: Icons.auto_awesome,
+                label: 'AI生成标签',
+                onTap: onGenerateAITags,
+                color: const Color(0xFF5E35B1),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
     );
   }
 
@@ -143,6 +140,7 @@ class BatchOperationSheet extends StatelessWidget {
   /// Shows the batch operation sheet
   static Future<void> show(
     BuildContext context, {
+    required SelectionProvider selectionProvider,
     VoidCallback? onAddTags,
     VoidCallback? onRemoveTags,
     VoidCallback? onGenerateAITags,
@@ -152,6 +150,7 @@ class BatchOperationSheet extends StatelessWidget {
     return showModalBottomSheet(
       context: context,
       builder: (context) => BatchOperationSheet(
+        selectionProvider: selectionProvider,
         onAddTags: onAddTags,
         onRemoveTags: onRemoveTags,
         onGenerateAITags: onGenerateAITags,
