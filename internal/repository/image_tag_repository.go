@@ -38,12 +38,39 @@ func NewImageTagRepository(db *sql.DB) ImageTagRepository {
 	return &imageTagRepository{db: db}
 }
 
+// syncImageFTS updates the FTS index for an image after its tags change.
+// It regenerates the tags text from the current image_tags associations.
+func (r *imageTagRepository) syncImageFTS(ctx context.Context, imageID int64) error {
+	// Get all tags for this image as a space-separated string
+	var tagsText string
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COALESCE(GROUP_CONCAT(t.preferred_label, ' '), '')
+		FROM image_tags it
+		JOIN tags t ON it.tag_id = t.id
+		WHERE it.image_id = ?
+	`, imageID).Scan(&tagsText)
+	if err != nil {
+		return err
+	}
+
+	// Update the FTS index
+	_, err = r.db.ExecContext(ctx, `
+		UPDATE images_fts SET tags = ? WHERE image_id = ?
+	`, tagsText, imageID)
+	return err
+}
+
 func (r *imageTagRepository) Save(ctx context.Context, imageTag *domain.ImageTag) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT OR REPLACE INTO image_tags (image_id, tag_id, source_observation_id, confidence, review_state)
 		VALUES (?, ?, ?, ?, ?)
 	`, imageTag.ImageID, imageTag.TagID, imageTag.SourceObservationID, imageTag.Confidence, imageTag.ReviewState)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Sync FTS index after saving image-tag association
+	return r.syncImageFTS(ctx, imageTag.ImageID)
 }
 
 func (r *imageTagRepository) FindByImageID(ctx context.Context, imageID int64) ([]*domain.ImageTag, error) {
@@ -88,7 +115,12 @@ func (r *imageTagRepository) UpdateReviewState(ctx context.Context, imageID, tag
 
 func (r *imageTagRepository) Delete(ctx context.Context, imageID, tagID int64) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM image_tags WHERE image_id = ? AND tag_id = ?`, imageID, tagID)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Sync FTS index after deleting image-tag association
+	return r.syncImageFTS(ctx, imageID)
 }
 
 func (r *imageTagRepository) BatchUpdateReviewState(ctx context.Context, imageID int64, tagIDs []int64, state string) error {
@@ -147,7 +179,12 @@ func (r *imageTagRepository) MergeImageTag(ctx context.Context, imageID, sourceT
 		INSERT OR REPLACE INTO image_tags (image_id, tag_id, source_observation_id, confidence, review_state)
 		VALUES (?, ?, ?, ?, ?)
 	`, imageID, targetTagID, sourceObsID, confidence, reviewState)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Sync FTS index after merging tags
+	return r.syncImageFTS(ctx, imageID)
 }
 
 // GetTagStats returns usage statistics for a tag including counts by review state and source.

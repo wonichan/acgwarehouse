@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -224,4 +225,133 @@ func newFTSTestDB(t *testing.T) *sql.DB {
 	}
 
 	return db
+}
+
+func TestImageTagSaveUpdatesFTS(t *testing.T) {
+	t.Parallel()
+
+	db := newFTSTestDB(t)
+	imageRepo := NewImageRepository(db)
+	tagRepo := NewTagRepository(db)
+	imageTagRepo := NewImageTagRepository(db)
+
+	// Create image
+	img := &domain.Image{
+		Path:       "/test/anime.png",
+		Filename:   "anime.png",
+		SourceRoot: "/test",
+		Format:     "png",
+	}
+	if err := imageRepo.SaveImage(img); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
+	}
+
+	// Create tag
+	tag := &domain.Tag{
+		PreferredLabel: "cute",
+		Slug:           "cute",
+		ReviewState:    "confirmed",
+	}
+	if err := tagRepo.Save(context.Background(), tag); err != nil {
+		t.Fatalf("Save tag: %v", err)
+	}
+
+	// Verify FTS tags is empty before adding tag
+	var tagsBefore string
+	err := db.QueryRow(`SELECT tags FROM images_fts WHERE image_id = ?`, img.ID).Scan(&tagsBefore)
+	if err != nil {
+		t.Fatalf("query FTS tags: %v", err)
+	}
+	if tagsBefore != "" {
+		t.Fatalf("tags before = %q, want empty", tagsBefore)
+	}
+
+	// Add image-tag association
+	if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{
+		ImageID:     img.ID,
+		TagID:       tag.ID,
+		ReviewState: "confirmed",
+	}); err != nil {
+		t.Fatalf("Save image-tag: %v", err)
+	}
+
+	// Verify FTS tags is updated
+	var tagsAfter string
+	err = db.QueryRow(`SELECT tags FROM images_fts WHERE image_id = ?`, img.ID).Scan(&tagsAfter)
+	if err != nil {
+		t.Fatalf("query FTS tags after save: %v", err)
+	}
+	if tagsAfter != "cute" {
+		t.Fatalf("tags after = %q, want 'cute'", tagsAfter)
+	}
+
+	// Search by tag name should find the image
+	ids, err := NewSearchRepository(db).FTSFullTextSearch(context.Background(), "cute", 10, 0)
+	if err != nil {
+		t.Fatalf("FTS search: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != img.ID {
+		t.Fatalf("FTS search results = %v, want [%d]", ids, img.ID)
+	}
+}
+
+func TestImageTagDeleteUpdatesFTS(t *testing.T) {
+	t.Parallel()
+
+	db := newFTSTestDB(t)
+	imageRepo := NewImageRepository(db)
+	tagRepo := NewTagRepository(db)
+	imageTagRepo := NewImageTagRepository(db)
+
+	// Create image
+	img := &domain.Image{
+		Path:       "/test/anime2.png",
+		Filename:   "anime2.png",
+		SourceRoot: "/test",
+		Format:     "png",
+	}
+	if err := imageRepo.SaveImage(img); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
+	}
+
+	// Create tag
+	tag := &domain.Tag{
+		PreferredLabel: "animal",
+		Slug:           "animal",
+		ReviewState:    "confirmed",
+	}
+	if err := tagRepo.Save(context.Background(), tag); err != nil {
+		t.Fatalf("Save tag: %v", err)
+	}
+
+	// Add image-tag association
+	if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{
+		ImageID:     img.ID,
+		TagID:       tag.ID,
+		ReviewState: "confirmed",
+	}); err != nil {
+		t.Fatalf("Save image-tag: %v", err)
+	}
+
+	// Verify tag is in FTS
+	var tagsBefore string
+	db.QueryRow(`SELECT tags FROM images_fts WHERE image_id = ?`, img.ID).Scan(&tagsBefore)
+	if tagsBefore != "animal" {
+		t.Fatalf("tags before delete = %q, want 'animal'", tagsBefore)
+	}
+
+	// Delete image-tag association
+	if err := imageTagRepo.Delete(context.Background(), img.ID, tag.ID); err != nil {
+		t.Fatalf("Delete image-tag: %v", err)
+	}
+
+	// Verify FTS tags is cleared
+	var tagsAfter string
+	err := db.QueryRow(`SELECT tags FROM images_fts WHERE image_id = ?`, img.ID).Scan(&tagsAfter)
+	if err != nil {
+		t.Fatalf("query FTS tags after delete: %v", err)
+	}
+	if tagsAfter != "" {
+		t.Fatalf("tags after delete = %q, want empty", tagsAfter)
+	}
 }
