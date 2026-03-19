@@ -27,7 +27,8 @@ void main() {
 
       // Tap button to open lightbox
       await tester.tap(find.text('Open Lightbox'));
-      await tester.pumpAndSettle();
+      // Use pump instead of pumpAndSettle to avoid timeout on network images
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Verify dark background overlay exists
       expect(find.byType(Container), findsWidgets);
@@ -55,7 +56,7 @@ void main() {
       );
 
       await tester.tap(find.text('Open Lightbox'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Verify close button exists
       expect(find.byIcon(Icons.close), findsOneWidget);
@@ -83,11 +84,11 @@ void main() {
       );
 
       await tester.tap(find.text('Open Lightbox'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Tap close button
       await tester.tap(find.byIcon(Icons.close));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Verify lightbox is dismissed (back to original screen)
       expect(find.text('Open Lightbox'), findsOneWidget);
@@ -117,7 +118,7 @@ void main() {
       );
 
       await tester.tap(find.text('Open Lightbox'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Verify Hero widget is present
       expect(find.byType(Hero), findsOneWidget);
@@ -145,12 +146,12 @@ void main() {
       );
 
       await tester.tap(find.text('Open Lightbox'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Tap outside the image (on the barrier/background)
       // The barrier should be dismissible
       await tester.tapAt(const Offset(10, 10));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Lightbox should be dismissed
       expect(find.text('Open Lightbox'), findsOneWidget);
