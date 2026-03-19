@@ -112,7 +112,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 4 | 选择方案二：添加image_imported处理器来自动触发缩略图生成任务 | 2026-03-19 | 8dfca64 | [4-image-imported](./quick/4-image-imported/) |
 | 5 | Admin Dashboard 中文化本地化 | 2026-03-19 | 1e87527 | [5-admin-chinese-localization](./quick/5-admin-chinese-localization/) |
 | 6 | 执行方案三：添加任务加载逻辑，服务器启动时自动处理数据库中ready任务 | 2026-03-19 | 54a687c | [6-ready](./quick/6-ready/) |
-| 7 | 创建并注册 manual_scan handler，修复后台扫描功能"no handler registered"错误 | 2026-03-19 | [待提交] | [7-manual-scan-handler-no-handler-registere](./quick/7-manual-scan-handler-no-handler-registere/) |
+| 7 | 创建并注册 manual_scan handler，修复后台扫描功能"no handler registered"错误 | 2026-03-19 | cfd507b | [7-manual-scan-handler-no-handler-registere](./quick/7-manual-scan-handler-no-handler-registere/) |
 
 ## 会话历史
 
