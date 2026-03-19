@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -23,10 +25,12 @@ import (
 var registerAITagHandler = worker.RegisterAITagHandler
 
 func main() {
-	cfg, err := config.LoadConfig()
+	// 使用配置热重载
+	cfgReloader, err := config.NewReloader("config.yaml")
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+	cfg := cfgReloader.Get()
 
 	if strings.EqualFold(cfg.Server.Env, "production") {
 		gin.SetMode(gin.ReleaseMode)
@@ -60,9 +64,27 @@ func main() {
 	hashSvc := service.NewHashService()
 	duplicateSvc := service.NewDuplicateService(imageRepo, duplicateRepo, hashSvc)
 	searchSvc := service.NewSearchService(imageRepo, tagRepo, searchRepo)
-	jobManager := worker.NewManager(jobRepo)
+
+	// 创建任务管理器（使用配置）
+	jobManager := worker.NewManagerWithConfig(jobRepo, cfg.WorkerPool.WorkerCount, cfg.WorkerPool.QueueSize)
+	log.Printf("任务管理器配置: workers=%d, queue_size=%d", cfg.WorkerPool.WorkerCount, cfg.WorkerPool.QueueSize)
 	jobManager.Start(context.Background())
 	defer jobManager.Stop()
+
+	// 注册配置变更回调
+	cfgReloader.OnChange(func(old, new *config.Config) {
+		// 动态调整 worker 数量
+		if old.WorkerPool.WorkerCount != new.WorkerPool.WorkerCount {
+			jobManager.SetWorkerCount(context.Background(), new.WorkerPool.WorkerCount)
+		}
+		// refill 参数会在 refillLoop 中动态读取
+	})
+
+	// 启动配置热重载
+	if err := cfgReloader.Start(); err != nil {
+		log.Printf("配置热重载启动失败: %v", err)
+	}
+	defer cfgReloader.Stop()
 
 	// Thumbnail generation handler
 	thumbnailSvc := service.NewThumbnailService()
@@ -132,8 +154,15 @@ func main() {
 		log.Printf("AI provider not configured for background processing: %v", err)
 	}
 
-	// 加载数据库中所有 ready 状态的任务到队列（必须在所有处理器注册之后）
+	// 恢复数据库中的任务到队列（必须在所有处理器注册之后）
 	go func() {
+		// 首先重置 running 状态的任务为 ready（处理异常重启的情况）
+		if count, err := jobRepo.ResetRunningToReady(); err != nil {
+			log.Printf("重置 running 任务失败: %v", err)
+		} else if count > 0 {
+			log.Printf("已重置 %d 个 running 状态的任务为 ready", count)
+		}
+
 		jobs, err := jobRepo.FindByStatus("ready")
 		if err != nil {
 			log.Printf("加载待处理任务失败: %v", err)
@@ -145,16 +174,56 @@ func main() {
 			skippedCount := 0
 			for i := range jobs {
 				job := &jobs[i]
-				// 使用 LoadExistingJob 方法直接加载已有任务到队列
+				// LoadExistingJob 非阻塞，队列满时返回 false
 				if jobManager.LoadExistingJob(job) {
 					loadedCount++
-					log.Printf("已加载任务: %s #%d", job.Type, job.ID)
 				} else {
 					skippedCount++
-					log.Printf("任务队列已满，跳过任务 #%d", job.ID)
 				}
 			}
-			log.Printf("任务加载完成，已加载 %d 个，跳过 %d 个", loadedCount, skippedCount)
+			log.Printf("任务加载完成，已加载 %d 个，跳过 %d 个（将在队列空闲时自动加载）", loadedCount, skippedCount)
+		}
+	}()
+
+	// 后台任务补充机制：定期检查队列空闲并加载待处理任务
+	// 使用动态配置读取
+	var refillStopMu sync.Mutex
+	refillStopCh := make(chan struct{})
+	defer func() {
+		refillStopMu.Lock()
+		close(refillStopCh)
+		refillStopMu.Unlock()
+	}()
+
+	go func() {
+		for {
+			cfg := cfgReloader.Get()
+			refillInterval := time.Duration(cfg.WorkerPool.RefillIntervalSeconds) * time.Second
+			refillThreshold := int(float64(cfg.WorkerPool.QueueSize) * cfg.WorkerPool.RefillThreshold)
+
+			select {
+			case <-refillStopCh:
+				return
+			case <-time.After(refillInterval):
+				// 检查队列是否有空位
+				if jobManager.QueueSize() < refillThreshold {
+					jobs, err := jobRepo.FindByStatus("ready")
+					if err != nil {
+						continue
+					}
+					loaded := 0
+					for i := range jobs {
+						if jobManager.LoadExistingJob(&jobs[i]) {
+							loaded++
+						} else {
+							break // 队列满了，等下一轮
+						}
+					}
+					if loaded > 0 {
+						log.Printf("后台补充加载了 %d 个任务", loaded)
+					}
+				}
+			}
 		}
 	}()
 
@@ -174,7 +243,8 @@ func main() {
 		HashSvc:        hashSvc,
 		JobManager:     jobManager,
 		AdminSvc:       adminSvc,
-		AdminCfg:       cfg,
+		AdminCfg:       cfgReloader.Get(), // 使用当前配置
+		ConfigReloader: cfgReloader,       // 传递 reloader 给 handler
 		DB:             db,
 	})
 

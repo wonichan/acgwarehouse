@@ -46,3 +46,15 @@ ai:
 #   bucket_url: "https://your-bucket.cos.ap-guangzhou.myqcloud.com"
 #   secret_id: "YOUR_COS_SECRET_ID"
 #   secret_key: "YOUR_COS_SECRET_KEY"
+
+# Worker pool configuration for background job processing
+worker_pool:
+  # Number of concurrent workers processing jobs (default: 4)
+  worker_count: 4
+  # Job queue buffer size (default: 512)
+  queue_size: 512
+  # How often to check for pending jobs to refill the queue, in seconds (default: 5)
+  refill_interval_seconds: 5
+  # Refill is triggered when queue size drops below this fraction of queue_size (default: 0.5)
+  # For example, 0.5 means refill when queue has less than half capacity
+  refill_threshold: 0.5

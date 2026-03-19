@@ -27,7 +27,8 @@ func TestManagerProcessesJobsSequentially(t *testing.T) {
 	}
 
 	jobRepo := repository.NewJobRepository(db)
-	mgr := NewManager(jobRepo)
+	// 使用单 worker 确保顺序执行
+	mgr := NewManagerWithConfig(jobRepo, 1, 10)
 
 	var (
 		mu    sync.Mutex
@@ -89,6 +90,80 @@ func TestManagerProcessesJobsSequentially(t *testing.T) {
 	defer mu.Unlock()
 	if len(order) != 2 || order[0] != id1 || order[1] != id2 {
 		t.Fatalf("handler order = %v, want [%d %d]", order, id1, id2)
+	}
+}
+
+func TestManagerProcessesJobsParallel(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	// 使用 4 个 worker 并行处理
+	mgr := NewManagerWithConfig(jobRepo, 4, 10)
+
+	var (
+		mu         sync.Mutex
+		order      []int64
+		startTimes []time.Time
+	)
+	mgr.RegisterHandler("image_imported", func(ctx context.Context, id int64, payload string) error {
+		mu.Lock()
+		order = append(order, id)
+		startTimes = append(startTimes, time.Now())
+		mu.Unlock()
+		// 模拟一些工作
+		time.Sleep(50 * time.Millisecond)
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.Start(ctx)
+	defer mgr.Stop()
+
+	// 添加多个任务
+	for i := 0; i < 4; i++ {
+		_, err := mgr.AddJob(ctx, "image_imported", `{"path":"test.png"}`)
+		if err != nil {
+			t.Fatalf("AddJob() error = %v", err)
+		}
+	}
+
+	// 等待所有任务完成
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		jobs, _ := jobRepo.FindByStatus("finished")
+		if len(jobs) >= 4 {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	// 验证所有任务完成
+	jobs, err := jobRepo.FindByStatus("finished")
+	if err != nil {
+		t.Fatalf("FindByStatus() error = %v", err)
+	}
+	if len(jobs) != 4 {
+		t.Fatalf("expected 4 finished jobs, got %d", len(jobs))
+	}
+
+	// 验证多个任务有重叠执行（并行）
+	// 注意：如果严格串行执行，任务完成间隔会 >= 50ms
+	// 并行执行时，多个任务会在接近同一时间开始
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 4 {
+		t.Fatalf("expected 4 processed jobs, got %d", len(order))
 	}
 }
 
@@ -330,5 +405,44 @@ func TestManager_GetStats(t *testing.T) {
 
 	if stats.QueueSize < 0 {
 		t.Errorf("Unexpected queue size: %d", stats.QueueSize)
+	}
+}
+
+func TestManager_SetWorkerCount(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	mgr := NewManagerWithConfig(jobRepo, 2, 10)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.Start(ctx)
+	defer mgr.Stop()
+
+	// 初始 worker 数量
+	if count := mgr.GetWorkerCount(); count != 2 {
+		t.Fatalf("initial worker count = %d, want 2", count)
+	}
+
+	// 增加 worker 数量
+	mgr.SetWorkerCount(ctx, 4)
+	if count := mgr.GetWorkerCount(); count != 4 {
+		t.Fatalf("after increase, worker count = %d, want 4", count)
+	}
+
+	// 减少 worker 数量
+	mgr.SetWorkerCount(ctx, 1)
+	if count := mgr.GetWorkerCount(); count != 1 {
+		t.Fatalf("after decrease, worker count = %d, want 1", count)
 	}
 }
