@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/image.dart';
 
@@ -62,12 +63,18 @@ class ApiService {
       queryParameters: queryParams,
     );
 
+    debugPrint('API 请求: $uri');
+    debugPrint('查询参数: $queryParams');
+
     final response = await _client.get(
       uri,
       headers: {'Content-Type': 'application/json'},
     );
 
+    debugPrint('API 响应状态: ${response.statusCode}');
+
     if (response.statusCode != 200) {
+      debugPrint('API 错误响应: ${response.body}');
       throw ApiException(
         'Failed to fetch images: ${response.statusCode}',
         response.statusCode,

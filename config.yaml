@@ -14,7 +14,7 @@ storage:
 
 ai:
   provider: "doubao"
-  api_key: ""
+  api_key: "YOUR_API_KEY_HERE"
   model: "doubao-seed-2-0-lite-260215"
   requests_per_minute: 120
 
@@ -26,3 +26,16 @@ cos:
 admin:
   username: "admin"
   password: "admin"
+
+
+# Worker pool configuration for background job processing
+worker_pool:
+  # Number of concurrent workers processing jobs (default: 4)
+  worker_count: 10
+  # Job queue buffer size (default: 512)
+  queue_size: 512
+  # How often to check for pending jobs to refill the queue, in seconds (default: 5)
+  refill_interval_seconds: 5
+  # Refill is triggered when queue size drops below this fraction of queue_size (default: 0.5)
+  # For example, 0.5 means refill when queue has less than half capacity
+  refill_threshold: 0.5

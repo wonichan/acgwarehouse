@@ -93,7 +93,9 @@ class _GalleryContentState extends State<_GalleryContent> {
           
           if (provider.images.isEmpty) {
             // Check if filters are applied
-            final hasFilters = provider.selectedTagIds.isNotEmpty;
+            final hasTagFilter = provider.selectedTagIds.isNotEmpty;
+            final hasUntaggedFilter = provider.hasTagsFilter == false;
+            final hasFilters = hasTagFilter || hasUntaggedFilter;
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -116,6 +118,7 @@ class _GalleryContentState extends State<_GalleryContent> {
                       onPressed: () {
                         context.read<TagProvider>().clearSelection();
                         provider.setTagFilter([]);
+                        provider.setHasTagsFilter(null);
                       },
                       icon: const Icon(Icons.clear_all),
                       label: const Text('清除筛选'),
