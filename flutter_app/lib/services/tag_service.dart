@@ -196,8 +196,9 @@ class TagService {
     if (response.statusCode != 200) {
       throw Exception('Failed to get tag statistics: ${response.statusCode}');
     }
-    final json = jsonDecode(response.body) as List;
-    return json
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final stats = json['stats'] as List;
+    return stats
         .map((e) => TagStatistics.fromJson(e as Map<String, dynamic>))
         .toList();
   }
