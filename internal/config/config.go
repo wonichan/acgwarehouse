@@ -42,6 +42,7 @@ type AIConfig struct {
 	APIKey            string `yaml:"api_key"`
 	Model             string `yaml:"model"`
 	RequestsPerMinute int    `yaml:"requests_per_minute"` // 限流：每分钟请求数，默认 60
+	MaxConcurrency    int    `yaml:"max_concurrency"`     // 并发限制：同时执行的最大AI请求数，默认 3
 }
 
 type COSConfig struct {
@@ -225,6 +226,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.AI.RequestsPerMinute <= 0 {
 		cfg.AI.RequestsPerMinute = 60
 	}
+	if cfg.AI.MaxConcurrency <= 0 {
+		cfg.AI.MaxConcurrency = 3
+	}
 }
 
 func applyEnvOverrides(cfg *Config) {
@@ -269,6 +273,11 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("AI_REQUESTS_PER_MINUTE"); v != "" {
 		if rpm, err := strconv.Atoi(v); err == nil {
 			cfg.AI.RequestsPerMinute = rpm
+		}
+	}
+	if v := os.Getenv("AI_MAX_CONCURRENCY"); v != "" {
+		if mc, err := strconv.Atoi(v); err == nil && mc > 0 {
+			cfg.AI.MaxConcurrency = mc
 		}
 	}
 
