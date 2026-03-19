@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -136,6 +137,7 @@ func (m *Manager) processJob(ctx context.Context, job *domain.AsyncJob) {
 		finished := time.Now()
 		job.FinishedAt = &finished
 		_ = m.jobRepo.Update(job)
+		log.Printf("任务 %d 失败: 未找到处理器 %s", job.ID, job.Type)
 		return
 	}
 
@@ -145,13 +147,18 @@ func (m *Manager) processJob(ctx context.Context, job *domain.AsyncJob) {
 	job.Error = nil
 	_ = m.jobRepo.Update(job)
 
+	log.Printf("开始执行任务: %s #%d", job.Type, job.ID)
+
 	if err := handler(ctx, job.ID, job.Payload); err != nil {
 		errText := err.Error()
 		job.Status = "failed"
 		job.Error = &errText
+		log.Printf("任务 %s #%d 执行失败: %v", job.Type, job.ID, err)
 	} else {
 		job.Status = "finished"
 		job.Progress = 1
+		duration := time.Since(started)
+		log.Printf("任务 %s #%d 执行完成，耗时: %.2f秒", job.Type, job.ID, duration.Seconds())
 	}
 
 	finished := time.Now()
