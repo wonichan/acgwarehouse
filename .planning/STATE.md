@@ -114,6 +114,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 6 | 执行方案三：添加任务加载逻辑，服务器启动时自动处理数据库中ready任务 | 2026-03-19 | 54a687c | [6-ready](./quick/6-ready/) |
 | 7 | 创建并注册 manual_scan handler，修复后台扫描功能"no handler registered"错误 | 2026-03-19 | cfd507b | [7-manual-scan-handler-no-handler-registere](./quick/7-manual-scan-handler-no-handler-registere/) |
 | 8 | 修复Flutter缩略图不显示问题 | 2026-03-19 | 233d0a4 | [8-flutter](./quick/8-flutter/) |
+| 9 | 修复任务加载竞态条件，确保所有处理器注册后再加载任务 | 2026-03-20 | 167e777 | [9-fix-task-loading-race-condition](./quick/9-fix-task-loading-race-condition/) |
 
 ## 会话历史
 
