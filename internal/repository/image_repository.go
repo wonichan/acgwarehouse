@@ -225,7 +225,7 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
 		INNER JOIN image_tags it ON it.image_id = i.id
-		WHERE it.tag_id IN (%s)
+		WHERE it.tag_id IN (%s) AND it.review_state != 'rejected'
 		GROUP BY i.id
 		HAVING COUNT(DISTINCT it.tag_id) = ?
 		ORDER BY %s %s
@@ -292,7 +292,7 @@ func (r *sqliteImageRepository) CountByTagIDs(ctx context.Context, tagIDs []int6
 		FROM (
 			SELECT it.image_id
 			FROM image_tags it
-			WHERE it.tag_id IN (%s)
+			WHERE it.tag_id IN (%s) AND it.review_state != 'rejected'
 			GROUP BY it.image_id
 			HAVING COUNT(DISTINCT it.tag_id) = ?
 		) sub
