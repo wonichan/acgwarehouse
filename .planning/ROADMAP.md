@@ -131,11 +131,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. 重复检测与搜索 | v1.0 | 6/6 | Complete | 2026-03-17 |
 | 5. 收藏夹与批量操作 | v1.0 | 4/4 | Complete | 2026-03-18 |
 | 6. 优化与部署 | v1.0 | 4/4 | Complete | 2026-03-19 |
-| 7. 架构基础层 | v2.0 | 0/4 | Not started | - |
+| 7. 架构基础层 | v2.0 | 0/4 | Planned | - |
 | 8. Windows 桌面端 UI | v2.0 | 0/7 | Not started | - |
 | 9. Android 移动端 UI | v2.0 | 0/5 | Not started | - |
 | 10. 主题统一与优化 | v2.0 | 0/6 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-14*
-*Last updated: 2026-03-20 after v2.0 milestone roadmap created*
+*Last updated: 2026-03-20 after Phase 7 planned*
