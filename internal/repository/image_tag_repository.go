@@ -18,6 +18,7 @@ type ImageTagRepository interface {
 	BatchUpdateReviewState(ctx context.Context, imageID int64, tagIDs []int64, state string) error
 	MergeImageTag(ctx context.Context, imageID, sourceTagID, targetTagID int64) error
 	GetTagStats(ctx context.Context, tagID int64) (*TagStats, error)
+	SyncFTSForTag(ctx context.Context, tagID int64) error
 }
 
 type TagStats struct {
@@ -185,6 +186,37 @@ func (r *imageTagRepository) MergeImageTag(ctx context.Context, imageID, sourceT
 
 	// Sync FTS index after merging tags
 	return r.syncImageFTS(ctx, imageID)
+}
+
+// SyncFTSForTag updates the FTS index for all images that have the given tag.
+// This should be called when a tag's preferred_label changes.
+func (r *imageTagRepository) SyncFTSForTag(ctx context.Context, tagID int64) error {
+	// Get all image IDs that have this tag
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT image_id FROM image_tags WHERE tag_id = ?
+	`, tagID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	imageIDs := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		imageIDs = append(imageIDs, id)
+	}
+
+	// Sync FTS for each image
+	for _, imageID := range imageIDs {
+		if err := r.syncImageFTS(ctx, imageID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // GetTagStats returns usage statistics for a tag including counts by review state and source.
