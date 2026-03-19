@@ -8,17 +8,20 @@ class ImageGrid extends StatelessWidget {
   final List<ImageModel> images;
   final ImageTapCallback? onImageTap;
   final int crossAxisCount;
+  final ScrollController? scrollController;
   
   const ImageGrid({
     super.key,
     required this.images,
     this.onImageTap,
     this.crossAxisCount = 3,
+    this.scrollController,
   });
   
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
+      controller: scrollController,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
         mainAxisSpacing: 4,
@@ -63,17 +66,10 @@ class ImageGrid extends StatelessWidget {
         );
       },
       errorBuilder: (context, error, stackTrace) {
-        print('Image load error: $error');
-        print('URL: $thumbnailUrl');
+        debugPrint('Image load error: $error, URL: $thumbnailUrl');
         return Container(
           color: Colors.grey[200],
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error, color: Colors.red, size: 20),
-              Text('Error', style: TextStyle(fontSize: 10, color: Colors.red)),
-            ],
-          ),
+          child: const Icon(Icons.error, color: Colors.red),
         );
       },
     );
