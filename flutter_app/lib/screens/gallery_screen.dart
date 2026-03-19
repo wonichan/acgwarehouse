@@ -69,10 +69,19 @@ class _GalleryContentState extends State<_GalleryContent> {
         ],
       ),
       drawer: Drawer(
-        child: TagFilterDrawer(
-          onFilterChanged: (tagIds) {
-            // Update image list with selected tags
-            context.read<ImageListProvider>().setTagFilter(tagIds);
+        child: Consumer<ImageListProvider>(
+          builder: (context, provider, _) {
+            return TagFilterDrawer(
+              hasTagsFilter: provider.hasTagsFilter,
+              onFilterChanged: (tagIds) {
+                // Update image list with selected tags
+                provider.setTagFilter(tagIds);
+              },
+              onHasTagsChanged: (hasTags) {
+                // Update image list with hasTags filter
+                provider.setHasTagsFilter(hasTags);
+              },
+            );
           },
         ),
       ),

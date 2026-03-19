@@ -18,6 +18,7 @@ class ImageListProvider extends ChangeNotifier {
   SortField _sortField = SortField.createdAt;
   bool _sortAsc = false;
   List<int> _selectedTagIds = [];
+  bool? _hasTagsFilter;
   
   ImageListProvider(this._apiService);
   
@@ -29,6 +30,7 @@ class ImageListProvider extends ChangeNotifier {
   SortField get sortField => _sortField;
   bool get sortAsc => _sortAsc;
   List<int> get selectedTagIds => _selectedTagIds;
+  bool? get hasTagsFilter => _hasTagsFilter;
   
   Future<void> loadImages({bool refresh = false}) async {
     // Prevent duplicate in-flight loads
@@ -47,7 +49,7 @@ class ImageListProvider extends ChangeNotifier {
         _hasMore = true;
       }
       
-      debugPrint('加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}');
+      debugPrint('加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds, hasTags=$_hasTagsFilter, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}');
       
       final response = await _apiService.fetchImages(
         offset: refresh ? 0 : _currentOffset,
@@ -55,6 +57,7 @@ class ImageListProvider extends ChangeNotifier {
                 _sortField.name == 'fileSize' ? 'file_size' : 'filename',
         sortDir: _sortAsc ? 'asc' : 'desc',
         tagIds: _selectedTagIds.isNotEmpty ? _selectedTagIds : null,
+        hasTags: _hasTagsFilter,
       );
       
       if (refresh) {
@@ -103,6 +106,28 @@ class ImageListProvider extends ChangeNotifier {
   Future<void> setTagFilter(List<int> tagIds) async {
     debugPrint('setTagFilter 被调用: tagIds=$tagIds');
     _selectedTagIds = List.unmodifiable(tagIds);
+    // Clear hasTagsFilter when setting tag filter (mutually exclusive)
+    _hasTagsFilter = null;
+    // Reset pagination when filter changes
+    _currentOffset = 0;
+    _hasMore = true;
+    // Clear images immediately to show empty state while loading
+    _images = [];
+    notifyListeners();
+    await loadImages(refresh: true);
+  }
+
+  /// Sets the hasTags filter and reloads images with the new filter
+  /// When hasTags is false, shows only untagged images
+  /// When hasTags is null, clears the filter
+  /// Preserves current sort settings and resets pagination
+  Future<void> setHasTagsFilter(bool? hasTags) async {
+    debugPrint('setHasTagsFilter 被调用: hasTags=$hasTags');
+    _hasTagsFilter = hasTags;
+    // Clear tag selection when setting hasTagsFilter (mutually exclusive)
+    if (hasTags != null) {
+      _selectedTagIds = [];
+    }
     // Reset pagination when filter changes
     _currentOffset = 0;
     _hasMore = true;
