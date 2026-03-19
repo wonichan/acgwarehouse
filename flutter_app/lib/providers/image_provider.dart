@@ -47,6 +47,8 @@ class ImageListProvider extends ChangeNotifier {
         _hasMore = true;
       }
       
+      debugPrint('加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds');
+      
       final response = await _apiService.fetchImages(
         offset: refresh ? 0 : _currentOffset,
         sortBy: _sortField.name == 'createdAt' ? 'created_at' : 
@@ -98,6 +100,7 @@ class ImageListProvider extends ChangeNotifier {
   /// Sets the tag filter and reloads images with the new filter
   /// Preserves current sort settings and resets pagination
   Future<void> setTagFilter(List<int> tagIds) async {
+    debugPrint('setTagFilter 被调用: tagIds=$tagIds');
     _selectedTagIds = List.unmodifiable(tagIds);
     // Reset pagination when filter changes
     _currentOffset = 0;

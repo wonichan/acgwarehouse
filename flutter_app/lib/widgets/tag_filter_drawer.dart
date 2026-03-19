@@ -96,7 +96,7 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
                 if (provider.filteredTags.isEmpty) {
                   return const Center(child: Text('暂无标签'));
                 }
-                return ListView.builder(
+                  return ListView.builder(
                   itemCount: provider.filteredTags.length,
                   itemBuilder: (itemContext, index) {
                     final tag = provider.filteredTags[index];
@@ -106,10 +106,11 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
                       subtitle: Text('${tag.usageCount} 张图片'),
                       value: isSelected,
                       onChanged: (checked) {
-                        // 使用 builder 提供的 context 获取 provider
+                        debugPrint('标签点击: ${tag.preferredLabel} (ID: ${tag.id}), 选中状态: $checked');
                         provider.toggleTag(tag.id);
-                        widget.onFilterChanged
-                            ?.call(provider.selectedTagIds.toList());
+                        final selectedIds = provider.selectedTagIds.toList();
+                        debugPrint('选中标签IDs: $selectedIds');
+                        widget.onFilterChanged?.call(selectedIds);
                       },
                       secondary: Chip(
                         label: Text('${tag.usageCount}'),
