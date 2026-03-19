@@ -171,6 +171,7 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 		return
 	}
 
+	labelChanged := false
 	if label := strings.TrimSpace(req.PreferredLabel); label != "" && label != tag.PreferredLabel {
 		// Check for duplicate label (excluding current tag)
 		existing, err := h.tagRepo.FindByLabel(c.Request.Context(), label)
@@ -184,6 +185,7 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 		}
 		tag.PreferredLabel = label
 		tag.Slug = makeSlug(label)
+		labelChanged = true
 	}
 	if category := strings.TrimSpace(req.PrimaryCategory); category != "" {
 		tag.PrimaryCategory = category
@@ -195,6 +197,14 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 	if err := h.tagRepo.Update(c.Request.Context(), tag); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Sync FTS index if label changed
+	if labelChanged {
+		if err := h.imageTagRepo.SyncFTSForTag(c.Request.Context(), id); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "标签更新成功，但FTS索引同步失败: " + err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, tag)
