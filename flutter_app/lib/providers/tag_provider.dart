@@ -26,6 +26,7 @@ class TagProvider extends ChangeNotifier {
   TagProvider(this._tagService);
 
   // Getters
+  TagService get tagService => _tagService;
   List<Tag> get allTags => _allTags;
   List<Tag> get filteredTags => _filteredTags;
   Set<int> get selectedTagIds => _selectedTagIds;
@@ -223,6 +224,20 @@ class TagProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       debugPrint('Error adding tag: $e');
+      rethrow;
+    }
+  }
+
+  // 合并图片标签
+  Future<void> mergeImageTag(int imageId, int tagId, {int? targetTagId, String? targetLabel}) async {
+    try {
+      await _tagService.mergeImageTag(imageId, tagId, targetTagId: targetTagId, targetLabel: targetLabel);
+      // Remove from pending list
+      _imageTags['pending']?.removeWhere((t) => t.id == tagId);
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error merging tag: $e');
       rethrow;
     }
   }

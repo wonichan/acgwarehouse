@@ -8,6 +8,7 @@ import '../providers/tag_provider.dart';
 import '../services/tag_service.dart';
 import '../widgets/tag_chip.dart';
 import '../widgets/add_tag_dialog.dart';
+import '../widgets/edit_tag_dialog.dart';
 
 class ImageDetailScreen extends StatefulWidget {
   final ImageModel image;
@@ -167,6 +168,49 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('合并失败: $e')),
         );
+      }
+    }
+  }
+
+  Future<void> _showEditTagDialog(Tag tag) async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => EditTagDialog(
+        imageId: widget.image.id,
+        currentTag: tag,
+        tagService: _tagProvider.tagService,
+      ),
+    );
+
+    if (result != null && mounted) {
+      try {
+        if (result['tagId'] != null) {
+          // 选择现有标签
+          await _tagProvider.mergeImageTag(
+            widget.image.id,
+            tag.id,
+            targetTagId: result['tagId'] as int,
+          );
+        } else if (result['tagLabel'] != null) {
+          // 创建新标签
+          await _tagProvider.mergeImageTag(
+            widget.image.id,
+            tag.id,
+            targetLabel: result['tagLabel'] as String,
+          );
+        }
+        await _loadImageTags();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('标签已更新为: ${result['label']}')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('更新标签失败: $e')),
+          );
+        }
       }
     }
   }
@@ -469,6 +513,11 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
             InkWell(
               onTap: () => _showMergeDialog(tag),
               child: const Icon(Icons.merge_type, size: 18, color: Colors.blue),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: () => _showEditTagDialog(tag),
+              child: const Icon(Icons.edit, size: 18, color: Colors.orange),
             ),
           ],
         ),
