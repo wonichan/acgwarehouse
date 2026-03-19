@@ -118,10 +118,22 @@ class _GalleryContentState extends State<_GalleryContent> {
   }
   
   Widget _buildTagFilterButton(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.filter_list),
-      onPressed: () => Scaffold.of(context).openDrawer(),
-      tooltip: '标签筛选',
+    return Builder(
+      builder: (context) {
+        return IconButton(
+          icon: const Icon(Icons.filter_list),
+          onPressed: () {
+            debugPrint('标签筛选按钮被点击');
+            try {
+              Scaffold.of(context).openDrawer();
+              debugPrint('Drawer 打开成功');
+            } catch (e) {
+              debugPrint('打开 Drawer 失败: $e');
+            }
+          },
+          tooltip: '标签筛选',
+        );
+      },
     );
   }
   
