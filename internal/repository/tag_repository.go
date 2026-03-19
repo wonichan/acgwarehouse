@@ -16,6 +16,7 @@ type TagRepository interface {
 	FindAll(ctx context.Context, limit, offset int) ([]*domain.Tag, error)
 	UpdateReviewState(ctx context.Context, id int64, state string) error
 	IncrementUsageCount(ctx context.Context, id int64) error
+	DecrementUsageCount(ctx context.Context, id int64) error
 	Delete(ctx context.Context, id int64) error
 	Count(ctx context.Context) (int, error)
 }
@@ -119,6 +120,11 @@ func (r *tagRepository) UpdateReviewState(ctx context.Context, id int64, state s
 
 func (r *tagRepository) IncrementUsageCount(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE tags SET usage_count = usage_count + 1 WHERE id = ?`, id)
+	return err
+}
+
+func (r *tagRepository) DecrementUsageCount(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tags SET usage_count = MAX(usage_count - 1, 0) WHERE id = ?`, id)
 	return err
 }
 
