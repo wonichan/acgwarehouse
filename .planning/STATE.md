@@ -130,7 +130,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 22 | 修复AI分析标签未即时刷新的问题 | 2026-03-19 | 51fface | [22-ai-tag-refresh](./quick/22-ai-tag-refresh/) |
 | 23 | 添加图片自动压缩功能 - 超过10MB的图片在发送AI前自动压缩 | 2026-03-20 | 77862fc | [23-10mb](./quick/23-10mb/) |
 | 24 | 修复Flutter图片详情页AI生成标签不立即显示问题 | 2026-03-20 | f224013 | [24-fix-flutter-image-detail-page-not-showin](./quick/24-fix-flutter-image-detail-page-not-showin/) |
-| 25 | 修复AI生成标签的数据一致性问题：删除标签后筛选计数未更新，脏数据残留 | 2026-03-20 | TBD | [25-ai](./quick/25-ai/) |
+| 25 | 修复AI生成标签的数据一致性问题：删除标签后筛选计数未更新，脏数据残留 | 2026-03-20 | e449824 | [25-ai](./quick/25-ai/) |
 | 25 | 修复Flutter应用标签搜索无结果问题 - FTS索引同步 | 2026-03-20 | 0d7cc54 | [26-flutter](./quick/26-flutter/) |
 
 ## 会话历史
