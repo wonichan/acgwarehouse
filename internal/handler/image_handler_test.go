@@ -437,3 +437,178 @@ func itoa(n int64) string {
 	}
 	return string(digits)
 }
+
+func TestImageHandlerListImagesFiltersByHasTagsFalse(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+
+	// Create tag
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := repos.tagRepo.Save(context.Background(), tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	// Tag images 1 and 2, leave image 3 untagged
+	if err := repos.imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag image 1: %v", err)
+	}
+	if err := repos.imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 2, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag image 2: %v", err)
+	}
+
+	// Test: has_tags=false should return only untagged images
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_tags=false", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Images []map[string]any `json:"images"`
+		Total  int64            `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Images) != 1 {
+		t.Fatalf("len(images) = %d, want 1 (only untagged image)", len(resp.Images))
+	}
+	if resp.Images[0]["id"].(float64) != 3 {
+		t.Fatalf("images[0].id = %v, want 3 (the untagged image)", resp.Images[0]["id"])
+	}
+	if resp.Total != 1 {
+		t.Fatalf("total = %d, want 1", resp.Total)
+	}
+}
+
+func TestImageHandlerListImagesHasTagsTrueReturnsAllImages(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newImageHandlerTestRouter(t)
+
+	// Test: has_tags=true should return all images (same as default)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_tags=true", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Images []map[string]any `json:"images"`
+		Total  int64            `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Images) != 3 {
+		t.Fatalf("len(images) = %d, want 3 (all images)", len(resp.Images))
+	}
+	if resp.Total != 3 {
+		t.Fatalf("total = %d, want 3", resp.Total)
+	}
+}
+
+func TestImageHandlerListImagesHasTagsFalseWithTagIDsReturnsError(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+
+	// Create tag
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := repos.tagRepo.Save(context.Background(), tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	// Test: has_tags=false AND tag_ids should return 400
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_tags=false&tag_ids="+itoa(tag.ID), nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	decodeJSONResponse(t, w, &resp)
+
+	if resp["error"] == nil {
+		t.Fatal("response missing 'error' field")
+	}
+}
+
+func TestImageHandlerListImagesHasTagsFalseSupportsPagination(t *testing.T) {
+	t.Parallel()
+
+	// Create custom test DB with more untagged images
+	gin.SetMode(gin.TestMode)
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "image-handler-pagination.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	// Create 5 images
+	now := time.Now()
+	for i := 1; i <= 5; i++ {
+		_, err := db.Exec(`
+			INSERT INTO images (id, path, filename, source_root, file_size, width, height, format, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, i, filepath.Join("/img", string(rune('a'+i-1))), string(rune('a'+i-1)), "/img", 100, 100, 100, "png", now, now)
+		if err != nil {
+			t.Fatalf("seed image %d: %v", i, err)
+		}
+	}
+
+	// Tag first 2 images
+	tagRepo := repository.NewTagRepository(db)
+	imageTagRepo := repository.NewImageTagRepository(db)
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := tagRepo.Save(context.Background(), tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+	for i := 1; i <= 2; i++ {
+		if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: int64(i), TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+			t.Fatalf("tag image %d: %v", i, err)
+		}
+	}
+
+	imageRepo := repository.NewImageRepository(db)
+	h := NewImageHandler(imageRepo, tagRepo, imageTagRepo)
+	router := gin.New()
+	api := router.Group("/api/v1")
+	api.GET("/images", h.ListImages)
+
+	// Request first page with limit=1 (3 untagged images total)
+	w1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_tags=false&limit=1", nil)
+	router.ServeHTTP(w1, req1)
+
+	if w1.Code != http.StatusOK {
+		t.Fatalf("page 1 status = %d, want %d", w1.Code, http.StatusOK)
+	}
+
+	var resp1 struct {
+		Images     []map[string]any `json:"images"`
+		NextCursor string           `json:"next_cursor"`
+		HasMore    bool             `json:"has_more"`
+		Total      int64            `json:"total"`
+	}
+	decodeJSONResponse(t, w1, &resp1)
+
+	if len(resp1.Images) != 1 {
+		t.Fatalf("page 1: len(images) = %d, want 1", len(resp1.Images))
+	}
+	if resp1.Total != 3 {
+		t.Fatalf("page 1: total = %d, want 3 (3 untagged images)", resp1.Total)
+	}
+	if !resp1.HasMore {
+		t.Fatal("page 1: has_more = false, want true")
+	}
+}

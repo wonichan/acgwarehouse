@@ -27,7 +27,9 @@ func NewImageHandler(imageRepo repository.ImageRepository, tagRepo repository.Ta
 
 // ListImages handles GET /api/v1/images with optional tag_ids filtering.
 // When tag_ids query param is provided, returns images that have ALL specified tags (AND semantics).
-// When no tag_ids is provided, returns all images with pagination.
+// When has_tags=false is provided, returns images that have NO tags.
+// When no filter is provided, returns all images with pagination.
+// has_tags=false is mutually exclusive with tag_ids parameter.
 func (h *ImageHandler) ListImages(c *gin.Context) {
 	ctx := c.Request.Context()
 	limit := parsePositiveInt(c.DefaultQuery("limit", "20"), 20)
@@ -53,11 +55,42 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 		sortDir = "desc"
 	}
 
+	// 解析 has_tags 参数
+	hasTagsStr := strings.TrimSpace(c.Query("has_tags"))
+	var hasTags *bool
+	if hasTagsStr != "" {
+		val := strings.ToLower(hasTagsStr) == "true"
+		hasTags = &val
+	}
+
 	tagIDsStr := strings.TrimSpace(c.Query("tag_ids"))
+
+	// 验证互斥性：has_tags=false 与 tag_ids 不能同时使用
+	if hasTags != nil && !*hasTags && tagIDsStr != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "has_tags=false is incompatible with tag_ids parameter"})
+		return
+	}
+
 	var images []interface{}
 	var total int64
 
-	if tagIDsStr != "" {
+	// 根据 has_tags 参数决定查询方式
+	if hasTags != nil && !*hasTags {
+		// 查询未打标签的图片
+		untaggedImages, err := h.imageRepo.FindUntagged(ctx, limit, offset, sortBy, sortDir)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		total, err = h.imageRepo.CountUntagged(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, img := range untaggedImages {
+			images = append(images, img)
+		}
+	} else if tagIDsStr != "" {
 		// Parse comma-separated tag IDs
 		tagIDs, err := parseTagIDs(tagIDsStr)
 		if err != nil {

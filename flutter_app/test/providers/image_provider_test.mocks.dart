@@ -57,6 +57,7 @@ class MockApiService extends _i1.Mock implements _i2.ApiService {
     String? sortBy = 'created_at',
     String? sortDir = 'desc',
     List<int>? tagIds,
+    bool? hasTags,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#fetchImages, [], {
@@ -65,6 +66,7 @@ class MockApiService extends _i1.Mock implements _i2.ApiService {
               #sortBy: sortBy,
               #sortDir: sortDir,
               #tagIds: tagIds,
+              #hasTags: hasTags,
             }),
             returnValue:
                 _i4.Future<_i2.PaginationResponse<_i5.ImageModel>>.value(
@@ -76,6 +78,7 @@ class MockApiService extends _i1.Mock implements _i2.ApiService {
                       #sortBy: sortBy,
                       #sortDir: sortDir,
                       #tagIds: tagIds,
+                      #hasTags: hasTags,
                     }),
                   ),
                 ),

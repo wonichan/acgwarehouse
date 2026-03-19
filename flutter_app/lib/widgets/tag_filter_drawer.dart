@@ -4,8 +4,15 @@ import '../providers/tag_provider.dart';
 
 class TagFilterDrawer extends StatefulWidget {
   final Function(List<int> tagIds)? onFilterChanged;
+  final Function(bool? hasTags)? onHasTagsChanged;
+  final bool? hasTagsFilter;
 
-  const TagFilterDrawer({super.key, this.onFilterChanged});
+  const TagFilterDrawer({
+    super.key,
+    this.onFilterChanged,
+    this.onHasTagsChanged,
+    this.hasTagsFilter,
+  });
 
   @override
   State<TagFilterDrawer> createState() => _TagFilterDrawerState();
@@ -66,6 +73,19 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
             },
           ),
         ),
+        // 未打标签筛选开关
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+          child: SwitchListTile(
+            title: const Text('未打标签'),
+            subtitle: const Text('显示没有标签的图片'),
+            value: widget.hasTagsFilter == false,
+            onChanged: (value) {
+              widget.onHasTagsChanged?.call(value ? false : null);
+            },
+            secondary: const Icon(Icons.label_off_outlined),
+          ),
+        ),
         // 清空按钮
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -77,6 +97,7 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
                 onPressed: () {
                   context.read<TagProvider>().clearSelection();
                   widget.onFilterChanged?.call([]);
+                  widget.onHasTagsChanged?.call(null);
                 },
               ),
             ],
