@@ -100,7 +100,10 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
         if (statusStr == 'completed' || statusStr == 'failed') {
           timer.cancel();
           if (statusStr == 'completed') {
-            await _loadImageTags();
+            // 增加延迟时间到1500ms，确保后端标签数据完全写入数据库
+            await Future.delayed(const Duration(milliseconds: 1500));
+            // 尝试加载标签，如果pending列表为空则重试一次
+            await _loadImageTagsWithRetry();
           }
         }
       } catch (e) {
@@ -121,6 +124,19 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
         return '失败';
       default:
         return status;
+    }
+  }
+
+  /// 加载图片标签，如果pending为空则重试一次
+  Future<void> _loadImageTagsWithRetry() async {
+    await _loadImageTags();
+    
+    // 检查pending标签是否为空，如果是则等待后重试一次
+    final pending = _tagProvider.imageTags['pending'] ?? [];
+    if (pending.isEmpty) {
+      debugPrint('No pending tags found after initial load, retrying...');
+      await Future.delayed(const Duration(milliseconds: 1000));
+      await _loadImageTags();
     }
   }
 
