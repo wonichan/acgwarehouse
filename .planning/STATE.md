@@ -84,7 +84,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 36 | 修复批量操作添加/移除标签按钮无响应 | 2026-03-20 | - | [36-batch-tag-buttons](./quick/36-batch-tag-buttons/) |
-| 35 | Async AI Tag Generation for Batch Operations | 2026-03-20 | bb8ce9e | [35-ai](./quick/35-ai/) |
+| 35 | 长按图片批量操作AI生成标签异步执行，点击后直接返回并提示任务进行中 | 2026-03-20 | 8bd9dd5 | [35-ai](./quick/35-ai/) |
 | 34 | 修复批量操作页 ProviderNotFoundException | 2026-03-20 | 068a0e3 | [34-fix-providernotfoundexception-for-select](./quick/34-fix-providernotfoundexception-for-select/) |
 | 33 | 批量选中图片生成AI tag | 2026-03-20 | 2bcd38e | [33-ai-tag](./quick/33-ai-tag/) |
 | 32 | 修复标签重命名后FTS索引未同步的bug | 2026-03-20 | a64474c | [32-fts-bug](./quick/32-fts-bug/) |
