@@ -128,6 +128,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 20 | 修复large缩略图可能比small小的问题 - 确保large>=500KB且比small大 | 2026-03-20 | a00ce2b | [20-fix-large-thumbnail-smaller-than-small](./quick/20-fix-large-thumbnail-smaller-than-small/) |
 | 21 | 详情页图片容器自适应缩略图大小 - 移除固定高度限制 | 2026-03-20 | df193ef | [21-detail-page-image-container-adaptive](./quick/21-detail-page-image-container-adaptive/) |
 | 22 | 修复AI分析标签未即时刷新的问题 | 2026-03-19 | 51fface | [22-ai-tag-refresh](./quick/22-ai-tag-refresh/) |
+| 24 | 修复Flutter图片详情页AI生成标签不立即显示问题 | 2026-03-20 | TBD | [24-fix-flutter-image-detail-page-not-showin](./quick/24-fix-flutter-image-detail-page-not-showin/) |
 
 ## 会话历史
 
@@ -186,4 +187,4 @@ Phase 6: ✓ 优化与部署                       (100%)
 *Phase 6 Plan 03 已完成：2026-03-18*
 *Phase 6 Plan 05 已完成：2026-03-18*
 
-Last activity: 2026-03-20 - Completed quick task 21: 详情页图片容器自适应缩略图大小
+Last activity: 2026-03-20 - Completed quick task 24: 修复Flutter图片详情页AI生成标签不立即显示问题
