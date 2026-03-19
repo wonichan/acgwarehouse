@@ -297,4 +297,31 @@ class TagProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  // 清理无用标签
+  Future<Map<String, dynamic>> cleanUnusedTags() async {
+    try {
+      final result = await _tagService.cleanUnusedTags();
+      // 刷新统计数据
+      await loadStatistics();
+      return result;
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error cleaning unused tags: $e');
+      rethrow;
+    }
+  }
+
+  // 更新标签
+  Future<void> updateTag(int tagId, {String? preferredLabel, String? primaryCategory, String? reviewState}) async {
+    try {
+      await _tagService.updateTag(tagId, preferredLabel: preferredLabel, primaryCategory: primaryCategory, reviewState: reviewState);
+      // 刷新统计数据
+      await loadStatistics();
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error updating tag: $e');
+      rethrow;
+    }
+  }
 }
