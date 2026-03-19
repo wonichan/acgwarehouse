@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-const maxAIImageSize = 10 * 1024 * 1024 // 10MB
-
 // TestCompressImageIfNeeded_SmallFileUnchanged tests that files under 10MB are returned unchanged
 func TestCompressImageIfNeeded_SmallFileUnchanged(t *testing.T) {
 	// Create a small test image (~100KB)
@@ -65,8 +63,8 @@ func TestCompressImageIfNeeded_LargeFileCompressed(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 	defer tmpFile.Close()
 
-	// Create a large image (4000x4000 should produce >10MB with quality 100)
-	img := createTestImage(4000, 4000)
+	// Create a large image (8000x8000 should produce >10MB with quality 100)
+	img := createTestImage(8000, 8000)
 	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 100}); err != nil {
 		t.Fatalf("Failed to encode test image: %v", err)
 	}
@@ -119,7 +117,7 @@ func TestCompressImageIfNeeded_CompressedImageValid(t *testing.T) {
 	defer tmpFile.Close()
 
 	// Create a large image
-	img := createTestImage(4000, 4000)
+	img := createTestImage(8000, 8000)
 	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 100}); err != nil {
 		t.Fatalf("Failed to encode test image: %v", err)
 	}
