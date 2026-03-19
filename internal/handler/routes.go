@@ -37,9 +37,6 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	r.GET("/health", HealthCheck)
 	r.GET("/ready", ReadyCheck)
 
-	// Serve admin static files
-	r.Static("/admin", "./web/admin")
-
 	var deps *Dependencies
 	if len(depsOpt) > 0 {
 		deps = depsOpt[0]
@@ -65,6 +62,15 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 			admin.POST("/actions/jobs/retry-failed", adminHandler.RetryFailedJobs)
 		}
 	}
+
+	// Redirect /admin to /admin-ui for convenience
+	r.GET("/admin", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/admin-ui/")
+	})
+
+	// Serve admin static files
+	// Using /admin-ui instead of /admin to avoid route conflicts with /admin/api/* and /api/*
+	r.Static("/admin-ui", "./web/admin")
 
 	images := api.Group("/images")
 	imageList := gin.HandlerFunc(placeholderHandler)
