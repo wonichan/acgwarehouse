@@ -98,7 +98,7 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
                 }
                 return ListView.builder(
                   itemCount: provider.filteredTags.length,
-                  itemBuilder: (context, index) {
+                  itemBuilder: (itemContext, index) {
                     final tag = provider.filteredTags[index];
                     final isSelected = provider.selectedTagIds.contains(tag.id);
                     return CheckboxListTile(
@@ -106,11 +106,10 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
                       subtitle: Text('${tag.usageCount} 张图片'),
                       value: isSelected,
                       onChanged: (checked) {
-                        // 使用 context.read 确保获取到正确的 provider 实例
-                        final tagProvider = context.read<TagProvider>();
-                        tagProvider.toggleTag(tag.id);
+                        // 使用 builder 提供的 context 获取 provider
+                        provider.toggleTag(tag.id);
                         widget.onFilterChanged
-                            ?.call(tagProvider.selectedTagIds.toList());
+                            ?.call(provider.selectedTagIds.toList());
                       },
                       secondary: Chip(
                         label: Text('${tag.usageCount}'),
