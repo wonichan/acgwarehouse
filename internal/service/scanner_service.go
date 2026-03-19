@@ -163,9 +163,12 @@ func (s *ScannerService) importFile(path, root string) error {
 			}
 		}
 
+		// Extract filename without extension for thumbnail naming
+		filename := strings.TrimSuffix(filepath.Base(image.Path), filepath.Ext(image.Path))
 		payload, err := json.Marshal(map[string]any{
 			"image_id": image.ID,
 			"path":     image.Path,
+			"filename": filename,
 		})
 		if err != nil {
 			return err
