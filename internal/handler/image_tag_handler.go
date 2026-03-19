@@ -155,6 +155,12 @@ func (h *ImageTagHandler) RemoveImageTag(c *gin.Context) {
 		return
 	}
 
+	// Decrement the tag's usage count
+	if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
