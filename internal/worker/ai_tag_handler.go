@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -22,6 +23,10 @@ type AITagPayload struct {
 type TagGovernanceMerger interface {
 	MergeTags(ctx context.Context, imageID int64, tags []string, observationID int64, confidence float64) error
 }
+
+// AITagConcurrencyLimiter AI 标签生成的并发控制器
+// 全局变量，在服务启动时初始化
+var AITagConcurrencyLimiter *ai.ConcurrencyLimiter
 
 // DefaultTagPrompt 默认标签生成提示词
 const DefaultTagPrompt = `请分析这张动漫风格的图片，提取符合以下分类的中文标签5-10个，用英文逗号分隔输出：
@@ -51,6 +56,12 @@ func GetDefaultTagPrompt() string {
 	return DefaultTagPrompt
 }
 
+// InitAITagConcurrencyLimiter 初始化 AI 标签生成的并发控制器
+func InitAITagConcurrencyLimiter(maxConcurrency int) {
+	AITagConcurrencyLimiter = ai.NewConcurrencyLimiter(maxConcurrency)
+	log.Printf("AI 标签生成并发限制已设置: %d", maxConcurrency)
+}
+
 // RegisterAITagHandler 注册 AI 标签生成任务处理器
 func RegisterAITagHandler(manager *Manager, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger) {
 	manager.RegisterHandler("ai_tag_generation", func(ctx context.Context, id int64, payload string) error {
@@ -60,6 +71,15 @@ func RegisterAITagHandler(manager *Manager, client ai.AIProvider, obsRepo reposi
 
 // handleAITagGeneration 处理 AI 标签生成任务
 func handleAITagGeneration(ctx context.Context, id int64, payload string, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger) error {
+	// 如果设置了并发控制器，先获取槽位
+	if AITagConcurrencyLimiter != nil {
+		release, err := AITagConcurrencyLimiter.Acquire(ctx)
+		if err != nil {
+			return fmt.Errorf("acquire concurrency slot: %w", err)
+		}
+		defer release()
+	}
+
 	// 解析 payload
 	var p AITagPayload
 	if err := json.Unmarshal([]byte(payload), &p); err != nil {

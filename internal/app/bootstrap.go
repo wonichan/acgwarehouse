@@ -135,6 +135,9 @@ func (a *App) registerAIHandlers() {
 		return
 	}
 
+	// 初始化 AI 标签生成并发控制器
+	worker.InitAITagConcurrencyLimiter(a.config.AI.MaxConcurrency)
+
 	client := ai.NewRateLimitedClient(provider, a.config.AI.RequestsPerMinute)
 	worker.RegisterAITagHandler(a.jobManager, client, a.obsRepo, a.governanceSvc)
 }
