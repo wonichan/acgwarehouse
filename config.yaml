@@ -10,7 +10,7 @@ database:
 
 storage:
   scan_roots:
-    - "E:\\picture\\xp十环-竖\\2026.310-2期"
+    - "E:\\picture\\xp十环-竖\\2026.320-3期"
 
 ai:
   provider: "doubao"
