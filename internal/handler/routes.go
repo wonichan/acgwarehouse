@@ -110,6 +110,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	tagAddAlias := gin.HandlerFunc(placeholderHandler)
 	tagDeleteAlias := gin.HandlerFunc(placeholderHandler)
 	tagGetStats := gin.HandlerFunc(placeholderHandler)
+	tagCleanUnused := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.TagRepo != nil && deps.AliasRepo != nil && deps.ImageTagRepo != nil {
 		tagHandler := NewTagHandler(deps.TagRepo, deps.AliasRepo, deps.ImageTagRepo)
 		tagGet = tagHandler.GetTags
@@ -120,6 +121,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		tagAddAlias = tagHandler.AddAlias
 		tagDeleteAlias = tagHandler.DeleteAlias
 		tagGetStats = tagHandler.GetTagStats
+		tagCleanUnused = tagHandler.CleanUnusedTags
 	}
 	api.GET("/tags", tagGet)
 	api.POST("/tags", tagCreate)
@@ -129,6 +131,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.POST("/tags/:id/aliases", tagAddAlias)
 	api.DELETE("/tags/:id/aliases/:alias_id", tagDeleteAlias)
 	api.GET("/tags/stats", tagGetStats)
+	api.DELETE("/tags/cleanup", tagCleanUnused)
 
 	imageTagGet := gin.HandlerFunc(placeholderHandler)
 	imageTagAdd := gin.HandlerFunc(placeholderHandler)

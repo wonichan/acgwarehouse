@@ -131,7 +131,8 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 23 | 添加图片自动压缩功能 - 超过10MB的图片在发送AI前自动压缩 | 2026-03-20 | 77862fc | [23-10mb](./quick/23-10mb/) |
 | 24 | 修复Flutter图片详情页AI生成标签不立即显示问题 | 2026-03-20 | f224013 | [24-fix-flutter-image-detail-page-not-showin](./quick/24-fix-flutter-image-detail-page-not-showin/) |
 | 25 | 修复AI生成标签的数据一致性问题：删除标签后筛选计数未更新，脏数据残留 | 2026-03-20 | e449824 | [25-ai](./quick/25-ai/) |
-| 25 | 修复Flutter应用标签搜索无结果问题 - FTS索引同步 | 2026-03-20 | 0d7cc54 | [26-flutter](./quick/26-flutter/) |
+| 26 | 修复Flutter应用标签搜索无结果问题 - FTS索引同步 | 2026-03-20 | 0d7cc54 | [26-flutter](./quick/26-flutter/) |
+| 27 | 验证手动添加标签功能 - 功能已存在 | 2026-03-20 | — | [27-support-manual-tag-addition](./quick/27-support-manual-tag-addition/) |
 
 ## 会话历史
 
@@ -190,4 +191,4 @@ Phase 6: ✓ 优化与部署                       (100%)
 *Phase 6 Plan 03 已完成：2026-03-18*
 *Phase 6 Plan 05 已完成：2026-03-18*
 
-Last activity: 2026-03-20 - Completed quick task 25: 修复Flutter应用标签搜索无结果问题 - FTS索引同步
+Last activity: 2026-03-20 - Completed quick task 27: 验证手动添加标签功能 - 功能已存在
