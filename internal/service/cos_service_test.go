@@ -42,16 +42,16 @@ func TestCOSServiceUploadReturnsURLAndUsesKeyFormat(t *testing.T) {
 		t.Fatalf("NewCOSService() error = %v", err)
 	}
 
-	url, err := svc.Upload(context.Background(), 123, "small", []byte("jpg-bytes"))
+	url, err := svc.Upload(context.Background(), "test-image", "small", []byte("jpg-bytes"))
 	if err != nil {
 		t.Fatalf("Upload() error = %v", err)
 	}
 
-	if gotPath != "/thumbnails/123_small.jpg" {
-		t.Fatalf("request path = %q, want /thumbnails/123_small.jpg", gotPath)
+	if gotPath != "/thumbnails/test-image-small.jpg" {
+		t.Fatalf("request path = %q, want /thumbnails/test-image-small.jpg", gotPath)
 	}
-	if url != srv.URL+"/thumbnails/123_small.jpg" {
-		t.Fatalf("returned url = %q, want %q", url, srv.URL+"/thumbnails/123_small.jpg")
+	if url != srv.URL+"/thumbnails/test-image-small.jpg" {
+		t.Fatalf("returned url = %q, want %q", url, srv.URL+"/thumbnails/test-image-small.jpg")
 	}
 }
 
@@ -70,7 +70,7 @@ func TestCOSServiceUploadReturnsErrorOnFailure(t *testing.T) {
 		t.Fatalf("NewCOSService() error = %v", err)
 	}
 
-	_, err = svc.Upload(context.Background(), 1, "large", []byte("jpg-bytes"))
+	_, err = svc.Upload(context.Background(), "test-image", "large", []byte("jpg-bytes"))
 	if err == nil {
 		t.Fatal("Upload() expected error on non-2xx response")
 	}
