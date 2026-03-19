@@ -1,74 +1,63 @@
-# Feature Research: ACGWarehouse (二次元图片库)
+# Feature Research: Windows Fluent UI + Android Material 3
 
-**Domain:** Anime/Manga Image Library Management System
-**Researched:** 2026-03-14
+**Domain:** Multi-platform Flutter UI (Windows Desktop + Android Mobile)
+**Milestone:** v2.0 UI/UX 重构与多端适配
+**Researched:** 2026-03-20
 **Confidence:** HIGH
+
+> **Note:** This research focuses on NEW features for the v2.0 UI milestone. Core product features (gallery, tagging, search, etc.) are already implemented in v1.0. See original FEATURES.md for core product feature landscape.
+
+---
 
 ## Executive Summary
 
-ACGWarehouse targets anime/manga image collectors who need to manage large local collections. The market has established players (Hydrus, ImoutoRebirth, FEMBOY) but none dominate. Key differentiation opportunities exist in: modern UI/UX, AI-powered automation, and "存入即整理" (store-and-organize) experience.
+This research covers the feature landscape for adding Windows Fluent UI and Android Material 3 interfaces to an existing Flutter Web image gallery application. The focus is on platform-specific UI components, responsive layouts, adaptive navigation, and input handling patterns. Windows users expect Fluent Design patterns (NavigationView, CommandBar, keyboard shortcuts) while Android users expect Material 3 patterns (NavigationBar, touch interactions, ripples). The key challenge is creating a unified codebase that feels native on both platforms while maintaining the anime-style aesthetic.
 
 ---
 
 ## Feature Landscape
 
-### Table Stakes (Must-Have)
+### Table Stakes (Users Expect These)
 
-Features users assume exist. Missing these = product feels broken.
+Features users assume exist. Missing these = product feels incomplete.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Image Import/Scanning | Users have existing folders to ingest | MEDIUM | Folder monitoring, batch import, format support (jpg/png/webp/gif) |
-| Basic File Browsing | Need to view what is in the library | LOW | Grid view, thumbnail generation, basic navigation |
-| Search (Text) | Find images by filename/basic metadata | MEDIUM | Filename search, simple filters |
-| Folder/Album Organization | Users expect to group images | LOW | Collections, albums, virtual folders |
-| Duplicate Detection | Large collections have duplicates | MEDIUM | Perceptual hashing, similarity threshold |
-| Basic Metadata Storage | Store filename, path, import date | LOW | EXIF, file stats, import timestamp |
+| Feature | Why Expected | Platform | Complexity | Notes |
+|---------|--------------|----------|------------|-------|
+| **NavigationView** | Standard Windows navigation pattern | Windows | MEDIUM | Uses `fluent_ui` package with `PaneDisplayMode.auto` for responsive adaptation |
+| **NavigationBar** | Standard Android bottom navigation | Android | LOW | Material 3 `NavigationBar` with `NavigationDestination` items |
+| **NavigationRail** | Expected for tablets/large screens | Both | MEDIUM | Switches from NavigationBar at 600px+ width threshold |
+| **Keyboard Shortcuts** | Desktop users expect accelerator keys | Windows | MEDIUM | `Shortcuts` + `Actions` widgets with `LogicalKeySet` |
+| **Hover Effects** | Mouse interaction expected on desktop | Windows | LOW | `MouseRegion` for custom hover states |
+| **Touch Ripples** | Material touch feedback expected | Android | LOW | `InkWell` provides built-in ripples |
+| **Light/Dark Theme** | Users expect theme switching | Both | LOW | `FluentThemeData` / `ColorScheme.fromSeed()` |
+| **Responsive Grid** | Gallery adapts to window size | Both | MEDIUM | `LayoutBuilder` + `SliverGridDelegateWithMaxCrossAxisExtent` |
+| **Back Button** | Android hardware/gesture back | Android | LOW | `WillPopScope` / `PopScope` for handling |
+| **ContentDialog** | Standard Windows confirmation dialogs | Windows | LOW | `ContentDialog` with actions |
 
 ### Differentiators (Competitive Advantage)
 
-Features that set ACGWarehouse apart. Not required, but valuable.
+Features that set the product apart. Not required, but valuable.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| AI Character Recognition | Auto-identify anime characters without manual tagging | HIGH | Requires AI service integration; key value prop |
-| Auto-Tagging (Artist/Original/Source) | Extract creator, series, style automatically | HIGH | Booru API integration or AI models; reduces manual work significantly |
-| Similar Image Detection | Find near-duplicates and variations | HIGH | Feature vector comparison; memory intensive |
-| Reverse Image Search (Internal) | Search own library by uploading an image | HIGH | Requires image embedding/indexing; very useful for large collections |
-| Booru Tag Sync | Fetch/update tags from Danbooru/Gelbooru/etc | MEDIUM | API integration, tag conflict resolution |
-| Tag-Based Browsing | Browse by character, artist, series, etc | MEDIUM | Faceted search, tag clouds, related tags |
-| Smart Collections | Auto-populated albums based on rules | MEDIUM | Query-based collections that update automatically |
-| Cross-Platform Client | Access from desktop + mobile | HIGH | Flutter enables this; competitors often desktop-only |
-| Folder Monitoring (Auto-Import) | Watch folders, auto-process new images | MEDIUM | File system watchers, background processing |
+| Feature | Value Proposition | Platform | Complexity | Notes |
+|---------|-------------------|----------|------------|-------|
+| **Anime-style Theming** | Soft pink-purple color scheme appeals to target audience | Both | LOW | `ColorScheme.fromSeed(seedColor: Color(0xFFED79B5))` for pink theme |
+| **Dual-Platform Native Feel** | Windows feels like Windows, Android feels like Android | Both | HIGH | Platform-adaptive widgets, not lowest-common-denominator |
+| **Adaptive Navigation** | Automatically switches NavigationRail/NavigationBar | Both | MEDIUM | 600px breakpoint, smooth transition |
+| **CommandBar Actions** | Windows File Explorer-style toolbar | Windows | MEDIUM | Primary and secondary items with overflow |
+| **Keyboard Gallery Navigation** | Arrow keys for browsing, space for select | Windows | MEDIUM | Focus management + Shortcuts widget |
+| **Extended NavigationRail** | Shows labels on tablets in landscape | Android | LOW | `extended: true` based on width |
 
+### Anti-Features (Commonly Requested, Often Problematic)
 
-### Anti-Features (Deliberately NOT Building)
-
-Features that seem good but create problems or do not fit the product vision.
+Features that seem good but create problems.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Social Features (Sharing/Following) | Users want to share collections | Violates privacy-first personal library positioning; complexity explosion | Export/share individual images only |
-| Cloud Sync/Storage | Access from anywhere | Cost, complexity, privacy concerns | Local network access via Flutter app |
-| Video Management | Some users have anime clips | Scope creep; completely different metadata needs | Out of scope per PROJECT.md |
-| Image Editing | Users want to crop/resize | Not core value prop; OS tools exist better | Integration with external editors only |
-| Built-in Web Browser/Downloader | Hydrus has this for booru scraping | Legal gray area, maintenance burden, focus drift | Manual import workflow |
-| Plugin System (Early) | Power users want extensibility | Premature abstraction, API instability | Build core features first, consider v2+ |
-| Multiple User Accounts | Multi-user household scenarios | Adds auth complexity, not primary use case | Single-user with optional basic auth |
-
-### Anime/Manga Specific Features
-
-Specialized features for the ACG domain that general image libraries do not have.
-
-| Feature | Why It Matters | Complexity | Notes |
-|---------|----------------|------------|-------|
-| Booru-Style Tag System | Anime community uses specific tag taxonomies (character, artist, copyright, general) | MEDIUM | Need tag types, hierarchies, aliases |
-| Pixiv Integration | Primary source for anime artwork | MEDIUM | API rate limits, requires auth |
-| Character Database | Link to character info (AniList/MyAnimeList) | MEDIUM | Character name normalization, aliases |
-| Source Attribution | Track where image came from (Pixiv ID, Twitter handle, etc) | LOW | URL metadata, source detection |
-| Rating/Content Filter | NSFW/SFW content separation | LOW | Tag-based filtering, user preference |
-| Pixiv Ugoira Support | Animated illustrations popular in anime community | MEDIUM | ZIP-based animation format |
-| Notes/Translation Overlay | Boorus have translation notes on images | HIGH | Coordinate-based overlay system |
+| **Custom Touch Gestures** | Want unique interactions | Conflicts with platform conventions, confusing users | Use standard `GestureDetector` patterns, Material `InkWell` |
+| **Platform-Identical UI** | "Same experience everywhere" | Ignores platform conventions, feels foreign on both | Platform-adaptive widgets that feel native on each |
+| **Over-Animated Transitions** | Want "smooth" experience | Performance issues, motion sickness, slow interactions | Subtle animations, respect system animation settings |
+| **Custom Navigation Patterns** | Want unique navigation | Users can't transfer muscle memory, increases learning curve | Follow Fluent/Material navigation patterns |
+| **Hamburger Menu Everywhere** | Want simple navigation | Hides options, requires extra tap, poor on large screens | Use NavigationRail on large screens, NavigationBar on mobile |
 
 
 ---
@@ -76,80 +65,239 @@ Specialized features for the ACG domain that general image libraries do not have
 ## Feature Dependencies
 
 ```
-[Image Import]
-    |--requires--> [File Storage]
-    |                 |--requires--> [Thumbnail Generation]
-    |--requires--> [Duplicate Detection]
+Responsive Layout System
+    └──requires──> LayoutBuilder/MediaQuery measurement
+    └──enables──> Adaptive Navigation
+                       └──requires──> NavigationRail (large) + NavigationBar (small)
 
-[AI Character Recognition]
-    |--requires--> [Image Import]
-    |--requires--> [Character Database]
+Keyboard Shortcuts
+    └──requires──> Focus Management (Focus widget)
+    └──requires──> Shortcuts widget + Actions widget
+    └──requires──> LogicalKeySet for key combinations
 
-[Auto-Tagging]
-    |--requires--> [Image Import]
-    |--requires--> [Booru API Integration]
-                        |--requires--> [Tag System]
+Anime Theming
+    └──requires──> FluentThemeData.accentColor (Windows)
+    └──requires──> ColorScheme.fromSeed(seedColor) (Android)
+    └──requires──> Light/dark mode support
 
-[Reverse Image Search]
-    |--requires--> [Image Embedding/Indexing]
-                        |--requires--> [Image Import]
+Hover Effects
+    └──requires──> MouseRegion widget
+    └──requires──> State management for hover state
+    └──conflicts──> Touch-only interactions (need separate paths)
 
-[Smart Collections]
-    |--requires--> [Search System]
-                        |--requires--> [Tag System]
+Touch Interactions
+    └──requires──> InkWell for ripples (Android)
+    └──requires──> GestureDetector for gestures
+    └──conflicts──> Mouse-only interactions (need fallback)
 
-[Tag-Based Browsing]
-    |--requires--> [Tag System]
-                        |--requires--> [Image Import]
-
-[Booru Tag Sync]
-    |--requires--> [Tag System]
-    |--conflicts--> [AI Auto-Tagging] (need tag priority rules)
+CommandBar
+    └──requires──> ScaffoldPage.header with PageHeader
+    └──enables──> Toolbar actions in page header
+    └──enables──> Overflow menu for secondary actions
 ```
 
 ### Dependency Notes
 
-- **AI Character Recognition requires Character Database**: Need canonical character names to store recognition results
-- **Auto-Tagging requires Booru API or AI Models**: External dependency for tag generation
-- **Reverse Image Search requires Image Indexing**: Need vector embeddings for similarity search
-- **Booru Tag Sync conflicts with AI Auto-Tagging**: When both provide tags for same image, need merge/priority strategy
-- **Smart Collections requires Search System**: Collections are saved search queries that auto-update
+- **Responsive Layout enables Adaptive Navigation:** Cannot switch between NavigationRail and NavigationBar without first measuring screen width
+- **Keyboard Shortcuts require Focus:** Shortcuts only fire when the widget tree has focus; wrap in `Focus(autofocus: true)`
+- **Hover Effects conflict with Touch:** `MouseRegion.onEnter/onExit` don't fire on touch devices; need separate interaction handlers
+- **Anime Theming affects both platforms:** Must define consistent accent color across FluentThemeData and ColorScheme
+
+---
+
+## Platform-Specific Components
+
+### Windows Fluent UI Components
+
+| Component | Purpose | When to Use |
+|-----------|---------|-------------|
+| `NavigationView` | Main app navigation structure | Always for main navigation |
+| `NavigationPane` | Side navigation panel | With NavigationView |
+| `PaneItem` | Navigation item with icon + title | NavigationPane.items |
+| `CommandBar` | Toolbar with primary/secondary actions | Page headers |
+| `CommandBarButton` | Action button in CommandBar | CommandBar.primaryItems |
+| `ScaffoldPage` | Page layout with header | All content pages |
+| `PageHeader` | Page title + CommandBar | ScaffoldPage.header |
+| `ContentDialog` | Modal dialog | Confirmations, forms |
+| `InfoBar` | Toast notifications | Success/error feedback |
+| `Expander` | Collapsible sections | Settings panels |
+| `FluentThemeData` | Theme configuration | FluentApp.theme |
+
+**Display Modes (PaneDisplayMode):**
+- `auto` - Automatically switches based on width (recommended)
+- `expanded` - Full pane with icons + labels
+- `compact` - Collapsed, icons only
+- `minimal` - Hidden, hamburger menu
+- `top` - Horizontal navigation bar
+
+### Android Material 3 Components
+
+| Component | Purpose | When to Use |
+|-----------|---------|-------------|
+| `NavigationBar` | Bottom navigation bar | Main navigation (width < 600px) |
+| `NavigationDestination` | Navigation item | NavigationBar.destinations |
+| `NavigationRail` | Side navigation rail | Large screens (width >= 600px) |
+| `NavigationRailDestination` | Rail navigation item | NavigationRail.destinations |
+| `InkWell` | Touch ripple container | All tappable items |
+| `ColorScheme.fromSeed()` | Generate theme from color | Theme configuration |
+| `ThemeData(useMaterial3: true)` | Material 3 theme | MaterialApp.theme |
+
+**NavigationRail Types:**
+- `labelType: NavigationRailLabelType.all` - Always show labels
+- `labelType: NavigationRailLabelType.selected` - Show selected label only
+- `extended: true` - Full width with labels always visible
+
+---
+
+## Responsive Design Patterns
+
+### Breakpoint Strategy
+
+| Width Range | Navigation | Grid Columns | Notes |
+|-------------|------------|--------------|-------|
+| 0-599px | NavigationBar | 2-3 columns | Phone portrait |
+| 600-839px | NavigationRail (compact) | 4-5 columns | Phone landscape, small tablet |
+| 840+px | NavigationRail (extended) | 6+ columns | Tablet, desktop |
+
+### Implementation Pattern
+
+```dart
+// Responsive navigation switch
+LayoutBuilder(
+  builder: (context, constraints) {
+    final isLargeScreen = constraints.maxWidth >= 600;
+    
+    if (isLargeScreen) {
+      // Windows: NavigationView with PaneDisplayMode.auto
+      // Android: NavigationRail (extended if >= 840px)
+      return NavigationRail(...);
+    } else {
+      // Android: NavigationBar
+      return NavigationBar(...);
+    }
+  },
+)
+
+// Responsive grid
+SliverGridDelegateWithMaxCrossAxisExtent(
+  maxCrossAxisExtent: 200, // Item max width
+  mainAxisSpacing: 8,
+  crossAxisSpacing: 8,
+)
+```
+
+---
+
+## Keyboard Shortcuts Reference
+
+### Common Desktop Shortcuts
+
+| Shortcut | Action | Implementation |
+|----------|--------|----------------|
+| `Ctrl+N` | New item | `SingleActivator(LogicalKeyboardKey.keyN, control: true)` |
+| `Delete` | Delete selected | `SingleActivator(LogicalKeyboardKey.delete)` |
+| `Ctrl+A` | Select all | `SingleActivator(LogicalKeyboardKey.keyA, control: true)` |
+| `Escape` | Cancel/close | `SingleActivator(LogicalKeyboardKey.escape)` |
+| `Arrow Keys` | Navigate grid | Focus traversal |
+| `Space` | Select/toggle | `SingleActivator(LogicalKeyboardKey.space)` |
+
+### Implementation Pattern
+
+```dart
+Shortcuts(
+  shortcuts: const <ShortcutActivator, Intent>{
+    SingleActivator(LogicalKeyboardKey.keyN, control: true): CreateNewItemIntent(),
+    SingleActivator(LogicalKeyboardKey.delete): DeleteSelectedIntent(),
+  },
+  child: Actions(
+    actions: <Type, Action<Intent>>{
+      CreateNewItemIntent: CallbackAction<CreateNewItemIntent>(
+        onInvoke: (intent) => _createNewItem(),
+      ),
+      DeleteSelectedIntent: CallbackAction<DeleteSelectedIntent>(
+        onInvoke: (intent) => _deleteSelected(),
+      ),
+    },
+    child: Focus(autofocus: true, child: content),
+  ),
+)
+```
+
+---
+
+## Theming: Anime-Style Soft Pink-Purple
+
+### Color Scheme Definition
+
+```dart
+// Material 3 (Android)
+final lightTheme = ThemeData(
+  useMaterial3: true,
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: const Color(0xFFED79B5), // Soft pink
+    brightness: Brightness.light,
+  ),
+);
+
+final darkTheme = ThemeData(
+  useMaterial3: true,
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: const Color(0xFFD3BBFF), // Soft purple for dark
+    brightness: Brightness.dark,
+  ),
+);
+
+// Fluent UI (Windows)
+final fluentLightTheme = FluentThemeData(
+  brightness: Brightness.light,
+  accentColor: Colors.pink.toAccentColor(),
+);
+
+final fluentDarkTheme = FluentThemeData(
+  brightness: Brightness.dark,
+  accentColor: Colors.purple.toAccentColor(),
+);
+```
+
+### Accent Color Options
+
+| Theme | Light Seed | Dark Seed | Notes |
+|-------|-----------|-----------|-------|
+| Pink | `Color(0xFFED79B5)` | `Color(0xFFED79B5)` | Primary recommendation |
+| Purple | `Color(0xFF6F43C0)` | `Color(0xFFD3BBFF)` | Alternative |
+| Lavender | `Color(0xFFB39DDB)` | `Color(0xFF9575CD)` | Subtle option |
 
 ---
 
 ## MVP Definition
 
-### Launch With (v1)
+### Launch With (v2.0)
 
-Minimum viable product - what is needed to validate the concept.
+Minimum viable product — what's needed to validate the dual-platform UI.
 
-- [x] **Image Scanning & Import** - Core entry point; users need to get images in
-- [x] **Basic Gallery View** - Grid/waterfall layout, thumbnails, basic navigation
-- [x] **Folder Monitoring** - Auto-import from watched folders; critical for workflow
-- [x] **Duplicate Detection** - Table stakes for any serious image library
-- [x] **Basic Search** - Filename and simple metadata search
-- [x] **Album/Collection Management** - Manual organization users expect
+- [x] **NavigationView (Windows)** — Core Windows navigation pattern
+- [x] **NavigationBar (Android)** — Core Android navigation pattern
+- [x] **Responsive Layout** — Adapts to screen size
+- [x] **Adaptive Navigation** — Rail/Bar switch at breakpoint
+- [x] **Anime Theming** — Pink-purple color scheme
+- [x] **Light/Dark Theme** — Theme switching support
 
-### Add After Validation (v1.x)
+### Add After Validation (v2.x)
 
-Features to add once core is working and validated.
+Features to add once core is working.
 
-- [ ] **AI Character Recognition** - Key differentiator; requires AI service
-- [ ] **Auto-Tagging (Artist/Source)** - Reduces manual work significantly
-- [ ] **Tag-Based Browsing** - Requires tag system + populated tags first
-- [ ] **Booru Tag Sync** - Fetch tags from Danbooru/Gelbooru
-- [ ] **Reverse Image Search** - Search own library by image
+- [ ] **Keyboard Shortcuts** — Desktop efficiency (trigger: positive Windows feedback)
+- [ ] **CommandBar Actions** — Toolbar for page actions (trigger: need for bulk operations)
+- [ ] **Extended NavigationRail** — Labels on tablets (trigger: tablet user feedback)
+- [ ] **Hover Effects** — Desktop interaction refinement (trigger: desktop usability testing)
 
-### Future Consideration (v2+)
+### Future Consideration (v3+)
 
 Features to defer until product-market fit is established.
 
-- [ ] **Similar Image Detection** - Beyond exact duplicates, find variations
-- [ ] **Smart Collections** - Auto-updating rule-based albums
-- [ ] **Mobile Sync** - Selective sync to mobile devices
-- [ ] **Notes/Translation Overlay** - Display booru notes on images
-- [ ] **Plugin System** - Extensibility for power users
-- [ ] **WebDAV/FUSE Integration** - Mount library as filesystem
+- [ ] **Custom Touch Gestures** — Advanced mobile interactions (defer: standard patterns sufficient)
+- [ ] **Animated Transitions** — Screen transition animations (defer: performance priority)
+- [ ] **Keyboard Gallery Navigation** — Arrow key browsing (defer: complex focus management)
 
 
 ---
@@ -158,130 +306,78 @@ Features to defer until product-market fit is established.
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Image Scanning & Import | HIGH | MEDIUM | P1 |
-| Basic Gallery View | HIGH | LOW | P1 |
-| Folder Monitoring | HIGH | MEDIUM | P1 |
-| Duplicate Detection | HIGH | MEDIUM | P1 |
-| Basic Search | HIGH | LOW | P1 |
-| Album Management | MEDIUM | LOW | P1 |
-| AI Character Recognition | HIGH | HIGH | P2 |
-| Auto-Tagging | HIGH | HIGH | P2 |
-| Tag-Based Browsing | MEDIUM | MEDIUM | P2 |
-| Booru Tag Sync | MEDIUM | MEDIUM | P2 |
-| Reverse Image Search | HIGH | HIGH | P2 |
-| Similar Image Detection | MEDIUM | HIGH | P3 |
-| Smart Collections | MEDIUM | MEDIUM | P3 |
-| Mobile Sync | MEDIUM | HIGH | P3 |
-| Notes Overlay | LOW | HIGH | P3 |
+| NavigationView (Windows) | HIGH | MEDIUM | P1 |
+| NavigationBar (Android) | HIGH | LOW | P1 |
+| Responsive Layout | HIGH | MEDIUM | P1 |
+| Adaptive Navigation | HIGH | MEDIUM | P1 |
+| Anime Theming | MEDIUM | LOW | P1 |
+| Light/Dark Theme | HIGH | LOW | P1 |
+| Keyboard Shortcuts | MEDIUM | MEDIUM | P2 |
+| CommandBar | MEDIUM | MEDIUM | P2 |
+| Hover Effects | LOW | LOW | P2 |
+| Extended NavigationRail | LOW | LOW | P3 |
 
-**Priority Key:**
-- P1: Must have for launch
-- P2: Should have, add when possible
-- P3: Nice to have, future consideration
+**Priority key:**
+- P1: Must have for launch — core platform UI patterns
+- P2: Should have, add when possible — desktop refinements
+- P3: Nice to have, future consideration — polish features
 
 ---
 
-## Competitor Feature Analysis
+## Integration with Existing Features
 
-| Feature | Hydrus | ImoutoRebirth | FEMBOY | Mangatsu | Our Approach |
-|---------|--------|---------------|--------|----------|--------------|
-| Auto-Tagging | Parser-based download | Booru API sync | DeepDanbooru AI | Manual only | AI + Booru hybrid |
-| UI/UX | Desktop Qt (dated) | Desktop WPF (Windows) | Desktop + Mobile | Web-based | Flutter (modern, cross-platform) |
-| Character Recognition | No | No | No | No | Yes AI-powered (differentiator) |
-| Reverse Search | No | No | No | No | Yes Internal library search |
-| Tag Sync | Parser-based | Real-time Booru sync | No | No | On-demand Booru sync |
-| Cross-Platform | Win/Linux/Mac | Windows only | All platforms | Web (all) | All platforms (Flutter) |
-| Folder Monitoring | Yes | Yes | No | No | Yes Real-time monitoring |
-| Collection Focus | General media | Anime images | Anime images | Manga/Doujin | Anime images (optimized) |
+### Dependencies on Existing v1.0 Features
 
-### Competitive Positioning
+| New Feature | Depends On Existing | Integration Notes |
+|-------------|---------------------|-------------------|
+| NavigationView | Page routing, state management | Shared Provider/BLoC state |
+| NavigationBar | Page routing, state management | Same navigation logic as Web |
+| Responsive Grid | Image gallery, pagination | Same data fetching, different layout |
+| Theming | Theme preferences | Extend existing theme system |
+| Keyboard Shortcuts | Selection, batch operations | Connect to existing action handlers |
 
-**Hydrus**: Powerful but dated UI, steep learning curve. Targets power users.
+### Code Reuse Strategy
 
-**ImoutoRebirth**: Windows-only, Booru-centric. Good for existing booru users.
+```
+Shared Layer:
+├── State Management (Provider/BLoC)
+├── API Services
+├── Data Models
+├── Business Logic
+└── Theme Configuration (colors, constants)
 
-**FEMBOY**: Mobile+Desktop, AI tagging. Limited active development.
-
-**Mangatsu**: Manga-focused, web-based. Different media type.
-
-**ACGWarehouse Opportunity**: Modern Flutter UI + AI automation + cross-platform + anime-optimized workflow.
-
-
----
-
-## Technical Complexity Notes
-
-### High Complexity Features
-
-1. **AI Character Recognition**: Requires training data, model inference infrastructure, character database maintenance
-2. **Reverse Image Search**: Needs vector database (Milvus/Pinecone), embedding generation, similarity indexing
-3. **Similar Image Detection**: Perceptual hashing at scale, threshold tuning, false positive management
-4. **Cross-Platform Sync**: Conflict resolution, bandwidth optimization, selective sync logic
-
-### Medium Complexity Features
-
-1. **Auto-Tagging**: External API integration, rate limiting, tag normalization
-2. **Booru Tag Sync**: API auth, tag type mapping, update conflict handling
-3. **Folder Monitoring**: File system watchers, event debouncing, move detection
-4. **Smart Collections**: Query parser, cache invalidation, background updates
-
-### Low Complexity Features
-
-1. **Basic Gallery**: Thumbnail generation, pagination, view modes
-2. **Album Management**: CRUD operations, many-to-many relationships
-3. **Basic Search**: Full-text index, simple filters
-4. **Duplicate Detection**: Perceptual hash library integration
+Platform-Specific Layer:
+├── Windows: fluent_ui widgets
+├── Android: Material 3 widgets
+└── Web: Existing implementation
+```
 
 ---
 
 ## Sources
 
-### Competitor Products Analyzed
+### High Confidence (Context7 + Official Docs)
 
-- [Hydrus Network](https://github.com/hydrusnetwork/hydrus) - Personal booru-style media tagger
-- [ImoutoRebirth](https://github.com/ImoutoChan/ImoutoRebirth) - Anime image storage with Booru sync
-- [FEMBOY](https://github.com/k1rak1ra/FEMBOY) - DeepDanbooru-based auto-tagging system
-- [Mangatsu](https://github.com/Mangatsu/server) - Manga/doujinshi media server (Go)
-- [Shoko](https://shokoanime.com/) - Anime video management system
-- [Seanime](https://seanime.app/) - Anime/manga streaming media server
+- Flutter Official Documentation: https://docs.flutter.dev/ui/adaptive-responsive/general
+- Flutter Material 3 Migration: https://docs.flutter.dev/release/breaking-changes/material-3-migration
+- Flutter Actions & Shortcuts: https://docs.flutter.dev/ui/interactivity/actions-and-shortcuts
+- fluent_ui Package: https://context7.com/bdlukaa/fluent_ui
+- Microsoft Fluent UI: https://developer.microsoft.com/en-us/fluentui
 
-### Reverse Image Search Services
+### Medium Confidence (GitHub Examples)
 
-- [SauceNAO](https://saucenao.com/) - Anime/manga artwork source finder
-- [trace.moe](https://trace.moe/) - Anime scene search from screenshot
-- [IQDB](https://iqdb.org/) - Multi-service image search aggregator
-- [SmartImage](https://github.com/Decimation/SmartImage) - Multi-engine reverse search tool
+- Immich App Theme: https://github.com/immich-app/immich (ColorScheme.fromSeed usage)
+- PixEz Flutter: https://github.com/Notsfsssf/pixez-flutter (NavigationView with PaneDisplayMode.auto)
+- fluent_ui Examples: https://github.com/bdlukaa/fluent_ui/tree/master/example
 
-### Booru Systems Referenced
+### Real-World Patterns Verified
 
-- [Danbooru](https://danbooru.donmai.us/) - Original booru, tag taxonomy reference
-- [Gelbooru](https://gelbooru.com/) - Popular anime imageboard
-- [DeepDanbooru](https://github.com/KichangKim/DeepDanbooru) - AI-based anime image tagger
-
-### General Image Management
-
-- [PhotoPrism](https://www.photoprism.app/) - Self-hosted photo management
-- [Immich](https://immich.app/) - Self-hosted photo backup solution
-- [DigiKam](https://www.digikam.org/) - Professional photo management
+- `ColorScheme.fromSeed()` for Material 3 theming — widely adopted
+- `PaneDisplayMode.auto` for responsive NavigationView — recommended pattern
+- 600px breakpoint for NavigationRail/NavigationBar — Material guideline
+- `LayoutBuilder` for responsive layouts — Flutter standard approach
 
 ---
 
-## Appendix: Booru Tag Taxonomy
-
-Standard tag types used by Danbooru and derived systems:
-
-| Tag Type | Description | Examples |
-|----------|-------------|----------|
-| Character | Fictional characters depicted | hatsune_miku, naruto |
-| Artist | Creator of the artwork | kyo_(kuroichigo) |
-| Copyright | Source material (anime/game) | touhou, pokemon |
-| General | Visual descriptors | blonde_hair, sunset, smile |
-| Meta | Information about the post | highres, commentary, translated |
-
-This taxonomy is essential for organizing anime images effectively and is expected by users familiar with booru culture.
-
----
-
-*Feature research for: ACGWarehouse (二次元图片库)*
-*Researched: 2026-03-14*
-*Based on: PROJECT.md requirements + competitor analysis*
+*Feature research for: Windows Fluent UI + Android Material 3 dual-platform Flutter app*
+*Researched: 2026-03-20*

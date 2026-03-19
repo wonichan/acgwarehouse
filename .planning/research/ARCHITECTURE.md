@@ -1,19 +1,15 @@
 # Architecture Research
 
-**Domain:** Image Library Management System (二次元图片库)
-**Researched:** 2026-03-14
+**Domain:** Dual-framework Flutter app (Windows Fluent UI + Android Material 3)
+**Researched:** 2026-03-20
 **Confidence:** HIGH
+**Context:** v2.0 UI/UX重构与多端适配 — Adding Windows desktop and Android mobile UI to existing Flutter Web app
 
 ## Summary
 
-Image library/gallery management systems follow a traditional **client-server architecture** with clear separation between:
-1. **Ingestion Layer** — File scanning and import
-2. **Processing Layer** — Thumbnails, AI analysis, deduplication
-3. **Storage Layer** — File system for images, database for metadata
-4. **API Layer** — RESTful endpoints for client access
-5. **Client Layer** — Flutter frontend with offline-first capabilities
+This research focuses specifically on **dual-framework Flutter architecture** for integrating Windows Fluent UI (`fluent_ui`) alongside existing Material 3 Android/Web UI. The key architectural decision is maintaining a **shared business logic layer** while having **platform-specific presentation layers**.
 
-This architecture aligns with production systems like [Immich](https://immich.app/docs/developer/architecture) and [PhotoPrism](https://www.photoprism.app/kb/architecture).
+**Core Principle:** UI frameworks change, business logic stays the same. Providers, services, and models remain unchanged. Only the presentation layer bifurcates into platform-specific implementations.
 
 ---
 
@@ -22,627 +18,788 @@ This architecture aligns with production systems like [Immich](https://immich.ap
 ### System Overview
 
 ```
-+-------------------------------------------------------------------------+
-|                          CLIENT LAYER (Flutter)                          |
-+-------------------------------------------------------------------------+
-|  +--------------+  +--------------+  +--------------+  +-------------+  |
-|  |   Gallery    |  |    Tags      |  | Collections  |  |   Search    |  |
-|  |  (瀑布流/Grid)|  |   (筛选器)    |  |  (收藏夹管理) |  | (以图搜图)   |  |
-|  +------+-------+  +------+-------+  +------+-------+  +------+------+  |
-+--------+----------------+----------------+---------------+--------------+
-|                           State Management                              |
-|                    (Riverpod / BLoC / Provider)                         |
-+-------------------------------------------------------------------------+
-|                          Local Database (SQLite)                        |
-|                    (Offline-first, sync with server)                    |
-+--------------------------------+----------------------------------------+
-                                 | HTTPS/REST
-                                 v
-+-------------------------------------------------------------------------+
-|                           API GATEWAY (Go)                               |
-+-------------------------------------------------------------------------+
-|  +--------------+  +--------------+  +--------------+  +-------------+  |
-|  | Image REST   |  |   Tag REST   |  |Collection    |  |  Search     |  |
-|  |  Controller  |  |  Controller  |  |  Controller  |  | Controller  |  |
-|  +------+-------+  +------+-------+  +------+-------+  +------+------+  |
-+--------+----------------+----------------+---------------+--------------+
-|                              SERVICE LAYER                               |
-|         (Business Logic: Validation, Processing, Orchestration)         |
-+-------------------------------------------------------------------------+
-|                             REPOSITORY LAYER                             |
-|              (Data Access: SQL Queries, File Operations)                |
-+-------------------------------------------------------------------------+
-|  +-----------------------------------------------------------------+    |
-|  |                    BACKGROUND WORKER                             |    |
-|  |   +----------+ +----------+ +----------+ +----------+          |    |
-|  |   | Scanner  | |Thumbnail | |  AI      | | Duplicate|          |    |
-|  |   | Service  | |Generator | | Service  | | Detector |          |    |
-|  |   +----------+ +----------+ +----------+ +----------+          |    |
-|  +-----------------------------------------------------------------+    |
-+-------------------------------------------------------------------------+
-                                 |
-                                 v
-+-------------------------------------------------------------------------+
-|                           DATA LAYER                                     |
-|  +-----------------+  +-----------------+  +-------------------------+ |
-|  | SQLite/Postgres |  |  File System    |  |     AI API (External)   | |
-|  |   (Metadata)    |  |  (Images/Thumbs)|  |  (角色识别/标签生成)      | |
-|  +-----------------+  +-----------------+  +-------------------------+ |
-+-------------------------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              PRESENTATION LAYER                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌───────────────────────┐  ┌───────────────────────┐  ┌─────────────────┐  │
+│  │    Windows UI Shell   │  │    Android UI Shell   │  │    Web UI Shell │  │
+│  │    (fluent_ui)        │  │    (Material 3)       │  │    (Material 3) │  │
+│  │                       │  │                       │  │                 │  │
+│  │  - NavigationView     │  │  - NavigationBar      │  │  - Same as      │  │
+│  │  - NavigationPane     │  │  - NavigationRail     │  │    Android      │  │
+│  │  - ScaffoldPage       │  │  - Scaffold           │  │                 │  │
+│  │  - FluentThemeData    │  │  - ThemeData          │  │                 │  │
+│  └───────────┬───────────┘  └───────────┬───────────┘  └────────┬────────┘  │
+│              │                          │                       │           │
+│              └──────────────────────────┴───────────────────────┘           │
+│                                         │                                   │
+├─────────────────────────────────────────┴───────────────────────────────────┤
+│                           PLATFORM ABSTRACTION LAYER                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                      Adaptive Navigation Shell                       │    │
+│  │  - Platform detection (defaultTargetPlatform)                       │    │
+│  │  - Responsive layout (LayoutBuilder)                                │    │
+│  │  - Screen size breakpoints (600px threshold)                        │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                         │                                   │
+├─────────────────────────────────────────┴───────────────────────────────────┤
+│                           SHARED BUSINESS LOGIC                              │
+│                           (EXISTING - UNCHANGED)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐          │
+│  │    Providers     │  │    Services      │  │     Models       │          │
+│  │                  │  │                  │  │                  │          │
+│  │  - ImageListProv │  │  - ApiService    │  │  - ImageModel    │          │
+│  │  - TagProvider   │  │  - TagService    │  │  - Tag           │          │
+│  │  - SearchProvider│  │  - SearchService │  │  - Collection    │          │
+│  │  - etc.          │  │  - etc.          │  │  - etc.          │          │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘          │
+│                                         │                                   │
+├─────────────────────────────────────────┴───────────────────────────────────┤
+│                              DATA LAYER (UNCHANGED)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                      Go Backend REST API (port 8080)                 │    │
+│  │  - /api/images    - /api/tags    - /api/search    - /api/collections│    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## Component Responsibilities
-
-### Backend (Go)
+### Component Responsibilities
 
 | Component | Responsibility | Typical Implementation |
 |-----------|----------------|------------------------|
-| **Controller/Handler** | HTTP request handling, input validation, response formatting | Gin/Fiber/Echo routers with JSON handlers |
-| **Service** | Business logic, orchestration between repositories | Structs with injected repository interfaces |
-| **Repository** | Data access abstraction, SQL queries | GORM/sqlx with interface-based design |
-| **Background Worker** | Async processing: scanning, thumbnails, AI calls | go-co-op/gocron or custom worker pool |
-| **File Store** | Image file operations, thumbnail generation | Standard library + imaging/disintegration |
-| **AI Client** | External API integration for recognition/tagging | HTTP client with retry logic |
-
-### Frontend (Flutter)
-
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| **UI Layer** | Widgets, layouts, animations | Stateless/Stateful widgets |
-| **State Management** | Business logic, data flow | Riverpod (recommended) or BLoC |
-| **Repository** | API calls, local DB operations | Dio for HTTP, sqflite for local |
-| **Models** | Data classes, serialization | freezed/json_serializable |
-| **Local DB** | Offline storage, cache | SQLite via sqflite |
+| `lib/ui/windows/` | Windows Fluent UI screens and widgets | fluent_ui NavigationView, ScaffoldPage |
+| `lib/ui/android/` | Android Material 3 screens and widgets | Material Scaffold, NavigationBar |
+| `lib/ui/web/` | Web Material 3 screens (shared with Android) | Material Scaffold, responsive layout |
+| `lib/ui/shared/` | Platform-agnostic widgets (images, cards) | Custom widgets using theme abstraction |
+| `lib/core/` | Navigation, theme, platform detection | Adaptive shell, theme provider |
+| `lib/providers/` | State management (EXISTING - unchanged) | Provider ChangeNotifier |
+| `lib/services/` | API and business logic (EXISTING - unchanged) | HTTP services |
+| `lib/models/` | Data models (EXISTING - unchanged) | Immutable data classes |
 
 ---
 
 ## Recommended Project Structure
 
-### Go Backend Structure
+### New Directory Structure
 
 ```
-acgwarehouse-backend/
-├── cmd/
-│   └── server/           # Application entrypoints
-│       └── main.go       # HTTP server startup
-├── internal/
-│   ├── config/           # Configuration loading
-│   │   └── config.go
-│   ├── domain/           # Business entities (core models)
-│   │   ├── image.go      # Image entity
-│   │   ├── tag.go        # Tag entity
-│   │   └── collection.go # Collection entity
-│   ├── handler/          # HTTP handlers (controllers)
-│   │   ├── image_handler.go
-│   │   ├── tag_handler.go
-│   │   └── collection_handler.go
-│   ├── service/          # Business logic layer
-│   │   ├── image_service.go
-│   │   ├── scanner_service.go    # Directory scanning
-│   │   ├── thumbnail_service.go  # Thumbnail generation
-│   │   └── ai_service.go         # AI integration
-│   ├── repository/       # Data access layer
-│   │   ├── image_repository.go
-│   │   ├── tag_repository.go
-│   │   └── collection_repository.go
-│   ├── worker/           # Background job processing
-│   │   ├── scanner.go
-│   │   ├── thumbnailer.go
-│   │   └── ai_processor.go
-│   ├── pkg/              # Shared utilities (optional)
-│   │   ├── database/
-│   │   ├── storage/
-│   │   └── api/
-│   └── middleware/       # HTTP middleware
-│       ├── auth.go
-│       ├── cors.go
-│       └── logging.go
-├── migrations/           # Database migrations
-├── uploads/              # Image storage (gitignored)
-└── go.mod
+flutter_app/lib/
+├── main.dart                    # Entry point with platform-aware app shell
+├── app.dart                     # AdaptiveApp widget (MaterialApp/FluentApp)
+│
+├── core/                        # NEW: Cross-platform infrastructure
+│   ├── navigation/              # Navigation shell and routing
+│   │   ├── adaptive_shell.dart  # Platform-aware navigation shell
+│   │   ├── router.dart          # Optional: go_router configuration
+│   │   └── routes.dart          # Route definitions
+│   ├── theme/                   # Theme management
+│   │   ├── app_theme.dart       # Shared theme constants (purple accent)
+│   │   ├── fluent_theme.dart    # Windows Fluent theme config
+│   │   └── material_theme.dart  # Material 3 theme config
+│   └── platform/                # Platform utilities
+│       └── platform_info.dart   # Platform detection helpers
+│
+├── ui/                          # NEW: Platform-specific UI layers
+│   ├── windows/                 # Windows Fluent UI
+│   │   ├── screens/             # Windows-specific screens
+│   │   │   ├── gallery_screen.dart
+│   │   │   ├── search_screen.dart
+│   │   │   ├── duplicate_screen.dart
+│   │   │   └── settings_screen.dart
+│   │   ├── widgets/             # Windows-specific widgets
+│   │   │   └── windows_image_grid.dart
+│   │   └── shell.dart           # NavigationView shell
+│   │
+│   ├── android/                 # Android Material 3 UI
+│   │   ├── screens/             # Android-specific screens
+│   │   │   ├── gallery_screen.dart
+│   │   │   ├── search_screen.dart
+│   │   │   └── duplicate_screen.dart
+│   │   ├── widgets/             # Android-specific widgets
+│   │   └── shell.dart           # Scaffold with NavigationBar/Rail
+│   │
+│   ├── web/                     # Web UI (can extend android/)
+│   │   └── shell.dart           # Web-specific shell
+│   │
+│   └── shared/                  # Shared UI components
+│       ├── widgets/             # Platform-agnostic widgets
+│       │   ├── image_card.dart  # Works with both themes
+│       │   ├── tag_chip.dart    # Themed via abstraction
+│       │   └── loading_indicator.dart
+│       └── screens/             # Complex shared screens (detail views)
+│           └── image_detail_screen.dart
+│
+├── providers/                   # EXISTING - State management (unchanged)
+│   ├── image_provider.dart
+│   ├── tag_provider.dart
+│   ├── search_provider.dart
+│   ├── selection_provider.dart
+│   ├── collection_provider.dart
+│   └── duplicate_provider.dart
+│
+├── services/                    # EXISTING - Business logic (unchanged)
+│   ├── api_service.dart
+│   ├── tag_service.dart
+│   ├── search_service.dart
+│   ├── batch_service.dart
+│   ├── collection_service.dart
+│   └── duplicate_service.dart
+│
+├── models/                      # EXISTING - Data models (unchanged)
+│   ├── image.dart
+│   ├── tag.dart
+│   ├── tag_alias.dart
+│   └── collection.dart
+│
+├── widgets/                     # EXISTING - Can migrate to ui/shared/ over time
+│   ├── image_grid.dart
+│   ├── image_masonry.dart
+│   ├── tag_filter_drawer.dart
+│   └── ...
+│
+├── screens/                     # EXISTING - To be replaced by ui/android/ screens
+│   └── ...
+│
+└── config/                      # EXISTING - Configuration (unchanged)
+    └── api_config.dart
 ```
 
-**Rationale:**
-- **`internal/`:** Go convention for private code (cannot be imported externally)
-- **`cmd/server/`:** Clean separation of entrypoints, supports multiple binaries later
-- **`domain/`:** Core business entities, independent of storage/transport
-- **`handler/`:** HTTP-specific code, thin layer delegating to services
-- **`service/`:** Business logic orchestration, testable without HTTP
-- **`repository/`:** Data access abstraction, enables testing with mocks
-- **`worker/`:** Background processing separate from API handlers
+### Structure Rationale
 
-### Flutter Frontend Structure
+| Directory | Rationale |
+|-----------|-----------|
+| `ui/windows/` | Isolated fluent_ui code prevents Material imports, avoiding widget naming conflicts |
+| `ui/android/` | Material 3 specific implementation for mobile; responsive patterns for tablets |
+| `ui/shared/` | Reusable components that work with both themes via abstraction layer |
+| `core/` | Infrastructure that both UI layers depend on; navigation, themes, platform detection |
+| `providers/` at root | Kept unchanged to minimize migration effort; works identically with both UI frameworks |
+| `services/` at root | Stateless HTTP clients; no UI framework dependency |
 
+---
+
+## Architectural Patterns
+
+### Pattern 1: Platform-Aware App Shell
+
+**What:** Single entry point that detects platform and renders appropriate UI framework  
+**When to use:** When supporting multiple UI frameworks in one codebase  
+**Trade-offs:** Adds complexity at entry point, but isolates platform differences cleanly
+
+```dart
+// lib/app.dart
+import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
+import 'ui/windows/shell.dart' as windows;
+import 'ui/android/shell.dart' as android;
+
+class AdaptiveApp extends StatelessWidget {
+  const AdaptiveApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Platform detection
+    if (kIsWeb) {
+      return const MaterialAppShell(); // Web uses Material
+    }
+    
+    if (Platform.isWindows) {
+      return const FluentAppShell(); // Windows uses Fluent
+    }
+    
+    // Android/iOS use Material
+    return const MaterialAppShell();
+  }
+}
+
+// Windows shell
+class FluentAppShell extends StatelessWidget {
+  const FluentAppShell({super.key});
+  
+  @override
+  Widget build(BuildContext context) {
+    return FluentApp(
+      title: 'ACGWarehouse',
+      theme: FluentThemeData(
+        accentColor: Colors.purple, // Anime-style purple
+        brightness: Brightness.light,
+      ),
+      darkTheme: FluentThemeData(
+        accentColor: Colors.purple,
+        brightness: Brightness.dark,
+      ),
+      themeMode: ThemeMode.system,
+      home: const windows.WindowsNavigationShell(),
+    );
+  }
+}
+
+// Android/Mobile shell
+class MaterialAppShell extends StatelessWidget {
+  const MaterialAppShell({super.key});
+  
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ACGWarehouse',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.purple, // Match Windows accent
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.purple,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: ThemeMode.system,
+      home: const android.AndroidNavigationShell(),
+    );
+  }
+}
 ```
-acgwarehouse-app/
-├── lib/
-│   ├── main.dart                 # App entrypoint
-│   ├── app.dart                  # MaterialApp configuration
-│   ├── config/                   # App configuration
-│   │   ├── routes.dart
-│   │   └── theme.dart
-│   ├── core/                     # Shared utilities
-│   │   ├── constants/
-│   │   ├── utils/
-│   │   └── widgets/
-│   ├── data/                     # Data layer
-│   │   ├── models/               # Entity classes
-│   │   │   ├── image_model.dart
-│   │   │   ├── tag_model.dart
-│   │   │   └── collection_model.dart
-│   │   ├── repositories/         # Data access
-│   │   │   ├── image_repository.dart
-│   │   │   └── local_database.dart
-│   │   └── services/             # API clients
-│   │       └── api_service.dart
-│   ├── presentation/             # UI layer
-│   │   ├── gallery/              # Gallery feature
-│   │   │   ├── bloc/             # State management (optional)
-│   │   │   ├── widgets/
-│   │   │   │   ├── image_grid.dart      # Grid view
-│   │   │   │   ├── waterfall_view.dart  # Waterfall
-│   │   │   │   └── image_card.dart
-│   │   │   └── pages/
-│   │   │       └── gallery_page.dart
-│   │   ├── tags/                 # Tag management
-│   │   │   ├── widgets/
-│   │   │   │   ├── tag_filter.dart      # Tag filter
-│   │   │   │   └── tag_cloud.dart
-│   │   │   └── pages/
-│   │   │       └── tags_page.dart
-│   │   ├── collections/          # Collection management
-│   │   │   ├── widgets/
-│   │   │   └── pages/
-│   │   └── search/               # Search feature
-│   │       ├── widgets/
-│   │       │   └── image_search.dart    # Image search
-│   │       └── pages/
-│   └── providers.dart            # Riverpod providers
-├── assets/
-│   ├── images/
-│   └── fonts/
-└── pubspec.yaml
+
+### Pattern 2: Adaptive Navigation (Material)
+
+**What:** Navigation component that switches between NavigationRail and NavigationBar based on screen width  
+**When to use:** Responsive layouts that adapt to phone vs tablet/desktop  
+**Trade-offs:** Two navigation implementations, but optimal UX per form factor
+
+```dart
+// lib/ui/android/shell.dart
+import 'package:flutter/material.dart';
+
+class AndroidNavigationShell extends StatefulWidget {
+  const AndroidNavigationShell({super.key});
+
+  @override
+  State<AndroidNavigationShell> createState() => _AndroidNavigationShellState();
+}
+
+class _AndroidNavigationShellState extends State<AndroidNavigationShell> {
+  int _selectedIndex = 0;
+
+  // Platform-specific screen imports
+  static final List<Widget> _screens = [
+    const GalleryScreen(),      // from ui/android/screens/
+    const SearchScreen(),
+    const DuplicateScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isLargeScreen = constraints.maxWidth >= 600;
+
+        if (isLargeScreen) {
+          // Tablet/Large screen: NavigationRail on left
+          return Scaffold(
+            body: Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: (index) {
+                    setState(() => _selectedIndex = index);
+                  },
+                  labelType: NavigationRailLabelType.all,
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.photo_library_outlined),
+                      selectedIcon: Icon(Icons.photo_library),
+                      label: Text('图库'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.search_outlined),
+                      selectedIcon: Icon(Icons.search),
+                      label: Text('搜索'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.content_copy_outlined),
+                      selectedIcon: Icon(Icons.content_copy),
+                      label: Text('重复检测'),
+                    ),
+                  ],
+                ),
+                const VerticalDivider(thickness: 1, width: 1),
+                Expanded(child: _screens[_selectedIndex]),
+              ],
+            ),
+          );
+        }
+
+        // Phone: NavigationBar at bottom
+        return Scaffold(
+          body: _screens[_selectedIndex],
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (index) {
+              setState(() => _selectedIndex = index);
+            },
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.photo_library_outlined),
+                selectedIcon: Icon(Icons.photo_library),
+                label: '图库',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.search_outlined),
+                selectedIcon: Icon(Icons.search),
+                label: '搜索',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.content_copy_outlined),
+                selectedIcon: Icon(Icons.content_copy),
+                label: '重复检测',
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
 ```
 
-**Rationale:**
-- **Feature-based organization:** Each feature (gallery, tags, collections) is self-contained
-- **`data/`:** Centralized data layer with models, repositories, and API services
-- **`presentation/`:** UI code separated from business logic
-- **State management at feature level:** Either BLoC per feature or Riverpod providers
+### Pattern 3: Windows Navigation (Fluent UI)
+
+**What:** NavigationView with adaptive pane display mode  
+**When to use:** Windows desktop applications  
+**Trade-offs:** Windows-specific, but native feel with auto-adapting layout
+
+```dart
+// lib/ui/windows/shell.dart
+import 'package:fluent_ui/fluent_ui.dart';
+
+class WindowsNavigationShell extends StatefulWidget {
+  const WindowsNavigationShell({super.key});
+
+  @override
+  State<WindowsNavigationShell> createState() => _WindowsNavigationShellState();
+}
+
+class _WindowsNavigationShellState extends State<WindowsNavigationShell> {
+  int _selectedIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return NavigationView(
+      appBar: NavigationAppBar(
+        title: const Text('ACGWarehouse'),
+        actions: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            IconButton(
+              icon: const Icon(FluentIcons.settings),
+              onPressed: () {
+                setState(() => _selectedIndex = 3); // Settings
+              },
+            ),
+          ],
+        ),
+      ),
+      pane: NavigationPane(
+        selected: _selectedIndex,
+        onChanged: (index) => setState(() => _selectedIndex = index),
+        displayMode: PaneDisplayMode.auto, // Auto-adapts: open/compact/minimal
+        items: [
+          PaneItem(
+            icon: const Icon(FluentIcons.photo2),
+            title: const Text('图库'),
+            body: const GalleryScreen(),
+          ),
+          PaneItem(
+            icon: const Icon(FluentIcons.search),
+            title: const Text('搜索'),
+            body: const SearchScreen(),
+          ),
+          PaneItem(
+            icon: const Icon(FluentIcons.copy),
+            title: const Text('重复检测'),
+            body: const DuplicateScreen(),
+          ),
+        ],
+        footerItems: [
+          PaneItem(
+            icon: const Icon(FluentIcons.settings),
+            title: const Text('设置'),
+            body: const SettingsScreen(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+### Pattern 4: Shared Provider Access
+
+**What:** Providers remain at root level, accessed identically from any UI layer  
+**When to use:** State management should be framework-agnostic  
+**Trade-offs:** None — Provider works with any Flutter widgets
+
+```dart
+// main.dart - Provider setup remains UNCHANGED
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        Provider(create: (_) => ApiService()),
+        Provider(create: (_) => TagService()),
+        ChangeNotifierProvider(create: (context) => ImageListProvider(context.read<ApiService>())),
+        ChangeNotifierProvider(create: (context) => TagProvider(context.read<TagService>())),
+        ChangeNotifierProvider(create: (context) => SearchProvider(service: context.read<SearchService>())),
+        ChangeNotifierProvider(create: (context) => DuplicateProvider(service: context.read<DuplicateService>())),
+        ChangeNotifierProvider(create: (context) => CollectionProvider(service: context.read<CollectionService>())),
+        ChangeNotifierProvider(create: (_) => SelectionProvider()),
+      ],
+      child: const AdaptiveApp(), // NEW: Platform-aware shell
+    );
+  }
+}
+
+// Usage is IDENTICAL in Windows and Android screens
+class GalleryScreen extends StatelessWidget {
+  const GalleryScreen({super.key});
+  
+  @override
+  Widget build(BuildContext context) {
+    // Same Consumer pattern works with both fluent_ui and Material widgets
+    return Consumer<ImageListProvider>(
+      builder: (context, provider, child) {
+        if (provider.isLoading && provider.images.isEmpty) {
+          // Windows: ProgressRing, Android: CircularProgressIndicator
+          return const Center(child: CircularProgressIndicator());
+        }
+        
+        // Build grid using shared data
+        return GridView.builder(
+          itemCount: provider.images.length,
+          itemBuilder: (context, index) {
+            final image = provider.images[index];
+            return ImageCard(image: image); // Shared widget
+          },
+        );
+      },
+    );
+  }
+}
+```
+
+### Pattern 5: Theme Abstraction for Shared Widgets
+
+**What:** Shared widgets detect current theme and adapt styling  
+**When to use:** For reusable components like cards, chips, lists  
+**Trade-offs:** Limited to properties both frameworks support
+
+```dart
+// lib/ui/shared/widgets/image_card.dart
+import 'package:flutter/material.dart' as material;
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import '../../models/image.dart';
+
+class ImageCard extends StatelessWidget {
+  final ImageModel image;
+  final VoidCallback? onTap;
+  
+  const ImageCard({super.key, required this.image, this.onTap});
+  
+  @override
+  Widget build(BuildContext context) {
+    // Detect current UI framework
+    if (fluent.FluentTheme.maybeOf(context) != null) {
+      return _buildFluentCard(context);
+    }
+    return _buildMaterialCard(context);
+  }
+  
+  Widget _buildMaterialCard(BuildContext context) {
+    return material.Card(
+      clipBehavior: material.Clip.antiAlias,
+      child: material.InkWell(
+        onTap: onTap,
+        child: material.Column(
+          crossAxisAlignment: material.CrossAxisAlignment.stretch,
+          children: [
+            material.Expanded(
+              child: material.CachedNetworkImage(
+                imageUrl: image.thumbnailPath,
+                fit: material.BoxFit.cover,
+              ),
+            ),
+            material.Padding(
+              padding: const material.EdgeInsets.all(8.0),
+              child: material.Text(
+                image.filename,
+                maxLines: 1,
+                overflow: material.TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildFluentCard(BuildContext context) {
+    return fluent.Card(
+      padding: fluent.EdgeInsets.zero,
+      child: fluent.Button(
+        style: fluent.ButtonState.all(fluent.ButtonStyle(
+          padding: fluent.ButtonState.all(fluent.EdgeInsets.zero),
+        )),
+        onPressed: onTap,
+        child: fluent.Column(
+          crossAxisAlignment: fluent.CrossAxisAlignment.stretch,
+          children: [
+            fluent.Expanded(
+              child: fluent.CachedNetworkImage(
+                imageUrl: image.thumbnailPath,
+                fit: fluent.BoxFit.cover,
+              ),
+            ),
+            fluent.Padding(
+              padding: const fluent.EdgeInsets.all(8.0),
+              child: fluent.Text(
+                image.filename,
+                maxLines: 1,
+                overflow: fluent.TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+```
 
 ---
 
 ## Data Flow
 
-### Image Ingestion Flow
+### State Management Flow (Unchanged)
 
 ```
-[File System]
-     |
-     v
-[Scanner Worker] -> Detect new/modified files
-     |
-     v
-[Thumbnail Generator] -> Create preview/thumbnail
-     |
-     v
-[AI Service] -> Character recognition, tag generation
-     |
-     v
-[Database] -> Store metadata, tags, paths
-     |
-     v
-[API] -> Notify clients of new images
-     |
-     v
-[Flutter App] -> Update gallery view
+[MultiProvider (root)]
+    ↓ (providers are global, injected in main.dart)
+┌───────────────────┬───────────────────┬───────────────────┐
+│  Windows Shell    │  Android Shell    │  Web Shell        │
+│  (FluentApp)      │  (MaterialApp)    │  (MaterialApp)    │
+└─────────┬─────────┴─────────┬─────────┴─────────┬─────────┘
+          │                   │                   │
+          └───────────────────┴───────────────────┘
+                              │
+                    Consumer<T>/Provider.of<T>()
+                              │
+                    [Screen Widget reads/writes state]
+                              │
+                    [notifyListeners() → UI Rebuild]
 ```
 
-### Gallery Browse Flow
+### Navigation Flow
 
 ```
-[User Opens Gallery]
-     |
-     v
-[Flutter: Check Local DB] -> Display cached images
-     | (async)
-     v
-[API: GET /images?page=N] -> Fetch from server
-     |
-     v
-[Go: Repository Layer] -> Query DB
-     |
-     v
-[Flutter: Update Local DB] -> Cache results
-     |
-     v
-[Flutter: Update UI] -> Display with animations
+[Shell maintains selectedIndex]
+    ↓
+[Switches body widget based on index]
+    ↓
+[Screen Widget builds UI]
+    ↓
+[Consumer reads from Provider]
+    ↓
+[User interaction → Provider method call]
+    ↓
+[notifyListeners() → UI update]
 ```
-
-### Tag Filter Flow
-
-```
-[User Selects Tags]
-     |
-     v
-[Flutter: Update Filter State] (Riverpod/BLoC)
-     |
-     v
-[API: GET /images?tags=tag1,tag2] -> Query with filters
-     |
-     v
-[Go: Service Layer] -> Build dynamic SQL
-     |
-     v
-[Go: Repository] -> Execute query
-     |
-     v
-[Flutter: Display Results] -> Update grid/waterfall
-```
-
----
-
-## API Design Patterns for Image Management
-
-### RESTful Endpoints
-
-| Resource | Method | Endpoint | Description |
-|----------|--------|----------|-------------|
-| Image | GET | /api/v1/images | List with pagination, filtering |
-| Image | GET | /api/v1/images/{id} | Get specific image |
-| Image | POST | /api/v1/images | Upload new image |
-| Image | DELETE | /api/v1/images/{id} | Delete image |
-| Tag | GET | /api/v1/tags | List all tags |
-| Tag | GET | /api/v1/tags/{id}/images | Images by tag |
-| Collection | GET | /api/v1/collections | List collections |
-| Collection | POST | /api/v1/collections/{id}/images | Add to collection |
-| Search | POST | /api/v1/search/similar | Image similarity search |
-| Scan | POST | /api/v1/scan | Trigger directory scan |
-
-### Key Patterns
-
-**Pagination:**
-```go
-// Request: GET /images?page=1&limit=50
-// Response:
-{
-  "data": [...],
-  "pagination": {
-    "current_page": 1,
-    "total_pages": 20,
-    "total_items": 1000,
-    "items_per_page": 50
-  }
-}
-```
-
-**Filtering:**
-```go
-// Request: GET /images?tags=anime,sakura&character=rem&sort=date_desc
-```
-
-**Batch Operations:**
-```go
-// POST /images/batch
-{
-  "operation": "delete",
-  "image_ids": [1, 2, 3, 4, 5]
-}
-```
-
----
-
-## Suggested Build Order (Dependencies)
-
-### Phase 1: Foundation (Weeks 1-2)
-**Dependencies:** None
-
-1. **Go Backend Skeleton**
-   - Project structure setup
-   - Database connection (SQLite first)
-   - Basic HTTP server with Gin/Fiber
-   - Health check endpoint
-
-2. **Database Schema**
-   - Images table (id, path, hash, width, height, created_at)
-   - Tags table (id, name, type)
-   - Image_Tags junction table
-   - Collections tables
-
-3. **Flutter App Skeleton**
-   - Project structure
-   - Basic navigation
-   - HTTP client setup
-
-### Phase 2: Core Image Operations (Weeks 3-4)
-**Dependencies:** Phase 1
-
-1. **Image Upload API**
-   - POST /images endpoint
-   - File upload handling
-   - Basic validation
-
-2. **Image Storage Service**
-   - File system operations
-   - Directory structure: /uploads/{year}/{month}/{hash}.ext
-   - Duplicate detection via hash
-
-3. **Flutter Gallery View**
-   - Grid layout implementation
-   - Image lazy loading
-   - Basic pagination
-
-### Phase 3: Image Processing (Weeks 5-6)
-**Dependencies:** Phase 2
-
-1. **Thumbnail Generation**
-   - Background worker setup
-   - Thumbnail generation service
-   - Multiple sizes (small, medium, large)
-
-2. **Directory Scanner**
-   - File system watcher or periodic scanner
-   - Auto-import from configured folders
-
-### Phase 4: AI Integration (Weeks 7-8)
-**Dependencies:** Phase 3
-
-1. **AI Service Client**
-   - External API integration
-   - Character recognition
-   - Tag generation
-
-2. **Tag System**
-   - Tag CRUD APIs
-   - Auto-tagging on import
-   - Flutter tag display
-
-### Phase 5: Advanced Features (Weeks 9-10)
-**Dependencies:** Phase 4
-
-1. **Search & Filter**
-   - Tag filtering API
-   - Full-text search
-   - Flutter filter UI
-
-2. **Collections**
-   - Collection CRUD
-   - Add/remove images
-
-3. **Similar Image Detection**
-   - Perceptual hashing
-   - Similarity search endpoint
-
-### Phase 6: Polish & PostgreSQL (Weeks 11-12)
-**Dependencies:** Phase 5
-
-1. **PostgreSQL Support**
-   - Migration from SQLite
-   - Connection pooling
-
-2. **Offline-First Sync**
-   - Local SQLite in Flutter
-   - Sync mechanism
-
-3. **Performance Optimization**
-   - API response caching
-   - Image lazy loading optimization
-
----
-
-## Component Boundaries
-
-### Backend Internal Boundaries
-
-```
-Handler (HTTP) --------> Service --------> Repository --------> Database
-     |                      |               |                |
-     |                      |               |                |
-     v                      v               v                v
-   Transport           Business         Data Access      Persistence
-   Layer               Logic            Abstraction       Layer
-   (Gin/Fiber)         Layer            (GORM/sqlx)      (SQLite/PG)
-```
-
-**Rules:**
-- Handlers never call repositories directly - always through services
-- Services contain business logic but no HTTP or SQL specifics
-- Repositories handle all database interactions
-- Domain models are shared across layers
-
-### Frontend-Backend Boundary
-
-```
-Flutter App ---HTTP/REST---> Go API
-     |                           |
-     |                           |
-     v                           v
-  Local DB                    Service Layer
- (Offline)                   (Business Logic)
-```
-
-**Communication:**
-- RESTful JSON API
-- Standard HTTP methods (GET, POST, PUT, DELETE)
-- JWT or session-based authentication (if needed)
-- File uploads via multipart/form-data
-
-### External Service Boundary (AI)
-
-```
-Go Backend ---HTTP/REST---> AI API (External)
-     |                           |
-     |                           |
-     v                           v
-  Async Queue               Rate Limiting
-  (Background)              Retry Logic
-```
-
-**Considerations:**
-- AI calls are slow - always async
-- Implement retry with exponential backoff
-- Cache AI results to avoid duplicate calls
-- Handle API limits gracefully
 
 ---
 
 ## Scaling Considerations
 
-### Current Scale: Single User/Personal Use
-**Architecture:** Monolithic, SQLite is fine
-- Single binary deployment
-- SQLite on local filesystem
-- In-memory job queue
-- Local file storage
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| Current (single user) | No changes needed; current Provider setup is optimal |
+| Large image collections | Already handled with pagination; add virtualization if needed |
+| Future multi-user | Add auth layer; user-scoped providers |
 
-### Future Scale: Multi-User/Family
-**Architecture:** PostgreSQL, separate job worker
-- PostgreSQL for concurrent access
-- Redis for job queue
-- Separate worker process
-- Nginx reverse proxy
+### Performance Priorities
 
-### Future Scale: Many Users
-**Architecture:** Microservices consideration
-- Split into API gateway + services
-- Object storage (S3/MinIO) for images
-- CDN for thumbnails
-- Kubernetes deployment
-
-**Note:** Start simple. Do not build for scale you do not have.
+1. **First bottleneck:** Image grid with 10k+ images — Already handled with pagination and lazy loading
+2. **Second bottleneck:** Memory usage — Use `cached_network_image` (already installed), add `AutomaticKeepAliveClientMixin`
 
 ---
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: Storing Images in Database
+### Anti-Pattern 1: Mixing UI Frameworks in Same Widget
 
-**What people do:** Store image binary data in BLOB columns
+**What people do:** Import both `material.dart` and `fluent_ui.dart` in same file  
+**Why it's wrong:** Widget naming conflicts (Card, Button, Icon), theme confusion, larger bundle  
+**Do this instead:** Create separate screen files per platform; share only business logic
 
-**Why it is wrong:**
-- Database bloat and slow queries
-- Hard to serve images via CDN
-- Backup/restore becomes painful
+```dart
+// ❌ BAD
+import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 
-**Do this instead:**
-- Store files on filesystem (or S3)
-- Store only paths and metadata in DB
-- Serve files directly via HTTP server or CDN
+class MyScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(child: Text('Which Card?')); // Conflict!
+  }
+}
 
-### Anti-Pattern 2: Synchronous AI Processing
+// ✅ GOOD - Separate files per platform
+// lib/ui/windows/gallery_screen.dart
+import 'package:fluent_ui/fluent_ui.dart';
+class WindowsGalleryScreen extends StatelessWidget { ... }
 
-**What people do:** Wait for AI API response during HTTP request
+// lib/ui/android/gallery_screen.dart
+import 'package:flutter/material.dart';
+class AndroidGalleryScreen extends StatelessWidget { ... }
+```
 
-**Why it is wrong:**
-- HTTP timeouts (30s+)
-- Poor user experience
-- Blocks API server
+### Anti-Pattern 2: Platform Detection in Every Widget
 
-**Do this instead:**
-- Queue AI jobs for background processing
-- Return 202 Accepted immediately
-- Use WebSocket or polling for completion status
+**What people do:** Check `Platform.isWindows` in every build method  
+**Why it's wrong:** Scattered logic, harder to maintain, test difficulty  
+**Do this instead:** Detect once at app root (AdaptiveApp), route to appropriate shell
 
-### Anti-Pattern 3: Tight Coupling to AI Provider
+### Anti-Pattern 3: Duplicating Business Logic
 
-**What people do:** Direct AI client calls scattered throughout code
+**What people do:** Copy provider logic between Windows and Android screens  
+**Why it's wrong:** Maintenance nightmare, bugs multiply  
+**Do this instead:** Keep providers/services at root level; screens only read/write via providers
 
-**Why it is wrong:**
-- Cannot swap providers easily
-- Hard to mock for testing
-- No central retry/caching logic
+### Anti-Pattern 4: Using `dart:io` Platform in Web Build
 
-**Do this instead:**
-- Create AI service interface
-- Implement provider-specific clients behind interface
-- Inject via dependency injection
+**What people do:** Use `Platform.isWindows` without guarding for web  
+**Why it's wrong:** Web builds fail because `dart:io` doesn't exist in browser  
+**Do this instead:** Use `kIsWeb` check first, or use `defaultTargetPlatform` from `flutter/foundation.dart`
 
-### Anti-Pattern 4: No Local Cache in Flutter
+```dart
+// ✅ Correct platform detection
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 
-**What people do:** Fetch from server on every screen open
-
-**Why it is wrong:**
-- Slow UI, poor UX
-- Wastes bandwidth
-- App unusable offline
-
-**Do this instead:**
-- Cache images locally (sqflite + cached_network_image)
-- Implement offline-first architecture
-- Sync changes when online
+String getPlatformName() {
+  if (kIsWeb) return 'web';
+  return defaultTargetPlatform.name; // 'android', 'windows', etc.
+}
+```
 
 ---
 
 ## Integration Points
 
-### External Services
+### External Services (Unchanged)
 
 | Service | Integration Pattern | Notes |
 |---------|---------------------|-------|
-| AI Recognition API | HTTP REST with retry | Use interface for swappability |
-| Object Storage (S3) | SDK or REST API | Optional, for future scale |
-| Reverse Image Search | HTTP API | Perceptual hashing service |
+| Go Backend (port 8080) | HTTP REST API | Existing ApiService works unchanged |
+| AI APIs (Qwen/Doubao) | Via Go backend | No direct Flutter integration needed |
 
-### Internal Communication
+### Internal Boundaries (Unchanged)
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| API <-> Worker | Job Queue (Redis/in-memory) | Async processing |
-| Service <-> Repository | Interface methods | Testable, swappable |
-| Flutter <-> Go API | HTTP REST + JSON | Standard RESTful |
+| UI Layer ↔ Providers | Provider.of<T>(), Consumer<T> | Same pattern for all UI frameworks |
+| Providers ↔ Services | Direct method calls | Services are stateless, inject into providers |
+| Services ↔ Backend | HTTP (ApiService) | Existing implementation unchanged |
 
 ---
 
-## Technology Choices Summary
+## New Components Required
 
-### Backend (Go)
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `AdaptiveApp` | `lib/app.dart` | Platform detection and app shell routing |
+| `FluentAppShell` | `lib/app.dart` | Windows FluentApp wrapper with theme |
+| `MaterialAppShell` | `lib/app.dart` | Android/Web MaterialApp wrapper with theme |
+| `WindowsNavigationShell` | `lib/ui/windows/shell.dart` | Fluent NavigationView container |
+| `AndroidNavigationShell` | `lib/ui/android/shell.dart` | Material Scaffold with adaptive NavigationBar/Rail |
+| `WindowsGalleryScreen` | `lib/ui/windows/screens/` | Fluent-styled gallery |
+| `AndroidGalleryScreen` | `lib/ui/android/screens/` | Material-styled gallery |
+| `AppTheme` | `lib/core/theme/` | Shared color palette (purple accent) |
 
-| Component | Recommendation | Alternatives |
-|-----------|----------------|--------------|
-| Web Framework | Gin or Fiber | Echo, Chi |
-| ORM | GORM or sqlx | Bun |
-| Database | SQLite (dev), PostgreSQL (prod) | MySQL |
-| Thumbnails | disintegration/imaging | nfnt/resize |
-| Hashing | perceptual image hash | SHA256 |
-| Job Queue | go-co-op/gocron | Asynq |
-| Config | godotenv | viper |
+## Modified Components
 
-### Frontend (Flutter)
+| Component | Change Required |
+|-----------|-----------------|
+| `main.dart` | Replace `MaterialApp` with `AdaptiveApp` |
+| `pubspec.yaml` | Add `fluent_ui: ^4.9.0` dependency |
+| Existing screens | Can remain as reference; new screens in `ui/` directories |
 
-| Component | Recommendation | Alternatives |
-|-----------|----------------|--------------|
-| State Management | Riverpod | BLoC, Provider |
-| HTTP Client | Dio | http package |
-| Local DB | sqflite | hive |
-| Image Caching | cached_network_image | - |
-| Gallery Layout | flutter_staggered_grid_view | masonry_grid |
-| Photo View | photo_view | - |
+---
+
+## Build Configuration
+
+### pubspec.yaml Additions
+
+```yaml
+dependencies:
+  fluent_ui: ^4.9.0       # Windows Fluent Design
+  system_theme: ^3.1.0    # Optional: System accent color on Windows
+  window_manager: ^0.4.3  # Optional: Window control on desktop
+```
+
+### Platform Build Commands
+
+```bash
+# Windows desktop
+flutter build windows --release
+
+# Android
+flutter build apk --release
+flutter build appbundle --release
+
+# Web (existing)
+flutter build web --release
+
+# Development
+flutter run -d windows    # Windows debug
+flutter run -d chrome     # Web debug
+flutter run -d <device>   # Android debug
+```
 
 ---
 
 ## Sources
 
-- [Immich Architecture Documentation](https://immich.app/docs/developer/architecture)
-- [PhotoPrism Application Architecture](https://www.photoprism.app/kb/architecture)
-- [Go Project Structure Best Practices](https://alnah.io/post/go-project-layout/)
-- [Flutter App Architecture](https://docs.flutter.dev/app-architecture)
-- [REST API Design Best Practices 2026](https://www.toolbrew.dev/blog/rest-api-design-2026)
-- [Go Clean Architecture](https://backendbytes.com/articles/production-go-api-design)
+- **Fluent UI Documentation** — https://context7.com/bdlukaa/fluent_ui (HIGH confidence)
+- **Flutter Adaptive Layout Guide** — https://docs.flutter.dev/ui/adaptive-responsive/large-screens (HIGH confidence)
+- **Flutter Platform Adaptations** — https://docs.flutter.dev/platform-integration/platform-adaptations (HIGH confidence)
+- **go_router ShellRoute** — https://pub.dev/documentation/go_router/latest/topics/Configuration-topic (HIGH confidence)
+- **Provider Documentation** — https://pub.dev/packages/provider (HIGH confidence)
+- **GitHub: Immich Adaptive Navigation** — https://github.com/immich-app/immich (MEDIUM confidence - real-world reference)
 
 ---
 
 ## Quality Gate Checklist
 
-- [x] Components clearly defined with boundaries
-- [x] Data flow direction explicit
-- [x] Build order implications noted
-- [x] Go project structure best practices included
-- [x] Flutter project structure best practices included
-- [x] API design patterns documented
+- [x] Integration points identified (Providers, Services, Backend API)
+- [x] New vs modified components explicitly listed
+- [x] Build order considers dependencies (Providers/Services first, UI last)
+- [x] Platform-specific code isolated in separate directories
+- [x] Shared business logic remains unchanged
+- [x] Theme consistency across platforms (purple accent)
 
 ---
 
-*Architecture research for: ACGWarehouse Image Library System*  
-*Researched: 2026-03-14*
+*Architecture research for: ACGWarehouse v2.0 Dual-Platform UI*  
+*Researched: 2026-03-20*

@@ -852,3 +852,448 @@ Backend memory grows unbounded when processing images. OOM kills during batch th
 *Pitfalls research for: ACGWarehouse (二次元图片库)*
 
 *Researched: 2026-03-14*
+
+---
+
+## v2.0: Dual-Platform UI Pitfalls (Windows Fluent UI + Android Material 3)
+
+**Focus:** Adding Windows desktop and Android mobile UI to existing Flutter Web app
+**Researched:** 2026-03-20
+**Confidence:** HIGH (Context7 + Flutter official docs + GitHub code patterns)
+
+---
+
+### Critical UI Pitfalls
+
+### Pitfall 11: Dual MaterialApp/FluentApp Root Widget
+
+**What goes wrong:**
+Developers try to nest `MaterialApp` inside `FluentApp` (or vice versa), causing theme context issues, navigation problems, and duplicate app wrappers. Widgets lose access to their respective theme data, resulting in "No MaterialLocalizations found" or "No FluentLocalizations found" errors.
+
+**Why it happens:**
+Both `MaterialApp` and `FluentApp` are wrapper widgets that provide navigation, theming, and localization. Nesting them creates conflicting contexts and breaks the theme inheritance chain.
+
+**How to avoid:**
+- Use a single platform-aware root widget that conditionally returns `MaterialApp` or `FluentApp`
+- Extract shared navigation logic into a separate layer (Provider state + route definitions)
+- Never nest `MaterialApp` inside `FluentApp` or vice versa
+
+**Warning signs:**
+- "No MaterialLocalizations found" errors
+- Theme.of(context) returns null or wrong theme
+- Navigation routes work on one platform but not another
+
+**Phase to address:** Phase 1 (Architecture Foundation)
+
+---
+
+### Pitfall 12: Hardcoded Responsive Breakpoints
+
+**What goes wrong:**
+Developers use fixed pixel values (e.g., `width > 600`) without considering device pixel ratio, safe areas, or orientation changes. Layouts break on tablets, foldables, or when the window resizes.
+
+**Why it happens:**
+Direct `MediaQuery.of(context).size.width` comparisons seem simple but don't account for:
+- Device pixel ratio differences
+- System UI overlays (status bar, navigation bar)
+- Foldable device hinge areas
+- Window resizing on desktop
+
+**How to avoid:**
+- Use Flutter's Material breakpoints: 600 (phone/tablet), 840 (tablet/desktop)
+- Wrap responsive logic in `LayoutBuilder` for constraint-based decisions
+- Consider `MediaQuery.of(context).padding` for safe areas
+- Test on multiple form factors during development
+
+**Warning signs:**
+- UI breaks when rotating device
+- Content cut off on certain devices
+- Desktop window resize causes layout overflow
+
+**Phase to address:** Phase 2 (Responsive Layout System)
+
+---
+
+### Pitfall 13: Mismatched Navigation Patterns
+
+**What goes wrong:**
+Using `NavigationBar` (bottom) on desktop or `NavigationRail` (side) on small phones creates poor UX. Navigation state management becomes complex when switching between navigation types.
+
+**Why it happens:**
+- `NavigationRail` takes vertical space, poor fit for narrow screens
+- `NavigationBar` at bottom wastes desktop vertical space
+- State index synchronization between different navigation widgets is error-prone
+
+**How to avoid:**
+- Use platform conventions: `NavigationRail` for width >= 600, `NavigationBar` for width < 600
+- For Windows, use `NavigationView` with `PaneDisplayMode.auto` (auto-adapts)
+- Centralize navigation state in Provider, let UI components observe it
+- Test navigation state preservation when resizing window
+
+**Warning signs:**
+- Navigation state resets when rotating device
+- Selected tab doesn't highlight correctly on platform switch
+- Deep links don't work consistently across platforms
+
+**Phase to address:** Phase 3 (Adaptive Navigation)
+
+---
+
+### Pitfall 14: Theme Data Type Confusion
+
+**What goes wrong:**
+Calling `Theme.of(context)` inside Fluent UI widgets returns Material theme data. Calling `FluentTheme.of(context)` inside Material widgets throws errors or returns null.
+
+**Why it happens:**
+`MaterialApp` provides `ThemeData` through `InheritedWidget`. `FluentApp` provides `FluentThemeData`. These are separate type hierarchies and cannot be interchanged.
+
+**How to avoid:**
+- Create platform-specific theme wrappers
+- Use a unified "app theme" Provider that exposes semantic properties (colors, text styles) as abstract getters
+- Platform UI widgets consume from the unified theme Provider
+
+**Warning signs:**
+- Colors don't match between platforms
+- Typography looks different on Windows vs Android
+- Theme changes don't propagate to all widgets
+
+**Phase to address:** Phase 4 (Custom Design System)
+
+---
+
+### Pitfall 15: Platform.isX Checks in Widget Build
+
+**What goes wrong:**
+Using `Platform.isWindows` directly in `build()` causes crashes on web (Platform not available) and makes testing difficult. The widget tree rebuilds incorrectly when platform detection changes.
+
+**Why it happens:**
+- `dart:io` Platform class is not available on web
+- Widget build methods should be pure and deterministic
+- Platform detection should happen once, not every build
+
+**How to avoid:**
+- Use `defaultTargetPlatform` instead of `Platform.isX` for UI decisions
+- Create platform detection at app initialization
+- For web compatibility, wrap Platform checks in `kIsWeb` guard
+
+**Warning signs:**
+- App crashes on web with "Unsupported operation: Platform._operatingSystem"
+- Hot reload causes platform detection to fail
+- Tests can't mock platform
+
+**Phase to address:** Phase 1 (Architecture Foundation)
+
+---
+
+### Pitfall 16: State Loss During Navigation Switch
+
+**What goes wrong:**
+When switching from `NavigationRail` to `NavigationBar` (or vice versa during resize), the current screen's state (scroll position, form data, selected items) is lost because the widget tree is completely rebuilt.
+
+**Why it happens:**
+Different navigation patterns create different widget hierarchies. Without proper state preservation, switching navigation types triggers `dispose()` on child widgets.
+
+**How to avoid:**
+- Keep navigation state in Provider/Bloc (above the navigation widget)
+- Use `PageStorage` for scroll position preservation
+- Consider `IndexedStack` for preserving all screens in memory
+- Extract screen content into stateless widgets that receive state from Provider
+
+**Warning signs:**
+- Scroll position resets when resizing window
+- Form data lost when switching to landscape
+- Selected grid items deselect on orientation change
+
+**Phase to address:** Phase 3 (Adaptive Navigation)
+
+---
+
+## v2.0 Technical Debt Patterns
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Copy-paste widgets for each platform | Faster initial dev | Duplicate code, double maintenance | Never |
+| Skip responsive breakpoints | Ship faster | Breaks on tablets, foldables | Prototype only |
+| Hardcode colors in widgets | Quick styling | Theme changes require widget edits | Never |
+| Use Platform.isWindows everywhere | Platform checks work | Scattered platform logic, hard to test | Never |
+| Ignore accessibility (screen readers) | Save time | Legal/compliance issues, excludes users | Never |
+| Single column layout for all sizes | Simple implementation | Wasted space on desktop | MVP only |
+
+---
+
+## v2.0 Integration Gotchas
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| fluent_ui + Provider | Accessing Provider in NavigationView.body without wrapper | Provider must wrap FluentApp or be at higher level |
+| NavigationPane -> Navigator | Using Navigator.push() inside NavigationPane body | NavigationPane already manages body, use indexed navigation |
+| Material widgets in FluentApp | Using Scaffold inside NavigationView | Use ScaffoldPage or Page from fluent_ui |
+| FluentThemeData <-> ThemeData | Trying to convert between theme types | Create unified theme interface, implement per-platform |
+| showDialog in Fluent context | Using Material showDialog | Use showDialog from fluent_ui which returns ContentDialog |
+| Flutter window manager | Not handling Windows minimize/maximize | Add window_manager package for native window controls |
+
+---
+
+## v2.0 Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| LayoutBuilder rebuild storm | Janky scrolling, high CPU | Memoize compu
+
+---
+
+## v2.0: Dual-Platform UI Pitfalls (Windows Fluent UI + Android Material 3)
+
+**Focus:** Adding Windows desktop and Android mobile UI to existing Flutter Web app
+**Researched:** 2026-03-20
+**Confidence:** HIGH (Context7 + Flutter official docs + GitHub code patterns)
+
+---
+
+### Critical UI Pitfalls
+
+### Pitfall 11: Dual MaterialApp/FluentApp Root Widget
+
+**What goes wrong:**
+Developers try to nest `MaterialApp` inside `FluentApp` (or vice versa), causing theme context issues, navigation problems, and duplicate app wrappers. Widgets lose access to their respective theme data, resulting in "No MaterialLocalizations found" or "No FluentLocalizations found" errors.
+
+**Why it happens:**
+Both `MaterialApp` and `FluentApp` are wrapper widgets that provide navigation, theming, and localization. Nesting them creates conflicting contexts and breaks the theme inheritance chain.
+
+**How to avoid:**
+- Use a single platform-aware root widget that conditionally returns `MaterialApp` or `FluentApp`
+- Extract shared navigation logic into a separate layer (Provider state + route definitions)
+- Never nest `MaterialApp` inside `FluentApp` or vice versa
+
+**Warning signs:**
+- "No MaterialLocalizations found" errors
+- Theme.of(context) returns null or wrong theme
+- Navigation routes work on one platform but not another
+
+**Phase to address:** Phase 1 (Architecture Foundation)
+
+---
+
+### Pitfall 12: Hardcoded Responsive Breakpoints
+
+**What goes wrong:**
+Developers use fixed pixel values (e.g., `width > 600`) without considering device pixel ratio, safe areas, or orientation changes. Layouts break on tablets, foldables, or when the window resizes.
+
+**Why it happens:**
+Direct `MediaQuery.of(context).size.width` comparisons seem simple but don't account for:
+- Device pixel ratio differences
+- System UI overlays (status bar, navigation bar)
+- Foldable device hinge areas
+- Window resizing on desktop
+
+**How to avoid:**
+- Use Flutter's Material breakpoints: 600 (phone/tablet), 840 (tablet/desktop)
+- Wrap responsive logic in `LayoutBuilder` for constraint-based decisions
+- Consider `MediaQuery.of(context).padding` for safe areas
+- Test on multiple form factors during development
+
+**Warning signs:**
+- UI breaks when rotating device
+- Content cut off on certain devices
+- Desktop window resize causes layout overflow
+
+**Phase to address:** Phase 2 (Responsive Layout System)
+
+---
+
+### Pitfall 13: Mismatched Navigation Patterns
+
+**What goes wrong:**
+Using `NavigationBar` (bottom) on desktop or `NavigationRail` (side) on small phones creates poor UX. Navigation state management becomes complex when switching between navigation types.
+
+**Why it happens:**
+- `NavigationRail` takes vertical space, poor fit for narrow screens
+- `NavigationBar` at bottom wastes desktop vertical space
+- State index synchronization between different navigation widgets is error-prone
+
+**How to avoid:**
+- Use platform conventions: `NavigationRail` for width >= 600, `NavigationBar` for width < 600
+- For Windows, use `NavigationView` with `PaneDisplayMode.auto` (auto-adapts)
+- Centralize navigation state in Provider, let UI components observe it
+- Test navigation state preservation when resizing window
+
+**Warning signs:**
+- Navigation state resets when rotating device
+- Selected tab doesn't highlight correctly on platform switch
+- Deep links don't work consistently across platforms
+
+**Phase to address:** Phase 3 (Adaptive Navigation)
+
+---
+
+### Pitfall 14: Theme Data Type Confusion
+
+**What goes wrong:**
+Calling `Theme.of(context)` inside Fluent UI widgets returns Material theme data. Calling `FluentTheme.of(context)` inside Material widgets throws errors or returns null.
+
+**Why it happens:**
+`MaterialApp` provides `ThemeData` through `InheritedWidget`. `FluentApp` provides `FluentThemeData`. These are separate type hierarchies and cannot be interchanged.
+
+**How to avoid:**
+- Create platform-specific theme wrappers
+- Use a unified "app theme" Provider that exposes semantic properties (colors, text styles) as abstract getters
+- Platform UI widgets consume from the unified theme Provider
+
+**Warning signs:**
+- Colors don't match between platforms
+- Typography looks different on Windows vs Android
+- Theme changes don't propagate to all widgets
+
+**Phase to address:** Phase 4 (Custom Design System)
+
+---
+
+### Pitfall 15: Platform.isX Checks in Widget Build
+
+**What goes wrong:**
+Using `Platform.isWindows` directly in `build()` causes crashes on web (Platform not available) and makes testing difficult. The widget tree rebuilds incorrectly when platform detection changes.
+
+**Why it happens:**
+- `dart:io` Platform class is not available on web
+- Widget build methods should be pure and deterministic
+- Platform detection should happen once, not every build
+
+**How to avoid:**
+- Use `defaultTargetPlatform` instead of `Platform.isX` for UI decisions
+- Create platform detection at app initialization
+- For web compatibility, wrap Platform checks in `kIsWeb` guard
+
+**Warning signs:**
+- App crashes on web with "Unsupported operation: Platform._operatingSystem"
+- Hot reload causes platform detection to fail
+- Tests can't mock platform
+
+**Phase to address:** Phase 1 (Architecture Foundation)
+
+---
+
+### Pitfall 16: State Loss During Navigation Switch
+
+**What goes wrong:**
+When switching from `NavigationRail` to `NavigationBar` (or vice versa during resize), the current screen's state (scroll position, form data, selected items) is lost because the widget tree is completely rebuilt.
+
+**Why it happens:**
+Different navigation patterns create different widget hierarchies. Without proper state preservation, switching navigation types triggers `dispose()` on child widgets.
+
+**How to avoid:**
+- Keep navigation state in Provider/Bloc (above the navigation widget)
+- Use `PageStorage` for scroll position preservation
+- Consider `IndexedStack` for preserving all screens in memory
+- Extract screen content into stateless widgets that receive state from Provider
+
+**Warning signs:**
+- Scroll position resets when resizing window
+- Form data lost when switching to landscape
+- Selected grid items deselect on orientation change
+
+**Phase to address:** Phase 3 (Adaptive Navigation)
+
+---
+
+## v2.0 Technical Debt Patterns
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Copy-paste widgets for each platform | Faster initial dev | Duplicate code, double maintenance | Never |
+| Skip responsive breakpoints | Ship faster | Breaks on tablets, foldables | Prototype only |
+| Hardcode colors in widgets | Quick styling | Theme changes require widget edits | Never |
+| Use `!kIsWeb && Platform.isWindows` everywhere | Platform checks work | Scattered platform logic, hard to test | Never |
+| Ignore accessibility (screen readers) | Save time | Legal/compliance issues, excludes users | Never |
+| Single column layout for all sizes | Simple implementation | Wasted space on desktop | MVP only |
+
+---
+
+## v2.0 Integration Gotchas
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| fluent_ui + Provider | Accessing Provider in `NavigationView.body` without wrapper | Provider must wrap `FluentApp` or be at higher level |
+| NavigationPane -> Navigator | Using `Navigator.push()` inside NavigationPane body | NavigationPane already manages body, use indexed navigation |
+| Material widgets in FluentApp | Using `Scaffold` inside `NavigationView` | Use `ScaffoldPage` or `Page` from fluent_ui |
+| FluentThemeData <-> ThemeData | Trying to convert between theme types | Create unified theme interface, implement per-platform |
+| showDialog in Fluent context | Using Material `showDialog` | Use `showDialog` from fluent_ui which returns `ContentDialog` |
+| Flutter window manager | Not handling Windows minimize/maximize | Add `window_manager` package for native window controls |
+
+---
+
+## v2.0 Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| LayoutBuilder rebuild storm | Janky scrolling, high CPU | Memoize computed layouts, use `const` widgets | Large grid views |
+| Navigation index rebuilds all | Switching tabs is slow | Use `IndexedStack` or `PageView` with `keepPage: true` | 5+ navigation items |
+| Unoptimized image loading | Memory spikes, lag | Use `cached_network_image`, implement pagination | 100+ images displayed |
+| Provider notifyListeners spam | UI stutters on updates | Batch updates, use `select` for granular rebuilds | Real-time updates |
+| MediaQuery rebuild cascade | Every pixel resize rebuilds tree | Cache MediaQuery values, use `LayoutBuilder` | Desktop window resize |
+
+---
+
+## v2.0 UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Bottom nav on desktop | Wastes vertical space, feels "mobile" | Use side navigation (NavigationRail/NavigationView) |
+| No loading states during resize | Blank screen, confusing | Show skeleton or shimmer during layout transition |
+| Different navigation order per platform | Users lose mental model | Keep navigation items in same order, just different layout |
+| Touch targets too small on desktop | Hard to click with mouse | Minimum 44x44 on mobile, consider larger on desktop |
+| No keyboard shortcuts on Windows | Power users frustrated | Add keyboard shortcuts, accelerator keys in menus |
+| Ignoring system theme (dark mode) | Jarring bright/dark mismatch | Use `ThemeMode.system` or `FluentThemeMode.system` |
+
+---
+
+## v2.0 "Looks Done But Isn't" Checklist
+
+- [ ] **Responsive Layout:** Often missing tablet/desktop specific layouts - verify on 7", 10", 13" screens
+- [ ] **Navigation State:** Often missing state preservation on resize - verify scroll position retained
+- [ ] **Theme Sync:** Often missing dark mode support on both platforms - verify theme toggle works everywhere
+- [ ] **Platform Icons:** Often missing platform-appropriate icons - verify Windows uses FluentIcons, Android uses Material icons
+- [ ] **Dialogs/Modals:** Often missing platform-specific dialogs - verify `showDialog` uses correct style per platform
+- [ ] **Keyboard Navigation:** Often missing Tab/Enter navigation on Windows - verify keyboard accessibility
+- [ ] **Window Controls:** Often missing native minimize/maximize/close - verify `window_manager` integration
+- [ ] **Safe Areas:** Often missing notch/status bar handling - verify content not obscured by system UI
+
+---
+
+## v2.0 Recovery Strategies
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Dual MaterialApp/FluentApp | HIGH | Refactor to single conditional root, rebuild navigation architecture |
+| Hardcoded breakpoints | MEDIUM | Extract to responsive utilities, add LayoutBuilder wrappers |
+| Mismatched navigation | MEDIUM | Create unified navigation state, refactor navigation widgets |
+| Theme type confusion | HIGH | Create unified theme interface, refactor all color references |
+| Platform.isX in build | LOW | Replace with `defaultTargetPlatform`, add web guards |
+| State loss on resize | MEDIUM | Add Provider state layer, implement PageStorage |
+
+---
+
+## v2.0 Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Dual MaterialApp/FluentApp | Phase 1 (Architecture) | Run app on Windows and Android, verify no context errors |
+| Hardcoded breakpoints | Phase 2 (Responsive) | Test on phone, tablet, desktop window resize |
+| Mismatched navigation | Phase 3 (Navigation) | Verify navigation state preserved on orientation change |
+| Theme type confusion | Phase 4 (Design System) | Toggle theme, verify both platforms update consistently |
+| Platform.isX in build | Phase 1 (Architecture) | Run flutter analyze, test on web platform |
+| State loss on resize | Phase 3 (Navigation) | Scroll, resize window, verify scroll position retained |
+
+---
+
+## v2.0 Sources
+
+- Context7: fluent_ui documentation (/bdlukaa/fluent_ui) - HIGH confidence
+- Context7: Flutter official documentation (/websites/flutter_dev) - HIGH confidence
+- GitHub code patterns: NavigationRail, NavigationBar, PaneDisplayMode usage - MEDIUM confidence
+- Flutter platform adaptation guide - HIGH confidence
+- Material Design responsive guidelines - HIGH confidence
+
+---
+
+*Pitfalls research for: ACGWarehouse (Anime Image Gallery)*
+*Researched: 2026-03-14 (v1.0), 2026-03-20 (v2.0 UI)*
