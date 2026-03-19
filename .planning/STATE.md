@@ -108,11 +108,13 @@ Phase 6: ✓ 优化与部署                       (100%)
 |---|-------------|------|--------|-----------|
 | 1 | 检查git所有分支，保证master分支上的提交是全的 | 2026-03-19 | b9f853c | [1-git-master](./quick/1-git-master/) |
 | 2 | 根据.planning/和代码，写一份操作手册 | 2026-03-19 | efb40d6 | [2-planning](./quick/2-planning/) |
+| 3 | 运行go程序后，打开浏览器 http://localhost:8080/admin ，报错404 page not found | 2026-03-19 | 7a56450 | [3-go-http-localhost-8080-admin-404-page-no](./quick/3-go-http-localhost-8080-admin-404-page-no/) |
 
 ## 会话历史
 
 | 日期 | Phase | 动作 | 说明 |
 |------|-------|--------|-------|
+| 2026-03-19 | Quick | Quick Task 3 已完成 | 已修复 `/admin` 404 错误，添加 redirect 到 `/admin-ui/` |
 | 2026-03-19 | Quick | Quick Task 2 已完成 | 已创建操作手册 `docs/user-manual.md` |
 |------|-------|--------|-------|
 | 2026-03-14 | 0 | 项目已初始化 | 已创建 PROJECT.md、config.json、research/、REQUIREMENTS.md、ROADMAP.md |
