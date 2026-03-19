@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 Phase: 8 of 10 (Windows UI)
 Plan: 0 of 4 in current phase
 Status: Ready to execute
-Last activity: 2026-03-20 — Completed quick task 32: 修复标签重命名后FTS索引未同步的bug
+Last activity: 2026-03-20 — Completed quick task 33: 批量选中图片生成AI tag
 
 Progress: [██████████░░░░░░░░░] 72% (27 plans completed)
 
@@ -83,6 +83,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 33 | 批量选中图片生成AI tag | 2026-03-20 | 2bcd38e | [33-ai-tag](./quick/33-ai-tag/) |
 | 32 | 修复标签重命名后FTS索引未同步的bug | 2026-03-20 | a64474c | [32-fts-bug](./quick/32-fts-bug/) |
 | 31 | 标签管理页bug修复和删除功能 | 2026-03-20 | 56b93ed | [31-2-bug-1-2](./quick/31-2-bug-1-2/) |
 | 30 | 添加筛选未打标签图片功能 | 2026-03-20 | fcd5597 | [30-筛选未打标签图片](./quick/30-筛选未打标签图片/) |
