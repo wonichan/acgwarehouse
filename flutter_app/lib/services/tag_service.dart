@@ -175,7 +175,7 @@ class TagService {
   /// 获取标签统计数据
   Future<List<TagStatistics>> getTagStatistics() async {
     final response = await _client.get(
-      Uri.parse('${ApiConfig.baseUrl}/tags/statistics'),
+      Uri.parse('${ApiConfig.baseUrl}/tags/stats'),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to get tag statistics: ${response.statusCode}');
