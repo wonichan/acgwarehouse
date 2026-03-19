@@ -1,7 +1,7 @@
 server:
   host: "0.0.0.0"
   port: 8080
-  env: "development"
+  env: "production"
 
 database:
   type: "sqlite"
@@ -10,19 +10,19 @@ database:
 
 storage:
   scan_roots:
-    - "/path/to/your/images"
+    - "E:\\picture\\xp十环-竖\\2026.310-2期"
 
 ai:
   provider: "doubao"
-  api_key: ""
+  api_key: "YOUR_API_KEY_HERE"
   model: "doubao-seed-2-0-lite-260215"
-  requests_per_minute: 60
+  requests_per_minute: 120
 
 cos:
   bucket_url: "literal:${COS_BUCKET_URL:-}"
-  secret_id: ""
-  secret_key: ""
+  secret_id: "YOUR_SECRET_ID_HERE"
+  secret_key: "YOUR_SECRET_KEY_HERE"
 
 admin:
-  username: ""
-  password: ""
+  username: "admin"
+  password: "admin"

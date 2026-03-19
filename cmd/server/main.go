@@ -141,6 +141,13 @@ func main() {
 		jobManager,
 	)
 
+	// 手动扫描 handler
+	metadataSvc := service.NewMetadataService()
+	scannerSvc := service.NewScannerService(metadataSvc, imageRepo, jobRepo, 4)
+	scanHandler := worker.NewScanHandler(scannerSvc, cfg.Storage.ScanRoots)
+	jobManager.RegisterHandler("manual_scan", scanHandler.Handle)
+	log.Printf("已注册 manual_scan 处理器 - 支持手动触发扫描任务")
+
 	provider, err := ai.NewProvider(&cfg.AI)
 	if err == nil {
 		client := ai.NewRateLimitedClient(provider, cfg.AI.RequestsPerMinute)
