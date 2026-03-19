@@ -115,7 +115,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 7 | 创建并注册 manual_scan handler，修复后台扫描功能"no handler registered"错误 | 2026-03-19 | cfd507b | [7-manual-scan-handler-no-handler-registere](./quick/7-manual-scan-handler-no-handler-registere/) |
 | 8 | 修复Flutter缩略图不显示问题 | 2026-03-19 | 233d0a4 | [8-flutter](./quick/8-flutter/) |
 | 9 | 修复任务加载竞态条件，确保所有处理器注册后再加载任务 | 2026-03-20 | 167e777 | [9-fix-task-loading-race-condition](./quick/9-fix-task-loading-race-condition/) |
-| 10 | 在 scanner_service.go 添加去重检查，避免为已导入的图片重复创建 image_imported 任务 | 2026-03-19 | 待提交 | [10-scanner-service-go-image-imported](./quick/10-scanner-service-go-image-imported/) |
+| 10 | 在 scanner_service.go 添加去重检查，避免为已导入的图片重复创建 image_imported 任务 | 2026-03-19 | 81edc17 | [10-scanner-service-go-image-imported](./quick/10-scanner-service-go-image-imported/) |
 
 ## 会话历史
 
