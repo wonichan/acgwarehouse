@@ -187,6 +187,15 @@ func (h *ImageTagHandler) ReviewTag(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "action must be confirm or reject"})
 		return
 	}
+
+	// If rejecting, decrement the tag usage count first
+	if state == "rejected" {
+		if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
 	if err := h.imageTagRepo.UpdateReviewState(c.Request.Context(), imageID, tagID, state); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -215,6 +224,17 @@ func (h *ImageTagHandler) BatchReview(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "action must be confirm or reject"})
 		return
 	}
+
+	// If rejecting, decrement usage count for each tag first
+	if state == "rejected" {
+		for _, tagID := range req.TagIDs {
+			if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+	}
+
 	if err := h.imageTagRepo.BatchUpdateReviewState(c.Request.Context(), imageID, req.TagIDs, state); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -285,10 +305,36 @@ func (h *ImageTagHandler) MergeImageTag(c *gin.Context) {
 		return
 	}
 
+	// Check if target tag already exists for this image
+	existingTags, err := h.imageTagRepo.FindByImageID(c.Request.Context(), imageID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	targetAlreadyExists := false
+	for _, et := range existingTags {
+		if et.TagID == targetTagID {
+			targetAlreadyExists = true
+			break
+		}
+	}
+
 	// Perform the merge
 	if err := h.imageTagRepo.MergeImageTag(c.Request.Context(), imageID, sourceTagID, targetTagID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Update usage counts: decrement source tag, increment target tag only if it didn't exist
+	if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), sourceTagID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !targetAlreadyExists {
+		if err := h.tagRepo.IncrementUsageCount(c.Request.Context(), targetTagID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
