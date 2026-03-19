@@ -253,6 +253,179 @@ dev_dependencies:
 
 ---
 
+## v2.0 Dual-Platform Additions (Windows + Android)
+
+**Focus:** Windows Fluent UI + Android Material 3 dual-platform support
+**Researched:** 2026-03-20
+**Confidence:** HIGH
+
+### New Dependencies Required
+
+| Package | Version | Purpose | Why This Choice |
+|---------|---------|---------|-----------------|
+| **fluent_ui** | ^4.15.0 | Windows Fluent Design UI | Official Flutter implementation of Microsoft Fluent Design. Active maintenance, 3.1k+ likes. Provides NavigationPane with adaptive display modes. |
+| **system_theme** | ^3.2.0 | Windows system accent color | Same author as fluent_ui. Enables Windows 10+ system accent color for native Fluent look. |
+| **window_manager** | ^0.5.1 | Windows desktop window control | Required for window sizing, positioning, title bar customization. 1.1k+ likes, standard for Flutter desktop. |
+
+### Existing Dependencies (Upgrade Only)
+
+| Package | Current | Upgrade To | Notes |
+|---------|---------|------------|-------|
+| **provider** | ^6.1.1 | ^6.1.5 | Minor upgrade. Works with both MaterialApp and FluentApp. No migration needed. |
+
+### NOT Required (Avoid)
+
+| Package | Why Avoid | Alternative |
+|---------|-----------|-------------|
+| responsive_builder | Adds dependency when LayoutBuilder is sufficient | Use native `LayoutBuilder` with 600px/900px breakpoints |
+| flutter_platform_widgets | Forces Cupertino/Material split pattern | Manual `Platform.isWindows` detection |
+| flutter_acrylic | Deprecated, merged into window_manager | window_manager |
+| get / get_it / riverpod / bloc | Already have Provider working | Keep existing Provider setup |
+
+### Platform Detection Pattern
+
+```dart
+import 'dart:io' show Platform;
+
+bool get isWindowsDesktop {
+  try {
+    return Platform.isWindows;
+  } catch (_) {
+    return false; // Web platform
+  }
+}
+```
+
+### Responsive Breakpoints (Native Flutter)
+
+```dart
+const double kTabletBreakpoint = 600.0;   // Flutter standard
+const double kDesktopBreakpoint = 900.0;  // NavigationRail threshold
+
+LayoutBuilder(
+  builder: (context, constraints) {
+    if (constraints.maxWidth >= kDesktopBreakpoint) {
+      return DesktopLayout();  // NavigationRail on left
+    } else if (constraints.maxWidth >= kTabletBreakpoint) {
+      return TabletLayout();
+    }
+    return MobileLayout();  // NavigationBar at bottom
+  },
+)
+```
+
+### Navigation Component Mapping
+
+| Platform | Widget | Source |
+|----------|--------|--------|
+| Android | NavigationBar | Flutter SDK (material) |
+| Windows | NavigationPane + NavigationView | fluent_ui |
+| Desktop adaptive | NavigationRail | Flutter SDK (material) |
+
+### Theme Configuration
+
+**Material 3 (Android/Web):**
+```dart
+ThemeData(
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: Color(0xFFE1BEE7),  // Soft purple-pink
+    brightness: Brightness.light,
+  ),
+  useMaterial3: true,
+)
+```
+
+**Fluent UI (Windows):**
+```dart
+FluentThemeData(
+  accentColor: SystemTheme.accentColor.accent.toAccentColor(),
+  brightness: Brightness.light,
+  scaffoldBackgroundColor: const Color(0xFFF3F3F3),
+)
+```
+
+### Architecture Integration
+
+```
+lib/
+├── main.dart                    # Platform detection + app selection
+├── app/
+│   ├── material_app.dart        # MaterialApp for Android/Web
+│   └── fluent_app.dart          # FluentApp for Windows
+├── shared/
+│   ├── providers/               # ✓ REUSE - Works with both UI frameworks
+│   ├── services/                # ✓ REUSE - Platform-agnostic
+│   └── models/                  # ✓ REUSE - Data classes unchanged
+└── widgets/
+    └── adaptive/                # NEW - Platform-adaptive widgets
+        ├── adaptive_scaffold.dart
+        └── adaptive_navigation.dart
+```
+
+### Windows Setup (main.dart)
+
+```dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  if (Platform.isWindows) {
+    await windowManager.ensureInitialized();
+    await SystemTheme.accentColor.load();
+    
+    const windowOptions = WindowOptions(
+      size: Size(1280, 800),
+      minimumSize: Size(800, 600),
+      center: true,
+      titleBarStyle: TitleBarStyle.normal,
+    );
+    
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
+  
+  runApp(const MyApp());
+}
+```
+
+### Installation
+
+```yaml
+# Add to pubspec.yaml
+dependencies:
+  fluent_ui: ^4.15.0
+  system_theme: ^3.2.0
+  window_manager: ^0.5.1
+  provider: ^6.1.5  # upgrade
+```
+
+```bash
+# Add Windows platform
+flutter create --platforms=windows .
+flutter pub get
+```
+
+### Development Commands
+
+```bash
+flutter run -d windows   # Windows desktop
+flutter run -d android   # Android
+flutter build windows    # Release build
+flutter build apk        # Android release
+```
+
+### Sources (v2.0 Additions)
+
+- `/bdlukaa/fluent_ui` (Context7) — NavigationView, NavigationPane, FluentThemeData
+- `/websites/flutter_dev` (Context7) — LayoutBuilder, Platform detection, NavigationRail
+- `pub.dev/packages/fluent_ui` — Version 4.15.0 verified
+- `pub.dev/packages/system_theme` — Version 3.2.0 verified
+- `pub.dev/packages/window_manager` — Version 0.5.1 verified
+
+---
+
 *Stack research for: ACGWarehouse Anime Image Library*  
-*Researched: 2026-03-14*  
+*Original research: 2026-03-14*  
+*v2.0 additions: 2026-03-20*  
 *Next Review: 2026-09-14*
