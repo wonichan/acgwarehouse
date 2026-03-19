@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -157,20 +156,10 @@ func (p *DoubaoProvider) processImageURL(imageURL string) (string, error) {
 		return imageURL, nil
 	}
 
-	// 本地文件：转换为 Base64
-	data, err := os.ReadFile(imageURL)
+	// 本地文件：使用压缩工具处理
+	data, contentType, err := CompressImageIfNeeded(imageURL)
 	if err != nil {
-		return "", fmt.Errorf("read file: %w", err)
-	}
-
-	// 检测图片类型
-	contentType := "image/jpeg"
-	if strings.HasSuffix(strings.ToLower(imageURL), ".png") {
-		contentType = "image/png"
-	} else if strings.HasSuffix(strings.ToLower(imageURL), ".gif") {
-		contentType = "image/gif"
-	} else if strings.HasSuffix(strings.ToLower(imageURL), ".webp") {
-		contentType = "image/webp"
+		return "", fmt.Errorf("process image: %w", err)
 	}
 
 	return fmt.Sprintf("data:%s;base64,%s", contentType, base64.StdEncoding.EncodeToString(data)), nil
