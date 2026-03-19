@@ -259,7 +259,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       value: _tagProvider,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.image.filename),
+          title: const Text('图片详情'),
           actions: [
             IconButton(
               icon: const Icon(Icons.add),

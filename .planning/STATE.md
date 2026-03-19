@@ -134,6 +134,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 26 | 修复Flutter应用标签搜索无结果问题 - FTS索引同步 | 2026-03-20 | 0d7cc54 | [26-flutter](./quick/26-flutter/) |
 | 27 | 验证手动添加标签功能 - 功能已存在 | 2026-03-20 | — | [27-support-manual-tag-addition](./quick/27-support-manual-tag-addition/) |
 | 28 | 图片详情页布局优化：添加全屏预览、减少留白 | 2026-03-20 | 9375a6e | [28-image-detail-layout-preview](./quick/28-image-detail-layout-preview/) |
+| 29 | 图片详情页标题从文件名改为固定名称 | 2026-03-19 | e667db7 | [29-image-detail-title](./quick/29-image-detail-title/) |
 
 ## 会话历史
 
@@ -193,4 +194,4 @@ Phase 6: ✓ 优化与部署                       (100%)
 *Phase 6 Plan 03 已完成：2026-03-18*
 *Phase 6 Plan 05 已完成：2026-03-18*
 
-Last activity: 2026-03-20 - Completed quick task 28: 图片详情页布局优化：添加全屏预览、减少留白
+Last activity: 2026-03-20 - Completed quick task 29: 图片详情页标题从文件名改为固定名称
