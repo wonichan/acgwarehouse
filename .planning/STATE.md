@@ -118,8 +118,9 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 10 | 在 scanner_service.go 添加去重检查，避免为已导入的图片重复创建 image_imported 任务 | 2026-03-19 | 81edc17 | [10-scanner-service-go-image-imported](./quick/10-scanner-service-go-image-imported/) |
 | 11 | Fix: Task status FINISHED but progress shows 1% | 2026-03-19 | d62cb90 | [11-fix-task-status-finished-but-progress-sh](./quick/11-fix-task-status-finished-but-progress-sh/) |
 | 12 | flutter程序，点击标签管理，页面报错 | 2026-03-19 | 322012b | [12-flutter](./quick/12-flutter/) |
-| 13 | 修复Flutter应用标签筛选无响应问题 | 2026-03-20 | 04fc05b | [13-flutter](./quick/13-flutter/) |
+| 13 | 修复Flutter应用标签筛选无响应问题 | 2026-03-20 | b9c7e4e | [13-flutter](./quick/13-flutter/) |
 | 14 | 修复标签统计API 500错误 - SQL NULL处理 | 2026-03-19 | 9b01935 | [14-api-500-sql-null](./quick/14-api-500-sql-null/) |
+| 15 | 修复 Flutter 桌面程序顶部排序按钮不生效的问题 | 2026-03-19 | 1811aa9 | [15-flutter](./quick/15-flutter/) |
 
 ## 会话历史
 
@@ -178,4 +179,4 @@ Phase 6: ✓ 优化与部署                       (100%)
 *Phase 6 Plan 03 已完成：2026-03-18*
 *Phase 6 Plan 05 已完成：2026-03-18*
 
-Last activity: 2026-03-20 - Completed quick task 14: 修复标签统计API 500错误 - SQL NULL处理
+Last activity: 2026-03-19 - Completed quick task 15: 修复 Flutter 桌面程序顶部排序按钮不生效的问题
