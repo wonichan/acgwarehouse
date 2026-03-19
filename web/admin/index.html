@@ -1,33 +1,33 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ACGWarehouse Admin Dashboard</title>
+    <title>ACGWarehouse 管理后台</title>
     <link rel="stylesheet" href="/admin-ui/styles.css">
 </head>
 <body>
     <div class="dashboard">
         <header class="dashboard-header">
-            <h1>ACGWarehouse Admin</h1>
+            <h1>ACGWarehouse 管理后台</h1>
             <div class="header-actions">
-                <button id="refreshBtn" class="btn btn-secondary">Refresh</button>
-                <button id="logoutBtn" class="btn btn-outline">Logout</button>
+                <button id="refreshBtn" class="btn btn-secondary">刷新</button>
+                <button id="logoutBtn" class="btn btn-outline">退出登录</button>
             </div>
         </header>
 
         <!-- Health & Status Section -->
         <section class="section">
-            <h2>Service Status</h2>
+            <h2>服务状态</h2>
             <div class="status-cards">
                 <div class="status-card" id="healthCard">
-                    <div class="card-label">Health</div>
-                    <div class="card-value" id="healthStatus">Loading...</div>
+                    <div class="card-label">健康状态</div>
+                    <div class="card-value" id="healthStatus">加载中...</div>
                     <div class="card-subtitle" id="healthTimestamp">-</div>
                 </div>
                 <div class="status-card" id="configCard">
-                    <div class="card-label">Environment</div>
-                    <div class="card-value" id="envStatus">Loading...</div>
+                    <div class="card-label">运行环境</div>
+                    <div class="card-value" id="envStatus">加载中...</div>
                     <div class="card-subtitle" id="serverInfo">-</div>
                 </div>
             </div>
@@ -35,50 +35,50 @@
 
         <!-- Task Queue Section -->
         <section class="section">
-            <h2>Task Queue</h2>
+            <h2>任务队列</h2>
             <div class="status-cards">
                 <div class="status-card">
-                    <div class="card-label">Total</div>
+                    <div class="card-label">总计</div>
                     <div class="card-value" id="taskTotal">-</div>
                 </div>
                 <div class="status-card status-ready">
-                    <div class="card-label">Ready</div>
+                    <div class="card-label">待处理</div>
                     <div class="card-value" id="taskReady">-</div>
                 </div>
                 <div class="status-card status-running">
-                    <div class="card-label">Running</div>
+                    <div class="card-label">运行中</div>
                     <div class="card-value" id="taskRunning">-</div>
                 </div>
                 <div class="status-card status-finished">
-                    <div class="card-label">Finished</div>
+                    <div class="card-label">已完成</div>
                     <div class="card-value" id="taskFinished">-</div>
                 </div>
                 <div class="status-card status-failed">
-                    <div class="card-label">Failed</div>
+                    <div class="card-label">失败</div>
                     <div class="card-value" id="taskFailed">-</div>
                 </div>
             </div>
             <div class="queue-controls">
-                <button id="pauseBtn" class="btn btn-warning">Pause Queue</button>
-                <button id="resumeBtn" class="btn btn-success">Resume Queue</button>
-                <button id="retryBtn" class="btn btn-danger">Retry Failed</button>
+                <button id="pauseBtn" class="btn btn-warning">暂停队列</button>
+                <button id="resumeBtn" class="btn btn-success">恢复队列</button>
+                <button id="retryBtn" class="btn btn-danger">重试失败任务</button>
             </div>
         </section>
 
         <!-- Library Stats Section -->
         <section class="section">
-            <h2>Library Scale</h2>
+            <h2>图库规模</h2>
             <div class="status-cards">
                 <div class="status-card">
-                    <div class="card-label">Total Images</div>
+                    <div class="card-label">图片总数</div>
                     <div class="card-value" id="totalImages">-</div>
                 </div>
                 <div class="status-card">
-                    <div class="card-label">Total Tags</div>
+                    <div class="card-label">标签总数</div>
                     <div class="card-value" id="totalTags">-</div>
                 </div>
                 <div class="status-card">
-                    <div class="card-label">Collections</div>
+                    <div class="card-label">收藏夹</div>
                     <div class="card-value" id="totalCollections">-</div>
                 </div>
             </div>
@@ -86,44 +86,44 @@
 
         <!-- Config Info Section -->
         <section class="section">
-            <h2>Configuration</h2>
+            <h2>系统配置</h2>
             <div class="config-grid">
                 <div class="config-item">
-                    <span class="config-label">AI API Key:</span>
+                    <span class="config-label">AI API 密钥:</span>
                     <span class="config-value" id="hasAIKey">-</span>
                 </div>
                 <div class="config-item">
-                    <span class="config-label">COS Storage:</span>
+                    <span class="config-label">COS 存储:</span>
                     <span class="config-value" id="hasCOSKey">-</span>
                 </div>
                 <div class="config-item">
-                    <span class="config-label">Admin Username:</span>
+                    <span class="config-label">管理员账号:</span>
                     <span class="config-value" id="adminUsername">-</span>
                 </div>
             </div>
             <div class="scan-control">
-                <button id="scanBtn" class="btn btn-primary">Trigger Scan</button>
+                <button id="scanBtn" class="btn btn-primary">触发扫描</button>
             </div>
         </section>
 
         <!-- Recent Jobs Section -->
         <section class="section">
-            <h2>Recent Jobs</h2>
+            <h2>最近任务</h2>
             <div class="jobs-table-wrapper">
                 <table class="jobs-table">
                     <thead>
                         <tr>
-                            <th>ID</th>
-                            <th>Type</th>
-                            <th>Status</th>
-                            <th>Progress</th>
-                            <th>Created</th>
-                            <th>Error</th>
+                            <th>任务ID</th>
+                            <th>类型</th>
+                            <th>状态</th>
+                            <th>进度</th>
+                            <th>创建时间</th>
+                            <th>错误信息</th>
                         </tr>
                     </thead>
                     <tbody id="jobsTableBody">
                         <tr>
-                            <td colspan="6" class="loading-cell">Loading...</td>
+                            <td colspan="6" class="loading-cell">加载中...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -132,9 +132,9 @@
 
         <!-- Error Log Section -->
         <section class="section">
-            <h2>Recent Errors</h2>
+            <h2>最近错误</h2>
             <div class="error-list" id="errorList">
-                <div class="empty-state">No errors to display</div>
+                <div class="empty-state">暂无错误</div>
             </div>
         </section>
     </div>
