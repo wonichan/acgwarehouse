@@ -9,17 +9,20 @@ class ImageMasonry extends StatelessWidget {
   final List<ImageModel> images;
   final ImageTapCallback? onImageTap;
   final int crossAxisCount;
+  final ScrollController? scrollController;
   
   const ImageMasonry({
     super.key,
     required this.images,
     this.onImageTap,
     this.crossAxisCount = 2,
+    this.scrollController,
   });
   
   @override
   Widget build(BuildContext context) {
     return MasonryGridView.count(
+      controller: scrollController,
       crossAxisCount: crossAxisCount,
       mainAxisSpacing: 4,
       crossAxisSpacing: 4,

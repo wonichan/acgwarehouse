@@ -88,29 +88,29 @@ class _GalleryContentState extends State<_GalleryContent> {
               ? ImageGrid(
                   images: provider.images,
                   onImageTap: (img) => _navigateToDetail(context, img),
+                  scrollController: _scrollController,
                 )
               : ImageMasonry(
                   images: provider.images,
                   onImageTap: (img) => _navigateToDetail(context, img),
+                  scrollController: _scrollController,
                 );
           
-          return RefreshIndicator(
-            onRefresh: () => provider.loadImages(refresh: true),
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                children: [
-                  widget,
-                  // Loading indicator at bottom when fetching more
-                  if (provider.isLoading && provider.hasMore)
-                    const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
-                ],
+          return Stack(
+            children: [
+              RefreshIndicator(
+                onRefresh: () => provider.loadImages(refresh: true),
+                child: widget,
               ),
-            ),
+              // Loading indicator at bottom when fetching more
+              if (provider.isLoading && provider.hasMore)
+                const Positioned(
+                  bottom: 16,
+                  left: 0,
+                  right: 0,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+            ],
           );
         },
       ),
