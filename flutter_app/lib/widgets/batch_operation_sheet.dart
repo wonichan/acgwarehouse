@@ -5,6 +5,7 @@ import '../providers/selection_provider.dart';
 class BatchOperationSheet extends StatelessWidget {
   final VoidCallback? onAddTags;
   final VoidCallback? onRemoveTags;
+  final VoidCallback? onGenerateAITags;
   final VoidCallback? onMoveToCollection;
   final VoidCallback? onDelete;
 
@@ -12,6 +13,7 @@ class BatchOperationSheet extends StatelessWidget {
     super.key,
     this.onAddTags,
     this.onRemoveTags,
+    this.onGenerateAITags,
     this.onMoveToCollection,
     this.onDelete,
   });
@@ -83,6 +85,19 @@ class BatchOperationSheet extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildOperationButton(
+                    context,
+                    icon: Icons.auto_awesome,
+                    label: 'AI生成标签',
+                    onTap: onGenerateAITags,
+                    color: const Color(0xFF5E35B1),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
             ],
           ),
         );
@@ -96,8 +111,9 @@ class BatchOperationSheet extends StatelessWidget {
     required String label,
     VoidCallback? onTap,
     bool isDestructive = false,
+    Color? color,
   }) {
-    final color = isDestructive ? Colors.red : Theme.of(context).primaryColor;
+    final resolvedColor = color ?? (isDestructive ? Colors.red : Theme.of(context).primaryColor);
 
     return InkWell(
       onTap: onTap,
@@ -108,13 +124,13 @@ class BatchOperationSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: 28),
+            Icon(icon, color: resolvedColor, size: 28),
             const SizedBox(height: 8),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: color,
+                color: resolvedColor,
               ),
               textAlign: TextAlign.center,
             ),
@@ -129,6 +145,7 @@ class BatchOperationSheet extends StatelessWidget {
     BuildContext context, {
     VoidCallback? onAddTags,
     VoidCallback? onRemoveTags,
+    VoidCallback? onGenerateAITags,
     VoidCallback? onMoveToCollection,
     VoidCallback? onDelete,
   }) {
@@ -137,6 +154,7 @@ class BatchOperationSheet extends StatelessWidget {
       builder: (context) => BatchOperationSheet(
         onAddTags: onAddTags,
         onRemoveTags: onRemoveTags,
+        onGenerateAITags: onGenerateAITags,
         onMoveToCollection: onMoveToCollection,
         onDelete: onDelete,
       ),
