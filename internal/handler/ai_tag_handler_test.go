@@ -58,7 +58,7 @@ func TestAITagGetStatusReturnsCurrentJobState(t *testing.T) {
 		t.Fatalf("FindByID() error = %v", err)
 	}
 	job.Status = "running"
-	job.Progress = 0.5
+	job.Progress = 50
 	if err := repos.jobRepo.Update(job); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
@@ -84,8 +84,8 @@ func TestAITagGetStatusReturnsCurrentJobState(t *testing.T) {
 	if resp.Status != "running" {
 		t.Fatalf("status = %q, want running", resp.Status)
 	}
-	if resp.Progress != 0.5 {
-		t.Fatalf("progress = %f, want 0.5", resp.Progress)
+	if resp.Progress != 50 {
+		t.Fatalf("progress = %f, want 50", resp.Progress)
 	}
 }
 
