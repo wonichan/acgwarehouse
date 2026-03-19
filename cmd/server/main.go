@@ -64,6 +64,32 @@ func main() {
 	jobManager.Start(context.Background())
 	defer jobManager.Stop()
 
+	// 加载数据库中所有 ready 状态的任务到队列
+	go func() {
+		jobs, err := jobRepo.FindByStatus("ready")
+		if err != nil {
+			log.Printf("加载待处理任务失败: %v", err)
+			return
+		}
+		if len(jobs) > 0 {
+			log.Printf("发现 %d 个待处理任务，正在加载到队列...", len(jobs))
+			loadedCount := 0
+			skippedCount := 0
+			for i := range jobs {
+				job := &jobs[i]
+				// 使用 LoadExistingJob 方法直接加载已有任务到队列
+				if jobManager.LoadExistingJob(job) {
+					loadedCount++
+					log.Printf("已加载任务: %s #%d", job.Type, job.ID)
+				} else {
+					skippedCount++
+					log.Printf("任务队列已满，跳过任务 #%d", job.ID)
+				}
+			}
+			log.Printf("任务加载完成，已加载 %d 个，跳过 %d 个", loadedCount, skippedCount)
+		}
+	}()
+
 	// Thumbnail generation handler
 	thumbnailSvc := service.NewThumbnailService()
 	cosSvc, err := service.NewCOSService(&cfg.COS)
