@@ -133,6 +133,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 25 | 修复AI生成标签的数据一致性问题：删除标签后筛选计数未更新，脏数据残留 | 2026-03-20 | e449824 | [25-ai](./quick/25-ai/) |
 | 26 | 修复Flutter应用标签搜索无结果问题 - FTS索引同步 | 2026-03-20 | 0d7cc54 | [26-flutter](./quick/26-flutter/) |
 | 27 | 验证手动添加标签功能 - 功能已存在 | 2026-03-20 | — | [27-support-manual-tag-addition](./quick/27-support-manual-tag-addition/) |
+| 28 | 图片详情页布局优化：添加全屏预览、减少留白 | 2026-03-20 | 9375a6e | [28-image-detail-layout-preview](./quick/28-image-detail-layout-preview/) |
 
 ## 会话历史
 
@@ -147,6 +148,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 2026-03-19 | Quick | Quick Task 4 已完成 | 已添加 image_imported 处理器，自动触发缩略图生成任务 |
 | 2026-03-19 | Quick | Quick Task 3 已完成 | 已修复 `/admin` 404 错误，添加 redirect 到 `/admin-ui/` |
 | 2026-03-19 | Quick | Quick Task 2 已完成 | 已创建操作手册 `docs/user-manual.md` |
+| 2026-03-20 | Quick | Quick Task 28 已完成 | 已集成全屏图片预览、优化详情页布局、减少留白 |
 |------|-------|--------|-------|
 | 2026-03-14 | 0 | 项目已初始化 | 已创建 PROJECT.md、config.json、research/、REQUIREMENTS.md、ROADMAP.md |
 | 2026-03-14 | 1 | 上下文已收集 | 已创建 `.planning/phases/01-foundation-scan-tag-base/01-CONTEXT.md`，可进入规划 |
@@ -191,4 +193,4 @@ Phase 6: ✓ 优化与部署                       (100%)
 *Phase 6 Plan 03 已完成：2026-03-18*
 *Phase 6 Plan 05 已完成：2026-03-18*
 
-Last activity: 2026-03-20 - Completed quick task 27: 验证手动添加标签功能 - 功能已存在
+Last activity: 2026-03-20 - Completed quick task 28: 图片详情页布局优化：添加全屏预览、减少留白
