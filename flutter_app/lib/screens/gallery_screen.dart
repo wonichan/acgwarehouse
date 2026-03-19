@@ -83,7 +83,38 @@ class _GalleryContentState extends State<_GalleryContent> {
           }
           
           if (provider.images.isEmpty) {
-            return const Center(child: Text('暂无图片'));
+            // Check if filters are applied
+            final hasFilters = provider.selectedTagIds.isNotEmpty;
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    hasFilters ? Icons.filter_alt_off : Icons.photo_library_outlined,
+                    size: 64,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    hasFilters ? '筛选出 0 张图片' : '暂无图片',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  if (hasFilters) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () {
+                        context.read<TagProvider>().clearSelection();
+                        provider.setTagFilter([]);
+                      },
+                      icon: const Icon(Icons.clear_all),
+                      label: const Text('清除筛选'),
+                    ),
+                  ],
+                ],
+              ),
+            );
           }
           
           final widget = provider.viewMode == ViewMode.grid
