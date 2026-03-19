@@ -70,6 +70,8 @@ func (h *AITagHandler) GetAITagStatus(c *gin.Context) {
 	status := job.Status
 	if status == "ready" {
 		status = "queued"
+	} else if status == "finished" {
+		status = "completed"
 	}
 
 	c.JSON(http.StatusOK, gin.H{
