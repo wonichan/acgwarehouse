@@ -13,7 +13,7 @@ type thumbnailGenerator interface {
 }
 
 type thumbnailUploader interface {
-	Upload(ctx context.Context, imageID int64, size string, data []byte) (string, error)
+	Upload(ctx context.Context, filename, size string, data []byte) (string, error)
 }
 
 type thumbnailImageRepository interface {
@@ -27,8 +27,9 @@ type ThumbnailHandler struct {
 }
 
 type thumbnailJobPayload struct {
-	ImageID int64  `json:"image_id"`
-	Path    string `json:"path"`
+	ImageID  int64  `json:"image_id"`
+	Path     string `json:"path"`
+	Filename string `json:"filename"`
 }
 
 func NewThumbnailHandler(thumbnailSvc thumbnailGenerator, cosSvc thumbnailUploader, imageRepo thumbnailImageRepository) *ThumbnailHandler {
@@ -55,11 +56,11 @@ func (h *ThumbnailHandler) Handle(ctx context.Context, jobID int64, payload stri
 		return fmt.Errorf("generate thumbnails: %w", err)
 	}
 
-	smallURL, err := h.cosSvc.Upload(ctx, p.ImageID, "small", small.Data)
+	smallURL, err := h.cosSvc.Upload(ctx, p.Filename, "small", small.Data)
 	if err != nil {
 		return fmt.Errorf("upload small thumbnail: %w", err)
 	}
-	largeURL, err := h.cosSvc.Upload(ctx, p.ImageID, "large", large.Data)
+	largeURL, err := h.cosSvc.Upload(ctx, p.Filename, "large", large.Data)
 	if err != nil {
 		return fmt.Errorf("upload large thumbnail: %w", err)
 	}

@@ -56,8 +56,8 @@ func NewCOSService(cfg *config.COSConfig) (*COSService, error) {
 	}, nil
 }
 
-func (s *COSService) Upload(ctx context.Context, imageID int64, size string, data []byte) (string, error) {
-	key := fmt.Sprintf("thumbnails/%d_%s.jpg", imageID, size)
+func (s *COSService) Upload(ctx context.Context, filename, size string, data []byte) (string, error) {
+	key := fmt.Sprintf("thumbnails/%s-%s.jpg", filename, size)
 
 	_, err := s.client.Object.Put(ctx, key, bytes.NewReader(data), &cos.ObjectPutOptions{
 		ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
