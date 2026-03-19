@@ -9,6 +9,7 @@ import '../services/tag_service.dart';
 import '../widgets/tag_chip.dart';
 import '../widgets/add_tag_dialog.dart';
 import '../widgets/edit_tag_dialog.dart';
+import '../widgets/image_lightbox.dart';
 
 class ImageDetailScreen extends StatefulWidget {
   final ImageModel image;
@@ -293,47 +294,91 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       );
     }
     
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.6,
-      ),
-      child: ExtendedImage.network(
-        largeUrl,
-        fit: BoxFit.contain,
-        mode: ExtendedImageMode.gesture,
-        initGestureConfigHandler: (state) {
-          return GestureConfig(
-            minScale: 0.5,
-            animationMinScale: 0.3,
-            maxScale: 3.0,
-            animationMaxScale: 3.5,
-            speed: 1.0,
-            inertialSpeed: 100.0,
-            initialScale: 1.0,
-            inPageView: false,
-          );
-        },
-        loadStateChanged: (state) {
-          if (state.extendedImageLoadState == LoadState.loading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (state.extendedImageLoadState == LoadState.failed) {
-            return const Center(child: Icon(Icons.error, color: Colors.red));
-          }
-          return null;
-        },
+    return GestureDetector(
+      onTap: () {
+        ImageLightbox.show(
+          context,
+          imageUrl: largeUrl,
+          heroTag: 'image-${widget.image.id}',
+        );
+      },
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Hero(
+              tag: 'image-${widget.image.id}',
+              child: ExtendedImage.network(
+                largeUrl,
+                fit: BoxFit.contain,
+                mode: ExtendedImageMode.gesture,
+                initGestureConfigHandler: (state) {
+                  return GestureConfig(
+                    minScale: 0.5,
+                    animationMinScale: 0.3,
+                    maxScale: 3.0,
+                    animationMaxScale: 3.5,
+                    speed: 1.0,
+                    inertialSpeed: 100.0,
+                    initialScale: 1.0,
+                    inPageView: false,
+                  );
+                },
+                loadStateChanged: (state) {
+                  if (state.extendedImageLoadState == LoadState.loading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (state.extendedImageLoadState == LoadState.failed) {
+                    return const Center(child: Icon(Icons.error, color: Colors.red));
+                  }
+                  return null;
+                },
+              ),
+            ),
+            // Tap hint overlay
+            Positioned(
+              bottom: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.fullscreen, color: Colors.white, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      '点击全屏',
+                      style: TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
   
   Widget _buildMetadataSection(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('元数据', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           _buildMetadataRow('文件名', widget.image.filename),
           _buildMetadataRow('尺寸', widget.image.displaySize),
           _buildMetadataRow('格式', widget.image.format.toUpperCase()),
@@ -347,16 +392,16 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   
   Widget _buildMetadataRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 80,
-            child: Text(label, style: const TextStyle(color: Colors.grey)),
+            width: 70,
+            child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
           ),
         ],
       ),
@@ -365,8 +410,8 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
 
   Widget _buildAITagSection(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.grey[100],
         borderRadius: BorderRadius.circular(8),
@@ -451,14 +496,14 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
         final rejected = provider.imageTags['rejected'] ?? [];
 
         return Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Confirmed tags
               if (confirmed.isNotEmpty) ...[
                 Text('已确认', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
                   runSpacing: 4,
@@ -468,19 +513,19 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                     onDelete: () => _removeTag(tag.id),
                   )).toList(),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
               ],
 
               // Pending tags
               if (pending.isNotEmpty) ...[
                 Text('待确认', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
                   runSpacing: 4,
                   children: pending.map((tag) => _buildPendingTagChip(tag)).toList(),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
               ],
 
               // Rejected tags
