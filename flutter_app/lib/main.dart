@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
+
 import 'providers/image_provider.dart';
 import 'providers/tag_provider.dart';
 import 'providers/duplicate_provider.dart';
 import 'providers/search_provider.dart';
+import 'providers/navigation_provider.dart';
 import 'services/api_service.dart';
 import 'services/tag_service.dart';
 import 'services/duplicate_service.dart';
 import 'services/search_service.dart';
+import 'app/adaptive_app.dart';
 import 'screens/gallery_screen.dart';
 import 'screens/duplicate_screen.dart';
 import 'screens/search_screen.dart';
@@ -27,23 +31,52 @@ class MyApp extends StatelessWidget {
         Provider(create: (_) => TagService()),
         Provider(create: (_) => DuplicateService()),
         Provider(create: (_) => SearchService()),
-        ChangeNotifierProvider(create: (context) => ImageListProvider(context.read<ApiService>())..loadImages()),
-        ChangeNotifierProvider(create: (context) => TagProvider(context.read<TagService>())),
-        ChangeNotifierProvider(create: (context) => DuplicateProvider(service: context.read<DuplicateService>())),
-        ChangeNotifierProvider(create: (context) => SearchProvider(service: context.read<SearchService>())),
+        ChangeNotifierProvider(
+            create: (context) =>
+                ImageListProvider(context.read<ApiService>())..loadImages()),
+        ChangeNotifierProvider(
+            create: (context) => TagProvider(context.read<TagService>())),
+        ChangeNotifierProvider(
+            create: (context) =>
+                DuplicateProvider(service: context.read<DuplicateService>())),
+        ChangeNotifierProvider(
+            create: (context) =>
+                SearchProvider(service: context.read<SearchService>())),
+        ChangeNotifierProvider(create: (_) => NavigationProvider()),
       ],
-      child: MaterialApp(
-        title: 'ACGWarehouse',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
-        ),
-        home: const MainScreen(),
+      child: const AdaptiveApp(
+        fluentAppBuilder: _buildFluentApp,
+        materialAppBuilder: _buildMaterialApp,
       ),
     );
   }
 }
 
+/// Placeholder FluentApp - Phase 8 完整实现
+Widget _buildFluentApp() {
+  return const fluent.FluentApp(
+    title: 'ACGWarehouse',
+    home: fluent.ScaffoldPage(
+      content: Center(
+        child: fluent.Text('Fluent UI - Windows (Phase 8)'),
+      ),
+    ),
+  );
+}
+
+/// MaterialApp - 保持现有 MainScreen 逻辑
+Widget _buildMaterialApp() {
+  return MaterialApp(
+    title: 'ACGWarehouse',
+    theme: ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+      useMaterial3: true,
+    ),
+    home: const MainScreen(),
+  );
+}
+
+/// 现有 MainScreen - 保持不变
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
