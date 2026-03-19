@@ -43,7 +43,7 @@ func mustSaveCollection(t *testing.T, repo CollectionRepository, collection *dom
 func mustSaveImage(t *testing.T, db *sql.DB, image *domain.Image) {
 	t.Helper()
 	imageRepo := NewImageRepository(db)
-	if err := imageRepo.SaveImage(image); err != nil {
+	if _, err := imageRepo.SaveImage(image); err != nil {
 		t.Fatalf("Save image: %v", err)
 	}
 }

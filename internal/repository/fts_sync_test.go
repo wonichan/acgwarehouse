@@ -43,7 +43,7 @@ func TestFTSInsertSyncsOnImageInsert(t *testing.T) {
 		SourceRoot: "/test",
 		Format:     "png",
 	}
-	if err := imageRepo.SaveImage(img); err != nil {
+	if _, err := imageRepo.SaveImage(img); err != nil {
 		t.Fatalf("SaveImage() error = %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestFTSDeleteCleansIndex(t *testing.T) {
 		SourceRoot: "/test",
 		Format:     "png",
 	}
-	if err := imageRepo.SaveImage(img); err != nil {
+	if _, err := imageRepo.SaveImage(img); err != nil {
 		t.Fatalf("SaveImage() error = %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestFTSSearchReturnsMatchingImageIDs(t *testing.T) {
 		{Path: "/cat2.png", Filename: "sleeping_cat.png", SourceRoot: "/", Format: "png"},
 	}
 	for _, img := range images {
-		if err := imageRepo.SaveImage(img); err != nil {
+		if _, err := imageRepo.SaveImage(img); err != nil {
 			t.Fatalf("SaveImage() error = %v", err)
 		}
 	}
@@ -184,7 +184,7 @@ func TestRebuildFTSIndex(t *testing.T) {
 			SourceRoot: "/test",
 			Format:     "png",
 		}
-		if err := imageRepo.SaveImage(img); err != nil {
+		if _, err := imageRepo.SaveImage(img); err != nil {
 			t.Fatalf("SaveImage() error = %v", err)
 		}
 	}
@@ -242,7 +242,7 @@ func TestImageTagSaveUpdatesFTS(t *testing.T) {
 		SourceRoot: "/test",
 		Format:     "png",
 	}
-	if err := imageRepo.SaveImage(img); err != nil {
+	if _, err := imageRepo.SaveImage(img); err != nil {
 		t.Fatalf("SaveImage() error = %v", err)
 	}
 
@@ -310,7 +310,7 @@ func TestImageTagDeleteUpdatesFTS(t *testing.T) {
 		SourceRoot: "/test",
 		Format:     "png",
 	}
-	if err := imageRepo.SaveImage(img); err != nil {
+	if _, err := imageRepo.SaveImage(img); err != nil {
 		t.Fatalf("SaveImage() error = %v", err)
 	}
 

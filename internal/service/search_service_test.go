@@ -104,10 +104,10 @@ func TestSearchService_TagSearch(t *testing.T) {
 	// Create images
 	img1 := &domain.Image{Path: "/img1.jpg", Filename: "image1.jpg"}
 	img2 := &domain.Image{Path: "/img2.jpg", Filename: "image2.jpg"}
-	if err := imageRepo.SaveImage(img1); err != nil {
+	if _, err := imageRepo.SaveImage(img1); err != nil {
 		t.Fatalf("Failed to save img1: %v", err)
 	}
-	if err := imageRepo.SaveImage(img2); err != nil {
+	if _, err := imageRepo.SaveImage(img2); err != nil {
 		t.Fatalf("Failed to save img2: %v", err)
 	}
 
@@ -163,7 +163,7 @@ func TestSearchService_Pagination(t *testing.T) {
 			Path:     "/images/test_image_" + string(rune('a'+i%26)) + ".jpg",
 			Filename: "test_image_" + string(rune('a'+i%26)) + ".jpg",
 		}
-		if err := imageRepo.SaveImage(img); err != nil {
+		if _, err := imageRepo.SaveImage(img); err != nil {
 			t.Fatalf("Failed to save image: %v", err)
 		}
 	}
@@ -232,7 +232,7 @@ func TestSearchService_EmptyQuery(t *testing.T) {
 			Path:     "/images/img" + string(rune('0'+i)) + ".jpg",
 			Filename: "img" + string(rune('0'+i)) + ".jpg",
 		}
-		if err := imageRepo.SaveImage(img); err != nil {
+		if _, err := imageRepo.SaveImage(img); err != nil {
 			t.Fatalf("Failed to save image: %v", err)
 		}
 	}

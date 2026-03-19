@@ -114,7 +114,7 @@ func TestAdminService_GetSummary(t *testing.T) {
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 	}
-	err := imageRepo.SaveImage(img)
+	_, err := imageRepo.SaveImage(img)
 	if err != nil {
 		t.Fatalf("Failed to save test image: %v", err)
 	}

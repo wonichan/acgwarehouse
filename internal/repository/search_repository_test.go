@@ -194,13 +194,13 @@ func TestSearchRepository_CombinedSearch(t *testing.T) {
 	image2 := &domain.Image{Path: "/img2.jpg", Filename: "dog_image.jpg"}
 	image3 := &domain.Image{Path: "/img3.jpg", Filename: "bird_image.jpg"}
 
-	if err := imageRepo.SaveImage(image1); err != nil {
+	if _, err := imageRepo.SaveImage(image1); err != nil {
 		t.Fatalf("Failed to save image1: %v", err)
 	}
-	if err := imageRepo.SaveImage(image2); err != nil {
+	if _, err := imageRepo.SaveImage(image2); err != nil {
 		t.Fatalf("Failed to save image2: %v", err)
 	}
-	if err := imageRepo.SaveImage(image3); err != nil {
+	if _, err := imageRepo.SaveImage(image3); err != nil {
 		t.Fatalf("Failed to save image3: %v", err)
 	}
 

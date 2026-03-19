@@ -139,30 +139,19 @@ func (s *ScannerService) importFile(path, root string) error {
 	}
 	image.SourceRoot = root
 
-	if err := s.imageRepo.SaveImage(image); err != nil {
+	// SaveImage 返回 isNew 表示是否为新插入的记录
+	// INSERT OR IGNORE 会自动处理重复路径，只有新图片才会返回 isNew=true
+	isNew, err := s.imageRepo.SaveImage(image)
+	if err != nil {
 		return err
 	}
 
+	// 只对新图片创建后续处理任务，已存在的图片跳过
+	if !isNew {
+		return nil
+	}
+
 	if s.jobRepo != nil {
-		// 去重检查：查询是否已存在针对该图片的 image_imported ready 任务
-		existingJobs, err := s.jobRepo.FindByTypeAndStatus("image_imported", "ready")
-		if err != nil {
-			return fmt.Errorf("检查现有任务失败: %w", err)
-		}
-
-		// 检查是否已有相同 image_id 的待处理任务
-		for _, job := range existingJobs {
-			var payloadData map[string]any
-			if err := json.Unmarshal([]byte(job.Payload), &payloadData); err == nil {
-				if existingImageID, ok := payloadData["image_id"].(float64); ok {
-					if int64(existingImageID) == image.ID {
-						// 已存在针对该图片的任务，跳过创建
-						return nil
-					}
-				}
-			}
-		}
-
 		// Extract filename without extension for thumbnail naming
 		filename := strings.TrimSuffix(filepath.Base(image.Path), filepath.Ext(image.Path))
 		payload, err := json.Marshal(map[string]any{
