@@ -13,9 +13,7 @@ import 'services/duplicate_service.dart';
 import 'services/search_service.dart';
 import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
-import 'screens/gallery_screen.dart';
-import 'screens/duplicate_screen.dart';
-import 'screens/search_screen.dart';
+import 'app/material_app_shell.dart';
 
 void main() {
   runApp(const MyApp());
@@ -64,7 +62,7 @@ Widget _buildFluentApp() {
   );
 }
 
-/// MaterialApp - 保持现有 MainScreen 逻辑
+/// MaterialApp - Android/Web 平台
 Widget _buildMaterialApp() {
   return MaterialApp(
     title: 'ACGWarehouse',
@@ -72,56 +70,6 @@ Widget _buildMaterialApp() {
       colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
       useMaterial3: true,
     ),
-    home: const MainScreen(),
+    home: const MaterialAppShell(),
   );
-}
-
-/// 现有 MainScreen - 保持不变
-class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
-
-  @override
-  State<MainScreen> createState() => _MainScreenState();
-}
-
-class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;
-
-  static const List<Widget> _screens = [
-    GalleryScreen(),
-    SearchScreen(),
-    DuplicateScreen(),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: _screens[_selectedIndex],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.photo_library_outlined),
-            selectedIcon: Icon(Icons.photo_library),
-            label: '图库',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.search_outlined),
-            selectedIcon: Icon(Icons.search),
-            label: '搜索',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.content_copy_outlined),
-            selectedIcon: Icon(Icons.content_copy),
-            label: '重复检测',
-          ),
-        ],
-      ),
-    );
-  }
 }
