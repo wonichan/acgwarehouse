@@ -31,7 +31,14 @@ func (h *AITagHandler) TriggerAITags(c *gin.Context) {
 		return
 	}
 
-	payload, err := json.Marshal(worker.AITagPayload{ImageID: imageID, Path: image.Path})
+	// 解析可选的自定义提示词
+	var req struct {
+		Prompt string `json:"prompt"`
+	}
+	// 忽略解析错误，因为 prompt 是可选的
+	_ = c.ShouldBindJSON(&req)
+
+	payload, err := json.Marshal(worker.AITagPayload{ImageID: imageID, Path: image.Path, Prompt: req.Prompt})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -73,9 +80,17 @@ func (h *AITagHandler) GetAITagStatus(c *gin.Context) {
 	})
 }
 
+// GetDefaultPrompt 返回默认的 AI 标签生成提示词
+func (h *AITagHandler) GetDefaultPrompt(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"default_prompt": worker.GetDefaultTagPrompt(),
+	})
+}
+
 func (h *AITagHandler) BatchTriggerAITags(c *gin.Context) {
 	var req struct {
 		ImageIDs []int64 `json:"image_ids"`
+		Prompt   string  `json:"prompt"` // 可选的自定义提示词
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -89,7 +104,7 @@ func (h *AITagHandler) BatchTriggerAITags(c *gin.Context) {
 			respondRepoError(c, err)
 			return
 		}
-		payload, err := json.Marshal(worker.AITagPayload{ImageID: imageID, Path: image.Path})
+		payload, err := json.Marshal(worker.AITagPayload{ImageID: imageID, Path: image.Path, Prompt: req.Prompt})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

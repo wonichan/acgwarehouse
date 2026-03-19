@@ -228,13 +228,24 @@ class TagProvider extends ChangeNotifier {
   }
 
   // 触发 AI 标签生成
-  Future<int> triggerAITags(int imageId) async {
+  Future<int> triggerAITags(int imageId, {String? prompt}) async {
     try {
-      final jobId = await _tagService.triggerAITags(imageId);
+      final jobId = await _tagService.triggerAITags(imageId, prompt: prompt);
       return jobId;
     } catch (e) {
       _error = e.toString();
       debugPrint('Error triggering AI tags: $e');
+      rethrow;
+    }
+  }
+
+  // 获取默认 AI 提示词
+  Future<String> getDefaultAIPrompt() async {
+    try {
+      return await _tagService.getDefaultAIPrompt();
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error getting default AI prompt: $e');
       rethrow;
     }
   }

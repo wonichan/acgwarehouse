@@ -23,19 +23,41 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   Timer? _pollTimer;
   String? _aiStatus;
   bool _isAITriggered = false;
+  
+  // 自定义提示词相关
+  final TextEditingController _promptController = TextEditingController();
+  String _defaultPrompt = '';
+  bool _isLoadingPrompt = false;
+  bool _useCustomPrompt = false;
 
   @override
   void initState() {
     super.initState();
     _tagProvider = TagProvider(TagService());
     _loadImageTags();
+    _loadDefaultPrompt();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _promptController.dispose();
     _tagProvider.dispose();
     super.dispose();
+  }
+  
+  Future<void> _loadDefaultPrompt() async {
+    setState(() => _isLoadingPrompt = true);
+    try {
+      _defaultPrompt = await _tagProvider.getDefaultAIPrompt();
+      _promptController.text = _defaultPrompt;
+    } catch (e) {
+      debugPrint('Error loading default prompt: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingPrompt = false);
+      }
+    }
   }
 
   Future<void> _loadImageTags() async {
@@ -44,7 +66,10 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
 
   Future<void> _triggerAITags() async {
     try {
-      await _tagProvider.triggerAITags(widget.image.id);
+      final prompt = _useCustomPrompt && _promptController.text.isNotEmpty
+          ? _promptController.text
+          : null;
+      await _tagProvider.triggerAITags(widget.image.id, prompt: prompt);
       setState(() {
         _isAITriggered = true;
         _aiStatus = '队列中';
@@ -305,11 +330,52 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
               ],
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            '点击"生成"触发 AI 分析，标签将自动添加到待确认列表。',
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          const SizedBox(height: 12),
+          // 提示词开关
+          Row(
+            children: [
+              Text('自定义提示词', style: TextStyle(fontSize: 13, color: Colors.grey[700])),
+              const SizedBox(width: 8),
+              Switch(
+                value: _useCustomPrompt,
+                onChanged: (value) {
+                  setState(() => _useCustomPrompt = value);
+                },
+              ),
+              if (_isLoadingPrompt)
+                const SizedBox(width: 8, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+            ],
           ),
+          // 提示词输入框
+          if (_useCustomPrompt) ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: _promptController,
+              maxLines: 6,
+              decoration: InputDecoration(
+                hintText: '输入自定义提示词...',
+                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  tooltip: '恢复默认提示词',
+                  onPressed: () {
+                    _promptController.text = _defaultPrompt;
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '提示：可编辑提示词以自定义 AI 生成的标签类型和风格',
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            ),
+          ] else
+            Text(
+              '点击"生成"触发 AI 分析，标签将自动添加到待确认列表。',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
         ],
       ),
     );
