@@ -167,7 +167,7 @@ func TestSearchHandler_SearchWithTags(t *testing.T) {
 
 	// Create images
 	img1 := &domain.Image{Path: "/img1.jpg", Filename: "tagged_image.jpg"}
-	if err := imageRepo.SaveImage(img1); err != nil {
+	if _, err := imageRepo.SaveImage(img1); err != nil {
 		t.Fatalf("Failed to save image: %v", err)
 	}
 

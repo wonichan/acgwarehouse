@@ -197,10 +197,10 @@ func TestE2E_SearchWithTags(t *testing.T) {
 	imageRepo := repository.NewImageRepository(db)
 	img1 := &domain.Image{Path: "/img1.jpg", Filename: "tagged_image.jpg"}
 	img2 := &domain.Image{Path: "/img2.jpg", Filename: "another_tagged.jpg"}
-	if err := imageRepo.SaveImage(img1); err != nil {
+	if _, err := imageRepo.SaveImage(img1); err != nil {
 		t.Fatalf("Failed to save img1: %v", err)
 	}
-	if err := imageRepo.SaveImage(img2); err != nil {
+	if _, err := imageRepo.SaveImage(img2); err != nil {
 		t.Fatalf("Failed to save img2: %v", err)
 	}
 

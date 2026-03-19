@@ -84,7 +84,7 @@ func saveCollectionHandlerImage(t *testing.T, imageRepo repository.ImageReposito
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-	if err := imageRepo.SaveImage(image); err != nil {
+	if _, err := imageRepo.SaveImage(image); err != nil {
 		t.Fatalf("save image: %v", err)
 	}
 	return image

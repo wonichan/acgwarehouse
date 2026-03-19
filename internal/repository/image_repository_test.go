@@ -38,7 +38,7 @@ func TestImageRepositoryFindByTagIDsFiltersByStandardTags(t *testing.T) {
 		{Path: "/img3.png", Filename: "img3.png", SourceRoot: "/", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 	for _, img := range images {
-		if err := repo.SaveImage(img); err != nil {
+		if _, err := repo.SaveImage(img); err != nil {
 			t.Fatalf("save image: %v", err)
 		}
 	}
@@ -112,7 +112,7 @@ func TestImageRepositoryFindByTagIDSSupportsPagination(t *testing.T) {
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
 		}
-		if err := repo.SaveImage(img); err != nil {
+		if _, err := repo.SaveImage(img); err != nil {
 			t.Fatalf("save image: %v", err)
 		}
 		if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: img.ID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
@@ -167,7 +167,7 @@ func TestImageRepositoryCountByTagIDsReturnsCorrectCount(t *testing.T) {
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
 		}
-		if err := repo.SaveImage(img); err != nil {
+		if _, err := repo.SaveImage(img); err != nil {
 			t.Fatalf("save image: %v", err)
 		}
 		// img0 and img1 have tag1; img2 does not

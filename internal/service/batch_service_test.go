@@ -66,7 +66,7 @@ func saveBatchTestImage(t *testing.T, imageRepo repository.ImageRepository, file
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-	if err := imageRepo.SaveImage(image); err != nil {
+	if _, err := imageRepo.SaveImage(image); err != nil {
 		t.Fatalf("save image: %v", err)
 	}
 	return image
