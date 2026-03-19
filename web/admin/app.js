@@ -92,7 +92,7 @@ async function fetchWithAuth(url, options = {}) {
     });
     
     if (response.status === 401) {
-        showToast('Authentication required. Please login.', 'error');
+        showToast('需要身份验证，请先登录', 'error');
         throw new Error('Unauthorized');
     }
     
@@ -107,8 +107,8 @@ async function loadSummary() {
         summaryData = await response.json();
         renderSummary();
     } catch (error) {
-        console.error('Summary load error:', error);
-        elements.healthStatus.textContent = 'Error';
+        console.error('加载概览数据失败:', error);
+        elements.healthStatus.textContent = '错误';
         elements.healthStatus.classList.add('status-error');
     }
 }
@@ -123,9 +123,9 @@ async function loadJobs() {
         renderJobs();
         renderErrors();
     } catch (error) {
-        console.error('Jobs load error:', error);
+        console.error('加载任务列表失败:', error);
         elements.jobsTableBody.innerHTML = `
-            <tr><td colspan="6" class="error-cell">Failed to load jobs</td></tr>
+            <tr><td colspan="6" class="error-cell">加载任务失败</td></tr>
         `;
     }
 }
@@ -137,7 +137,7 @@ function renderSummary() {
     const { health, config, tasks, library } = summaryData;
     
     // Health
-    elements.healthStatus.textContent = health.status || 'unknown';
+    elements.healthStatus.textContent = health.status || '未知';
     elements.healthStatus.className = 'card-value ' + 
         (health.status === 'healthy' ? 'status-healthy' : 'status-unhealthy');
     elements.healthTimestamp.textContent = formatDate(health.timestamp);
@@ -159,11 +159,11 @@ function renderSummary() {
     elements.totalCollections.textContent = library.total_collections || 0;
     
     // Config info
-    elements.hasAIKey.textContent = config.has_ai_key ? '✓ Configured' : '✗ Not set';
+    elements.hasAIKey.textContent = config.has_ai_key ? '✓ 已配置' : '✗ 未设置';
     elements.hasAIKey.className = 'config-value ' + (config.has_ai_key ? 'status-healthy' : 'status-warning');
-    elements.hasCOSKey.textContent = config.has_cos_secret_key ? '✓ Configured' : '✗ Not set';
+    elements.hasCOSKey.textContent = config.has_cos_secret_key ? '✓ 已配置' : '✗ 未设置';
     elements.hasCOSKey.className = 'config-value ' + (config.has_cos_secret_key ? 'status-healthy' : 'status-warning');
-    elements.adminUsername.textContent = config.admin_username || '(none)';
+    elements.adminUsername.textContent = config.admin_username || '(无)';
     
     // Update button states
     updateButtonStates();
@@ -172,7 +172,7 @@ function renderSummary() {
 function renderJobs() {
     if (!jobsData.length) {
         elements.jobsTableBody.innerHTML = `
-            <tr><td colspan="6" class="empty-cell">No jobs found</td></tr>
+            <tr><td colspan="6" class="empty-cell">暂无任务</td></tr>
         `;
         return;
     }
@@ -195,14 +195,14 @@ function renderErrors() {
     const errors = jobsData.filter(job => job.error);
     
     if (!errors.length) {
-        elements.errorList.innerHTML = '<div class="empty-state">No errors to display</div>';
+        elements.errorList.innerHTML = '<div class="empty-state">暂无错误</div>';
         return;
     }
     
     const html = errors.slice(0, 10).map(job => `
         <div class="error-item">
             <div class="error-header">
-                <span class="error-id">Job #${job.id}</span>
+                <span class="error-id">任务 #${job.id}</span>
                 <span class="error-type">${escapeHtml(job.type)}</span>
                 <span class="error-time">${formatDate(job.created_at)}</span>
             </div>
@@ -260,22 +260,22 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Pause queue
     elements.pauseBtn.addEventListener('click', () => {
-        triggerAction('actions/jobs/pause', 'Job queue paused', 'Failed to pause queue');
+        triggerAction('actions/jobs/pause', '任务队列已暂停', '暂停队列失败');
     });
     
     // Resume queue
     elements.resumeBtn.addEventListener('click', () => {
-        triggerAction('actions/jobs/resume', 'Job queue resumed', 'Failed to resume queue');
+        triggerAction('actions/jobs/resume', '任务队列已恢复', '恢复队列失败');
     });
     
     // Retry failed
     elements.retryBtn.addEventListener('click', () => {
-        triggerAction('actions/jobs/retry-failed', 'Failed jobs queued for retry', 'Failed to retry jobs');
+        triggerAction('actions/jobs/retry-failed', '失败任务已加入重试队列', '重试任务失败');
     });
     
     // Trigger scan
     elements.scanBtn.addEventListener('click', () => {
-        triggerAction('actions/scan', 'Scan triggered successfully', 'Failed to trigger scan');
+        triggerAction('actions/scan', '扫描任务已触发', '触发扫描失败');
     });
     
     // Logout - clear any cached auth and reload
