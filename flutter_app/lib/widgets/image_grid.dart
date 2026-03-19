@@ -45,18 +45,37 @@ class ImageGrid extends StatelessWidget {
       );
     }
     
-    return CachedNetworkImage(
-      imageUrl: thumbnailUrl,
+    return Image.network(
+      thumbnailUrl,
       fit: BoxFit.cover,
-      memCacheWidth: 200,
-      placeholder: (context, url) => Container(
-        color: Colors.grey[200],
-        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      ),
-      errorWidget: (context, url, error) => Container(
-        color: Colors.grey[200],
-        child: const Icon(Icons.error, color: Colors.red),
-      ),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Container(
+          color: Colors.grey[200],
+          child: Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              value: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                  : null,
+            ),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        print('Image load error: $error');
+        print('URL: $thumbnailUrl');
+        return Container(
+          color: Colors.grey[200],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error, color: Colors.red, size: 20),
+              Text('Error', style: TextStyle(fontSize: 10, color: Colors.red)),
+            ],
+          ),
+        );
+      },
     );
   }
 }
