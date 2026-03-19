@@ -47,7 +47,7 @@ class ImageListProvider extends ChangeNotifier {
         _hasMore = true;
       }
       
-      debugPrint('加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds');
+      debugPrint('加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}');
       
       final response = await _apiService.fetchImages(
         offset: refresh ? 0 : _currentOffset,
@@ -89,6 +89,7 @@ class ImageListProvider extends ChangeNotifier {
   }
   
   Future<void> setSort(SortField field, bool asc) async {
+    debugPrint('setSort 被调用: field=${field.name}, asc=$asc');
     _sortField = field;
     _sortAsc = asc;
     // Reset pagination when sort changes
