@@ -124,6 +124,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 16 | AI 标签提示词自定义支持 | 2026-03-20 | a150353 | [16-ai](./quick/16-ai/) |
 | 17 | Flutter图片详情页添加手动标签编辑功能 | 2026-03-20 | 93425b0 | [17-add-manual-tag-editing-feature-for-flutt](./quick/17-add-manual-tag-editing-feature-for-flutt/) |
 | 18 | 修复Flutter标签统计类型转换错误 - 解析wrapped响应 | 2026-03-20 | 247b885 | [18-fix-flutter-tag-statistics-type-cast-err](./quick/18-fix-flutter-tag-statistics-type-cast-err/) |
+| 19 | 缩略图任务修改：文件名格式改为{原文件名}-{size}.jpg，动态大小调整(small>=200KB, large<=1MB) | 2026-03-20 | 3f30825 | [19-1-small-large-2-small-200kb-large-1mb](./quick/19-1-small-large-2-small-200kb-large-1mb/) |
 
 ## 会话历史
 
@@ -182,4 +183,4 @@ Phase 6: ✓ 优化与部署                       (100%)
 *Phase 6 Plan 03 已完成：2026-03-18*
 *Phase 6 Plan 05 已完成：2026-03-18*
 
-Last activity: 2026-03-20 - Completed quick task 17: Flutter图片详情页添加手动标签编辑功能
+Last activity: 2026-03-20 - Completed quick task 19: 缩略图任务修改
