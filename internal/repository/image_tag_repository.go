@@ -158,9 +158,9 @@ func (r *imageTagRepository) GetTagStats(ctx context.Context, tagID int64) (*Tag
 	err := r.db.QueryRowContext(ctx, `
 		SELECT 
 			COUNT(*) as usage_count,
-			SUM(CASE WHEN review_state = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count,
-			SUM(CASE WHEN review_state = 'pending' THEN 1 ELSE 0 END) as pending_count,
-			SUM(CASE WHEN review_state = 'rejected' THEN 1 ELSE 0 END) as rejected_count
+			COALESCE(SUM(CASE WHEN review_state = 'confirmed' THEN 1 ELSE 0 END), 0) as confirmed_count,
+			COALESCE(SUM(CASE WHEN review_state = 'pending' THEN 1 ELSE 0 END), 0) as pending_count,
+			COALESCE(SUM(CASE WHEN review_state = 'rejected' THEN 1 ELSE 0 END), 0) as rejected_count
 		FROM image_tags WHERE tag_id = ?
 	`, tagID).Scan(&stats.UsageCount, &stats.ConfirmedCount, &stats.PendingCount, &stats.RejectedCount)
 	if err != nil {
