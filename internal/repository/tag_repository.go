@@ -10,6 +10,7 @@ import (
 
 type TagRepository interface {
 	Save(ctx context.Context, tag *domain.Tag) error
+	Update(ctx context.Context, tag *domain.Tag) error
 	FindByID(ctx context.Context, id int64) (*domain.Tag, error)
 	FindByLabel(ctx context.Context, label string) (*domain.Tag, error)
 	FindByLabelLike(ctx context.Context, query string, limit int) ([]*domain.Tag, error)
@@ -62,6 +63,16 @@ func (r *tagRepository) Save(ctx context.Context, tag *domain.Tag) error {
 	}
 
 	return nil
+}
+
+// Update updates an existing tag using UPDATE statement to avoid cascade delete
+func (r *tagRepository) Update(ctx context.Context, tag *domain.Tag) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE tags 
+		SET preferred_label = ?, slug = ?, primary_category = ?, review_state = ?, trust_score = ?, usage_count = ?
+		WHERE id = ?
+	`, tag.PreferredLabel, tag.Slug, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.ID)
+	return err
 }
 
 func (r *tagRepository) FindByID(ctx context.Context, id int64) (*domain.Tag, error) {
