@@ -21,40 +21,41 @@ class _AddTagDialogState extends State<AddTagDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('添加标签'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _controller,
-            decoration: const InputDecoration(hintText: '输入标签名称'),
-            onChanged: _searchTags,
-          ),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: CircularProgressIndicator(),
+      content: SizedBox(
+        width: 400,
+        height: 300,
+        child: Column(
+          children: [
+            TextField(
+              controller: _controller,
+              decoration: const InputDecoration(hintText: '输入标签名称'),
+              onChanged: _searchTags,
             ),
-          if (_suggestions.isNotEmpty)
-            Container(
-              constraints: const BoxConstraints(maxHeight: 200),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _suggestions.length,
-                itemBuilder: (context, index) {
-                  final tag = _suggestions[index];
-                  return ListTile(
-                    dense: true,
-                    title: Text(tag.preferredLabel),
-                    subtitle: tag.primaryCategory != null
-                        ? Text(tag.primaryCategory!)
-                        : null,
-                    trailing: Text('${tag.usageCount}'),
-                    onTap: () => _selectTag(tag.id),
-                  );
-                },
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: CircularProgressIndicator(),
               ),
-            ),
-        ],
+            if (_suggestions.isNotEmpty)
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _suggestions.length,
+                  itemBuilder: (context, index) {
+                    final tag = _suggestions[index];
+                    return ListTile(
+                      dense: true,
+                      title: Text(tag.preferredLabel),
+                      subtitle: tag.primaryCategory != null
+                          ? Text(tag.primaryCategory!)
+                          : null,
+                      trailing: Text('${tag.usageCount}'),
+                      onTap: () => _selectTag(tag.id),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
