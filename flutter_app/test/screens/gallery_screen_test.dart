@@ -165,4 +165,137 @@ void main() {
       expect(find.textContaining('批量操作'), findsOneWidget);
     });
   });
+
+  group('Async AI Tag Generation', () {
+    testWidgets('closes bottom sheet immediately when AI generate tapped', (tester) async {
+      // Arrange
+      final selectionProvider = SelectionProvider()..enterSelectionMode();
+      selectionProvider.toggleSelection(1);
+      selectionProvider.toggleSelection(2);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GalleryScreen(
+            imageListProvider: _FakeImageListProvider(),
+            tagProvider: _TestTagProvider(_FakeTagService()),
+            selectionProvider: selectionProvider,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Tap batch action button to open bottom sheet
+      await tester.tap(find.textContaining('批量操作'));
+      await tester.pumpAndSettle();
+
+      // Verify bottom sheet is showing
+      expect(find.text('AI生成标签'), findsOneWidget);
+
+      // Act - tap AI generate button using the icon's parent InkWell
+      final aiIcon = find.byIcon(Icons.auto_awesome);
+      expect(aiIcon, findsOneWidget);
+      await tester.tap(aiIcon);
+      await tester.pumpAndSettle();
+
+      // Assert - bottom sheet should be closed
+      expect(find.text('AI生成标签'), findsNothing);
+    });
+
+    testWidgets('shows snackbar immediately with correct message', (tester) async {
+      // Arrange
+      final selectionProvider = SelectionProvider()..enterSelectionMode();
+      selectionProvider.toggleSelection(1);
+      selectionProvider.toggleSelection(2);
+      selectionProvider.toggleSelection(3);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GalleryScreen(
+            imageListProvider: _FakeImageListProvider(),
+            tagProvider: _TestTagProvider(_FakeTagService()),
+            selectionProvider: selectionProvider,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Open batch operations
+      await tester.tap(find.textContaining('批量操作'));
+      await tester.pumpAndSettle();
+
+      // Act - tap AI generate icon
+      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.pump();
+
+      // Assert - snackbar should show immediately with correct message
+      expect(find.textContaining('AI标签生成任务已在后台启动'), findsOneWidget);
+      expect(find.textContaining('3张图片'), findsOneWidget);
+    });
+
+    testWidgets('exits selection mode immediately', (tester) async {
+      // Arrange
+      final selectionProvider = SelectionProvider()..enterSelectionMode();
+      selectionProvider.toggleSelection(1);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GalleryScreen(
+            imageListProvider: _FakeImageListProvider(),
+            tagProvider: _TestTagProvider(_FakeTagService()),
+            selectionProvider: selectionProvider,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(selectionProvider.isSelectionMode, isTrue);
+
+      // Open batch operations
+      await tester.tap(find.textContaining('批量操作'));
+      await tester.pumpAndSettle();
+
+      // Act - tap AI generate icon
+      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.pump();
+
+      // Assert - selection mode should be exited immediately
+      expect(selectionProvider.isSelectionMode, isFalse);
+    });
+
+    testWidgets('fires API call without blocking UI', (tester) async {
+      // Arrange - use a fake service that tracks calls
+      final fakeTagService = _FakeTagService();
+      final selectionProvider = SelectionProvider()..enterSelectionMode();
+      selectionProvider.toggleSelection(1);
+      selectionProvider.toggleSelection(2);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GalleryScreen(
+            imageListProvider: _FakeImageListProvider(),
+            tagProvider: _TestTagProvider(fakeTagService),
+            selectionProvider: selectionProvider,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Open batch operations
+      await tester.tap(find.textContaining('批量操作'));
+      await tester.pumpAndSettle();
+
+      // Reset the called flag before act
+      fakeTagService.called = false;
+
+      // Act - tap AI generate icon
+      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.pump();
+
+      // Assert - API should have been called
+      expect(fakeTagService.called, isTrue);
+    });
+  });
 }
