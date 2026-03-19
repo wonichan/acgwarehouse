@@ -137,15 +137,31 @@ class TagService {
   }
 
   /// 触发 AI 标签生成
-  Future<int> triggerAITags(int imageId) async {
+  Future<int> triggerAITags(int imageId, {String? prompt}) async {
     final response = await _client.post(
       Uri.parse(ApiConfig.triggerAITags(imageId)),
+      headers: {'Content-Type': 'application/json'},
+      body: prompt != null && prompt.isNotEmpty 
+          ? jsonEncode({'prompt': prompt})
+          : null,
     );
     if (response.statusCode != 200 && response.statusCode != 202) {
       throw Exception('Failed to trigger AI tags: ${response.statusCode}');
     }
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     return json['job_id'] as int;
+  }
+
+  /// 获取默认 AI 提示词
+  Future<String> getDefaultAIPrompt() async {
+    final response = await _client.get(
+      Uri.parse(ApiConfig.defaultAIPrompt),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get default prompt: ${response.statusCode}');
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return json['default_prompt'] as String;
   }
 
   /// 获取 AI 任务状态

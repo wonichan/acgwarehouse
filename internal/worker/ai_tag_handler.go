@@ -16,6 +16,7 @@ import (
 type AITagPayload struct {
 	ImageID int64  `json:"image_id"`
 	Path    string `json:"path"`
+	Prompt  string `json:"prompt,omitempty"` // 用户自定义提示词，为空则使用默认提示词
 }
 
 type TagGovernanceMerger interface {
@@ -45,6 +46,11 @@ const DefaultTagPrompt = `请分析这张动漫风格的图片，提取符合以
 日系平涂,明日方舟,能天使,银发,兽耳,战斗服,冷淡表情,逆光,高质量
 只输出标签，用逗号分隔，不要解释。`
 
+// GetDefaultTagPrompt 返回默认的 AI 标签生成提示词
+func GetDefaultTagPrompt() string {
+	return DefaultTagPrompt
+}
+
 // RegisterAITagHandler 注册 AI 标签生成任务处理器
 func RegisterAITagHandler(manager *Manager, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger) {
 	manager.RegisterHandler("ai_tag_generation", func(ctx context.Context, id int64, payload string) error {
@@ -61,7 +67,11 @@ func handleAITagGeneration(ctx context.Context, id int64, payload string, client
 	}
 
 	// 调用 AI 服务生成标签
-	result, err := client.GenerateTags(ctx, p.Path, DefaultTagPrompt)
+	prompt := p.Prompt
+	if prompt == "" {
+		prompt = DefaultTagPrompt
+	}
+	result, err := client.GenerateTags(ctx, p.Path, prompt)
 	if err != nil {
 		return fmt.Errorf("generate tags: %w", err)
 	}

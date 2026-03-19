@@ -21,6 +21,7 @@ class ApiConfig {
   static String triggerAITags(int imageId) => '$baseUrl/images/$imageId/ai-tags';
   static String aiTagStatus(int imageId) => '$baseUrl/images/$imageId/ai-tags/status';
   static String get batchAITags => '$baseUrl/images/batch-ai-tags';
+  static String get defaultAIPrompt => '$baseUrl/ai-tags/default-prompt';
 
   // Duplicate detection endpoints
   static String get duplicates => '$baseUrl/duplicates';
