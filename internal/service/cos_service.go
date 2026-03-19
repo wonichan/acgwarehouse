@@ -66,5 +66,11 @@ func (s *COSService) Upload(ctx context.Context, imageID int64, size string, dat
 		return "", fmt.Errorf("upload thumbnail to cos: %w", err)
 	}
 
-	return fmt.Sprintf("%s/%s", s.bucketURL, key), nil
+	// Ensure bucketURL has https:// protocol
+	uploadURL := s.bucketURL
+	if !strings.HasPrefix(uploadURL, "http://") && !strings.HasPrefix(uploadURL, "https://") {
+		uploadURL = "https://" + uploadURL
+	}
+
+	return fmt.Sprintf("%s/%s", uploadURL, key), nil
 }
