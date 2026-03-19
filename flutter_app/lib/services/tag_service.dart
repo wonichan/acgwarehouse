@@ -221,4 +221,33 @@ class TagService {
       throw Exception('Failed to merge tag: ${response.statusCode}');
     }
   }
+
+  /// 清理无用标签（usage_count=0）
+  Future<Map<String, dynamic>> cleanUnusedTags() async {
+    final response = await _client.delete(
+      Uri.parse('${ApiConfig.baseUrl}/tags/cleanup'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to clean unused tags: ${response.statusCode}');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// 更新标签
+  Future<Tag> updateTag(int tagId, {String? preferredLabel, String? primaryCategory, String? reviewState}) async {
+    final body = <String, dynamic>{};
+    if (preferredLabel != null) body['preferred_label'] = preferredLabel;
+    if (primaryCategory != null) body['primary_category'] = primaryCategory;
+    if (reviewState != null) body['review_state'] = reviewState;
+
+    final response = await _client.put(
+      Uri.parse('${ApiConfig.baseUrl}/tags/$tagId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update tag: ${response.statusCode}');
+    }
+    return Tag.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
 }

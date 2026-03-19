@@ -67,13 +67,16 @@ class _TagManagementContent extends StatelessWidget {
               // Summary cards
               _buildSummaryCards(context, provider),
               
+              // Action buttons
+              _buildActionButtons(context, provider),
+              
               // Statistics list
               Expanded(
                 child: ListView.builder(
                   itemCount: provider.statistics.length,
                   itemBuilder: (context, index) {
                     final stat = provider.statistics[index];
-                    return _buildStatTile(stat);
+                    return _buildStatTile(context, provider, stat);
                   },
                 ),
               ),
@@ -156,7 +159,75 @@ class _TagManagementContent extends StatelessWidget {
     );
   }
 
-  Widget _buildStatTile(TagStatistics stat) {
+  Widget _buildActionButtons(BuildContext context, TagProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: provider.isLoadingStatistics 
+                ? null 
+                : () => _showCleanUnusedTagsDialog(context, provider),
+              icon: const Icon(Icons.cleaning_services),
+              label: const Text('清理无用标签'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCleanUnusedTagsDialog(BuildContext context, TagProvider provider) async {
+    // 计算无用标签数量
+    final unusedCount = provider.statistics.where((s) => s.usageCount == 0).length;
+    
+    if (unusedCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('没有无用标签需要清理')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认清理'),
+        content: Text('将删除 $unusedCount 个无用标签（未被任何图片使用）。此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认清理'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        final result = await provider.cleanUnusedTags();
+        final deletedCount = result['deleted_count'] as int? ?? 0;
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('成功清理 $deletedCount 个无用标签')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('清理失败: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Widget _buildStatTile(BuildContext context, TagProvider provider, TagStatistics stat) {
     return ListTile(
       leading: CircleAvatar(
         child: Text(stat.label.isNotEmpty ? stat.label[0].toUpperCase() : '?'),
@@ -166,10 +237,87 @@ class _TagManagementContent extends StatelessWidget {
         'AI: ${stat.aiCount} | 手动: ${stat.manualCount} | 待复核: ${stat.pendingCount}',
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: Chip(
-        label: Text('${stat.usageCount}'),
-        backgroundColor: Colors.grey[200],
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Chip(
+            label: Text('${stat.usageCount}'),
+            backgroundColor: stat.usageCount == 0 ? Colors.red[100] : Colors.grey[200],
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'edit') {
+                _showEditTagDialog(context, provider, stat);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit, size: 20),
+                    SizedBox(width: 8),
+                    Text('编辑标签'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _showEditTagDialog(BuildContext context, TagProvider provider, TagStatistics stat) async {
+    final controller = TextEditingController(text: stat.label);
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑标签'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: '标签名称',
+            hintText: '输入新的标签名称',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final newLabel = controller.text.trim();
+              if (newLabel.isNotEmpty && newLabel != stat.label) {
+                Navigator.of(context).pop(newLabel);
+              } else {
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty && context.mounted) {
+      try {
+        await provider.updateTag(stat.tagId, preferredLabel: result);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('标签更新成功')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('更新失败: $e')),
+          );
+        }
+      }
+    }
   }
 }

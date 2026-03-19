@@ -321,6 +321,85 @@ func (h *TagHandler) GetTagStats(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"stats": stats})
 }
 
+// CleanUnusedTags handles DELETE /api/v1/tags/cleanup
+// It removes tags with usage_count = 0 and no associated images.
+func (h *TagHandler) CleanUnusedTags(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Get all tags
+	tags, err := h.tagRepo.FindAll(ctx, 10000, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var deletedTags []gin.H
+	var failedDeletions []gin.H
+
+	for _, tag := range tags {
+		// Check if tag has any image associations
+		imageTags, err := h.imageTagRepo.FindByTagID(ctx, tag.ID, 1, 0)
+		if err != nil {
+			failedDeletions = append(failedDeletions, gin.H{
+				"tag_id":          tag.ID,
+				"preferred_label": tag.PreferredLabel,
+				"error":           "failed to check image associations: " + err.Error(),
+			})
+			continue
+		}
+
+		// Skip if tag has image associations
+		if len(imageTags) > 0 {
+			continue
+		}
+
+		// Delete tag aliases first
+		aliases, err := h.aliasRepo.FindByTagID(ctx, tag.ID)
+		if err != nil {
+			failedDeletions = append(failedDeletions, gin.H{
+				"tag_id":          tag.ID,
+				"preferred_label": tag.PreferredLabel,
+				"error":           "failed to find aliases: " + err.Error(),
+			})
+			continue
+		}
+
+		for _, alias := range aliases {
+			if err := h.aliasRepo.Delete(ctx, alias.ID); err != nil {
+				failedDeletions = append(failedDeletions, gin.H{
+					"tag_id":          tag.ID,
+					"preferred_label": tag.PreferredLabel,
+					"error":           "failed to delete alias: " + err.Error(),
+				})
+				continue
+			}
+		}
+
+		// Delete the tag
+		if err := h.tagRepo.Delete(ctx, tag.ID); err != nil {
+			failedDeletions = append(failedDeletions, gin.H{
+				"tag_id":          tag.ID,
+				"preferred_label": tag.PreferredLabel,
+				"error":           err.Error(),
+			})
+			continue
+		}
+
+		deletedTags = append(deletedTags, gin.H{
+			"tag_id":          tag.ID,
+			"preferred_label": tag.PreferredLabel,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":          true,
+		"deleted_count":    len(deletedTags),
+		"failed_count":     len(failedDeletions),
+		"deleted_tags":     deletedTags,
+		"failed_deletions": failedDeletions,
+	})
+}
+
 func parseIDParam(c *gin.Context, name string) (int64, bool) {
 	id, err := strconv.ParseInt(c.Param(name), 10, 64)
 	if err != nil || id <= 0 {
