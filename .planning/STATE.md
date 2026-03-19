@@ -122,6 +122,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 14 | 修复标签统计API 500错误 - SQL NULL处理 | 2026-03-19 | 9b01935 | [14-api-500-sql-null](./quick/14-api-500-sql-null/) |
 | 15 | 修复 Flutter 桌面程序顶部排序按钮不生效的问题 | 2026-03-19 | 2e46b60 | [15-flutter](./quick/15-flutter/) |
 | 16 | AI 标签提示词自定义支持 | 2026-03-20 | a150353 | [16-ai](./quick/16-ai/) |
+| 17 | Flutter图片详情页添加手动标签编辑功能 | 2026-03-20 | TBD | [17-add-manual-tag-editing-feature-for-flutt](./quick/17-add-manual-tag-editing-feature-for-flutt/) |
 | 18 | 修复Flutter标签统计类型转换错误 - 解析wrapped响应 | 2026-03-20 | 247b885 | [18-fix-flutter-tag-statistics-type-cast-err](./quick/18-fix-flutter-tag-statistics-type-cast-err/) |
 
 ## 会话历史
