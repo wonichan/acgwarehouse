@@ -117,6 +117,16 @@ func (m *Manager) AddJob(ctx context.Context, jobType, payload string) (int64, e
 	}
 }
 
+// LoadExistingJob 将已有的任务加载到队列中（不创建新记录）
+func (m *Manager) LoadExistingJob(job *domain.AsyncJob) bool {
+	select {
+	case m.queue <- job:
+		return true
+	default:
+		return false
+	}
+}
+
 func (m *Manager) processJob(ctx context.Context, job *domain.AsyncJob) {
 	handler, ok := m.handlers[job.Type]
 	if !ok {
