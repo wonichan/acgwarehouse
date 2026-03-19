@@ -156,7 +156,7 @@ func (m *Manager) processJob(ctx context.Context, job *domain.AsyncJob) {
 		log.Printf("任务 %s #%d 执行失败: %v", job.Type, job.ID, err)
 	} else {
 		job.Status = "finished"
-		job.Progress = 1
+		job.Progress = 100
 		duration := time.Since(started)
 		log.Printf("任务 %s #%d 执行完成，耗时: %.2f秒", job.Type, job.ID, duration.Seconds())
 	}
