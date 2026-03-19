@@ -113,11 +113,14 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 5 | Admin Dashboard 中文化本地化 | 2026-03-19 | 1e87527 | [5-admin-chinese-localization](./quick/5-admin-chinese-localization/) |
 | 6 | 执行方案三：添加任务加载逻辑，服务器启动时自动处理数据库中ready任务 | 2026-03-19 | 54a687c | [6-ready](./quick/6-ready/) |
 | 7 | 创建并注册 manual_scan handler，修复后台扫描功能"no handler registered"错误 | 2026-03-19 | cfd507b | [7-manual-scan-handler-no-handler-registere](./quick/7-manual-scan-handler-no-handler-registere/) |
+| 8 | 修复Flutter缩略图不显示问题 | 2026-03-19 | 233d0a4 | [8-flutter](./quick/8-flutter/) |
 
 ## 会话历史
 
 | 日期 | Phase | 动作 | 说明 |
 |------|-------|--------|-------|
+| 2026-03-19 | Quick | Quick Task 8 已完成 | 已修复后端COALESCE问题和COS URL协议头问题 |
+| 2026-03-19 | Quick | Quick Task 7 已完成 | 已创建并注册 manual_scan handler |
 | 2026-03-19 | Quick | Quick Task 6 已完成 | 已添加任务加载逻辑，服务器启动时自动加载 ready 状态任务到队列 |
 | 2026-03-19 | Quick | Quick Task 5 已完成 | 已完成 Admin Dashboard 中文化本地化，包括 index.html 和 app.js |
 | 2026-03-19 | Quick | Quick Task 4 已完成 | 已添加 image_imported 处理器，自动触发缩略图生成任务 |
