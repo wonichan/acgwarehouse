@@ -20,6 +20,8 @@ type ImageRepository interface {
 	FindAll(limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
+	FindUntagged(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
+	CountUntagged(ctx context.Context) (int64, error)
 	UpdateThumbnails(id int64, smallURL, largeURL string) error
 	Count() (int64, error)
 	Delete(id int64) error
@@ -309,6 +311,88 @@ func (r *sqliteImageRepository) CountByTagIDs(ctx context.Context, tagIDs []int6
 
 	var count int64
 	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	return count, err
+}
+
+// FindUntagged returns images that have no tags associated with them.
+// Uses LEFT JOIN to find images without any corresponding image_tags entries.
+func (r *sqliteImageRepository) FindUntagged(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error) {
+	// 验证并设置默认排序字段
+	validSortFields := map[string]string{
+		"created_at": "i.created_at",
+		"filename":   "i.filename",
+		"file_size":  "i.file_size",
+		"id":         "i.id",
+	}
+
+	sortColumn := validSortFields[sortBy]
+	if sortColumn == "" {
+		sortColumn = "i.id"
+	}
+
+	// 验证排序方向
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
+		FROM images i
+		LEFT JOIN image_tags it ON it.image_id = i.id
+		WHERE it.image_id IS NULL
+		ORDER BY %s %s
+		LIMIT ? OFFSET ?
+	`, sortColumn, sortDir)
+
+	rows, err := r.db.QueryContext(ctx, query, int64(limit), int64(offset))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	images := make([]domain.Image, 0)
+	for rows.Next() {
+		var image domain.Image
+		var thumbnailSmallUrl, thumbnailLargeUrl sql.NullString
+		if err := rows.Scan(
+			&image.ID,
+			&image.Path,
+			&image.Filename,
+			&image.SourceRoot,
+			&image.FileSize,
+			&image.Width,
+			&image.Height,
+			&image.Format,
+			&image.PHash,
+			&thumbnailSmallUrl,
+			&thumbnailLargeUrl,
+			&image.CreatedAt,
+			&image.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		// Convert NullString to string (empty if NULL)
+		if thumbnailSmallUrl.Valid {
+			image.ThumbnailSmallUrl = thumbnailSmallUrl.String
+		}
+		if thumbnailLargeUrl.Valid {
+			image.ThumbnailLargeUrl = thumbnailLargeUrl.String
+		}
+		images = append(images, image)
+	}
+
+	return images, rows.Err()
+}
+
+// CountUntagged returns the count of images that have no tags associated with them.
+func (r *sqliteImageRepository) CountUntagged(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(i.id)
+		FROM images i
+		LEFT JOIN image_tags it ON it.image_id = i.id
+		WHERE it.image_id IS NULL
+	`).Scan(&count)
 	return count, err
 }
 

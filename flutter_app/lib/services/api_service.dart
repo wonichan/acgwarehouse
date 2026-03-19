@@ -34,12 +34,14 @@ class ApiService {
   /// [sortBy] - Field to sort by (created_at, filename, file_size)
   /// [sortDir] - Sort direction (asc or desc)
   /// [tagIds] - Optional list of tag IDs to filter images by (AND semantics)
+  /// [hasTags] - Optional filter for tagged/untagged images (true = has tags, false = no tags)
   Future<PaginationResponse<ImageModel>> fetchImages({
     int offset = 0,
     int limit = 20,
     String sortBy = 'created_at',
     String sortDir = 'desc',
     List<int>? tagIds,
+    bool? hasTags,
   }) async {
     final queryParams = <String, String>{
       'offset': offset.toString(),
@@ -50,6 +52,10 @@ class ApiService {
 
     if (tagIds != null && tagIds.isNotEmpty) {
       queryParams['tag_ids'] = tagIds.join(',');
+    }
+
+    if (hasTags != null) {
+      queryParams['has_tags'] = hasTags.toString();
     }
 
     final uri = Uri.parse('$baseUrl/api/v1/images').replace(

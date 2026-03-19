@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 Phase: 8 of 10 (Windows UI)
 Plan: 0 of 4 in current phase
 Status: Ready to execute
-Last activity: 2026-03-20 — Phase 7 complete: Architecture Foundation
+Last activity: 2026-03-20 — Completed quick task 30: 添加筛选未打标签图片功能
 
 Progress: [██████████░░░░░░░░░] 72% (27 plans completed)
 
@@ -78,6 +78,12 @@ None yet for v2.0.
 ### Blockers/Concerns
 
 None yet.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 30 | 添加筛选未打标签图片功能 | 2026-03-20 | TBD | [30-筛选未打标签图片](./quick/30-筛选未打标签图片/) |
 
 ## Session Continuity
 

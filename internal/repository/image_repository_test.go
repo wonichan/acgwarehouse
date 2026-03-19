@@ -212,3 +212,242 @@ func newImageRepositoryTestDB(t *testing.T) (*sql.DB, ImageRepository) {
 
 	return db, NewImageRepository(db)
 }
+
+func TestFindUntaggedReturnsOnlyImagesWithoutTags(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	// Create tags
+	tagRepo := NewTagRepository(db)
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	// Create 3 images
+	images := []*domain.Image{
+		{Path: "/img1.png", Filename: "img1.png", SourceRoot: "/", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/img2.png", Filename: "img2.png", SourceRoot: "/", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/img3.png", Filename: "img3.png", SourceRoot: "/", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	for _, img := range images {
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	// Tag img1 and img2, leave img3 untagged
+	imageTagRepo := NewImageTagRepository(db)
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[0].ID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save image-tag: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[1].ID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save image-tag: %v", err)
+	}
+
+	// Test: FindUntagged should return only img3
+	untagged, err := repo.FindUntagged(ctx, 10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindUntagged() error = %v", err)
+	}
+	if len(untagged) != 1 {
+		t.Fatalf("len(untagged) = %d, want 1", len(untagged))
+	}
+	if untagged[0].ID != images[2].ID {
+		t.Fatalf("untagged[0].ID = %d, want %d", untagged[0].ID, images[2].ID)
+	}
+}
+
+func TestFindUntaggedSupportsPagination(t *testing.T) {
+	t.Parallel()
+
+	_, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	// Create 5 untagged images
+	for i := 0; i < 5; i++ {
+		img := &domain.Image{
+			Path:       filepath.Join("/img", string(rune('a'+i))),
+			Filename:   string(rune('a'+i)) + ".png",
+			SourceRoot: "/img",
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	// Test pagination: limit 2, offset 0
+	page1, err := repo.FindUntagged(ctx, 2, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindUntagged() error = %v", err)
+	}
+	if len(page1) != 2 {
+		t.Fatalf("len(page1) = %d, want 2", len(page1))
+	}
+
+	// Test pagination: limit 2, offset 2
+	page2, err := repo.FindUntagged(ctx, 2, 2, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindUntagged() error = %v", err)
+	}
+	if len(page2) != 2 {
+		t.Fatalf("len(page2) = %d, want 2", len(page2))
+	}
+
+	// Test pagination: limit 2, offset 4
+	page3, err := repo.FindUntagged(ctx, 2, 4, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindUntagged() error = %v", err)
+	}
+	if len(page3) != 1 {
+		t.Fatalf("len(page3) = %d, want 1", len(page3))
+	}
+}
+
+func TestFindUntaggedSupportsSorting(t *testing.T) {
+	t.Parallel()
+
+	_, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	// Create images with different file sizes
+	sizes := []int{100, 200, 300}
+	for i, size := range sizes {
+		img := &domain.Image{
+			Path:       filepath.Join("/img", string(rune('a'+i))),
+			Filename:   string(rune('a'+i)) + ".png",
+			SourceRoot: "/img",
+			FileSize:   int64(size),
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	// Test sorting by file_size descending
+	desc, err := repo.FindUntagged(ctx, 10, 0, "file_size", "desc")
+	if err != nil {
+		t.Fatalf("FindUntagged() error = %v", err)
+	}
+	if len(desc) != 3 {
+		t.Fatalf("len(desc) = %d, want 3", len(desc))
+	}
+	if desc[0].FileSize != 300 {
+		t.Fatalf("desc[0].FileSize = %d, want 300 (largest first)", desc[0].FileSize)
+	}
+
+	// Test sorting by file_size ascending
+	asc, err := repo.FindUntagged(ctx, 10, 0, "file_size", "asc")
+	if err != nil {
+		t.Fatalf("FindUntagged() error = %v", err)
+	}
+	if asc[0].FileSize != 100 {
+		t.Fatalf("asc[0].FileSize = %d, want 100 (smallest first)", asc[0].FileSize)
+	}
+}
+
+func TestCountUntaggedReturnsCorrectCount(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	// Create tags
+	tagRepo := NewTagRepository(db)
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	// Create 5 images
+	for i := 0; i < 5; i++ {
+		img := &domain.Image{
+			Path:       filepath.Join("/img", string(rune('a'+i))),
+			Filename:   string(rune('a'+i)) + ".png",
+			SourceRoot: "/img",
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	// Tag first 2 images
+	imageTagRepo := NewImageTagRepository(db)
+	imgs, _ := repo.FindAll(10, 0, "id", "asc")
+	for i := 0; i < 2; i++ {
+		if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: imgs[i].ID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+			t.Fatalf("save image-tag: %v", err)
+		}
+	}
+
+	// Count untagged: should be 3
+	count, err := repo.CountUntagged(ctx)
+	if err != nil {
+		t.Fatalf("CountUntagged() error = %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("count = %d, want 3", count)
+	}
+}
+
+func TestFindUntaggedReturnsEmptyWhenAllImagesHaveTags(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	// Create tag
+	tagRepo := NewTagRepository(db)
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	// Create 3 images and tag all of them
+	imageTagRepo := NewImageTagRepository(db)
+	for i := 0; i < 3; i++ {
+		img := &domain.Image{
+			Path:       filepath.Join("/img", string(rune('a'+i))),
+			Filename:   string(rune('a'+i)) + ".png",
+			SourceRoot: "/img",
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+		if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: img.ID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+			t.Fatalf("save image-tag: %v", err)
+		}
+	}
+
+	// Test: should return empty
+	untagged, err := repo.FindUntagged(ctx, 10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindUntagged() error = %v", err)
+	}
+	if len(untagged) != 0 {
+		t.Fatalf("len(untagged) = %d, want 0", len(untagged))
+	}
+
+	// Count should also be 0
+	count, err := repo.CountUntagged(ctx)
+	if err != nil {
+		t.Fatalf("CountUntagged() error = %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count = %d, want 0", count)
+	}
+}
