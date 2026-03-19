@@ -60,7 +60,12 @@ func (s *COSService) Upload(ctx context.Context, imageID int64, size string, dat
 	key := fmt.Sprintf("thumbnails/%d_%s.jpg", imageID, size)
 
 	_, err := s.client.Object.Put(ctx, key, bytes.NewReader(data), &cos.ObjectPutOptions{
-		ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{ContentType: "image/jpeg"},
+		ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
+			ContentType: "image/jpeg",
+		},
+		ACLHeaderOptions: &cos.ACLHeaderOptions{
+			XCosACL: "public-read",
+		},
 	})
 	if err != nil {
 		return "", fmt.Errorf("upload thumbnail to cos: %w", err)

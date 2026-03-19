@@ -144,6 +144,25 @@ func (s *ScannerService) importFile(path, root string) error {
 	}
 
 	if s.jobRepo != nil {
+		// 去重检查：查询是否已存在针对该图片的 image_imported ready 任务
+		existingJobs, err := s.jobRepo.FindByTypeAndStatus("image_imported", "ready")
+		if err != nil {
+			return fmt.Errorf("检查现有任务失败: %w", err)
+		}
+
+		// 检查是否已有相同 image_id 的待处理任务
+		for _, job := range existingJobs {
+			var payloadData map[string]any
+			if err := json.Unmarshal([]byte(job.Payload), &payloadData); err == nil {
+				if existingImageID, ok := payloadData["image_id"].(float64); ok {
+					if int64(existingImageID) == image.ID {
+						// 已存在针对该图片的任务，跳过创建
+						return nil
+					}
+				}
+			}
+		}
+
 		payload, err := json.Marshal(map[string]any{
 			"image_id": image.ID,
 			"path":     image.Path,
