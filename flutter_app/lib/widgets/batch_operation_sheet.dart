@@ -23,9 +23,10 @@ class BatchOperationSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
           // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -99,7 +100,8 @@ class BatchOperationSheet extends StatelessWidget {
           const SizedBox(height: 16),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildOperationButton(

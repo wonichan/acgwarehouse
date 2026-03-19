@@ -6,6 +6,7 @@ import '../providers/tag_provider.dart';
 import '../services/api_service.dart';
 import '../services/tag_service.dart';
 import '../widgets/batch_operation_sheet.dart';
+import '../widgets/batch_tag_dialog.dart';
 import '../widgets/image_grid.dart';
 import '../widgets/image_masonry.dart';
 import '../widgets/tag_filter_drawer.dart';
@@ -299,29 +300,96 @@ class _GalleryContentState extends State<_GalleryContent> {
     return BatchOperationSheet.show(
       context,
       selectionProvider: selectionProvider,
+      onAddTags: () => _batchAddTags(context),
+      onRemoveTags: () => _batchRemoveTags(context),
       onGenerateAITags: () => _generateAITags(context),
     );
+  }
+
+  Future<void> _batchAddTags(BuildContext context) async {
+    final selectionProvider = context.read<SelectionProvider>();
+    final imageIds = selectionProvider.selectedImageIds.toList();
+
+    // Close bottom sheet
+    Navigator.pop(context);
+
+    final result = await showDialog<dynamic>(
+      context: context,
+      builder: (context) => BatchAddTagDialog(imageIds: imageIds),
+    );
+
+    // Handle result
+    if (result is Map && result['success'] == true && mounted) {
+      final successCount = result['successCount'] as int? ?? 0;
+      final failCount = result['failCount'] as int? ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已为 $successCount 张图片添加标签${failCount > 0 ? '，$failCount 张失败' : ''}'),
+        ),
+      );
+      selectionProvider.exitSelectionMode();
+    } else if (result is Map && result['success'] == false && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('添加失败: ${result['error']}')),
+      );
+    }
+  }
+
+  Future<void> _batchRemoveTags(BuildContext context) async {
+    final selectionProvider = context.read<SelectionProvider>();
+    final imageIds = selectionProvider.selectedImageIds.toList();
+
+    // Close bottom sheet
+    Navigator.pop(context);
+
+    final result = await showDialog<dynamic>(
+      context: context,
+      builder: (context) => BatchRemoveTagDialog(imageIds: imageIds),
+    );
+
+    // Handle result
+    if (result is Map && result['success'] == true && mounted) {
+      final successCount = result['successCount'] as int? ?? 0;
+      final failCount = result['failCount'] as int? ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已从 $successCount 张图片移除标签${failCount > 0 ? '，$failCount 张失败' : ''}'),
+        ),
+      );
+      selectionProvider.exitSelectionMode();
+    }
   }
 
   Future<void> _generateAITags(BuildContext context) async {
     final selectionProvider = context.read<SelectionProvider>();
     final tagService = context.read<TagProvider>().tagService;
     final imageIds = selectionProvider.selectedImageIds.toList();
+    final count = imageIds.length;
 
+    // Close bottom sheet immediately
+    Navigator.pop(context);
+    
+    // Show immediate feedback
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('AI标签生成任务已在后台启动 ($count张图片)')),
+      );
+    }
+    
+    // Exit selection mode
+    selectionProvider.exitSelectionMode();
+
+    // Fire API call asynchronously without blocking
+    _triggerAITagsAsync(tagService, imageIds);
+  }
+
+  void _triggerAITagsAsync(TagService tagService, List<int> imageIds) async {
     try {
-      final result = await tagService.batchTriggerAITags(imageIds);
-      final jobIds = (result['job_ids'] as List?) ?? const [];
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已触发 ${jobIds.length} 个 AI 标签任务')),
-      );
-      selectionProvider.exitSelectionMode();
+      await tagService.batchTriggerAITags(imageIds);
+      // Success - no need to show another message
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('AI 生成失败: $e')),
-      );
+      // Log error but don't show to user since we're async
+      debugPrint('AI tag generation error: $e');
     }
   }
 
