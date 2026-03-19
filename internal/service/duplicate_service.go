@@ -49,7 +49,7 @@ func (s *DuplicateService) DetectDuplicates(ctx context.Context, opts DetectOpti
 	}
 
 	// 获取所有图片
-	images, err := s.imageRepo.FindAll(1000000, 0)
+	images, err := s.imageRepo.FindAll(1000000, 0, "id", "asc")
 	if err != nil {
 		return 0, err
 	}
