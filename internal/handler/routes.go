@@ -137,15 +137,18 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	aiTrigger := gin.HandlerFunc(placeholderHandler)
 	aiStatus := gin.HandlerFunc(placeholderHandler)
 	aiBatch := gin.HandlerFunc(placeholderHandler)
+	aiDefaultPrompt := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.JobManager != nil && deps.ImageRepo != nil && deps.JobRepo != nil {
 		aiTagHandler := NewAITagHandler(deps.JobManager, deps.ImageRepo, deps.JobRepo)
 		aiTrigger = aiTagHandler.TriggerAITags
 		aiStatus = aiTagHandler.GetAITagStatus
 		aiBatch = aiTagHandler.BatchTriggerAITags
+		aiDefaultPrompt = aiTagHandler.GetDefaultPrompt
 	}
 	api.POST("/images/:id/ai-tags", aiTrigger)
 	api.GET("/images/:id/ai-tags/status", aiStatus)
 	api.POST("/images/batch-ai-tags", aiBatch)
+	api.GET("/ai-tags/default-prompt", aiDefaultPrompt)
 
 	// Duplicate detection routes
 	duplicateDetect := gin.HandlerFunc(placeholderHandler)
