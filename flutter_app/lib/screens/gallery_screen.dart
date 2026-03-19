@@ -68,12 +68,6 @@ class _GalleryContentState extends State<_GalleryContent> {
           _buildManageTagsButton(context),
         ],
       ),
-      drawer: TagFilterDrawer(
-        onFilterChanged: (tagIds) {
-          // Update both providers
-          context.read<ImageListProvider>().setTagFilter(tagIds);
-        },
-      ),
       body: Consumer<ImageListProvider>(
         builder: (context, provider, child) {
           if (provider.images.isEmpty && provider.isLoading) {
@@ -118,20 +112,37 @@ class _GalleryContentState extends State<_GalleryContent> {
   }
   
   Widget _buildTagFilterButton(BuildContext context) {
-    return Builder(
-      builder: (context) {
-        return IconButton(
-          icon: const Icon(Icons.filter_list),
-          onPressed: () {
-            debugPrint('标签筛选按钮被点击');
-            try {
-              Scaffold.of(context).openDrawer();
-              debugPrint('Drawer 打开成功');
-            } catch (e) {
-              debugPrint('打开 Drawer 失败: $e');
-            }
-          },
-          tooltip: '标签筛选',
+    return IconButton(
+      icon: const Icon(Icons.filter_list),
+      onPressed: () => _showTagFilterDialog(context),
+      tooltip: '标签筛选',
+    );
+  }
+  
+  void _showTagFilterDialog(BuildContext context) {
+    debugPrint('显示标签筛选对话框');
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('标签筛选'),
+          content: SizedBox(
+            width: 400,
+            height: 500,
+            child: TagFilterDrawer(
+              onFilterChanged: (tagIds) {
+                debugPrint('标签筛选变更: $tagIds');
+                // 更新图片列表
+                context.read<ImageListProvider>().setTagFilter(tagIds);
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
         );
       },
     );
