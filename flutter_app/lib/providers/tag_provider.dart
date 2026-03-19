@@ -324,4 +324,17 @@ class TagProvider extends ChangeNotifier {
       rethrow;
     }
   }
+
+  // 删除标签
+  Future<void> deleteTag(int tagId) async {
+    try {
+      await _tagService.deleteTag(tagId);
+      // 刷新统计数据
+      await loadStatistics();
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error deleting tag: $e');
+      rethrow;
+    }
+  }
 }
