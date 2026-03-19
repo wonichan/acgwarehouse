@@ -14,7 +14,7 @@ storage:
 
 ai:
   provider: "doubao"
-  api_key: "YOUR_API_KEY_HERE"
+  api_key: ""
   model: "doubao-seed-2-0-lite-260215"
   requests_per_minute: 120
 
