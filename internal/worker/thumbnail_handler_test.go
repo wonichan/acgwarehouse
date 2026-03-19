@@ -16,13 +16,13 @@ func TestThumbnailHandlerHandleSuccess(t *testing.T) {
 		large: &domain.Thumbnail{Data: []byte("large-bytes"), Size: "large"},
 	}
 	cosSvc := &stubThumbnailUploader{urls: map[string]string{
-		"small": "https://cos.local/thumbnails/11_small.jpg",
-		"large": "https://cos.local/thumbnails/11_large.jpg",
+		"small": "https://cos.local/thumbnails/test-image-small.jpg",
+		"large": "https://cos.local/thumbnails/test-image-large.jpg",
 	}}
 	repo := &stubThumbnailImageRepo{}
 
 	h := NewThumbnailHandler(thumbSvc, cosSvc, repo)
-	err := h.Handle(context.Background(), 99, `{"image_id":11,"path":"C:/tmp/a.png"}`)
+	err := h.Handle(context.Background(), 99, `{"image_id":11,"path":"C:/tmp/a.png","filename":"test-image"}`)
 	if err != nil {
 		t.Fatalf("Handle() error = %v", err)
 	}
@@ -33,10 +33,10 @@ func TestThumbnailHandlerHandleSuccess(t *testing.T) {
 	if repo.id != 11 {
 		t.Fatalf("updated image id = %d, want 11", repo.id)
 	}
-	if repo.smallURL != "https://cos.local/thumbnails/11_small.jpg" {
+	if repo.smallURL != "https://cos.local/thumbnails/test-image-small.jpg" {
 		t.Fatalf("small url = %q", repo.smallURL)
 	}
-	if repo.largeURL != "https://cos.local/thumbnails/11_large.jpg" {
+	if repo.largeURL != "https://cos.local/thumbnails/test-image-large.jpg" {
 		t.Fatalf("large url = %q", repo.largeURL)
 	}
 }
@@ -91,7 +91,7 @@ type stubThumbnailUploader struct {
 	err  error
 }
 
-func (s *stubThumbnailUploader) Upload(ctx context.Context, imageID int64, size string, data []byte) (string, error) {
+func (s *stubThumbnailUploader) Upload(ctx context.Context, filename, size string, data []byte) (string, error) {
 	if s.err != nil {
 		return "", s.err
 	}
