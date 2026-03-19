@@ -14,8 +14,8 @@ type ImageRepository interface {
 	SaveImage(image *domain.Image) error
 	FindByID(id int64) (*domain.Image, error)
 	FindByPath(path string) (*domain.Image, error)
-	FindAll(limit, offset int) ([]domain.Image, error)
-	FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int) ([]domain.Image, error)
+	FindAll(limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
+	FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
 	UpdateThumbnails(id int64, smallURL, largeURL string) error
 	Count() (int64, error)
@@ -107,11 +107,31 @@ func (r *sqliteImageRepository) queryOne(query string, args ...any) (*domain.Ima
 	return image, nil
 }
 
-func (r *sqliteImageRepository) FindAll(limit, offset int) ([]domain.Image, error) {
-	rows, err := r.db.Query(`
+func (r *sqliteImageRepository) FindAll(limit, offset int, sortBy, sortDir string) ([]domain.Image, error) {
+	// 验证并设置默认排序字段
+	validSortFields := map[string]string{
+		"created_at": "created_at",
+		"filename":   "filename",
+		"file_size":  "file_size",
+		"id":         "id",
+	}
+
+	sortColumn := validSortFields[sortBy]
+	if sortColumn == "" {
+		sortColumn = "id"
+	}
+
+	// 验证排序方向
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
-		FROM images ORDER BY id LIMIT ? OFFSET ?
-	`, limit, offset)
+		FROM images ORDER BY %s %s LIMIT ? OFFSET ?
+	`, sortColumn, sortDir)
+
+	rows, err := r.db.Query(query, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -169,9 +189,27 @@ func (r *sqliteImageRepository) Count() (int64, error) {
 // FindByTagIDs returns images that have ALL the specified tag IDs (AND semantics).
 // It joins images with image_tags and counts matched tags per image, returning only
 // images where the matched count equals the number of requested tags.
-func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int) ([]domain.Image, error) {
+func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error) {
 	if len(tagIDs) == 0 {
 		return []domain.Image{}, nil
+	}
+
+	// 验证并设置默认排序字段
+	validSortFields := map[string]string{
+		"created_at": "i.created_at",
+		"filename":   "i.filename",
+		"file_size":  "i.file_size",
+		"id":         "i.id",
+	}
+
+	sortColumn := validSortFields[sortBy]
+	if sortColumn == "" {
+		sortColumn = "i.id"
+	}
+
+	// 验证排序方向
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
 	}
 
 	// Build placeholders for IN clause
@@ -190,9 +228,9 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 		WHERE it.tag_id IN (%s)
 		GROUP BY i.id
 		HAVING COUNT(DISTINCT it.tag_id) = ?
-		ORDER BY i.id
+		ORDER BY %s %s
 		LIMIT ? OFFSET ?
-	`, strings.Join(placeholders, ", "))
+	`, strings.Join(placeholders, ", "), sortColumn, sortDir)
 
 	args = append(args, int64(len(tagIDs)), int64(limit), int64(offset))
 

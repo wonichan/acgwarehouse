@@ -121,7 +121,7 @@ func (s *SearchService) ftsSearch(ctx context.Context, opts SearchOptions) ([]do
 
 // tagSearch performs a tag-based search.
 func (s *SearchService) tagSearch(ctx context.Context, opts SearchOptions) ([]domain.Image, int64, error) {
-	images, err := s.imageRepo.FindByTagIDs(ctx, opts.TagIDs, opts.Limit, opts.Offset)
+	images, err := s.imageRepo.FindByTagIDs(ctx, opts.TagIDs, opts.Limit, opts.Offset, opts.SortBy, opts.SortOrder)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -180,7 +180,7 @@ func (s *SearchService) imageHasAllTags(ctx context.Context, imageID int64, tagI
 
 // allImages returns all images with pagination.
 func (s *SearchService) allImages(ctx context.Context, opts SearchOptions) ([]domain.Image, int64, error) {
-	images, err := s.imageRepo.FindAll(opts.Limit, opts.Offset)
+	images, err := s.imageRepo.FindAll(opts.Limit, opts.Offset, opts.SortBy, opts.SortOrder)
 	if err != nil {
 		return nil, 0, err
 	}

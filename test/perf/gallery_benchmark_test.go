@@ -36,7 +36,7 @@ func runGalleryBenchmark(b *testing.B, imageCount, tagCount, tagsPerImage int) {
 	b.ResetTimer()
 	b.Run("FindAll-50", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, err := repo.FindAll(50, 0)
+			_, err := repo.FindAll(50, 0, "id", "desc")
 			if err != nil {
 				b.Fatalf("FindAll: %v", err)
 			}
@@ -46,7 +46,7 @@ func runGalleryBenchmark(b *testing.B, imageCount, tagCount, tagsPerImage int) {
 	// Benchmark FindAll with offset (pagination)
 	b.Run("FindAll-50-offset-500", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, err := repo.FindAll(50, 500)
+			_, err := repo.FindAll(50, 500, "id", "desc")
 			if err != nil {
 				b.Fatalf("FindAll with offset: %v", err)
 			}
@@ -77,7 +77,7 @@ func runGalleryBenchmark(b *testing.B, imageCount, tagCount, tagsPerImage int) {
 		// Benchmark FindByTagIDs
 		b.Run("FindByTagIDs-3tags", func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_, err := repo.FindByTagIDs(ctx, tagIDs, 50, 0)
+				_, err := repo.FindByTagIDs(ctx, tagIDs, 50, 0, "id", "desc")
 				if err != nil {
 					b.Fatalf("FindByTagIDs: %v", err)
 				}
@@ -130,7 +130,7 @@ func TestSmokeTest(t *testing.T) {
 	repo := bd.GetImageRepository()
 
 	// Test basic operations
-	images, err := repo.FindAll(10, 0)
+	images, err := repo.FindAll(10, 0, "id", "desc")
 	if err != nil {
 		t.Fatalf("FindAll: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestSmokeTest(t *testing.T) {
 		t.Fatalf("FindAll tags: %v", err)
 	}
 	if len(tags) > 0 {
-		filtered, err := repo.FindByTagIDs(ctx, []int64{tags[0].ID}, 10, 0)
+		filtered, err := repo.FindByTagIDs(ctx, []int64{tags[0].ID}, 10, 0, "id", "desc")
 		if err != nil {
 			t.Fatalf("FindByTagIDs: %v", err)
 		}

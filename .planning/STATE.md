@@ -120,7 +120,7 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 12 | flutter程序，点击标签管理，页面报错 | 2026-03-19 | 322012b | [12-flutter](./quick/12-flutter/) |
 | 13 | 修复Flutter应用标签筛选无响应问题 | 2026-03-20 | 6edadc6 | [13-flutter](./quick/13-flutter/) |
 | 14 | 修复标签统计API 500错误 - SQL NULL处理 | 2026-03-19 | 9b01935 | [14-api-500-sql-null](./quick/14-api-500-sql-null/) |
-| 15 | 修复 Flutter 桌面程序顶部排序按钮不生效的问题 | 2026-03-19 | 1811aa9 | [15-flutter](./quick/15-flutter/) |
+| 15 | 修复 Flutter 桌面程序顶部排序按钮不生效的问题 | 2026-03-19 | 2e46b60 | [15-flutter](./quick/15-flutter/) |
 | 16 | AI 标签提示词自定义支持 | 2026-03-20 | a150353 | [16-ai](./quick/16-ai/) |
 
 ## 会话历史
