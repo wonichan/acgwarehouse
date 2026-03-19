@@ -248,6 +248,8 @@ class _TagManagementContent extends StatelessWidget {
             onSelected: (value) {
               if (value == 'edit') {
                 _showEditTagDialog(context, provider, stat);
+              } else if (value == 'delete') {
+                _showDeleteTagDialog(context, provider, stat);
               }
             },
             itemBuilder: (context) => [
@@ -258,6 +260,16 @@ class _TagManagementContent extends StatelessWidget {
                     Icon(Icons.edit, size: 20),
                     SizedBox(width: 8),
                     Text('编辑标签'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, size: 20, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('删除标签', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -312,9 +324,61 @@ class _TagManagementContent extends StatelessWidget {
           );
         }
       } catch (e) {
+        // 检查是否是重名错误 (409 Conflict)
+        final errorMsg = e.toString();
+        if (errorMsg.contains('409') || errorMsg.contains('标签名已存在')) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('标签名已存在，请使用其他名称')),
+            );
+            // 重新打开编辑对话框让用户修改
+            _showEditTagDialog(context, provider, stat);
+          }
+        } else {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('更新失败: $e')),
+            );
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _showDeleteTagDialog(BuildContext context, TagProvider provider, TagStatistics stat) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除标签 "${stat.label}" 吗？此操作将同时删除该标签的所有图片关联，且不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        await provider.deleteTag(stat.tagId);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('更新失败: $e')),
+            SnackBar(content: Text('标签 "${stat.label}" 已删除')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('删除失败: $e')),
           );
         }
       }

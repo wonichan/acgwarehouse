@@ -250,4 +250,14 @@ class TagService {
     }
     return Tag.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
+
+  /// 删除标签
+  Future<void> deleteTag(int tagId) async {
+    final response = await _client.delete(
+      Uri.parse('${ApiConfig.baseUrl}/tags/$tagId'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete tag: ${response.statusCode}');
+    }
+  }
 }
