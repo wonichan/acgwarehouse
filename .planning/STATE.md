@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-last_updated: "2026-03-18T16:05:03.289Z"
+last_updated: "2026-03-19T00:00:00.000Z"
 progress:
   total_phases: 6
   completed_phases: 4
@@ -110,11 +110,13 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 2 | 根据.planning/和代码，写一份操作手册 | 2026-03-19 | efb40d6 | [2-planning](./quick/2-planning/) |
 | 3 | 运行go程序后，打开浏览器 http://localhost:8080/admin ，报错404 page not found | 2026-03-19 | 7a56450 | [3-go-http-localhost-8080-admin-404-page-no](./quick/3-go-http-localhost-8080-admin-404-page-no/) |
 | 4 | 选择方案二：添加image_imported处理器来自动触发缩略图生成任务 | 2026-03-19 | 8dfca64 | [4-image-imported](./quick/4-image-imported/) |
+| 5 | Admin Dashboard 中文化本地化 | 2026-03-19 | 1e87527 | [5-admin-chinese-localization](./quick/5-admin-chinese-localization/) |
 
 ## 会话历史
 
 | 日期 | Phase | 动作 | 说明 |
 |------|-------|--------|-------|
+| 2026-03-19 | Quick | Quick Task 5 已完成 | 已完成 Admin Dashboard 中文化本地化，包括 index.html 和 app.js |
 | 2026-03-19 | Quick | Quick Task 4 已完成 | 已添加 image_imported 处理器，自动触发缩略图生成任务 |
 | 2026-03-19 | Quick | Quick Task 3 已完成 | 已修复 `/admin` 404 错误，添加 redirect 到 `/admin-ui/` |
 | 2026-03-19 | Quick | Quick Task 2 已完成 | 已创建操作手册 `docs/user-manual.md` |
