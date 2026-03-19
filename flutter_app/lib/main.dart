@@ -12,6 +12,7 @@ import 'services/tag_service.dart';
 import 'services/duplicate_service.dart';
 import 'services/search_service.dart';
 import 'app/adaptive_app.dart';
+import 'app/fluent_app_shell.dart';
 import 'screens/gallery_screen.dart';
 import 'screens/duplicate_screen.dart';
 import 'screens/search_screen.dart';
@@ -52,15 +53,14 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Placeholder FluentApp - Phase 8 完整实现
+/// FluentApp - Windows 桌面端
 Widget _buildFluentApp() {
-  return const fluent.FluentApp(
+  return fluent.FluentApp(
     title: 'ACGWarehouse',
-    home: fluent.ScaffoldPage(
-      content: Center(
-        child: fluent.Text('Fluent UI - Windows (Phase 8)'),
-      ),
+    theme: fluent.FluentThemeData(
+      accentColor: fluent.Colors.blue,
     ),
+    home: const FluentAppShell(),
   );
 }
 
