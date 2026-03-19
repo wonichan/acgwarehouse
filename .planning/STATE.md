@@ -107,10 +107,13 @@ Phase 6: ✓ 优化与部署                       (100%)
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 1 | 检查git所有分支，保证master分支上的提交是全的 | 2026-03-19 | b9f853c | [1-git-master](./quick/1-git-master/) |
+| 2 | 根据.planning/和代码，写一份操作手册 | 2026-03-19 | efb40d6 | [2-planning](./quick/2-planning/) |
 
 ## 会话历史
 
 | 日期 | Phase | 动作 | 说明 |
+|------|-------|--------|-------|
+| 2026-03-19 | Quick | Quick Task 2 已完成 | 已创建操作手册 `docs/user-manual.md` |
 |------|-------|--------|-------|
 | 2026-03-14 | 0 | 项目已初始化 | 已创建 PROJECT.md、config.json、research/、REQUIREMENTS.md、ROADMAP.md |
 | 2026-03-14 | 1 | 上下文已收集 | 已创建 `.planning/phases/01-foundation-scan-tag-base/01-CONTEXT.md`，可进入规划 |
