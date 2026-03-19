@@ -277,34 +277,37 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       );
     }
     
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 400),
-      child: ExtendedImage.network(
-        largeUrl,
-        fit: BoxFit.contain,
-        mode: ExtendedImageMode.gesture,
-        initGestureConfigHandler: (state) {
-          return GestureConfig(
-            minScale: 0.9,
-            animationMinScale: 0.7,
-            maxScale: 3.0,
-            animationMaxScale: 3.5,
-            speed: 1.0,
-            inertialSpeed: 100.0,
-            initialScale: 1.0,
-            inPageView: false,
+    return ExtendedImage.network(
+      largeUrl,
+      fit: BoxFit.contain,
+      mode: ExtendedImageMode.gesture,
+      initGestureConfigHandler: (state) {
+        return GestureConfig(
+          minScale: 0.5,
+          animationMinScale: 0.3,
+          maxScale: 3.0,
+          animationMaxScale: 3.5,
+          speed: 1.0,
+          inertialSpeed: 100.0,
+          initialScale: 1.0,
+          inPageView: false,
+        );
+      },
+      loadStateChanged: (state) {
+        if (state.extendedImageLoadState == LoadState.loading) {
+          return Container(
+            height: 200,
+            child: const Center(child: CircularProgressIndicator()),
           );
-        },
-        loadStateChanged: (state) {
-          if (state.extendedImageLoadState == LoadState.loading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (state.extendedImageLoadState == LoadState.failed) {
-            return const Center(child: Icon(Icons.error, color: Colors.red));
-          }
-          return null;
-        },
-      ),
+        }
+        if (state.extendedImageLoadState == LoadState.failed) {
+          return Container(
+            height: 200,
+            child: const Center(child: Icon(Icons.error, color: Colors.red)),
+          );
+        }
+        return null;
+      },
     );
   }
   
