@@ -11,7 +11,10 @@ import (
 )
 
 type ImageRepository interface {
-	SaveImage(image *domain.Image) error
+	// SaveImage saves an image to the database.
+	// Returns (isNew, error) where isNew is true if a new record was inserted,
+	// false if the image already existed (INSERT OR IGNORE took effect).
+	SaveImage(image *domain.Image) (isNew bool, err error)
 	FindByID(id int64) (*domain.Image, error)
 	FindByPath(path string) (*domain.Image, error)
 	FindAll(limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
@@ -30,31 +33,35 @@ func NewImageRepository(db *sql.DB) ImageRepository {
 	return &sqliteImageRepository{db: db}
 }
 
-func (r *sqliteImageRepository) SaveImage(image *domain.Image) error {
+// SaveImage saves an image to the database using INSERT OR IGNORE.
+// Returns (isNew, error) where isNew is true if a new record was inserted,
+// false if the image already existed (path conflict, INSERT OR IGNORE took effect).
+func (r *sqliteImageRepository) SaveImage(image *domain.Image) (bool, error) {
 	result, err := r.db.Exec(`
 		INSERT OR IGNORE INTO images
 		(path, filename, source_root, file_size, width, height, format, phash, thumbnail_small_url, thumbnail_large_url, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, image.Path, image.Filename, image.SourceRoot, image.FileSize, image.Width, image.Height, image.Format, image.PHash, image.ThumbnailSmallUrl, image.ThumbnailLargeUrl, image.CreatedAt, image.UpdatedAt)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if id > 0 {
 		image.ID = id
-		return nil
+		return true, nil // 新插入的记录
 	}
 
+	// INSERT OR IGNORE took effect - record already exists
 	existing, err := r.FindByPath(image.Path)
 	if err != nil {
-		return err
+		return false, err
 	}
 	image.ID = existing.ID
-	return nil
+	return false, nil // 已存在的记录
 }
 
 func (r *sqliteImageRepository) FindByPath(path string) (*domain.Image, error) {

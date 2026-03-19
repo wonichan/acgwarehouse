@@ -137,9 +137,10 @@ func (s *AdminService) GetSummary(ctx context.Context) (*Summary, error) {
 
 	// Get library stats
 	summary.Library.TotalImages, _ = s.imageRepo.Count()
-	// TagRepo and CollectionRepo may not have Count methods, use reasonable defaults
-	summary.Library.TotalTags = 0
-	summary.Library.TotalCollections = 0
+	if tagCount, err := s.tagRepo.Count(ctx); err == nil {
+		summary.Library.TotalTags = int64(tagCount)
+	}
+	summary.Library.TotalCollections, _ = s.collectionRepo.Count(ctx)
 
 	return summary, nil
 }

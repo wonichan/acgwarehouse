@@ -146,7 +146,7 @@ func (bd *BenchmarkDatabase) SeedData(cfg BenchmarkConfig) error {
 				img.PHash = int64(bd.rng.rand.Intn(1 << 62))
 			}
 
-			if err := bd.imageRepo.SaveImage(img); err != nil {
+			if _, err := bd.imageRepo.SaveImage(img); err != nil {
 				return fmt.Errorf("save image %d: %w", i, err)
 			}
 
