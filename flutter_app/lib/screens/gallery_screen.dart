@@ -68,6 +68,14 @@ class _GalleryContentState extends State<_GalleryContent> {
           _buildManageTagsButton(context),
         ],
       ),
+      drawer: Drawer(
+        child: TagFilterDrawer(
+          onFilterChanged: (tagIds) {
+            // Update image list with selected tags
+            context.read<ImageListProvider>().setTagFilter(tagIds);
+          },
+        ),
+      ),
       body: Consumer<ImageListProvider>(
         builder: (context, provider, child) {
           if (provider.images.isEmpty && provider.isLoading) {
@@ -112,37 +120,15 @@ class _GalleryContentState extends State<_GalleryContent> {
   }
   
   Widget _buildTagFilterButton(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.filter_list),
-      onPressed: () => _showTagFilterDialog(context),
-      tooltip: '标签筛选',
-    );
-  }
-  
-  void _showTagFilterDialog(BuildContext context) {
-    debugPrint('显示标签筛选对话框');
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('标签筛选'),
-          content: SizedBox(
-            width: 400,
-            height: 500,
-            child: TagFilterDrawer(
-              onFilterChanged: (tagIds) {
-                debugPrint('标签筛选变更: $tagIds');
-                // 更新图片列表
-                context.read<ImageListProvider>().setTagFilter(tagIds);
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
+    return Builder(
+      builder: (buttonContext) {
+        return IconButton(
+          icon: const Icon(Icons.filter_list),
+          onPressed: () {
+            // 打开左侧抽屉
+            Scaffold.of(buttonContext).openDrawer();
+          },
+          tooltip: '标签筛选',
         );
       },
     );
@@ -173,35 +159,42 @@ class _GalleryContentState extends State<_GalleryContent> {
   }
   
   Widget _buildSortButton(BuildContext context) {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.sort),
-      onSelected: (value) {
-        final provider = context.read<ImageListProvider>();
-        final asc = value.endsWith('_asc');
-        final field = value.replaceAll('_asc', '').replaceAll('_desc', '');
-        
-        // 安全地匹配 SortField 枚举
-        SortField? sortField;
-        if (field == 'createdAt') {
-          sortField = SortField.createdAt;
-        } else if (field == 'filename') {
-          sortField = SortField.filename;
-        } else if (field == 'fileSize') {
-          sortField = SortField.fileSize;
-        }
-        
-        if (sortField != null) {
-          provider.setSort(sortField, asc);
-        }
+    return Consumer<ImageListProvider>(
+      builder: (context, provider, _) {
+        return PopupMenuButton<String>(
+          icon: const Icon(Icons.sort),
+          tooltip: '排序',
+          onSelected: (value) {
+            debugPrint('排序菜单被选中: $value');
+            final asc = value.endsWith('_asc');
+            final field = value.replaceAll('_asc', '').replaceAll('_desc', '');
+            
+            // 安全地匹配 SortField 枚举
+            SortField? sortField;
+            if (field == 'createdAt') {
+              sortField = SortField.createdAt;
+            } else if (field == 'filename') {
+              sortField = SortField.filename;
+            } else if (field == 'fileSize') {
+              sortField = SortField.fileSize;
+            }
+            
+            debugPrint('解析结果: field=$field, asc=$asc, sortField=$sortField');
+            
+            if (sortField != null) {
+              provider.setSort(sortField, asc);
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(value: 'createdAt_desc', child: Text('最新导入')),
+            const PopupMenuItem(value: 'createdAt_asc', child: Text('最早导入')),
+            const PopupMenuItem(value: 'filename_asc', child: Text('文件名 A-Z')),
+            const PopupMenuItem(value: 'filename_desc', child: Text('文件名 Z-A')),
+            const PopupMenuItem(value: 'fileSize_desc', child: Text('文件最大')),
+            const PopupMenuItem(value: 'fileSize_asc', child: Text('文件最小')),
+          ],
+        );
       },
-      itemBuilder: (context) => [
-        const PopupMenuItem(value: 'createdAt_desc', child: Text('最新导入')),
-        const PopupMenuItem(value: 'createdAt_asc', child: Text('最早导入')),
-        const PopupMenuItem(value: 'filename_asc', child: Text('文件名 A-Z')),
-        const PopupMenuItem(value: 'filename_desc', child: Text('文件名 Z-A')),
-        const PopupMenuItem(value: 'fileSize_desc', child: Text('文件最大')),
-        const PopupMenuItem(value: 'fileSize_asc', child: Text('文件最小')),
-      ],
     );
   }
   
