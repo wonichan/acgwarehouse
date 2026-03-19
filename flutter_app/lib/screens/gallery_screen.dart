@@ -295,8 +295,10 @@ class _GalleryContentState extends State<_GalleryContent> {
   }
 
   Future<void> _showBatchOperations(BuildContext context) {
+    final selectionProvider = context.read<SelectionProvider>();
     return BatchOperationSheet.show(
       context,
+      selectionProvider: selectionProvider,
       onGenerateAITags: () => _generateAITags(context),
     );
   }
