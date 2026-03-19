@@ -30,6 +30,7 @@ type Dependencies struct {
 	AdminSvc       *service.AdminService
 	JobManager     *worker.Manager
 	AdminCfg       *config.Config
+	ConfigReloader *config.Reloader // For hot-reloadable config access
 	AITagProcessor gin.HandlerFunc
 	DB             *sql.DB // for FTS rebuild and other direct DB operations
 }

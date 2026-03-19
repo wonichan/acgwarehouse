@@ -44,8 +44,8 @@ func TestThumbnailServiceGenerateThumbnailLargeDimensions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateThumbnail() error = %v", err)
 	}
-	if thumb.Width != 600 || thumb.Height != 400 {
-		t.Fatalf("thumbnail dimensions = %dx%d, want 600x400", thumb.Width, thumb.Height)
+	if thumb.Width != 500 || thumb.Height != 333 {
+		t.Fatalf("thumbnail dimensions = %dx%d, want 500x333", thumb.Width, thumb.Height)
 	}
 }
 

@@ -19,6 +19,8 @@ type JobRepository interface {
 	FindFailed() ([]domain.AsyncJob, error)
 	UpdateStatus(id int64, status string, errorMsg *string) error
 	CountByStatus(status string) (int64, error)
+	// ResetRunningToReady resets all running jobs to ready status (for recovery after crash)
+	ResetRunningToReady() (int64, error)
 }
 
 type sqliteJobRepository struct {
@@ -137,4 +139,14 @@ func (r *sqliteJobRepository) CountByStatus(status string) (int64, error) {
 	var count int64
 	err := r.db.QueryRow(`SELECT COUNT(*) FROM async_jobs WHERE status = ?`, status).Scan(&count)
 	return count, err
+}
+
+// ResetRunningToReady resets all running jobs to ready status.
+// This is used to recover jobs that were in running state when the server crashed.
+func (r *sqliteJobRepository) ResetRunningToReady() (int64, error) {
+	result, err := r.db.Exec(`UPDATE async_jobs SET status = 'ready', started_at = NULL WHERE status = 'running'`)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
