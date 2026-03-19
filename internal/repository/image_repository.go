@@ -59,20 +59,21 @@ func (r *sqliteImageRepository) SaveImage(image *domain.Image) error {
 
 func (r *sqliteImageRepository) FindByPath(path string) (*domain.Image, error) {
 	return r.queryOne(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(thumbnail_small_url, ''), COALESCE(thumbnail_large_url, ''), created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
 		FROM images WHERE path = ?
 	`, path)
 }
 
 func (r *sqliteImageRepository) FindByID(id int64) (*domain.Image, error) {
 	return r.queryOne(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(thumbnail_small_url, ''), COALESCE(thumbnail_large_url, ''), created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
 		FROM images WHERE id = ?
 	`, id)
 }
 
 func (r *sqliteImageRepository) queryOne(query string, args ...any) (*domain.Image, error) {
 	image := &domain.Image{}
+	var thumbnailSmallUrl, thumbnailLargeUrl sql.NullString
 	err := r.db.QueryRow(query, args...).Scan(
 		&image.ID,
 		&image.Path,
@@ -83,8 +84,8 @@ func (r *sqliteImageRepository) queryOne(query string, args ...any) (*domain.Ima
 		&image.Height,
 		&image.Format,
 		&image.PHash,
-		&image.ThumbnailSmallUrl,
-		&image.ThumbnailLargeUrl,
+		&thumbnailSmallUrl,
+		&thumbnailLargeUrl,
 		&image.CreatedAt,
 		&image.UpdatedAt,
 	)
@@ -95,12 +96,20 @@ func (r *sqliteImageRepository) queryOne(query string, args ...any) (*domain.Ima
 		return nil, err
 	}
 
+	// Convert NullString to string (empty if NULL)
+	if thumbnailSmallUrl.Valid {
+		image.ThumbnailSmallUrl = thumbnailSmallUrl.String
+	}
+	if thumbnailLargeUrl.Valid {
+		image.ThumbnailLargeUrl = thumbnailLargeUrl.String
+	}
+
 	return image, nil
 }
 
 func (r *sqliteImageRepository) FindAll(limit, offset int) ([]domain.Image, error) {
 	rows, err := r.db.Query(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(thumbnail_small_url, ''), COALESCE(thumbnail_large_url, ''), created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
 		FROM images ORDER BY id LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
@@ -111,6 +120,7 @@ func (r *sqliteImageRepository) FindAll(limit, offset int) ([]domain.Image, erro
 	images := make([]domain.Image, 0)
 	for rows.Next() {
 		var image domain.Image
+		var thumbnailSmallUrl, thumbnailLargeUrl sql.NullString
 		if err := rows.Scan(
 			&image.ID,
 			&image.Path,
@@ -121,12 +131,19 @@ func (r *sqliteImageRepository) FindAll(limit, offset int) ([]domain.Image, erro
 			&image.Height,
 			&image.Format,
 			&image.PHash,
-			&image.ThumbnailSmallUrl,
-			&image.ThumbnailLargeUrl,
+			&thumbnailSmallUrl,
+			&thumbnailLargeUrl,
 			&image.CreatedAt,
 			&image.UpdatedAt,
 		); err != nil {
 			return nil, err
+		}
+		// Convert NullString to string (empty if NULL)
+		if thumbnailSmallUrl.Valid {
+			image.ThumbnailSmallUrl = thumbnailSmallUrl.String
+		}
+		if thumbnailLargeUrl.Valid {
+			image.ThumbnailLargeUrl = thumbnailLargeUrl.String
 		}
 		images = append(images, image)
 	}
@@ -167,7 +184,7 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 
 	// Query images where matched tag count equals the number of requested tags (AND semantics)
 	query := fmt.Sprintf(`
-		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), COALESCE(i.thumbnail_small_url, ''), COALESCE(i.thumbnail_large_url, ''), i.created_at, i.updated_at
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
 		INNER JOIN image_tags it ON it.image_id = i.id
 		WHERE it.tag_id IN (%s)
@@ -188,6 +205,7 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 	images := make([]domain.Image, 0)
 	for rows.Next() {
 		var image domain.Image
+		var thumbnailSmallUrl, thumbnailLargeUrl sql.NullString
 		if err := rows.Scan(
 			&image.ID,
 			&image.Path,
@@ -198,12 +216,19 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 			&image.Height,
 			&image.Format,
 			&image.PHash,
-			&image.ThumbnailSmallUrl,
-			&image.ThumbnailLargeUrl,
+			&thumbnailSmallUrl,
+			&thumbnailLargeUrl,
 			&image.CreatedAt,
 			&image.UpdatedAt,
 		); err != nil {
 			return nil, err
+		}
+		// Convert NullString to string (empty if NULL)
+		if thumbnailSmallUrl.Valid {
+			image.ThumbnailSmallUrl = thumbnailSmallUrl.String
+		}
+		if thumbnailLargeUrl.Valid {
+			image.ThumbnailLargeUrl = thumbnailLargeUrl.String
 		}
 		images = append(images, image)
 	}
