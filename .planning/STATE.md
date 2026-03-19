@@ -125,6 +125,8 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 17 | Flutter图片详情页添加手动标签编辑功能 | 2026-03-20 | 93425b0 | [17-add-manual-tag-editing-feature-for-flutt](./quick/17-add-manual-tag-editing-feature-for-flutt/) |
 | 18 | 修复Flutter标签统计类型转换错误 - 解析wrapped响应 | 2026-03-20 | 247b885 | [18-fix-flutter-tag-statistics-type-cast-err](./quick/18-fix-flutter-tag-statistics-type-cast-err/) |
 | 19 | 缩略图任务修改：文件名格式改为{原文件名}-{size}.jpg，动态大小调整(small>=200KB, large<=1MB) | 2026-03-20 | 3f30825 | [19-1-small-large-2-small-200kb-large-1mb](./quick/19-1-small-large-2-small-200kb-large-1mb/) |
+| 20 | 修复large缩略图可能比small小的问题 - 确保large>=500KB且比small大 | 2026-03-20 | a00ce2b | [20-fix-large-thumbnail-smaller-than-small](./quick/20-fix-large-thumbnail-smaller-than-small/) |
+| 21 | 详情页图片容器自适应缩略图大小 - 移除固定高度限制 | 2026-03-20 | df193ef | [21-detail-page-image-container-adaptive](./quick/21-detail-page-image-container-adaptive/) |
 | 22 | 修复AI分析标签未即时刷新的问题 | 2026-03-19 | 51fface | [22-ai-tag-refresh](./quick/22-ai-tag-refresh/) |
 
 ## 会话历史
@@ -184,4 +186,4 @@ Phase 6: ✓ 优化与部署                       (100%)
 *Phase 6 Plan 03 已完成：2026-03-18*
 *Phase 6 Plan 05 已完成：2026-03-18*
 
-Last activity: 2026-03-19 - Completed quick task 22: 修复AI分析标签未即时刷新的问题
+Last activity: 2026-03-20 - Completed quick task 21: 详情页图片容器自适应缩略图大小
