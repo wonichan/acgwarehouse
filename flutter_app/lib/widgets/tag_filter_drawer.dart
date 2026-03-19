@@ -106,9 +106,11 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
                       subtitle: Text('${tag.usageCount} 张图片'),
                       value: isSelected,
                       onChanged: (checked) {
-                        provider.toggleTag(tag.id);
+                        // 使用 context.read 确保获取到正确的 provider 实例
+                        final tagProvider = context.read<TagProvider>();
+                        tagProvider.toggleTag(tag.id);
                         widget.onFilterChanged
-                            ?.call(provider.selectedTagIds.toList());
+                            ?.call(tagProvider.selectedTagIds.toList());
                       },
                       secondary: Chip(
                         label: Text('${tag.usageCount}'),
