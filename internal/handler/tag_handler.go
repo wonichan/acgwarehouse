@@ -130,6 +130,17 @@ func (h *TagHandler) CreateTag(c *gin.Context) {
 		return
 	}
 
+	// Check for duplicate label
+	existing, err := h.tagRepo.FindByLabel(c.Request.Context(), tag.PreferredLabel)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if existing != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "标签名已存在"})
+		return
+	}
+
 	if err := h.tagRepo.Save(c.Request.Context(), tag); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -160,7 +171,17 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 		return
 	}
 
-	if label := strings.TrimSpace(req.PreferredLabel); label != "" {
+	if label := strings.TrimSpace(req.PreferredLabel); label != "" && label != tag.PreferredLabel {
+		// Check for duplicate label (excluding current tag)
+		existing, err := h.tagRepo.FindByLabel(c.Request.Context(), label)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if existing != nil && existing.ID != tag.ID {
+			c.JSON(http.StatusConflict, gin.H{"error": "标签名已存在"})
+			return
+		}
 		tag.PreferredLabel = label
 		tag.Slug = makeSlug(label)
 	}
@@ -171,7 +192,7 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 		tag.ReviewState = state
 	}
 
-	if err := h.tagRepo.Save(c.Request.Context(), tag); err != nil {
+	if err := h.tagRepo.Update(c.Request.Context(), tag); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
