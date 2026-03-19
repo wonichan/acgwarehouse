@@ -75,10 +75,11 @@ func main() {
 
 		// 注册 image_imported 处理器 - 自动触发缩略图生成任务
 		jobManager.RegisterHandler("image_imported", func(ctx context.Context, id int64, payload string) error {
-			// 解析 payload 获取 image_id 和 path
+			// 解析 payload 获取 image_id、path 和 filename
 			var p struct {
-				ImageID int64  `json:"image_id"`
-				Path    string `json:"path"`
+				ImageID  int64  `json:"image_id"`
+				Path     string `json:"path"`
+				Filename string `json:"filename"`
 			}
 			if err := json.Unmarshal([]byte(payload), &p); err != nil {
 				return fmt.Errorf("解析 image_imported payload 失败: %w", err)
@@ -88,6 +89,7 @@ func main() {
 			thumbnailPayload, err := json.Marshal(map[string]interface{}{
 				"image_id": p.ImageID,
 				"path":     p.Path,
+				"filename": p.Filename,
 			})
 			if err != nil {
 				return err
