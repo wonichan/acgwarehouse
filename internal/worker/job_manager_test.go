@@ -77,6 +77,14 @@ func TestManagerProcessesJobsSequentially(t *testing.T) {
 		t.Fatalf("unexpected statuses: job1=%s job2=%s", j1.Status, j2.Status)
 	}
 
+	// Verify progress is 100 for finished jobs
+	if j1.Progress != 100 {
+		t.Fatalf("job1.Progress = %f, want 100", j1.Progress)
+	}
+	if j2.Progress != 100 {
+		t.Fatalf("job2.Progress = %f, want 100", j2.Progress)
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
 	if len(order) != 2 || order[0] != id1 || order[1] != id2 {

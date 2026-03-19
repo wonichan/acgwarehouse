@@ -261,6 +261,9 @@ func (m *mockJobRepoForAI) FindRecent(limit int) ([]domain.AsyncJob, error) {
 func (m *mockJobRepoForAI) FindFailed() ([]domain.AsyncJob, error) {
 	return nil, nil
 }
+func (m *mockJobRepoForAI) FindByTypeAndStatus(jobType string, status string) ([]domain.AsyncJob, error) {
+	return nil, nil
+}
 func (m *mockJobRepoForAI) UpdateStatus(id int64, status string, errorMsg *string) error {
 	return nil
 }
