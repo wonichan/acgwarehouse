@@ -116,10 +116,13 @@ Phase 6: ✓ 优化与部署                       (100%)
 | 8 | 修复Flutter缩略图不显示问题 | 2026-03-19 | 233d0a4 | [8-flutter](./quick/8-flutter/) |
 | 9 | 修复任务加载竞态条件，确保所有处理器注册后再加载任务 | 2026-03-20 | 167e777 | [9-fix-task-loading-race-condition](./quick/9-fix-task-loading-race-condition/) |
 | 10 | 在 scanner_service.go 添加去重检查，避免为已导入的图片重复创建 image_imported 任务 | 2026-03-19 | 81edc17 | [10-scanner-service-go-image-imported](./quick/10-scanner-service-go-image-imported/) |
+| 11 | Fix: Task status FINISHED but progress shows 1% | 2026-03-19 | d62cb90 | [11-fix-task-status-finished-but-progress-sh](./quick/11-fix-task-status-finished-but-progress-sh/) |
 
 ## 会话历史
 
 | 日期 | Phase | 动作 | 说明 |
+|------|-------|--------|-------|
+| 2026-03-19 | Quick | Quick Task 11 已完成 | 已修复任务进度显示问题，将进度范围从 0-1 改为 0-100 |
 |------|-------|--------|-------|
 | 2026-03-19 | Quick | Quick Task 8 已完成 | 已修复后端COALESCE问题和COS URL协议头问题 |
 | 2026-03-19 | Quick | Quick Task 7 已完成 | 已创建并注册 manual_scan handler |
@@ -171,3 +174,5 @@ Phase 6: ✓ 优化与部署                       (100%)
 *Phase 6 Plan 01 已完成：2026-03-18*
 *Phase 6 Plan 03 已完成：2026-03-18*
 *Phase 6 Plan 05 已完成：2026-03-18*
+
+Last activity: 2026-03-19 - Completed quick task 11: Fix: Task status FINISHED but progress shows 1%
