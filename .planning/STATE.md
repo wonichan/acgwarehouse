@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 8 of 10 (Windows UI)
-Plan: 0 of 4 in current phase
-Status: Ready to execute
-Last activity: 2026-03-20 — Completed quick task 35: Async AI Tag Generation for Batch Operations
+Plan: 1 of 7 in current phase
+Status: Executing Wave 1 complete
+Last activity: 2026-03-20 — Completed plan 08-01: NavigationView sidebar enhancement
 
 Progress: [██████████░░░░░░░░░] 72% (27 plans completed)
 
@@ -84,7 +84,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 36 | 修复批量操作添加/移除标签按钮无响应 | 2026-03-20 | - | [36-batch-tag-buttons](./quick/36-batch-tag-buttons/) |
-| 35 | 长按图片批量操作AI生成标签异步执行，点击后直接返回并提示任务进行中 | 2026-03-20 | 8bd9dd5 | [35-ai](./quick/35-ai/) |
+| 35 | 长按图片批量操作AI生成标签异步执行，点击后直接返回并提示任务进行中 | 2026-03-20 | ab465a7 | [35-ai](./quick/35-ai/) |
 | 34 | 修复批量操作页 ProviderNotFoundException | 2026-03-20 | 068a0e3 | [34-fix-providernotfoundexception-for-select](./quick/34-fix-providernotfoundexception-for-select/) |
 | 33 | 批量选中图片生成AI tag | 2026-03-20 | 2bcd38e | [33-ai-tag](./quick/33-ai-tag/) |
 | 32 | 修复标签重命名后FTS索引未同步的bug | 2026-03-20 | a64474c | [32-fts-bug](./quick/32-fts-bug/) |
