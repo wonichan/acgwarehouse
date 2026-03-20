@@ -71,7 +71,7 @@ Plans:
 **Plans**: 7 plans
 
 Plans:
-- [ ] 08-01: NavigationView 侧边导航栏
+- [x] 08-01: NavigationView 侧边导航栏
 - [ ] 08-02: 图库浏览界面 (Fluent 网格)
 - [ ] 08-03: 图片详情与标签管理界面
 - [ ] 08-04: 搜索界面
