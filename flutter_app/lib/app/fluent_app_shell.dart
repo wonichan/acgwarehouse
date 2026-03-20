@@ -2,9 +2,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/navigation_provider.dart';
-import '../screens/gallery_screen.dart';
-import '../screens/search_screen.dart';
-import '../screens/duplicate_screen.dart';
+import 'fluent_screens.dart';
+import '../widgets/fluent_settings_page.dart';
 
 /// FluentApp Shell - Windows 桌面端导航框架
 /// 包含 NavigationView 侧边导航栏和页面容器
@@ -16,8 +15,8 @@ class FluentAppShell extends StatelessWidget {
     return Consumer<NavigationProvider>(
       builder: (context, navProvider, child) {
         return NavigationView(
-          titleBar: const TitleBar(
-            title: Text('ACGWarehouse'),
+          titleBar: TitleBar(
+            title: Text('ACGWarehouse - ${navProvider.currentPageTitle}'),
           ),
           pane: NavigationPane(
             selected: navProvider.selectedIndex,
@@ -29,17 +28,27 @@ class FluentAppShell extends StatelessWidget {
               PaneItem(
                 icon: const Icon(FluentIcons.photo2),
                 title: const Text('图库'),
-                body: const GalleryScreen(),
-              ),
-              PaneItem(
-                icon: const Icon(FluentIcons.search),
-                title: const Text('搜索'),
-                body: const SearchScreen(),
+                body: const FluentGalleryPage(),
               ),
               PaneItem(
                 icon: const Icon(FluentIcons.copy),
                 title: const Text('重复检测'),
-                body: const DuplicateScreen(),
+                body: const FluentDuplicatePage(),
+              ),
+              PaneItem(
+                icon: const Icon(FluentIcons.search),
+                title: const Text('搜索'),
+                body: const FluentSearchPage(),
+              ),
+              PaneItem(
+                icon: const Icon(FluentIcons.tag),
+                title: const Text('标签管理'),
+                body: const FluentTagManagementPage(),
+              ),
+              PaneItem(
+                icon: const Icon(FluentIcons.settings),
+                title: const Text('设置'),
+                body: const FluentSettingsPage(),
               ),
             ],
           ),
