@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 8 of 10 (Windows UI)
-Plan: 1 of 7 in current phase
-Status: Executing Wave 1 complete
-Last activity: 2026-03-20 — Completed plan 08-01: NavigationView sidebar enhancement
+Plan: 3 of 7 in current phase
+Status: Executing Wave 2 complete
+Last activity: 2026-03-20 — Completed plans 08-02 and 08-06: Gallery browsing + Window controls
 
 Progress: [██████████░░░░░░░░░] 72% (27 plans completed)
 
