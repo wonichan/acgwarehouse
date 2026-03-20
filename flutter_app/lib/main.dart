@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
@@ -14,8 +15,17 @@ import 'services/search_service.dart';
 import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
 import 'app/material_app_shell.dart';
+import 'utils/window_manager.dart';
 
-void main() {
+void main() async {
+  // Ensure Flutter binding is initialized
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize window manager for Windows desktop
+  if (defaultTargetPlatform == TargetPlatform.windows) {
+    await AppWindowManager.ensureInitialized();
+  }
+
   runApp(const MyApp());
 }
 
@@ -59,6 +69,12 @@ Widget _buildFluentApp() {
       accentColor: fluent.Colors.blue,
     ),
     home: const FluentAppShell(),
+    // ScaffoldMessenger is needed for dialogs to show SnackBar feedback
+    builder: (context, child) {
+      return ScaffoldMessenger(
+        child: child ?? const SizedBox.shrink(),
+      );
+    },
   );
 }
 

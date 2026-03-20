@@ -1,5 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../providers/navigation_provider.dart';
 import 'fluent_screens.dart';
@@ -16,7 +17,12 @@ class FluentAppShell extends StatelessWidget {
       builder: (context, navProvider, child) {
         return NavigationView(
           titleBar: TitleBar(
-            title: Text('ACGWarehouse - ${navProvider.currentPageTitle}'),
+            title: DragToMoveArea(
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text('ACGWarehouse - ${navProvider.currentPageTitle}'),
+              ),
+            ),
           ),
           pane: NavigationPane(
             selected: navProvider.selectedIndex,
