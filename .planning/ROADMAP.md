@@ -73,11 +73,11 @@ Plans:
 Plans:
 - [x] 08-01: NavigationView 侧边导航栏
 - [x] 08-02: 图库浏览界面 (Fluent 网格)
-- [ ] 08-03: 图片详情与标签管理界面
-- [ ] 08-04: 搜索界面
-- [ ] 08-05: 标签管理界面
+- [x] 08-03: 图片详情与标签管理界面
+- [x] 08-04: 搜索界面
+- [x] 08-05: 标签管理界面
 - [x] 08-06: Windows 窗口控制
-- [ ] 08-07: CommandBar 工具栏
+- [x] 08-07: CommandBar 工具栏
 
 #### Phase 9: Android 移动端 UI
 **Goal**: Android 用户可以使用自适应 Material 3 界面管理图片库
