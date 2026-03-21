@@ -233,10 +233,18 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   }
 
   Future<void> _addTag() async {
-    await showDialog<bool>(
+    final result = await showDialog<dynamic>(
       context: context,
       builder: (context) => AddTagDialog(imageId: widget.image.id),
     );
+    
+    // Handle error result from dialog
+    if (result is Map && result['success'] == false && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('操作失败: ${result['error']}')),
+      );
+    }
+    
     // Reload tags after dialog closes
     await _loadImageTags();
   }
@@ -318,6 +326,30 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
               child: ExtendedImage.network(
                 largeUrl,
                 fit: BoxFit.contain,
+                // Enable zoom functionality with gesture mode
+                mode: ExtendedImageMode.gesture,
+                initGestureConfigHandler: (state) {
+                  return GestureConfig(
+                    minScale: 1.0,
+                    maxScale: 3.0,
+                    animationMaxScale: 3.5,
+                    initialScale: 1.0,
+                    inPageView: false,
+                    initialAlignment: InitialAlignment.center,
+                    cacheGesture: false,
+                  );
+                },
+                // Double-tap zoom support (toggle between 1x and 2x)
+                onDoubleTap: (state) {
+                  final pointerDownPosition = state.pointerDownPosition;
+                  final begin = state.gestureDetails?.totalScale ?? 1.0;
+                  final end = begin == 1.0 ? 2.0 : 1.0; // Toggle zoom
+
+                  state.handleDoubleTap(
+                    scale: end,
+                    doubleTapPosition: pointerDownPosition,
+                  );
+                },
                 loadStateChanged: (state) {
                   if (state.extendedImageLoadState == LoadState.loading) {
                     return const Center(child: CircularProgressIndicator());
