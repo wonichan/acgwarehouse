@@ -7,8 +7,7 @@ import '../services/api_service.dart';
 import '../services/tag_service.dart';
 import '../widgets/batch_operation_sheet.dart';
 import '../widgets/batch_tag_dialog.dart';
-import '../widgets/image_grid.dart';
-import '../widgets/image_masonry.dart';
+import '../widgets/responsive_image_grid.dart';
 import '../widgets/tag_filter_drawer.dart';
 import 'image_detail_screen.dart';
 import 'tag_management_screen.dart';
@@ -180,24 +179,29 @@ class _GalleryContentState extends State<_GalleryContent> {
             );
           }
 
-          final galleryWidget = provider.viewMode == ViewMode.grid
-              ? ImageGrid(
-                  images: provider.images,
-                  onImageTap: (img) => _navigateToDetail(context, img),
-                  scrollController: _scrollController,
-                  selectionProvider: selectionProvider,
-                )
-              : ImageMasonry(
-                  images: provider.images,
-                  onImageTap: (img) => _navigateToDetail(context, img),
-                  scrollController: _scrollController,
-                  selectionProvider: selectionProvider,
-                );
+          final galleryWidget = ResponsiveImageGrid(
+            images: provider.images,
+            viewMode: provider.viewMode,
+            onImageTap: (img) => _navigateToDetail(context, img),
+            scrollController: _scrollController,
+            selectionProvider: selectionProvider,
+          );
 
           return Stack(
             children: [
               RefreshIndicator(
-                onRefresh: () => provider.loadImages(refresh: true),
+                onRefresh: () async {
+                  await provider.loadImages(refresh: true);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('已刷新'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  }
+                },
+                displacement: 40,
                 child: galleryWidget,
               ),
               if (provider.isLoading && provider.hasMore)
