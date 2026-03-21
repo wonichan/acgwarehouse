@@ -95,7 +95,7 @@ Plans:
 - [ ] 09-01: NavigationBar bottom navigation (phones) - TDD plan with tests
 - [ ] 09-02: NavigationRail side navigation (tablets) - TDD plan with tests  
 - [ ] 09-03: Responsive grid layout - TDD plan with tests
-- [ ] 09-04: Touch gesture optimizations - TDD plan with tests
+- [x] 09-04: Touch gesture optimizations - TDD plan with tests
 - [x] 09-05: Responsive breakpoint system (foundation) - TDD plan with tests
 
 **Plan Details:**
@@ -140,9 +140,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. 优化与部署 | v1.0 | 4/4 | Complete | 2026-03-19 |
 | 7. 架构基础层 | v2.0 | 0/4 | Planned | - |
 | 8. Windows 桌面端 UI | v2.0 | Complete    | 2026-03-20 | - |
-| 9. Android 移动端 UI | v2.0 | 1/5 | In progress | 2026-03-22 |
+| 9. Android 移动端 UI | v2.0 | 2/5 | In progress | 2026-03-22 |
 | 10. 主题统一与优化 | v2.0 | 0/6 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-14*
-*Last updated: 2026-03-22 after 09-05 complete*
+*Last updated: 2026-03-22 after 09-04 complete*
