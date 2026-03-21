@@ -7,7 +7,7 @@ import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/providers/selection_provider.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/services/tag_service.dart';
-import 'package:gallery/widgets/image_grid.dart';
+import 'package:gallery/widgets/responsive_image_grid.dart';
 import 'package:provider/provider.dart';
 
 class _FakeTagService extends TagService {
@@ -139,7 +139,7 @@ void main() {
       );
 
       await tester.pumpAndSettle();
-      expect(find.byType(ImageGrid), findsOneWidget);
+      expect(find.byType(ResponsiveImageGrid), findsOneWidget);
 
       await tester.longPress(find.byKey(const ValueKey('image-1')));
       await tester.pumpAndSettle();
