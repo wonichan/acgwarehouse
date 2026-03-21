@@ -38,5 +38,42 @@ void main() {
       provider.setSelectedIndex(1); // 不同索引
       expect(callCount, equals(1));
     });
+
+    test('currentPageTitle 对应图库', () {
+      final provider = NavigationProvider();
+      expect(provider.currentPageTitle, equals('图库'));
+    });
+
+    test('currentPageTitle 随索引切换更新 (3-item navigation)', () {
+      final provider = NavigationProvider();
+
+      // Index 0: Gallery
+      expect(provider.currentPageTitle, equals('图库'));
+
+      // Index 1: Search
+      provider.setSelectedIndex(1);
+      expect(provider.currentPageTitle, equals('搜索'));
+
+      // Index 2: Tag Management
+      provider.setSelectedIndex(2);
+      expect(provider.currentPageTitle, equals('标签管理'));
+    });
+
+    test('throws error for invalid index', () {
+      final provider = NavigationProvider();
+      
+      expect(() => provider.setSelectedIndex(3), throwsRangeError);
+      expect(() => provider.setSelectedIndex(-1), throwsRangeError);
+    });
+
+    test('navigation indices constants are correct', () {
+      expect(NavigationProvider.galleryIndex, 0);
+      expect(NavigationProvider.searchIndex, 1);
+      expect(NavigationProvider.tagManagementIndex, 2);
+    });
+
+    test('itemCount is 3', () {
+      expect(NavigationProvider.itemCount, 3);
+    });
   });
 }
