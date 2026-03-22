@@ -1,4 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/theme_provider.dart';
 
 /// Fluent 风格设置页面
 /// Phase 10 完整实现主题切换等配置
@@ -7,30 +10,44 @@ class FluentSettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ScaffoldPage(
-      header: const PageHeader(
-        title: Text('设置'),
-      ),
-      content: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              FluentIcons.settings,
-              size: 64,
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, _) {
+        return ScaffoldPage(
+          header: const PageHeader(
+            title: Text('设置'),
+          ),
+          content: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('外观', style: FluentTheme.of(context).typography.subtitle),
+                const SizedBox(height: 12),
+                _buildThemeTile(context, themeProvider, ThemeMode.system, '跟随系统', FluentIcons.bulleted_list),
+                _buildThemeTile(context, themeProvider, ThemeMode.light, '浅色', FluentIcons.sunny),
+                _buildThemeTile(context, themeProvider, ThemeMode.dark, '深色', FluentIcons.clear_night),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              '设置功能开发中...',
-              style: FluentTheme.of(context).typography.subtitle,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '将在后续版本中添加主题切换、API 配置等功能',
-              style: FluentTheme.of(context).typography.body,
-            ),
-          ],
-        ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildThemeTile(
+    BuildContext context,
+    ThemeProvider provider,
+    ThemeMode mode,
+    String label,
+    IconData icon,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: ListTile.selectable(
+        selected: provider.themeMode == mode,
+        leading: Icon(icon),
+        title: Text(label),
+        onPressed: () => provider.setThemeMode(mode),
       ),
     );
   }

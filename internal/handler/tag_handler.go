@@ -222,7 +222,7 @@ func (h *TagHandler) DeleteTag(c *gin.Context) {
 		return
 	}
 	for _, imageTag := range imageTags {
-		if err := h.imageTagRepo.Delete(c.Request.Context(), imageTag.ImageID, imageTag.TagID); err != nil {
+		if _, err := h.imageTagRepo.Delete(c.Request.Context(), imageTag.ImageID, imageTag.TagID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

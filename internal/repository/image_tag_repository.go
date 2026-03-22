@@ -14,7 +14,9 @@ type ImageTagRepository interface {
 	FindByImageID(ctx context.Context, imageID int64) ([]*domain.ImageTag, error)
 	FindByTagID(ctx context.Context, tagID int64, limit, offset int) ([]*domain.ImageTag, error)
 	UpdateReviewState(ctx context.Context, imageID, tagID int64, state string) error
-	Delete(ctx context.Context, imageID, tagID int64) error
+	// Delete removes the image-tag association and returns the number of rows affected.
+	// Returns 0 if the association didn't exist.
+	Delete(ctx context.Context, imageID, tagID int64) (int64, error)
 	BatchUpdateReviewState(ctx context.Context, imageID int64, tagIDs []int64, state string) error
 	MergeImageTag(ctx context.Context, imageID, sourceTagID, targetTagID int64) error
 	GetTagStats(ctx context.Context, tagID int64) (*TagStats, error)
@@ -114,14 +116,27 @@ func (r *imageTagRepository) UpdateReviewState(ctx context.Context, imageID, tag
 	return err
 }
 
-func (r *imageTagRepository) Delete(ctx context.Context, imageID, tagID int64) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM image_tags WHERE image_id = ? AND tag_id = ?`, imageID, tagID)
+// Delete removes the image-tag association and returns the number of rows affected.
+// Returns 0 if the association didn't exist.
+func (r *imageTagRepository) Delete(ctx context.Context, imageID, tagID int64) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM image_tags WHERE image_id = ? AND tag_id = ?`, imageID, tagID)
 	if err != nil {
-		return err
+		return 0, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
 	}
 
 	// Sync FTS index after deleting image-tag association
-	return r.syncImageFTS(ctx, imageID)
+	if rowsAffected > 0 {
+		if err := r.syncImageFTS(ctx, imageID); err != nil {
+			return rowsAffected, err
+		}
+	}
+
+	return rowsAffected, nil
 }
 
 func (r *imageTagRepository) BatchUpdateReviewState(ctx context.Context, imageID int64, tagIDs []int64, state string) error {
