@@ -350,10 +350,19 @@ class _TagFilterDialogContentState extends State<_TagFilterDialogContent> {
   }
 
   void _applyFilters() {
-    // Apply tag filter
-    widget.imageProvider.setTagFilter(_selectedTagIds);
-    // Apply hasTags filter
-    widget.imageProvider.setHasTagsFilter(_hasTagsFilter);
+    // 同步 TagProvider 的选择状态
+    widget.tagProvider.clearSelection();
+    for (final tagId in _selectedTagIds) {
+      widget.tagProvider.toggleTag(tagId);
+    }
+    // 互斥逻辑：根据用户选择只调用一个筛选方法
+    if (_hasTagsFilter != null) {
+      // 用户选择了"显示未打标签的图片"
+      widget.imageProvider.setHasTagsFilter(_hasTagsFilter);
+    } else {
+      // 用户选择了标签筛选或清空
+      widget.imageProvider.setTagFilter(_selectedTagIds);
+    }
     Navigator.pop(context);
   }
 
