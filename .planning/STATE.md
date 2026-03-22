@@ -111,6 +111,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 37 | 修复图片详情页面无法访问的问题 | 2026-03-22 | 6911746 | [037-xiu-fu-tu-pian-xiang-qing-ye-mian-wu-fa-fang-wen-de-wen-ti](./quick/037-xiu-fu-tu-pian-xiang-qing-ye-mian-wu-fa-fang-wen-de-wen-ti/) |
 | 36 | 修复批量操作添加/移除标签按钮无响应 | 2026-03-20 | - | [36-batch-tag-buttons](./quick/36-batch-tag-buttons/) |
 | 35 | 长按图片批量操作AI生成标签异步执行，点击后直接返回并提示任务进行中 | 2026-03-20 | ab465a7 | [35-ai](./quick/35-ai/) |
 | 34 | 修复批量操作页 ProviderNotFoundException | 2026-03-20 | 068a0e3 | [34-fix-providernotfoundexception-for-select](./quick/34-fix-providernotfoundexception-for-select/) |
@@ -122,5 +123,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22T05:28:02.340Z
-Last activity: 2026-03-22 — Completed plan 09-03: Responsive Image Grid
+Last activity: 2026-03-22 — Completed quick task 37: 修复图片详情页面无法访问的问题
 Resume file: .planning/phases/10-theme-unification-optimization/10-CONTEXT.md
