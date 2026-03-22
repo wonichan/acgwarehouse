@@ -111,7 +111,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 38 | 图片详情页背景透明原因调查 | 2026-03-22 | - | [038-image-detail-transparent-bg](./quick/038-image-detail-transparent-bg/) |
+| 38 | 修复 Flutter Windows 标签筛选功能被错误标记为未实现的问题 | 2026-03-22 | a0709a5 | [38-flutter-windows](./quick/38-flutter-windows/) |
 | 37 | 修复图片详情页面无法访问的问题 | 2026-03-22 | 6911746 | [037-xiu-fu-tu-pian-xiang-qing-ye-mian-wu-fa-fang-wen-de-wen-ti](./quick/037-xiu-fu-tu-pian-xiang-qing-ye-mian-wu-fa-fang-wen-de-wen-ti/) |
 | 36 | 修复批量操作添加/移除标签按钮无响应 | 2026-03-20 | - | [36-batch-tag-buttons](./quick/36-batch-tag-buttons/) |
 | 35 | 长按图片批量操作AI生成标签异步执行，点击后直接返回并提示任务进行中 | 2026-03-20 | ab465a7 | [35-ai](./quick/35-ai/) |
@@ -124,5 +124,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-22T05:28:02.340Z
-Last activity: 2026-03-22 — Completed quick task 38: 图片详情页背景透明原因调查
+Last activity: 2026-03-22 — Completed quick task 38: 修复 Flutter Windows 标签筛选功能被错误标记为未实现的问题
 Resume file: .planning/phases/10-theme-unification-optimization/10-CONTEXT.md
