@@ -21,25 +21,25 @@ class FluentGalleryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ImageListProvider>(
-      builder: (context, provider, child) {
+    return Consumer2<ImageListProvider, TagProvider>(
+      builder: (context, imageProvider, tagProvider, child) {
         return ScaffoldPage(
           header: PageHeader(
-            title: const Text('图库'),
+            title: _buildTitle(context, imageProvider, tagProvider),
             commandBar: CommandBar(
               mainAxisAlignment: MainAxisAlignment.end,
               primaryItems: [
                 // View toggle
                 CommandBarButton(
                   icon: Icon(
-                    provider.viewMode == ViewMode.grid
+                    imageProvider.viewMode == ViewMode.grid
                         ? FluentIcons.bulleted_list_text
                         : FluentIcons.tiles,
                   ),
-                  label: Text(provider.viewMode == ViewMode.grid ? '网格' : '瀑布流'),
+                  label: Text(imageProvider.viewMode == ViewMode.grid ? '网格' : '瀑布流'),
                   onPressed: () {
-                    provider.setViewMode(
-                      provider.viewMode == ViewMode.grid
+                    imageProvider.setViewMode(
+                      imageProvider.viewMode == ViewMode.grid
                           ? ViewMode.masonry
                           : ViewMode.grid,
                     );
@@ -51,7 +51,7 @@ class FluentGalleryPage extends StatelessWidget {
                   icon: const Icon(FluentIcons.refresh),
                   label: const Text('刷新'),
                   onPressed: () {
-                    provider.loadImages(refresh: true);
+                    imageProvider.loadImages(refresh: true);
                   },
                 ),
                 // Tag filter
@@ -78,6 +78,44 @@ class FluentGalleryPage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildTitle(BuildContext context, ImageListProvider imageProvider, TagProvider tagProvider) {
+    final selectedTags = tagProvider.selectedTags;
+    final hasUntaggedFilter = imageProvider.hasTagsFilter == false;
+    
+    if (selectedTags.isEmpty && !hasUntaggedFilter) {
+      return const Text('图库');
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('图库'),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            if (hasUntaggedFilter)
+              Button(
+                child: const Text('未打标签 ×'),
+                onPressed: () {
+                  imageProvider.setHasTagsFilter(null);
+                },
+              ),
+            ...selectedTags.map((tag) => Button(
+              child: Text('${tag.preferredLabel} ×'),
+              onPressed: () {
+                tagProvider.toggleTag(tag.id);
+                imageProvider.setTagFilter(tagProvider.selectedTagIds.toList());
+              },
+            )),
+          ],
+        ),
+      ],
     );
   }
 
