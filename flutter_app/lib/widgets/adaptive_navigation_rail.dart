@@ -2,59 +2,64 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/navigation_provider.dart';
 
-/// Bottom navigation bar for phone screens (< 600px).
+/// Side navigation rail for tablet screens (>= 600px).
 ///
-/// Displays 5 navigation items:
-/// - Gallery (图库)
-/// - Duplicate detection (重复检测)
-/// - Search (搜索)
-/// - Tag Management (标签管理)
-/// - Settings (设置)
+/// Features:
+/// - 72px icon-only mode (standard Material Rail width)
+/// - Shows label only for selected item
+/// - 5 navigation items: Gallery, Duplicate detection, Search, Tag Management, Settings
+/// - Smooth selection indicator animation
 ///
 /// Usage:
 /// ```dart
 /// Scaffold(
-///   bottomNavigationBar: const AdaptiveNavigationBar(),
-///   body: // content
+///   body: Row(
+///     children: [
+///       const AdaptiveNavigationRail(),
+///       Expanded(child: content),
+///     ],
+///   ),
 /// )
 /// ```
-class AdaptiveNavigationBar extends StatelessWidget {
-  const AdaptiveNavigationBar({super.key});
+class AdaptiveNavigationRail extends StatelessWidget {
+  const AdaptiveNavigationRail({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Consumer<NavigationProvider>(
       builder: (context, navProvider, child) {
-        return NavigationBar(
+        return NavigationRail(
           selectedIndex: navProvider.selectedIndex,
           onDestinationSelected: (index) {
             navProvider.setSelectedIndex(index);
           },
+          labelType: NavigationRailLabelType.selected,
+          minWidth: 72,
           destinations: const [
-            NavigationDestination(
+            NavigationRailDestination(
               icon: Icon(Icons.photo_library_outlined),
               selectedIcon: Icon(Icons.photo_library),
-              label: '图库',
+              label: Text('图库'),
             ),
-            NavigationDestination(
+            NavigationRailDestination(
               icon: Icon(Icons.content_copy_outlined),
               selectedIcon: Icon(Icons.content_copy),
-              label: '重复检测',
+              label: Text('重复检测'),
             ),
-            NavigationDestination(
+            NavigationRailDestination(
               icon: Icon(Icons.search_outlined),
               selectedIcon: Icon(Icons.search),
-              label: '搜索',
+              label: Text('搜索'),
             ),
-            NavigationDestination(
+            NavigationRailDestination(
               icon: Icon(Icons.label_outlined),
               selectedIcon: Icon(Icons.label),
-              label: '标签管理',
+              label: Text('标签管理'),
             ),
-            NavigationDestination(
+            NavigationRailDestination(
               icon: Icon(Icons.settings_outlined),
               selectedIcon: Icon(Icons.settings),
-              label: '设置',
+              label: Text('设置'),
             ),
           ],
         );

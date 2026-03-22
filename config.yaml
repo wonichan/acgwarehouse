@@ -14,7 +14,7 @@ storage:
 
 ai:
   provider: "doubao"
-  api_key: "YOUR_API_KEY_HERE"
+  api_key: "literal:${DOUBAO_API_KEY:-}"
   model: "doubao-seed-2-0-lite-260215"
   requests_per_minute: 120
   max_concurrency: 3  # 同时执行的最大AI请求数，默认3

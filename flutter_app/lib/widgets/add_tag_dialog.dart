@@ -90,35 +90,37 @@ class _AddTagDialogState extends State<AddTagDialog> {
 
   Future<void> _selectTag(int tagId) async {
     final tagService = context.read<TagService>();
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       await tagService.addImageTag(widget.imageId, tagId: tagId);
       if (mounted) {
         Navigator.pop(context, true);
       }
     } catch (e) {
+      // Return error to caller for display
       if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text('添加失败: $e')),
-        );
+        Navigator.pop(context, {'success': false, 'error': e.toString()});
       }
     }
   }
 
   Future<void> _createNewTag(String label) async {
-    if (label.isEmpty) return;
+    if (label.trim().isEmpty) {
+      // Return error for empty input
+      if (mounted) {
+        Navigator.pop(context, {'success': false, 'error': '标签名称不能为空'});
+      }
+      return;
+    }
     final tagService = context.read<TagService>();
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
-      await tagService.addImageTag(widget.imageId, tagLabel: label);
+      await tagService.addImageTag(widget.imageId, tagLabel: label.trim());
       if (mounted) {
         Navigator.pop(context, true);
       }
     } catch (e) {
+      // Return error to caller for display
       if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text('创建失败: $e')),
-        );
+        Navigator.pop(context, {'success': false, 'error': e.toString()});
       }
     }
   }

@@ -150,18 +150,21 @@ func (h *ImageTagHandler) RemoveImageTag(c *gin.Context) {
 		return
 	}
 
-	if err := h.imageTagRepo.Delete(c.Request.Context(), imageID, tagID); err != nil {
+	rowsAffected, err := h.imageTagRepo.Delete(c.Request.Context(), imageID, tagID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Decrement the tag's usage count
-	if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	// Only decrement usage count if we actually deleted an association
+	if rowsAffected > 0 {
+		if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	c.JSON(http.StatusOK, gin.H{"success": true, "deleted": rowsAffected > 0})
 }
 
 func (h *ImageTagHandler) ReviewTag(c *gin.Context) {
@@ -188,9 +191,38 @@ func (h *ImageTagHandler) ReviewTag(c *gin.Context) {
 		return
 	}
 
-	// If rejecting, decrement the tag usage count first
-	if state == "rejected" {
+	// Get current review state to determine if usage count should change
+	tags, err := h.imageTagRepo.FindByImageID(c.Request.Context(), imageID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var currentState string
+	for _, t := range tags {
+		if t.TagID == tagID {
+			currentState = t.ReviewState
+			break
+		}
+	}
+	if currentState == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "image-tag association not found"})
+		return
+	}
+
+	// Determine usage count change:
+	// - reject: only decrement if transitioning from non-rejected to rejected
+	// - confirm: only increment if transitioning from rejected to confirmed
+	needDecrement := state == "rejected" && currentState != "rejected"
+	needIncrement := state == "confirmed" && currentState == "rejected"
+
+	if needDecrement {
 		if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	if needIncrement {
+		if err := h.tagRepo.IncrementUsageCount(c.Request.Context(), tagID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -225,13 +257,43 @@ func (h *ImageTagHandler) BatchReview(c *gin.Context) {
 		return
 	}
 
-	// If rejecting, decrement usage count for each tag first
-	if state == "rejected" {
-		for _, tagID := range req.TagIDs {
-			if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
+	// Get current states of all tags for this image
+	tags, err := h.imageTagRepo.FindByImageID(c.Request.Context(), imageID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	currentStates := make(map[int64]string)
+	for _, t := range tags {
+		currentStates[t.TagID] = t.ReviewState
+	}
+
+	// Determine which tags need usage count changes
+	var tagsToDecrement, tagsToIncrement []int64
+	for _, tagID := range req.TagIDs {
+		currentState := currentStates[tagID]
+		if currentState == "" {
+			continue // skip tags not associated with this image
+		}
+		if state == "rejected" && currentState != "rejected" {
+			tagsToDecrement = append(tagsToDecrement, tagID)
+		}
+		if state == "confirmed" && currentState == "rejected" {
+			tagsToIncrement = append(tagsToIncrement, tagID)
+		}
+	}
+
+	// Apply usage count changes
+	for _, tagID := range tagsToDecrement {
+		if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	for _, tagID := range tagsToIncrement {
+		if err := h.tagRepo.IncrementUsageCount(c.Request.Context(), tagID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 	}
 

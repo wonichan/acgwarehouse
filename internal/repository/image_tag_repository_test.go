@@ -90,7 +90,7 @@ func TestImageTagRepositoryDeleteRemovesAssociation(t *testing.T) {
 	repo := newImageTagRepositoryForTest(t)
 	mustSaveImageTag(t, repo, &domain.ImageTag{ImageID: 1, TagID: 1, ReviewState: "pending"})
 
-	if err := repo.Delete(context.Background(), 1, 1); err != nil {
+	if _, err := repo.Delete(context.Background(), 1, 1); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 

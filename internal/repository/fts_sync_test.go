@@ -341,7 +341,7 @@ func TestImageTagDeleteUpdatesFTS(t *testing.T) {
 	}
 
 	// Delete image-tag association
-	if err := imageTagRepo.Delete(context.Background(), img.ID, tag.ID); err != nil {
+	if _, err := imageTagRepo.Delete(context.Background(), img.ID, tag.ID); err != nil {
 		t.Fatalf("Delete image-tag: %v", err)
 	}
 
