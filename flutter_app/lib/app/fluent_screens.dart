@@ -104,6 +104,7 @@ class FluentGalleryPage extends StatelessWidget {
                 child: const Text('未打标签 ×'),
                 onPressed: () {
                   imageProvider.setHasTagsFilter(null);
+                  tagProvider.clearSelection();
                 },
               ),
             ...selectedTags.map((tag) => Button(
