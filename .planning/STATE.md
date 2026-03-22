@@ -111,6 +111,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 39 | Fix 'Show untagged images' filter bug - TDD verification | 2026-03-22 | 2366f87 | [39-bug](./quick/39-bug/) |
 | 38 | 修复 Flutter Windows 标签筛选功能被错误标记为未实现的问题 | 2026-03-22 | a0709a5 | [38-flutter-windows](./quick/38-flutter-windows/) |
 | 37 | 修复图片详情页面无法访问的问题 | 2026-03-22 | 6911746 | [037-xiu-fu-tu-pian-xiang-qing-ye-mian-wu-fa-fang-wen-de-wen-ti](./quick/037-xiu-fu-tu-pian-xiang-qing-ye-mian-wu-fa-fang-wen-de-wen-ti/) |
 | 36 | 修复批量操作添加/移除标签按钮无响应 | 2026-03-20 | - | [36-batch-tag-buttons](./quick/36-batch-tag-buttons/) |
@@ -123,6 +124,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T05:28:02.340Z
-Last activity: 2026-03-22 — Completed quick task 38: 修复 Flutter Windows 标签筛选功能被错误标记为未实现的问题
-Resume file: .planning/phases/10-theme-unification-optimization/10-CONTEXT.md
+Last session: 2026-03-22T17:00:00.000Z
+Last activity: 2026-03-22 — Completed quick task 39: Fix 'Show untagged images' filter bug - TDD verification
+Resume file: .planning/quick/39-bug/39-SUMMARY.md
