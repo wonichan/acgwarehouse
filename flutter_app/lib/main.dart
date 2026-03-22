@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 
 import 'providers/image_provider.dart';
+import 'providers/theme_provider.dart';
 import 'providers/tag_provider.dart';
 import 'providers/duplicate_provider.dart';
 import 'providers/search_provider.dart';
@@ -15,6 +16,7 @@ import 'services/search_service.dart';
 import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
 import 'app/material_app_shell.dart';
+import 'theme/app_theme.dart';
 import 'utils/window_manager.dart';
 
 void main() async {
@@ -52,27 +54,64 @@ class MyApp extends StatelessWidget {
             create: (context) =>
                 SearchProvider(service: context.read<SearchService>())),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: const AdaptiveApp(
-        fluentAppBuilder: _buildFluentApp,
-        materialAppBuilder: _buildMaterialApp,
+      child: const _ThemeBootstrapper(
+        child: AdaptiveApp(
+          fluentAppBuilder: _buildFluentApp,
+          materialAppBuilder: _buildMaterialApp,
+        ),
       ),
     );
   }
 }
 
+class _ThemeBootstrapper extends StatefulWidget {
+  final Widget child;
+
+  const _ThemeBootstrapper({required this.child});
+
+  @override
+  State<_ThemeBootstrapper> createState() => _ThemeBootstrapperState();
+}
+
+class _ThemeBootstrapperState extends State<_ThemeBootstrapper> {
+  bool _scheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_scheduled) {
+      _scheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<ThemeProvider>().initialize();
+      });
+    }
+
+    return widget.child;
+  }
+}
+
 /// FluentApp - Windows 桌面端
 Widget _buildFluentApp() {
-  return fluent.FluentApp(
-    title: 'ACGWarehouse',
-    theme: fluent.FluentThemeData(
-      accentColor: fluent.Colors.blue,
-    ),
-    home: const FluentAppShell(),
-    // ScaffoldMessenger is needed for dialogs to show SnackBar feedback
-    builder: (context, child) {
-      return ScaffoldMessenger(
-        child: child ?? const SizedBox.shrink(),
+  return Consumer<ThemeProvider>(
+    builder: (context, themeProvider, _) {
+      final brightness = switch (themeProvider.themeMode) {
+        ThemeMode.dark => Brightness.dark,
+        ThemeMode.light => Brightness.light,
+        ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+      };
+
+      return fluent.FluentApp(
+        title: 'ACGWarehouse',
+        theme: AppTheme.getFluentTheme(brightness),
+        home: const FluentAppShell(),
+        // ScaffoldMessenger is needed for dialogs to show SnackBar feedback
+        builder: (context, child) {
+          return ScaffoldMessenger(
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
       );
     },
   );
@@ -80,12 +119,20 @@ Widget _buildFluentApp() {
 
 /// MaterialApp - Android/Web 平台
 Widget _buildMaterialApp() {
-  return MaterialApp(
-    title: 'ACGWarehouse',
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      useMaterial3: true,
-    ),
-    home: const MaterialAppShell(),
+  return Consumer<ThemeProvider>(
+    builder: (context, themeProvider, _) {
+      final brightness = switch (themeProvider.themeMode) {
+        ThemeMode.dark => Brightness.dark,
+        ThemeMode.light => Brightness.light,
+        ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+      };
+
+      return MaterialApp(
+        title: 'ACGWarehouse',
+        theme: AppTheme.getMaterialTheme(brightness),
+        themeMode: themeProvider.themeMode,
+        home: const MaterialAppShell(),
+      );
+    },
   );
 }

@@ -1,10 +1,10 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show MaterialPageRoute;
 import 'package:provider/provider.dart';
 
-import '../screens/gallery_screen.dart';
-import '../screens/search_screen.dart';
 import '../screens/duplicate_screen.dart';
 import '../screens/tag_management_screen.dart';
+import '../screens/image_detail_screen.dart';
 import '../providers/image_provider.dart';
 import '../providers/search_provider.dart';
 import '../providers/navigation_provider.dart';
@@ -96,17 +96,10 @@ class FluentGalleryPage extends StatelessWidget {
   }
 
   void _showImageDetail(BuildContext context, ImageModel image) {
-    showDialog(
-      context: context,
-      builder: (context) => ContentDialog(
-        title: Text(image.filename),
-        content: Text('图片详情功能将在 08-03 中实现'),
-        actions: [
-          FilledButton(
-            child: const Text('确定'),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ImageDetailScreen(image: image),
       ),
     );
   }
@@ -271,17 +264,10 @@ class _FluentSearchPageState extends State<FluentSearchPage> {
   }
 
   void _showImageDetail(BuildContext context, ImageModel image) {
-    showDialog(
-      context: context,
-      builder: (context) => ContentDialog(
-        title: Text(image.filename),
-        content: Text('图片详情功能将在 08-03 中实现'),
-        actions: [
-          FilledButton(
-            child: const Text('确定'),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ImageDetailScreen(image: image),
       ),
     );
   }

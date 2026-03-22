@@ -28,6 +28,12 @@ class _EditTagDialogState extends State<EditTagDialog> {
   bool _loading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => setState(() {}));
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();

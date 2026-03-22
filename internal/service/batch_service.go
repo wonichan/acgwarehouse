@@ -83,13 +83,22 @@ func (s *BatchService) BatchRemoveTags(ctx context.Context, imageIDs, tagIDs []i
 
 	successCount := 0
 	for _, imageID := range imageIDs {
+		anyRemoved := false
 		for _, tagID := range tagIDs {
-			if err := s.imageTagRepo.Delete(ctx, imageID, tagID); err != nil {
+			rowsAffected, err := s.imageTagRepo.Delete(ctx, imageID, tagID)
+			if err != nil {
 				// Continue with other deletions even if one fails
 				continue
 			}
+			if rowsAffected > 0 {
+				anyRemoved = true
+				// Decrement usage count only when we actually deleted an association
+				_ = s.tagRepo.DecrementUsageCount(ctx, tagID)
+			}
 		}
-		successCount++
+		if anyRemoved {
+			successCount++
+		}
 	}
 
 	return successCount, nil
@@ -170,7 +179,7 @@ func (s *BatchService) BatchRemoveFromCollection(ctx context.Context, imageIDs [
 	return successCount, nil
 }
 
-// BatchDeleteImages deletes multiple images
+// BatchDeleteImages deletes multiple images and updates tag usage counts
 func (s *BatchService) BatchDeleteImages(ctx context.Context, imageIDs []int64) (int, error) {
 	if len(imageIDs) == 0 {
 		return 0, errors.New("image_ids must not be empty")
@@ -178,6 +187,19 @@ func (s *BatchService) BatchDeleteImages(ctx context.Context, imageIDs []int64) 
 
 	successCount := 0
 	for _, imageID := range imageIDs {
+		// Get all tags for this image before deleting
+		imageTags, err := s.imageTagRepo.FindByImageID(ctx, imageID)
+		if err != nil {
+			continue // Skip if we can't get tags
+		}
+
+		// Decrement usage count for each tag (only non-rejected tags affect usage_count)
+		for _, it := range imageTags {
+			if it.ReviewState != "rejected" {
+				_ = s.tagRepo.DecrementUsageCount(ctx, it.TagID)
+			}
+		}
+
 		// Delete image (cascade will handle related records)
 		if err := s.imageRepo.Delete(imageID); err != nil {
 			continue // Continue with other deletions
