@@ -10,6 +10,7 @@ import (
 type JobRepository interface {
 	Save(job *domain.AsyncJob) error
 	FindByID(id int64) (*domain.AsyncJob, error)
+	FindByPlatformTaskID(platformTaskID int64) ([]domain.AsyncJob, error)
 	FindByStatus(status string) ([]domain.AsyncJob, error)
 	FindByType(jobType string) ([]domain.AsyncJob, error)
 	FindByTypeAndStatus(jobType string, status string) ([]domain.AsyncJob, error)
@@ -67,6 +68,13 @@ func (r *sqliteJobRepository) FindByStatus(status string) ([]domain.AsyncJob, er
 		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
 		FROM async_jobs WHERE status = ? ORDER BY id
 	`, status)
+}
+
+func (r *sqliteJobRepository) FindByPlatformTaskID(platformTaskID int64) ([]domain.AsyncJob, error) {
+	return r.findMany(`
+		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
+		FROM async_jobs WHERE platform_task_id = ? ORDER BY id
+	`, platformTaskID)
 }
 
 func (r *sqliteJobRepository) FindByType(jobType string) ([]domain.AsyncJob, error) {
