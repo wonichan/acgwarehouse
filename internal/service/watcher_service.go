@@ -115,7 +115,7 @@ func (w *WatcherService) scheduleImport(path, root string) {
 		timer.Stop()
 	}
 	w.timers[path] = time.AfterFunc(w.debounceTime, func() {
-		_ = w.scannerSvc.importFile(path, root)
+		_, _ = w.scannerSvc.importFile(path, root)
 		w.mu.Lock()
 		delete(w.timers, path)
 		w.mu.Unlock()

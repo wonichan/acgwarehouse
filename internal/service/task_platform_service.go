@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +16,8 @@ type TaskPlatformPlanItem struct {
 	ImageID          int64
 	ImageVersionKey  string
 	SourceDescriptor string
+	SkipPlanning     bool
+	SkipReason       string
 }
 
 type TaskPlatformPlanRequest struct {
@@ -75,9 +78,20 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 
 	createdTasks := make([]domain.PlatformTask, 0)
 	createdImages := make(map[int64]struct{})
+	taskTypes := uniqueNonEmptyStrings(req.TaskTypes)
 	for _, item := range req.Items {
+		if item.SkipPlanning {
+			batch.SkippedImages++
+			if item.SkipReason == domain.PlatformTaskSkipReasonUnchanged {
+				batch.SkippedUnchanged++
+			}
+			if len(taskTypes) > 0 {
+				batch.SkippedDuplicateTasks += int64(len(taskTypes))
+			}
+			continue
+		}
 		createdForImage := false
-		for _, taskType := range uniqueNonEmptyStrings(req.TaskTypes) {
+		for _, taskType := range taskTypes {
 			dedupeKey := buildPlatformTaskDedupeKey(item.ImageVersionKey, taskType)
 			existing, err := s.taskRepo.FindActiveByDedupeKey(ctx, dedupeKey)
 			if err != nil {
@@ -85,9 +99,7 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 			}
 			if existing != nil {
 				batch.SkippedDuplicateTasks++
-				if existing.Status == domain.PlatformTaskStatusCompleted {
-					batch.SkippedUnchanged++
-				}
+				batch.SkippedUnchanged++
 				continue
 			}
 
@@ -134,6 +146,29 @@ func buildPlatformTaskDedupeKey(imageVersionKey, taskType string) string {
 		return taskType
 	}
 	return fmt.Sprintf("%s:%s", imageVersionKey, taskType)
+}
+
+func BuildImageVersionKey(image *domain.Image) string {
+	if image == nil {
+		return ""
+	}
+	return fmt.Sprintf("image:%d:size:%d:phash:%d", image.ID, image.FileSize, image.PHash)
+}
+
+func BuildTaskBatchSummaryLabel(sourceType string, sourceRoots []string, totalImages int) string {
+	roots := uniqueNonEmptyStrings(sourceRoots)
+	if len(roots) == 0 {
+		return fmt.Sprintf("%s batch (%d images)", strings.TrimSpace(sourceType), totalImages)
+	}
+	labels := make([]string, 0, len(roots))
+	for _, root := range roots {
+		base := filepath.Base(filepath.Clean(root))
+		if base == "." || base == string(filepath.Separator) || strings.TrimSpace(base) == "" {
+			base = root
+		}
+		labels = append(labels, base)
+	}
+	return fmt.Sprintf("%s batch [%s] (%d images)", strings.TrimSpace(sourceType), strings.Join(labels, ", "), totalImages)
 }
 
 func uniqueNonEmptyStrings(values []string) []string {

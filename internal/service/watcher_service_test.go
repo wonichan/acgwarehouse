@@ -30,7 +30,7 @@ func TestWatcherImportsNewImageAndQueuesJob(t *testing.T) {
 	metadataSvc := NewMetadataService()
 	imageRepo := repository.NewImageRepository(db)
 	jobRepo := repository.NewJobRepository(db)
-	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, 1)
+	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, nil, 1)
 
 	watcher, err := NewWatcherService(scanner, metadataSvc, imageRepo, jobRepo, []string{root})
 	if err != nil {
