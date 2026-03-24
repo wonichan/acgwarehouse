@@ -68,7 +68,7 @@ Each task was committed atomically:
 1. **task 1: 为批次 / 任务读模型聚合写失败测试并实现查询服务** - `3cf7f85` (test), `061c6a1` (feat)
 2. **task 2: 扩展 admin service/handler/routes 暴露批次与任务查询接口** - `153f8bc` (test), `e58c9ea` (feat)
 
-**Plan metadata:** `pending at summary creation`
+**Plan metadata:** `af85539`
 
 ## Files Created/Modified
 - `internal/repository/task_batch_read_repository.go` - 提供批次汇总查询与按批次任务明细查询 SQL。
