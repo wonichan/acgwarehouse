@@ -160,8 +160,11 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	aiStatus := gin.HandlerFunc(placeholderHandler)
 	aiBatch := gin.HandlerFunc(placeholderHandler)
 	aiDefaultPrompt := gin.HandlerFunc(placeholderHandler)
-	if deps != nil && deps.JobManager != nil && deps.ImageRepo != nil && deps.JobRepo != nil {
-		aiTagHandler := NewAITagHandler(deps.JobManager, deps.ImageRepo, deps.JobRepo)
+	if deps != nil && deps.JobManager != nil && deps.ImageRepo != nil && deps.JobRepo != nil && deps.DB != nil {
+		taskRepo := repository.NewPlatformTaskRepository(deps.DB)
+		batchRepo := repository.NewTaskBatchRepository(deps.DB)
+		taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, deps.JobRepo)
+		aiTagHandler := NewAITagHandler(deps.JobManager, deps.ImageRepo, deps.JobRepo, taskRepo, taskPlatformSvc)
 		aiTrigger = aiTagHandler.TriggerAITags
 		aiStatus = aiTagHandler.GetAITagStatus
 		aiBatch = aiTagHandler.BatchTriggerAITags

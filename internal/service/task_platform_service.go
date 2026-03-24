@@ -141,6 +141,35 @@ func (s *TaskPlatformService) RefreshBatchStatus(ctx context.Context, batchID in
 	return s.batchRepo.RefreshStatus(ctx, batchID)
 }
 
+func (s *TaskPlatformService) QueueTask(ctx context.Context, task *domain.PlatformTask, jobType, payload string) (*domain.AsyncJob, error) {
+	if task == nil {
+		return nil, fmt.Errorf("platform task is required")
+	}
+	job := &domain.AsyncJob{
+		PlatformTaskID: &task.ID,
+		Type:           jobType,
+		Status:         "ready",
+		Payload:        payload,
+		Progress:       0,
+		CreatedAt:      time.Now(),
+	}
+	if err := s.jobRepo.Save(job); err != nil {
+		return nil, err
+	}
+	if err := s.taskRepo.SetLatestAsyncJob(ctx, task.ID, &job.ID); err != nil {
+		return nil, err
+	}
+	queuedTask, err := s.taskRepo.FindByID(ctx, task.ID)
+	if err != nil {
+		return nil, err
+	}
+	*task = *queuedTask
+	if _, err := s.batchRepo.RefreshStatus(ctx, task.BatchID); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
 func buildPlatformTaskDedupeKey(imageVersionKey, taskType string) string {
 	if imageVersionKey == "" {
 		return taskType

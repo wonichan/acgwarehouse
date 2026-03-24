@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -13,11 +14,13 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/service"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
-func TestAITagTriggerQueuesJob(t *testing.T) {
+func TestAITagTriggerCreatesManualSingleBatch(t *testing.T) {
 	t.Parallel()
 
 	router, _ := newAITagHandlerTestRouter(t)
@@ -32,16 +35,33 @@ func TestAITagTriggerQueuesJob(t *testing.T) {
 	}
 
 	var resp struct {
-		JobID  int64  `json:"job_id"`
-		Status string `json:"status"`
+		BatchID        int64   `json:"batch_id"`
+		SourceType     string  `json:"source_type"`
+		Status         string  `json:"status"`
+		CreatedTasks   int     `json:"created_tasks"`
+		SkippedTasks   int     `json:"skipped_tasks"`
+		PlatformTaskID []int64 `json:"platform_task_ids"`
+		JobIDs         []int64 `json:"job_ids"`
 	}
 	decodeAIJSONBody(t, w.Body.Bytes(), &resp)
 
-	if resp.JobID == 0 {
-		t.Fatal("expected job id to be assigned")
+	if resp.BatchID == 0 {
+		t.Fatal("expected batch id to be assigned")
+	}
+	if resp.SourceType != domain.TaskBatchSourceManualSingle {
+		t.Fatalf("source_type = %q, want %q", resp.SourceType, domain.TaskBatchSourceManualSingle)
 	}
 	if resp.Status != "queued" {
 		t.Fatalf("status = %q, want queued", resp.Status)
+	}
+	if resp.CreatedTasks != 1 || resp.SkippedTasks != 0 {
+		t.Fatalf("created/skipped = %d/%d, want 1/0", resp.CreatedTasks, resp.SkippedTasks)
+	}
+	if len(resp.PlatformTaskID) != 1 || resp.PlatformTaskID[0] == 0 {
+		t.Fatalf("platform_task_ids = %+v, want one task id", resp.PlatformTaskID)
+	}
+	if len(resp.JobIDs) != 1 || resp.JobIDs[0] == 0 {
+		t.Fatalf("job_ids = %+v, want one async job", resp.JobIDs)
 	}
 }
 
@@ -89,10 +109,80 @@ func TestAITagGetStatusReturnsCurrentJobState(t *testing.T) {
 	}
 }
 
+func TestBatchAITagTriggerCreatesManualBatchAndSkipsDuplicateQueue(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newAITagHandlerTestRouter(t)
+	ctx := context.Background()
+	image2 := repos.mustFindImage(t, 2)
+
+	seed, err := repos.taskPlatformSvc.PlanBatch(ctx, service.TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceManualSingle,
+		SummaryLabel: "seed duplicate ai task",
+		TaskTypes:    []string{domain.PlatformTaskTypeAITagGeneration},
+		Items: []service.TaskPlatformPlanItem{{
+			ImageID:          1,
+			ImageVersionKey:  service.BuildImageVersionKey(repos.mustFindImage(t, 1)),
+			SourceDescriptor: "/images/1.png",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PlanBatch(seed) error = %v", err)
+	}
+	if len(seed.CreatedTasks) != 1 {
+		t.Fatalf("seed created tasks = %d, want 1", len(seed.CreatedTasks))
+	}
+	payload, err := json.Marshal(worker.AITagPayload{ImageID: 1, Path: "/images/1.png"})
+	if err != nil {
+		t.Fatalf("json.Marshal(seed payload) error = %v", err)
+	}
+	if _, err := repos.taskPlatformSvc.QueueTask(ctx, &seed.CreatedTasks[0], domain.PlatformTaskTypeAITagGeneration, string(payload)); err != nil {
+		t.Fatalf("QueueTask(seed) error = %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"image_ids": []int64{1, image2.ID},
+	})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/batch-ai-tags", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	var resp struct {
+		BatchID        int64   `json:"batch_id"`
+		SourceType     string  `json:"source_type"`
+		CreatedTasks   int     `json:"created_tasks"`
+		SkippedTasks   int     `json:"skipped_tasks"`
+		PlatformTaskID []int64 `json:"platform_task_ids"`
+		JobIDs         []int64 `json:"job_ids"`
+	}
+	decodeAIJSONBody(t, w.Body.Bytes(), &resp)
+
+	if resp.BatchID == 0 {
+		t.Fatal("expected batch id to be assigned")
+	}
+	if resp.SourceType != domain.TaskBatchSourceManualBatch {
+		t.Fatalf("source_type = %q, want %q", resp.SourceType, domain.TaskBatchSourceManualBatch)
+	}
+	if resp.CreatedTasks != 1 || resp.SkippedTasks != 1 {
+		t.Fatalf("created/skipped = %d/%d, want 1/1", resp.CreatedTasks, resp.SkippedTasks)
+	}
+	if len(resp.PlatformTaskID) != 1 || len(resp.JobIDs) != 1 {
+		t.Fatalf("platform_task_ids/job_ids = %+v/%+v, want one new queued task", resp.PlatformTaskID, resp.JobIDs)
+	}
+}
+
 type aiTagHandlerTestRepos struct {
-	jobRepo repository.JobRepository
-	manager *worker.Manager
-	db      *sql.DB
+	db              *sql.DB
+	jobRepo         repository.JobRepository
+	taskRepo        repository.PlatformTaskRepository
+	batchRepo       repository.TaskBatchRepository
+	taskPlatformSvc *service.TaskPlatformService
+	manager         *worker.Manager
 }
 
 func newAITagHandlerTestRouter(t *testing.T) (*gin.Engine, *aiTagHandlerTestRepos) {
@@ -113,16 +203,21 @@ func newAITagHandlerTestRouter(t *testing.T) (*gin.Engine, *aiTagHandlerTestRepo
 	now := time.Now()
 	_, err = db.Exec(`
 		INSERT INTO images (id, path, filename, source_root, file_size, width, height, format, created_at, updated_at)
-		VALUES (1, '/images/1.png', '1.png', '/images', 100, 100, 100, 'png', ?, ?)
-	`, now, now)
+		VALUES
+			(1, '/images/1.png', '1.png', '/images', 100, 100, 100, 'png', ?, ?),
+			(2, '/images/2.png', '2.png', '/images', 120, 120, 120, 'png', ?, ?)
+	`, now, now, now, now)
 	if err != nil {
 		t.Fatalf("seed image: %v", err)
 	}
 
 	jobRepo := repository.NewJobRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	batchRepo := repository.NewTaskBatchRepository(db)
+	taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, jobRepo)
 	manager := worker.NewManager(jobRepo)
 	imageRepo := repository.NewImageRepository(db)
-	h := NewAITagHandler(manager, imageRepo, jobRepo)
+	h := NewAITagHandler(manager, imageRepo, jobRepo, taskRepo, taskPlatformSvc)
 
 	router := gin.New()
 	api := router.Group("/api/v1")
@@ -130,7 +225,23 @@ func newAITagHandlerTestRouter(t *testing.T) (*gin.Engine, *aiTagHandlerTestRepo
 	api.GET("/images/:id/ai-tags/status", h.GetAITagStatus)
 	api.POST("/images/batch-ai-tags", h.BatchTriggerAITags)
 
-	return router, &aiTagHandlerTestRepos{jobRepo: jobRepo, manager: manager, db: db}
+	return router, &aiTagHandlerTestRepos{
+		db:              db,
+		jobRepo:         jobRepo,
+		taskRepo:        taskRepo,
+		batchRepo:       batchRepo,
+		taskPlatformSvc: taskPlatformSvc,
+		manager:         manager,
+	}
+}
+
+func (r *aiTagHandlerTestRepos) mustFindImage(t *testing.T, imageID int64) *domain.Image {
+	t.Helper()
+	image, err := repository.NewImageRepository(r.db).FindByID(imageID)
+	if err != nil {
+		t.Fatalf("FindByID(%d) error = %v", imageID, err)
+	}
+	return image
 }
 
 func decodeAIJSONBody(t *testing.T, body []byte, target any) {
