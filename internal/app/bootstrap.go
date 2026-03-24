@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/ai"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
@@ -34,14 +35,6 @@ func (a *App) initServices() {
 	a.hashSvc = service.NewHashService()
 	a.duplicateSvc = service.NewDuplicateService(a.imageRepo, a.duplicateRepo, a.hashSvc)
 	a.searchSvc = service.NewSearchService(a.imageRepo, a.tagRepo, a.searchRepo)
-	a.adminSvc = service.NewAdminService(
-		a.config,
-		a.jobRepo,
-		a.imageRepo,
-		a.tagRepo,
-		a.collectionRepo,
-		a.jobManager,
-	)
 }
 
 // initWorkerManager initializes the worker manager and registers all handlers.
@@ -73,6 +66,7 @@ func (a *App) initWorkerManager() error {
 // registerThumbnailHandler registers the thumbnail generation handler.
 func (a *App) registerThumbnailHandler() {
 	thumbnailSvc := service.NewThumbnailService()
+	taskPlatformSvc := a.newTaskPlatformService()
 	cosSvc, err := service.NewCOSService(&a.config.COS)
 	if err != nil {
 		log.Printf("thumbnail job handler not registered: %v", err)
@@ -80,15 +74,15 @@ func (a *App) registerThumbnailHandler() {
 	}
 
 	thumbnailHandler := worker.NewThumbnailHandler(thumbnailSvc, cosSvc, a.imageRepo)
-	a.jobManager.RegisterHandler("thumbnail_generate", thumbnailHandler.Handle)
+	a.registerPlatformTaskHandler(domain.PlatformTaskTypeThumbnailGenerate, thumbnailHandler.Handle)
 
 	// Register image_imported handler - auto-triggers thumbnail generation
-	a.jobManager.RegisterHandler("image_imported", a.createImageImportedHandler())
+	a.jobManager.RegisterHandler(domain.PlatformTaskTypeImageImported, a.createImageImportedHandler(taskPlatformSvc))
 	log.Printf("已注册 image_imported 处理器 - 将自动触发缩略图生成")
 }
 
 // createImageImportedHandler creates the handler for image_imported events.
-func (a *App) createImageImportedHandler() func(ctx context.Context, id int64, payload string) error {
+func (a *App) createImageImportedHandler(taskPlatformSvc *service.TaskPlatformService) func(ctx context.Context, id int64, payload string) error {
 	return func(ctx context.Context, id int64, payload string) error {
 		var p struct {
 			ImageID  int64  `json:"image_id"`
@@ -97,6 +91,27 @@ func (a *App) createImageImportedHandler() func(ctx context.Context, id int64, p
 		}
 		if err := json.Unmarshal([]byte(payload), &p); err != nil {
 			return fmt.Errorf("解析 image_imported payload 失败: %w", err)
+		}
+		if taskPlatformSvc == nil {
+			return nil
+		}
+		image, err := a.imageRepo.FindByID(p.ImageID)
+		if err != nil {
+			return fmt.Errorf("查询导入图片失败: %w", err)
+		}
+		plan, err := taskPlatformSvc.PlanBatch(ctx, service.TaskPlatformPlanRequest{
+			SourceType:   domain.TaskBatchSourceImportScan,
+			SummaryLabel: service.BuildTaskBatchSummaryLabel(domain.TaskBatchSourceImportScan, []string{image.SourceRoot}, 1),
+			SourceRoots:  []string{image.SourceRoot},
+			TaskTypes:    []string{domain.PlatformTaskTypeThumbnailGenerate},
+			Items: []service.TaskPlatformPlanItem{{
+				ImageID:          image.ID,
+				ImageVersionKey:  service.BuildImageVersionKey(image),
+				SourceDescriptor: image.Path,
+			}},
+		})
+		if err != nil {
+			return fmt.Errorf("规划导入平台任务失败: %w", err)
 		}
 
 		thumbnailPayload, err := json.Marshal(map[string]interface{}{
@@ -108,12 +123,22 @@ func (a *App) createImageImportedHandler() func(ctx context.Context, id int64, p
 			return err
 		}
 
-		_, err = a.jobManager.AddJob(ctx, "thumbnail_generate", string(thumbnailPayload))
-		if err != nil {
-			return fmt.Errorf("添加缩略图生成任务失败: %w", err)
+		createdJobs := 0
+		for i := range plan.CreatedTasks {
+			job, err := taskPlatformSvc.QueueTask(ctx, &plan.CreatedTasks[i], domain.PlatformTaskTypeThumbnailGenerate, string(thumbnailPayload))
+			if err != nil {
+				return fmt.Errorf("添加缩略图生成任务失败: %w", err)
+			}
+			a.jobManager.LoadExistingJob(job)
+			createdJobs++
 		}
 
-		log.Printf("已为新导入的图片 %d 创建缩略图生成任务", p.ImageID)
+		if createdJobs == 0 {
+			log.Printf("图片 %d 的缩略图平台任务已存在，本次 image_imported 仅保留内部调度记录", p.ImageID)
+			return nil
+		}
+
+		log.Printf("已为新导入的图片 %d 创建 %d 个缩略图平台任务", p.ImageID, createdJobs)
 		return nil
 	}
 }
@@ -121,7 +146,7 @@ func (a *App) createImageImportedHandler() func(ctx context.Context, id int64, p
 // registerScanHandler registers the manual scan handler.
 func (a *App) registerScanHandler() {
 	metadataSvc := service.NewMetadataService()
-	scannerSvc := service.NewScannerService(metadataSvc, a.imageRepo, a.jobRepo, 4)
+	scannerSvc := service.NewScannerService(metadataSvc, a.imageRepo, a.jobRepo, a.newTaskPlatformService(), 4)
 	scanHandler := worker.NewScanHandler(scannerSvc, a.config.Storage.ScanRoots)
 	a.jobManager.RegisterHandler("manual_scan", scanHandler.Handle)
 	log.Printf("已注册 manual_scan 处理器 - 支持手动触发扫描任务")
@@ -139,7 +164,35 @@ func (a *App) registerAIHandlers() {
 	worker.InitAITagConcurrencyLimiter(a.config.AI.MaxConcurrency)
 
 	client := ai.NewRateLimitedClient(provider, a.config.AI.RequestsPerMinute)
-	worker.RegisterAITagHandler(a.jobManager, client, a.obsRepo, a.governanceSvc)
+	aiHandler := worker.NewAITagJobHandler(client, a.obsRepo, a.governanceSvc)
+	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagGeneration, aiHandler)
+}
+
+func (a *App) newTaskPlatformService() *service.TaskPlatformService {
+	return service.NewTaskPlatformService(
+		repository.NewTaskBatchRepository(a.db),
+		repository.NewPlatformTaskRepository(a.db),
+		a.jobRepo,
+	)
+}
+
+func (a *App) registerPlatformTaskHandler(jobType string, handler worker.JobFunc) {
+	taskPlatformSvc := a.newTaskPlatformService()
+	a.jobManager.RegisterHandler(jobType, func(ctx context.Context, id int64, payload string) error {
+		if err := taskPlatformSvc.MarkJobRunning(ctx, id); err != nil {
+			return fmt.Errorf("mark platform task running: %w", err)
+		}
+		if err := handler(ctx, id, payload); err != nil {
+			if markErr := taskPlatformSvc.MarkJobFailed(ctx, id, err.Error()); markErr != nil {
+				log.Printf("同步平台任务失败状态失败: job=%d err=%v", id, markErr)
+			}
+			return err
+		}
+		if err := taskPlatformSvc.MarkJobCompleted(ctx, id); err != nil {
+			return fmt.Errorf("mark platform task completed: %w", err)
+		}
+		return nil
+	})
 }
 
 // SetupGinMode sets the Gin mode based on environment.

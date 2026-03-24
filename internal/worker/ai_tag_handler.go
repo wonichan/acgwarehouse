@@ -69,9 +69,13 @@ func InitAITagConcurrencyLimiter(maxConcurrency int) {
 
 // RegisterAITagHandler 注册 AI 标签生成任务处理器
 func RegisterAITagHandler(manager *Manager, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger) {
-	manager.RegisterHandler("ai_tag_generation", func(ctx context.Context, id int64, payload string) error {
+	manager.RegisterHandler("ai_tag_generation", NewAITagJobHandler(client, obsRepo, governance))
+}
+
+func NewAITagJobHandler(client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger) JobFunc {
+	return func(ctx context.Context, id int64, payload string) error {
 		return handleAITagGeneration(ctx, id, payload, client, obsRepo, governance)
-	})
+	}
 }
 
 // handleAITagGeneration 处理 AI 标签生成任务

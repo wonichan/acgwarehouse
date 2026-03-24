@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -137,6 +138,142 @@ func TestTaskPlatformServiceRefreshBatchStatusAggregatesRunningAndPartialFailed(
 	}
 	if refreshed.Status != domain.TaskBatchStatusPartialFailed {
 		t.Fatalf("partial_failed batch status = %q, want %q", refreshed.Status, domain.TaskBatchStatusPartialFailed)
+	}
+}
+
+func TestTaskPlatformServiceQueueTaskLinksAsyncJobAndMarksTaskQueued(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	env := newTaskPlatformServiceTestEnv(t)
+	image := saveTaskPlatformServiceImage(t, env.db, "queued.png")
+	plan, err := env.service.PlanBatch(ctx, TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceManualSingle,
+		SummaryLabel: "queue ai task",
+		TaskTypes:    []string{domain.PlatformTaskTypeAITagGeneration},
+		Items: []TaskPlatformPlanItem{{
+			ImageID:          image.ID,
+			ImageVersionKey:  BuildImageVersionKey(image),
+			SourceDescriptor: image.Path,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PlanBatch() error = %v", err)
+	}
+	if len(plan.CreatedTasks) != 1 {
+		t.Fatalf("len(CreatedTasks) = %d, want 1", len(plan.CreatedTasks))
+	}
+	payload, err := json.Marshal(map[string]any{"image_id": image.ID, "path": image.Path})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	job, err := env.service.QueueTask(ctx, &plan.CreatedTasks[0], domain.PlatformTaskTypeAITagGeneration, string(payload))
+	if err != nil {
+		t.Fatalf("QueueTask() error = %v", err)
+	}
+	if job.PlatformTaskID == nil || *job.PlatformTaskID != plan.CreatedTasks[0].ID {
+		t.Fatalf("job.PlatformTaskID = %+v, want %d", job.PlatformTaskID, plan.CreatedTasks[0].ID)
+	}
+	reloadedTask, err := env.taskRepo.FindByID(ctx, plan.CreatedTasks[0].ID)
+	if err != nil {
+		t.Fatalf("FindByID(task) error = %v", err)
+	}
+	if reloadedTask.Status != domain.PlatformTaskStatusQueued {
+		t.Fatalf("task status = %q, want %q", reloadedTask.Status, domain.PlatformTaskStatusQueued)
+	}
+	if reloadedTask.LatestAsyncJobID == nil || *reloadedTask.LatestAsyncJobID != job.ID {
+		t.Fatalf("LatestAsyncJobID = %+v, want %d", reloadedTask.LatestAsyncJobID, job.ID)
+	}
+}
+
+func TestTaskPlatformServiceSyncsJobLifecycleBackToPlatformTask(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	env := newTaskPlatformServiceTestEnv(t)
+	image := saveTaskPlatformServiceImage(t, env.db, "lifecycle-sync.png")
+	plan, err := env.service.PlanBatch(ctx, TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "sync lifecycle",
+		TaskTypes:    []string{domain.PlatformTaskTypeThumbnailGenerate},
+		Items: []TaskPlatformPlanItem{{
+			ImageID:          image.ID,
+			ImageVersionKey:  BuildImageVersionKey(image),
+			SourceDescriptor: image.Path,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PlanBatch() error = %v", err)
+	}
+	payload := `{"image_id":1,"path":"/task-platform/lifecycle-sync.png","filename":"lifecycle-sync"}`
+	job, err := env.service.QueueTask(ctx, &plan.CreatedTasks[0], domain.PlatformTaskTypeThumbnailGenerate, payload)
+	if err != nil {
+		t.Fatalf("QueueTask() error = %v", err)
+	}
+	if err := env.service.MarkJobRunning(ctx, job.ID); err != nil {
+		t.Fatalf("MarkJobRunning() error = %v", err)
+	}
+	runningTask, err := env.taskRepo.FindByID(ctx, plan.CreatedTasks[0].ID)
+	if err != nil {
+		t.Fatalf("FindByID(running task) error = %v", err)
+	}
+	if runningTask.Status != domain.PlatformTaskStatusRunning {
+		t.Fatalf("running task status = %q, want %q", runningTask.Status, domain.PlatformTaskStatusRunning)
+	}
+	if err := env.service.MarkJobCompleted(ctx, job.ID); err != nil {
+		t.Fatalf("MarkJobCompleted() error = %v", err)
+	}
+	completedTask, err := env.taskRepo.FindByID(ctx, plan.CreatedTasks[0].ID)
+	if err != nil {
+		t.Fatalf("FindByID(completed task) error = %v", err)
+	}
+	if completedTask.Status != domain.PlatformTaskStatusCompleted {
+		t.Fatalf("completed task status = %q, want %q", completedTask.Status, domain.PlatformTaskStatusCompleted)
+	}
+	completedBatch, err := env.batchRepo.FindByID(ctx, plan.Batch.ID)
+	if err != nil {
+		t.Fatalf("FindByID(completed batch) error = %v", err)
+	}
+	if completedBatch.Status != domain.TaskBatchStatusCompleted {
+		t.Fatalf("completed batch status = %q, want %q", completedBatch.Status, domain.TaskBatchStatusCompleted)
+	}
+
+	failedPlan, err := env.service.PlanBatch(ctx, TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "sync failure",
+		TaskTypes:    []string{domain.PlatformTaskTypeThumbnailGenerate},
+		Items: []TaskPlatformPlanItem{{
+			ImageID:          image.ID,
+			ImageVersionKey:  "image:lifecycle-sync:v2",
+			SourceDescriptor: image.Path,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PlanBatch(failed) error = %v", err)
+	}
+	failedJob, err := env.service.QueueTask(ctx, &failedPlan.CreatedTasks[0], domain.PlatformTaskTypeThumbnailGenerate, payload)
+	if err != nil {
+		t.Fatalf("QueueTask(failed) error = %v", err)
+	}
+	if err := env.service.MarkJobFailed(ctx, failedJob.ID, "thumbnail failed"); err != nil {
+		t.Fatalf("MarkJobFailed() error = %v", err)
+	}
+	failedTask, err := env.taskRepo.FindByID(ctx, failedPlan.CreatedTasks[0].ID)
+	if err != nil {
+		t.Fatalf("FindByID(failed task) error = %v", err)
+	}
+	if failedTask.Status != domain.PlatformTaskStatusFailed {
+		t.Fatalf("failed task status = %q, want %q", failedTask.Status, domain.PlatformTaskStatusFailed)
+	}
+	if failedTask.ErrorSummary == nil || *failedTask.ErrorSummary != "thumbnail failed" {
+		t.Fatalf("ErrorSummary = %+v, want thumbnail failed", failedTask.ErrorSummary)
+	}
+	failedBatch, err := env.batchRepo.FindByID(ctx, failedPlan.Batch.ID)
+	if err != nil {
+		t.Fatalf("FindByID(failed batch) error = %v", err)
+	}
+	if failedBatch.Status != domain.TaskBatchStatusFailed {
+		t.Fatalf("failed batch status = %q, want %q", failedBatch.Status, domain.TaskBatchStatusFailed)
 	}
 }
 

@@ -170,6 +170,61 @@ func (s *TaskPlatformService) QueueTask(ctx context.Context, task *domain.Platfo
 	return job, nil
 }
 
+func (s *TaskPlatformService) MarkJobRunning(ctx context.Context, jobID int64) error {
+	return s.updateTaskStatusForJob(ctx, jobID, domain.PlatformTaskStatusRunning, nil)
+}
+
+func (s *TaskPlatformService) MarkJobCompleted(ctx context.Context, jobID int64) error {
+	return s.updateTaskStatusForJob(ctx, jobID, domain.PlatformTaskStatusCompleted, nil)
+}
+
+func (s *TaskPlatformService) MarkJobFailed(ctx context.Context, jobID int64, errorSummary string) error {
+	return s.updateTaskStatusForJob(ctx, jobID, domain.PlatformTaskStatusFailed, &errorSummary)
+}
+
+func (s *TaskPlatformService) updateTaskStatusForJob(ctx context.Context, jobID int64, status string, errorSummary *string) error {
+	job, err := s.jobRepo.FindByID(jobID)
+	if err != nil {
+		return err
+	}
+	if job.PlatformTaskID == nil {
+		return nil
+	}
+	task, err := s.taskRepo.FindByID(ctx, *job.PlatformTaskID)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	switch status {
+	case domain.PlatformTaskStatusRunning:
+		task.Status = domain.PlatformTaskStatusRunning
+		task.StartedAt = &now
+		task.FinishedAt = nil
+		task.ErrorSummary = nil
+	case domain.PlatformTaskStatusCompleted:
+		task.Status = domain.PlatformTaskStatusCompleted
+		if task.StartedAt == nil {
+			task.StartedAt = &now
+		}
+		task.FinishedAt = &now
+		task.ErrorSummary = nil
+	case domain.PlatformTaskStatusFailed:
+		task.Status = domain.PlatformTaskStatusFailed
+		if task.StartedAt == nil {
+			task.StartedAt = &now
+		}
+		task.FinishedAt = &now
+		task.ErrorSummary = errorSummary
+	default:
+		task.Status = status
+	}
+	if err := s.taskRepo.Update(ctx, task); err != nil {
+		return err
+	}
+	_, err = s.batchRepo.RefreshStatus(ctx, task.BatchID)
+	return err
+}
+
 func buildPlatformTaskDedupeKey(imageVersionKey, taskType string) string {
 	if imageVersionKey == "" {
 		return taskType
