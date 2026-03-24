@@ -69,7 +69,7 @@ Each task was committed atomically:
 2. **task 2: 让手动 AI 入口改为创建 manual_single / manual_batch 批次** - `f2ae96d` (feat)
 3. **task 3: 在 bootstrap 建立统一调度与状态回写骨架** - `002c984` (feat)
 
-**Plan metadata:** see final `docs(11-03)` commit
+**Plan metadata:** `2d6031d`
 
 ## Files Created/Modified
 - `internal/service/scanner_service.go` - 为扫描结果补充批次字段，并在扫描结束后统一规划 `import_scan` 批次。
