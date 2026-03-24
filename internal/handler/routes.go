@@ -59,6 +59,8 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		{
 			admin.GET("/summary", adminHandler.GetSummary)
 			admin.GET("/jobs", adminHandler.GetJobs)
+			admin.GET("/task-batches", adminHandler.GetTaskBatches)
+			admin.GET("/tasks", adminHandler.GetTasks)
 			admin.POST("/actions/scan", adminHandler.TriggerScan)
 			admin.POST("/actions/jobs/pause", adminHandler.PauseBackgroundTasks)
 			admin.POST("/actions/jobs/resume", adminHandler.ResumeBackgroundTasks)

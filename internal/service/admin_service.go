@@ -33,6 +33,7 @@ type AdminService struct {
 	tagRepo        repository.TagRepository
 	collectionRepo repository.CollectionRepository
 	jobManager     JobManagerControl
+	taskReadSvc    *TaskReadService
 }
 
 // HealthStatus represents the health of the system.
@@ -85,7 +86,12 @@ func NewAdminService(
 	tagRepo repository.TagRepository,
 	collectionRepo repository.CollectionRepository,
 	jobManager JobManagerControl,
+	taskReadSvcOpt ...*TaskReadService,
 ) *AdminService {
+	var taskReadSvc *TaskReadService
+	if len(taskReadSvcOpt) > 0 {
+		taskReadSvc = taskReadSvcOpt[0]
+	}
 	return &AdminService{
 		cfg:            cfg,
 		jobRepo:        jobRepo,
@@ -93,6 +99,7 @@ func NewAdminService(
 		tagRepo:        tagRepo,
 		collectionRepo: collectionRepo,
 		jobManager:     jobManager,
+		taskReadSvc:    taskReadSvc,
 	}
 }
 
@@ -157,6 +164,22 @@ func (s *AdminService) GetJobs(ctx context.Context, limit int) ([]interface{}, e
 		result[i] = job
 	}
 	return result, nil
+}
+
+// GetTaskBatches returns admin-facing task batch read models.
+func (s *AdminService) GetTaskBatches(ctx context.Context, filter TaskBatchReadFilter) ([]TaskBatchReadModel, error) {
+	if s.taskReadSvc == nil {
+		return []TaskBatchReadModel{}, nil
+	}
+	return s.taskReadSvc.ListBatches(ctx, filter)
+}
+
+// GetTasks returns admin-facing platform task details.
+func (s *AdminService) GetTasks(ctx context.Context, filter TaskReadFilter) ([]TaskReadModel, error) {
+	if s.taskReadSvc == nil {
+		return []TaskReadModel{}, nil
+	}
+	return s.taskReadSvc.ListTasks(ctx, filter)
 }
 
 // TriggerScan creates a manual scan job.

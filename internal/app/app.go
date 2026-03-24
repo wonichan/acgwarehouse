@@ -89,6 +89,16 @@ func New(cfgPath string) (*App, error) {
 		return nil, fmt.Errorf("failed to initialize worker manager: %w", err)
 	}
 
+	app.adminSvc = service.NewAdminService(
+		app.config,
+		app.jobRepo,
+		app.imageRepo,
+		app.tagRepo,
+		app.collectionRepo,
+		app.jobManager,
+		service.NewTaskReadService(repository.NewTaskBatchReadRepository(app.db)),
+	)
+
 	return app, nil
 }
 

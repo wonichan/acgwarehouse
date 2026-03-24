@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,8 @@ import (
 type AdminServiceInterface interface {
 	GetSummary(ctx context.Context) (*service.Summary, error)
 	GetJobs(ctx context.Context, limit int) ([]interface{}, error)
+	GetTaskBatches(ctx context.Context, filter service.TaskBatchReadFilter) ([]service.TaskBatchReadModel, error)
+	GetTasks(ctx context.Context, filter service.TaskReadFilter) ([]service.TaskReadModel, error)
 	TriggerScan(ctx context.Context) (int64, error)
 	RetryFailedJobs(ctx context.Context) (int, error)
 	PauseBackgroundTasks(ctx context.Context) error
@@ -143,6 +146,73 @@ func (h *AdminHandler) GetJobs(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
+}
+
+// GetTaskBatches returns aggregated task batch read models.
+// GET /admin/api/task-batches
+func (h *AdminHandler) GetTaskBatches(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "admin service not configured"})
+		return
+	}
+
+	filter := service.TaskBatchReadFilter{
+		SourceType: c.Query("source_type"),
+		Status:     c.Query("status"),
+		Limit:      parsePositiveIntWithCap(c.Query("limit"), 50, 1000),
+	}
+	batches, err := h.adminSvc.GetTaskBatches(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get task batches: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"task_batches": batches})
+}
+
+// GetTasks returns task details, optionally filtered by batch.
+// GET /admin/api/tasks
+func (h *AdminHandler) GetTasks(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "admin service not configured"})
+		return
+	}
+
+	filter := service.TaskReadFilter{
+		TaskType: c.Query("task_type"),
+		Status:   c.Query("status"),
+		Limit:    parsePositiveIntWithCap(c.Query("limit"), 50, 1000),
+	}
+	if batchIDText := c.Query("batch_id"); batchIDText != "" {
+		batchID, err := strconv.ParseInt(batchIDText, 10, 64)
+		if err != nil || batchID <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid batch_id"})
+			return
+		}
+		filter.BatchID = &batchID
+	}
+
+	tasks, err := h.adminSvc.GetTasks(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get tasks: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"tasks": tasks})
+}
+
+func parsePositiveIntWithCap(raw string, fallback, max int) int {
+	if strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 // TriggerScan triggers a manual scan job.
