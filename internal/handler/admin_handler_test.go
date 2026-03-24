@@ -16,6 +16,8 @@ import (
 type mockAdminService struct {
 	summary      *service.Summary
 	jobs         []interface{}
+	taskBatches  []service.TaskBatchReadModel
+	tasks        []service.TaskReadModel
 	scanJobID    int64
 	retryCount   int
 	pauseCalled  bool
@@ -30,6 +32,14 @@ func (m *mockAdminService) GetSummary(ctx context.Context) (*service.Summary, er
 
 func (m *mockAdminService) GetJobs(ctx context.Context, limit int) ([]interface{}, error) {
 	return m.jobs, m.err
+}
+
+func (m *mockAdminService) GetTaskBatches(ctx context.Context, filter service.TaskBatchReadFilter) ([]service.TaskBatchReadModel, error) {
+	return m.taskBatches, m.err
+}
+
+func (m *mockAdminService) GetTasks(ctx context.Context, filter service.TaskReadFilter) ([]service.TaskReadModel, error) {
+	return m.tasks, m.err
 }
 
 func (m *mockAdminService) TriggerScan(ctx context.Context) (int64, error) {
@@ -314,7 +324,9 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 			Tasks:   service.TaskSummary{Total: 5},
 			Library: service.LibraryStats{TotalImages: 100},
 		},
-		jobs: []interface{}{},
+		jobs:        []interface{}{},
+		taskBatches: []service.TaskBatchReadModel{},
+		tasks:       []service.TaskReadModel{},
 	}
 
 	handler := NewAdminHandler(cfg, mockSvc)
@@ -329,6 +341,8 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 	admin.Use(handler.AuthMiddleware())
 	admin.GET("/summary", handler.GetSummary)
 	admin.GET("/jobs", handler.GetJobs)
+	admin.GET("/task-batches", handler.GetTaskBatches)
+	admin.GET("/tasks", handler.GetTasks)
 	admin.POST("/actions/scan", handler.TriggerScan)
 	admin.POST("/actions/jobs/pause", handler.PauseBackgroundTasks)
 	admin.POST("/actions/jobs/resume", handler.ResumeBackgroundTasks)
@@ -364,4 +378,89 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected 200 for scan action, got %d", w.Code)
 	}
+}
+
+func TestAdminHandler_GetTaskBatches(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{
+		taskBatches: []service.TaskBatchReadModel{{
+			ID:            12,
+			SourceType:    "import_scan",
+			SummaryLabel:  "import batch",
+			Status:        "partial_failed",
+			SourceSummary: "root-a, root-b",
+			SkipSummary:   service.TaskBatchSkipSummary{Total: 2, Unchanged: 1, DuplicateTasks: 1},
+			StatusCounts:  map[string]int64{"completed": 1, "failed": 1},
+			TaskTypeCounts: map[string]int64{"thumbnail_generate": 1,
+				"ai_tag_generation": 1},
+			FailureSummary: "ai tag timeout",
+		}},
+	}
+
+	handler := NewAdminHandler(cfg, mockSvc)
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.GET("/task-batches", handler.GetTaskBatches)
+
+	req := httptest.NewRequest("GET", "/admin/api/task-batches?limit=20", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "task_batches") {
+		t.Fatalf("Expected task_batches response body, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "root-a, root-b") {
+		t.Fatalf("Expected source summary in response, got %s", w.Body.String())
+	}
+}
+
+func TestAdminHandler_GetTasksByBatchID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{
+		tasks: []service.TaskReadModel{{
+			ID:               33,
+			BatchID:          12,
+			ImageID:          9,
+			ImagePath:        "/library/task.png",
+			ImageFilename:    "task.png",
+			TaskType:         "ai_tag_generation",
+			Status:           "queued",
+			SkipReason:       "already_completed",
+			LatestAsyncJobID: int64Ptr(77),
+		}},
+	}
+
+	handler := NewAdminHandler(cfg, mockSvc)
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.GET("/tasks", handler.GetTasks)
+
+	req := httptest.NewRequest("GET", "/admin/api/tasks?batch_id=12", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "tasks") {
+		t.Fatalf("Expected tasks response body, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "ai_tag_generation") {
+		t.Fatalf("Expected task type in response, got %s", w.Body.String())
+	}
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
 }
