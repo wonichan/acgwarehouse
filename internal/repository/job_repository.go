@@ -36,9 +36,9 @@ func (r *sqliteJobRepository) Save(job *domain.AsyncJob) error {
 		job.CreatedAt = time.Now()
 	}
 	result, err := r.db.Exec(`
-		INSERT INTO async_jobs (type, status, payload, progress, error, created_at, started_at, finished_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, job.Type, job.Status, job.Payload, job.Progress, job.Error, job.CreatedAt, job.StartedAt, job.FinishedAt)
+		INSERT INTO async_jobs (platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, job.PlatformTaskID, job.Type, job.Status, job.Payload, job.Progress, job.Error, job.CreatedAt, job.StartedAt, job.FinishedAt)
 	if err != nil {
 		return err
 	}
@@ -53,9 +53,9 @@ func (r *sqliteJobRepository) Save(job *domain.AsyncJob) error {
 func (r *sqliteJobRepository) FindByID(id int64) (*domain.AsyncJob, error) {
 	job := &domain.AsyncJob{}
 	err := r.db.QueryRow(`
-		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
+		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
 		FROM async_jobs WHERE id = ?
-	`, id).Scan(&job.ID, &job.Type, &job.Status, &job.Payload, &job.Progress, &job.Error, &job.CreatedAt, &job.StartedAt, &job.FinishedAt)
+	`, id).Scan(&job.ID, &job.PlatformTaskID, &job.Type, &job.Status, &job.Payload, &job.Progress, &job.Error, &job.CreatedAt, &job.StartedAt, &job.FinishedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -64,21 +64,21 @@ func (r *sqliteJobRepository) FindByID(id int64) (*domain.AsyncJob, error) {
 
 func (r *sqliteJobRepository) FindByStatus(status string) ([]domain.AsyncJob, error) {
 	return r.findMany(`
-		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
+		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
 		FROM async_jobs WHERE status = ? ORDER BY id
 	`, status)
 }
 
 func (r *sqliteJobRepository) FindByType(jobType string) ([]domain.AsyncJob, error) {
 	return r.findMany(`
-		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
+		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
 		FROM async_jobs WHERE type = ? ORDER BY id DESC
 	`, jobType)
 }
 
 func (r *sqliteJobRepository) FindByTypeAndStatus(jobType string, status string) ([]domain.AsyncJob, error) {
 	return r.findMany(`
-		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
+		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
 		FROM async_jobs WHERE type = ? AND status = ? ORDER BY id DESC
 	`, jobType, status)
 }
@@ -93,7 +93,7 @@ func (r *sqliteJobRepository) findMany(query string, args ...any) ([]domain.Asyn
 	jobs := make([]domain.AsyncJob, 0)
 	for rows.Next() {
 		var job domain.AsyncJob
-		if err := rows.Scan(&job.ID, &job.Type, &job.Status, &job.Payload, &job.Progress, &job.Error, &job.CreatedAt, &job.StartedAt, &job.FinishedAt); err != nil {
+		if err := rows.Scan(&job.ID, &job.PlatformTaskID, &job.Type, &job.Status, &job.Payload, &job.Progress, &job.Error, &job.CreatedAt, &job.StartedAt, &job.FinishedAt); err != nil {
 			return nil, err
 		}
 		jobs = append(jobs, job)
@@ -104,16 +104,16 @@ func (r *sqliteJobRepository) findMany(query string, args ...any) ([]domain.Asyn
 func (r *sqliteJobRepository) Update(job *domain.AsyncJob) error {
 	_, err := r.db.Exec(`
 		UPDATE async_jobs
-		SET status = ?, payload = ?, progress = ?, error = ?, started_at = ?, finished_at = ?
+		SET platform_task_id = ?, status = ?, payload = ?, progress = ?, error = ?, started_at = ?, finished_at = ?
 		WHERE id = ?
-	`, job.Status, job.Payload, job.Progress, job.Error, job.StartedAt, job.FinishedAt, job.ID)
+	`, job.PlatformTaskID, job.Status, job.Payload, job.Progress, job.Error, job.StartedAt, job.FinishedAt, job.ID)
 	return err
 }
 
 // FindRecent returns the most recent jobs, ordered by created_at descending.
 func (r *sqliteJobRepository) FindRecent(limit int) ([]domain.AsyncJob, error) {
 	return r.findMany(`
-		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
+		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
 		FROM async_jobs ORDER BY created_at DESC LIMIT ?
 	`, limit)
 }
@@ -121,7 +121,7 @@ func (r *sqliteJobRepository) FindRecent(limit int) ([]domain.AsyncJob, error) {
 // FindFailed returns all jobs with status 'failed'.
 func (r *sqliteJobRepository) FindFailed() ([]domain.AsyncJob, error) {
 	return r.findMany(`
-		SELECT id, type, status, payload, progress, error, created_at, started_at, finished_at
+		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
 		FROM async_jobs WHERE status = 'failed' ORDER BY created_at DESC
 	`)
 }

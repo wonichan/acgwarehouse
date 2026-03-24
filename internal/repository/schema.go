@@ -1,6 +1,9 @@
 package repository
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+)
 
 const scanSchemaSQL = `
 CREATE TABLE IF NOT EXISTS images (
@@ -52,6 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_tag_aliases_normalized ON tag_aliases(normalized_
 
 CREATE TABLE IF NOT EXISTS async_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform_task_id INTEGER,
     type TEXT NOT NULL,
     status TEXT DEFAULT 'ready',
     payload TEXT,
@@ -59,11 +63,71 @@ CREATE TABLE IF NOT EXISTS async_jobs (
     error TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     started_at TIMESTAMP,
-    finished_at TIMESTAMP
+    finished_at TIMESTAMP,
+    FOREIGN KEY (platform_task_id) REFERENCES platform_tasks(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_async_jobs_status ON async_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_async_jobs_type ON async_jobs(type);
+CREATE INDEX IF NOT EXISTS idx_async_jobs_platform_task_id ON async_jobs(platform_task_id);
+
+CREATE TABLE IF NOT EXISTS task_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT NOT NULL,
+    trigger_key TEXT DEFAULT '',
+    summary_label TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    total_images INTEGER NOT NULL DEFAULT 0,
+    new_images INTEGER NOT NULL DEFAULT 0,
+    skipped_images INTEGER NOT NULL DEFAULT 0,
+    skipped_unchanged INTEGER NOT NULL DEFAULT 0,
+    skipped_duplicate_tasks INTEGER NOT NULL DEFAULT 0,
+    latest_error_summary TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_batches_source_type ON task_batches(source_type);
+CREATE INDEX IF NOT EXISTS idx_task_batches_status ON task_batches(status);
+CREATE INDEX IF NOT EXISTS idx_task_batches_created_at ON task_batches(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS task_batch_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER NOT NULL,
+    source_root TEXT NOT NULL,
+    source_label TEXT DEFAULT '',
+    FOREIGN KEY (batch_id) REFERENCES task_batches(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_batch_sources_batch_id ON task_batch_sources(batch_id);
+
+CREATE TABLE IF NOT EXISTS platform_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER NOT NULL,
+    image_id INTEGER NOT NULL,
+    task_type TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    dedupe_key TEXT NOT NULL,
+    image_version_key TEXT NOT NULL,
+    latest_async_job_id INTEGER,
+    skip_reason TEXT,
+    error_summary TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    queued_at TIMESTAMP,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP,
+    FOREIGN KEY (batch_id) REFERENCES task_batches(id) ON DELETE CASCADE,
+    FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
+    FOREIGN KEY (latest_async_job_id) REFERENCES async_jobs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_platform_tasks_batch_id ON platform_tasks(batch_id);
+CREATE INDEX IF NOT EXISTS idx_platform_tasks_image_id ON platform_tasks(image_id);
+CREATE INDEX IF NOT EXISTS idx_platform_tasks_status ON platform_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_platform_tasks_task_type ON platform_tasks(task_type);
+CREATE INDEX IF NOT EXISTS idx_platform_tasks_dedupe_key ON platform_tasks(dedupe_key);
 
 CREATE TABLE IF NOT EXISTS tag_observations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -174,6 +238,39 @@ CREATE INDEX IF NOT EXISTS idx_collection_images_added_at ON collection_images(a
 `
 
 func EnsureScanSchema(db *sql.DB) error {
-	_, err := db.Exec(scanSchemaSQL)
+	if _, err := db.Exec(scanSchemaSQL); err != nil {
+		return err
+	}
+	return ensureColumnExists(db, "async_jobs", "platform_task_id", "INTEGER REFERENCES platform_tasks(id) ON DELETE SET NULL")
+}
+
+func ensureColumnExists(db *sql.DB, tableName, columnName, definition string) error {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			declType   string
+			notNull    int
+			defaultVal any
+			pk         int
+		)
+		if err := rows.Scan(&cid, &name, &declType, &notNull, &defaultVal, &pk); err != nil {
+			return err
+		}
+		if name == columnName {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", tableName, columnName, definition))
 	return err
 }

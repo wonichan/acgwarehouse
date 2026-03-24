@@ -18,6 +18,7 @@ func newTestJobDB(t *testing.T) *sql.DB {
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS async_jobs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			platform_task_id INTEGER,
 			type TEXT NOT NULL,
 			status TEXT DEFAULT 'ready',
 			payload TEXT,
@@ -29,6 +30,7 @@ func newTestJobDB(t *testing.T) *sql.DB {
 		);
 		CREATE INDEX IF NOT EXISTS idx_async_jobs_status ON async_jobs(status);
 		CREATE INDEX IF NOT EXISTS idx_async_jobs_type ON async_jobs(type);
+		CREATE INDEX IF NOT EXISTS idx_async_jobs_platform_task_id ON async_jobs(platform_task_id);
 	`)
 	if err != nil {
 		t.Fatalf("Failed to create table: %v", err)
