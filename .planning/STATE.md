@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 导入后任务平台化
-status: Ready to start
-stopped_at: Completed 11-task-platform-batch-model-04-PLAN.md
-last_updated: "2026-03-24T16:20:36.381Z"
-last_activity: 2026-03-24 — Completed 11-04 and Phase 11 is now complete
+status: Ready to plan
+stopped_at: Phase 11 complete, ready to plan Phase 12
+last_updated: "2026-03-24T16:25:13+00:00"
+last_activity: 2026-03-24 — Phase 11 complete, ready to plan Phase 12
 progress:
   total_phases: 14
   completed_phases: 11
@@ -18,7 +18,7 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-23)
+See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
 **Current focus:** Phase 12 导入后任务接入与自动调度
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 
 Phase: 12 of 14 (导入后任务接入与自动调度)
 Plan: 0 of 4 in current phase
-Status: Ready to start
-Last activity: 2026-03-24 — Completed 11-04 and Phase 11 is now complete
+Status: Ready to plan
+Last activity: 2026-03-24 — Phase 11 complete, ready to plan Phase 12
 
 Progress: [███░░░░░░░] 27% (4/15 plans complete)
 
@@ -62,20 +62,11 @@ Progress: [███░░░░░░░] 27% (4/15 plans complete)
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- v2.0: 保持共享 Provider / Services / Models 层，双端 UI 只改表现层
 - v3.0: 导入后任务统一纳入任务平台；AI 标签是首个重点任务类型
 - v3.0: 默认仅无 AI 标签图片自动入队；后台支持批量补入队
-- v3.0: 后台管理需要暂停 / 继续 / 重试 / 取消 / 清空与按批次监控
-- [Phase 11]: Keep async_jobs as execution-layer storage and attach platform_task_id instead of replacing the table.
-- [Phase 11]: Model import processing with separate task_batches and platform_tasks tables so later phases can aggregate by batch, image, task type, and state.
-- [Phase 11]: Use image_version_key plus task_type as the stable dedupe key so unchanged content does not re-enqueue work.
-- [Phase 11]: Aggregate task batch status from platform task terminal states, including partial_failed when failures remain isolated inside the batch.
-- [Phase 11-task-platform-batch-model]: Scanner runs now always create an import_scan batch, but only newly imported images are eligible to plan thumbnail tasks.
-- [Phase 11-task-platform-batch-model]: Manual AI trigger responses expose batch/task/job identifiers so single-image actions still live inside the unified batch model.
-- [Phase 11-task-platform-batch-model]: Platform task lifecycle sync is implemented as bootstrap-level handler wrappers around existing worker.Manager registrations instead of changing the manager API.
-- [Phase 11-task-platform-batch-model]: 后台批次读模型直接聚合 task_batches、task_batch_sources、platform_tasks 与 images，而不是回退到裸 async_jobs 视角。
-- [Phase 11-task-platform-batch-model]: AdminService 通过 TaskReadService 暴露批次/任务查询，沿用既有 admin service/handler/router 分层，不新增平行路由风格。
-- [Phase 11-task-platform-batch-model]: 为保持验证命令稳定，admin_service_test 的测试数据库改为复用 EnsureScanSchema，而不是维护过时的手写 async_jobs schema。
+- [Phase 11]: async_jobs 保持执行层角色，通过 platform_task_id 关联平台语义
+- [Phase 11]: 去重按 image_version_key + task_type 计算，避免未变更图片重复入队
+- [Phase 11]: 后台批次/任务读模型统一通过 TaskReadService 暴露
 
 ### Pending Todos
 
@@ -83,10 +74,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- 实施前需要梳理现有导入后异步任务入口与后台管理页面接入点，避免重复模型并存
+None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-24T16:10:57.610Z
-Stopped at: Completed 11-task-platform-batch-model-04-PLAN.md
+Last session: 2026-03-24T16:25:13+00:00
+Stopped at: Phase 11 complete, ready to plan Phase 12
 Resume file: None
