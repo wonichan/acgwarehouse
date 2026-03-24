@@ -49,7 +49,7 @@
 **Plans**: 4 plans
 
 Plans:
-- [ ] 11-01: 定义导入批次、任务与任务状态模型
+- [x] 11-01: 定义导入批次、任务与任务状态模型
 - [ ] 11-02: 建立任务持久化与状态流转规则
 - [ ] 11-03: 接入统一调度入口与分发骨架
 - [ ] 11-04: 提供后台查询所需的批次 / 任务读模型
@@ -118,7 +118,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Windows 桌面端 UI | v2.0 | complete | Complete | 2026-03-22 |
 | 9. Android 移动端 UI | v2.0 | complete | Complete | 2026-03-22 |
 | 10. 主题统一与优化 | v2.0 | complete | Complete | 2026-03-22 |
-| 11. 任务平台基础与批次模型 | v3.0 | 0/4 | Not started | - |
+| 11. 任务平台基础与批次模型 | v3.0 | 1/4 | In Progress | - |
 | 12. 导入后任务接入与自动调度 | v3.0 | 0/4 | Not started | - |
 | 13. 后台监控与队列控制 | v3.0 | 0/4 | Not started | - |
 | 14. 补跑恢复与运营收尾 | v3.0 | 0/3 | Not started | - |

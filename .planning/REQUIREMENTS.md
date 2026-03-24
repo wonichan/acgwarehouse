@@ -7,9 +7,9 @@
 
 ### Pipeline Platform（任务平台）
 
-- [ ] **PIPE-01**: 用户导入图片后，系统会为该次导入创建一个可追踪的后处理批次
+- [x] **PIPE-01**: 用户导入图片后，系统会为该次导入创建一个可追踪的后处理批次
 - [ ] **PIPE-02**: 管理员可以按导入批次查看导入后任务，而不是逐张人工触发
-- [ ] **PIPE-03**: 系统会把 AI 标签等导入后任务纳入统一任务平台和生命周期管理
+- [x] **PIPE-03**: 系统会把 AI 标签等导入后任务纳入统一任务平台和生命周期管理
 
 ### AI Tag Automation（AI 标签自动化）
 
@@ -62,8 +62,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PIPE-01 | Phase 11 | Pending |
-| PIPE-03 | Phase 11 | Pending |
+| PIPE-01 | Phase 11 | Complete |
+| PIPE-03 | Phase 11 | Complete |
 | SAFE-03 | Phase 11 | Pending |
 | AIQ-01 | Phase 12 | Pending |
 | AIQ-02 | Phase 12 | Pending |

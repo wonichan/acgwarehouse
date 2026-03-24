@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 导入后任务平台化
-status: planning
-last_updated: "2026-03-23T12:00:00+08:00"
-last_activity: "2026-03-23 — Initialized milestone v3.0 and created requirements/roadmap"
+status: in_progress
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-03-24T15:05:29.870Z"
+last_activity: 2026-03-24 — Completed Phase 11 Plan 01 batch/task platform contract baseline
 progress:
   total_phases: 14
   completed_phases: 10
   total_plans: 15
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 7
 ---
 
 # Project State
@@ -25,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 11 of 14 (任务平台基础与批次模型)
-Plan: 0 of 4 in current phase
-Status: Ready to plan
-Last activity: 2026-03-23 — Milestone v3.0 initialized; requirements and roadmap drafted
+Plan: 1 of 4 in current phase
+Status: In progress
+Last activity: 2026-03-24 — Completed 11-01 and ready for 11-02
 
-Progress: [░░░░░░░░░░░░░░░░░░] 0% (0/15 plans complete)
+Progress: [█░░░░░░░░░] 7% (1/15 plans complete)
 
 ## Performance Metrics
 
@@ -44,11 +45,12 @@ Progress: [░░░░░░░░░░░░░░░░░░] 0% (0/15 plan
 |-----------|--------|-------|--------|
 | v1.0 | 1-6 | 28 | Shipped |
 | v2.0 | 7-10 | 20 | Shipped |
-| v3.0 | 11-14 | 0/15 | Planning |
+| v3.0 | 11-14 | 1/15 | In Progress |
 
 **Recent Trend:**
 - Last 2 milestones: delivered successfully with continuous phase numbering
 - Trend: Stable
+| Phase 11 P01 | 4 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -61,6 +63,8 @@ Recent decisions affecting current work:
 - v3.0: 导入后任务统一纳入任务平台；AI 标签是首个重点任务类型
 - v3.0: 默认仅无 AI 标签图片自动入队；后台支持批量补入队
 - v3.0: 后台管理需要暂停 / 继续 / 重试 / 取消 / 清空与按批次监控
+- [Phase 11]: Keep async_jobs as execution-layer storage and attach platform_task_id instead of replacing the table.
+- [Phase 11]: Model import processing with separate task_batches and platform_tasks tables so later phases can aggregate by batch, image, task type, and state.
 
 ### Pending Todos
 
@@ -72,6 +76,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23
-Stopped at: Milestone v3.0 planning artifacts created
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-24T15:05:29.867Z
+Stopped at: Completed 11-01-PLAN.md
+Resume file: None
