@@ -254,6 +254,47 @@ func TestJobRepository_CountByStatus(t *testing.T) {
 	}
 }
 
+func TestJobRepository_PreservesPlatformTaskAssociation(t *testing.T) {
+	db := newTestJobDB(t)
+	defer db.Close()
+
+	repo := NewJobRepository(db)
+	platformTaskID := int64(42)
+	job := &domain.AsyncJob{
+		PlatformTaskID: &platformTaskID,
+		Type:           "thumbnail_generate",
+		Status:         "ready",
+		Payload:        `{"image_id": 1}`,
+		CreatedAt:      time.Now(),
+	}
+
+	if err := repo.Save(job); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	found, err := repo.FindByPlatformTaskID(platformTaskID)
+	if err != nil {
+		t.Fatalf("FindByPlatformTaskID() error = %v", err)
+	}
+	if len(found) != 1 || found[0].PlatformTaskID == nil || *found[0].PlatformTaskID != platformTaskID {
+		t.Fatalf("FindByPlatformTaskID() = %+v, want one job linked to %d", found, platformTaskID)
+	}
+
+	nextPlatformTaskID := int64(84)
+	job.PlatformTaskID = &nextPlatformTaskID
+	if err := repo.Update(job); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	reloaded, err := repo.FindByID(job.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if reloaded.PlatformTaskID == nil || *reloaded.PlatformTaskID != nextPlatformTaskID {
+		t.Fatalf("updated PlatformTaskID = %v, want %d", reloaded.PlatformTaskID, nextPlatformTaskID)
+	}
+}
+
 func ptr(s string) *string {
 	return &s
 }
