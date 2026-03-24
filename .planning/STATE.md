@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 导入后任务平台化
 status: in_progress
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-03-24T15:05:29.870Z"
-last_activity: 2026-03-24 — Completed Phase 11 Plan 01 batch/task platform contract baseline
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-03-24T15:25:55.392Z"
+last_activity: 2026-03-24 — Completed Phase 11 Plan 02 task platform persistence and lifecycle rules
 progress:
   total_phases: 14
   completed_phases: 10
   total_plans: 15
-  completed_plans: 1
-  percent: 7
+  completed_plans: 2
+  percent: 13
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 11 of 14 (任务平台基础与批次模型)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-03-24 — Completed 11-01 and ready for 11-02
+Last activity: 2026-03-24 — Completed 11-02 and ready for 11-03
 
-Progress: [█░░░░░░░░░] 7% (1/15 plans complete)
+Progress: [█░░░░░░░░░] 13% (2/15 plans complete)
 
 ## Performance Metrics
 
@@ -45,12 +45,13 @@ Progress: [█░░░░░░░░░] 7% (1/15 plans complete)
 |-----------|--------|-------|--------|
 | v1.0 | 1-6 | 28 | Shipped |
 | v2.0 | 7-10 | 20 | Shipped |
-| v3.0 | 11-14 | 1/15 | In Progress |
+| v3.0 | 11-14 | 2/15 | In Progress |
 
 **Recent Trend:**
 - Last 2 milestones: delivered successfully with continuous phase numbering
 - Trend: Stable
 | Phase 11 P01 | 4 min | 2 tasks | 10 files |
+| Phase 11 P02 | 7 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,8 @@ Recent decisions affecting current work:
 - v3.0: 后台管理需要暂停 / 继续 / 重试 / 取消 / 清空与按批次监控
 - [Phase 11]: Keep async_jobs as execution-layer storage and attach platform_task_id instead of replacing the table.
 - [Phase 11]: Model import processing with separate task_batches and platform_tasks tables so later phases can aggregate by batch, image, task type, and state.
+- [Phase 11]: Use image_version_key plus task_type as the stable dedupe key so unchanged content does not re-enqueue work.
+- [Phase 11]: Aggregate task batch status from platform task terminal states, including partial_failed when failures remain isolated inside the batch.
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T15:05:29.867Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-03-24T15:25:55.389Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
