@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
 func TestTaskReadServiceListBatchesAggregatesSourcesAndStatusStats(t *testing.T) {
@@ -13,7 +14,7 @@ func TestTaskReadServiceListBatchesAggregatesSourcesAndStatusStats(t *testing.T)
 
 	ctx := context.Background()
 	env := newTaskPlatformServiceTestEnv(t)
-	service := NewTaskReadService(NewTaskBatchReadRepository(env.db))
+	service := NewTaskReadService(repository.NewTaskBatchReadRepository(env.db))
 
 	firstImage := saveTaskPlatformServiceImage(t, env.db, "batch-aggregate-a.png")
 	secondImage := saveTaskPlatformServiceImage(t, env.db, "batch-aggregate-b.png")
@@ -83,7 +84,7 @@ func TestTaskReadServiceListTasksReturnsBatchTaskDetails(t *testing.T) {
 
 	ctx := context.Background()
 	env := newTaskPlatformServiceTestEnv(t)
-	service := NewTaskReadService(NewTaskBatchReadRepository(env.db))
+	service := NewTaskReadService(repository.NewTaskBatchReadRepository(env.db))
 
 	image := saveTaskPlatformServiceImage(t, env.db, "task-details.png")
 	batch := &domain.TaskBatch{
@@ -134,7 +135,7 @@ func TestTaskReadServiceListBatchesSortsDescendingAndSupportsFilters(t *testing.
 
 	ctx := context.Background()
 	env := newTaskPlatformServiceTestEnv(t)
-	service := NewTaskReadService(NewTaskBatchReadRepository(env.db))
+	service := NewTaskReadService(repository.NewTaskBatchReadRepository(env.db))
 
 	older := &domain.TaskBatch{SourceType: domain.TaskBatchSourceImportScan, SummaryLabel: "older", Status: domain.TaskBatchStatusCompleted, CreatedAt: time.Now().Add(-2 * time.Hour)}
 	newer := &domain.TaskBatch{SourceType: domain.TaskBatchSourceManualBatch, SummaryLabel: "newer", Status: domain.TaskBatchStatusRunning, CreatedAt: time.Now().Add(-1 * time.Hour)}

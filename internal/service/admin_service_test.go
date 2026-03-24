@@ -19,56 +19,8 @@ func newTestAdminDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}
-	// Create tables
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS async_jobs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			type TEXT NOT NULL,
-			status TEXT DEFAULT 'ready',
-			payload TEXT,
-			progress REAL DEFAULT 0.0,
-			error TEXT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			started_at TIMESTAMP,
-			finished_at TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS images (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			path TEXT UNIQUE NOT NULL,
-			filename TEXT NOT NULL,
-			source_root TEXT NOT NULL,
-			file_size INTEGER,
-			width INTEGER,
-			height INTEGER,
-			format TEXT,
-			phash INTEGER,
-			thumbnail_small_url TEXT,
-			thumbnail_large_url TEXT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS tags (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			preferred_label TEXT UNIQUE NOT NULL,
-			slug TEXT UNIQUE NOT NULL,
-			primary_category TEXT,
-			review_state TEXT DEFAULT 'pending',
-			trust_score REAL DEFAULT 0.0,
-			usage_count INTEGER DEFAULT 0,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS collections (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			description TEXT DEFAULT '',
-			cover_image_id INTEGER,
-			image_count INTEGER DEFAULT 0,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	if err != nil {
-		t.Fatalf("Failed to create tables: %v", err)
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("Failed to ensure scan schema: %v", err)
 	}
 	return db
 }
