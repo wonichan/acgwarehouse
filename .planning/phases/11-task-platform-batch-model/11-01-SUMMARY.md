@@ -68,7 +68,7 @@ Each task was committed atomically:
 1. **task 1: 为批次与平台任务契约写失败测试骨架** - `af048bc` (test)
 2. **task 2: 定义领域模型、状态常量与 repository 契约** - `ad7aec3` (feat)
 
-**Plan metadata:** `pending`
+**Plan metadata:** `86cd43a`
 
 _Note: TDD tasks may have multiple commits (test → feat → refactor)_
 

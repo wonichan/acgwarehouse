@@ -67,7 +67,7 @@ Each task was committed atomically:
 2. **task 2: 实现 repository 持久化与 async job 关联** - `5d82071` (feat)
 3. **task 3: 实现任务平台 service 的规划、去重与状态聚合规则** - `9d2beba` (feat)
 
-**Plan metadata:** `pending`
+**Plan metadata:** `3ec007f`
 
 _Note: TDD tasks may have multiple commits (test → feat → refactor)_
 
