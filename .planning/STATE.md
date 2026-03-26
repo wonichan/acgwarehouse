@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 导入后任务平台化
-status: planning
-stopped_at: Phase 12 context gathered
-last_updated: "2026-03-26T15:16:29.134Z"
-last_activity: 2026-03-24 — Phase 11 complete, ready to plan Phase 12
+status: in_progress
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-03-26T16:03:10.857Z"
+last_activity: 2026-03-26 — Phase 12 plan 01 complete, ready for plan 02
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 27
+  total_plans: 15
+  completed_plans: 5
+  percent: 33
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 ## Current Position
 
 Phase: 12 of 14 (导入后任务接入与自动调度)
-Plan: 0 of 4 in current phase
-Status: Ready to plan
-Last activity: 2026-03-24 — Phase 11 complete, ready to plan Phase 12
+Plan: 1 of 4 in current phase
+Status: In Progress
+Last activity: 2026-03-26 — Phase 12 plan 01 complete, ready for plan 02
 
-Progress: [███░░░░░░░] 27% (4/15 plans complete)
+Progress: [███░░░░░░░] 33% (5/15 plans complete)
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [███░░░░░░░] 27% (4/15 plans complete)
 | Phase 11 P02 | 7 min | 3 tasks | 8 files |
 | Phase 11-task-platform-batch-model P03 | 9 min | 3 tasks | 9 files |
 | Phase 11-task-platform-batch-model P04 | 10 min | 2 tasks | 9 files |
+| Phase 12 P01 | 10 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Recent decisions affecting current work:
 - [Phase 11]: async_jobs 保持执行层角色，通过 platform_task_id 关联平台语义
 - [Phase 11]: 去重按 image_version_key + task_type 计算，避免未变更图片重复入队
 - [Phase 11]: 后台批次/任务读模型统一通过 TaskReadService 暴露
+- [Phase 12]: Use image_tags.source enum values ai/manual with manual default — Provides explicit AI/manual semantics for auto-queue eligibility and future filtering.
+- [Phase 12]: Eligibility query requires non-empty thumbnail_small_url and excludes source='ai' — Prevents scheduling non-thumbnail images and avoids re-queueing already AI-tagged images.
 
 ### Pending Todos
 
@@ -78,6 +81,6 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-26T15:16:29.131Z
-Stopped at: Phase 12 context gathered
-Resume file: .planning/phases/12-import-task-auto-scheduling/12-CONTEXT.md
+Last session: 2026-03-26T16:03:10.855Z
+Stopped at: Completed 12-01-PLAN.md
+Resume file: None

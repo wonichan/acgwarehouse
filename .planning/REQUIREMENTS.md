@@ -14,7 +14,7 @@
 ### AI Tag Automation（AI 标签自动化）
 
 - [ ] **AIQ-01**: 用户导入图片后，系统会自动把符合条件的图片加入 AI 打标签队列
-- [ ] **AIQ-02**: 默认只有没有 AI 标签的图片会自动进入 AI 打标签队列
+- [x] **AIQ-02**: 默认只有没有 AI 标签的图片会自动进入 AI 打标签队列
 - [ ] **AIQ-03**: 管理员可以批量把未打过 AI 标签的图片加入队列处理
 
 ### Operations（后台监控与控制）
@@ -66,7 +66,7 @@
 | PIPE-03 | Phase 11 | Complete |
 | SAFE-03 | Phase 11 | Complete |
 | AIQ-01 | Phase 12 | Pending |
-| AIQ-02 | Phase 12 | Pending |
+| AIQ-02 | Phase 12 | Complete |
 | PIPE-02 | Phase 13 | Pending |
 | OPS-01 | Phase 13 | Pending |
 | OPS-02 | Phase 13 | Pending |
@@ -85,4 +85,4 @@
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after milestone v3.0 definition*
+*Last updated: 2026-03-26 after phase 12-01 execution*
