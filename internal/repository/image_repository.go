@@ -413,6 +413,13 @@ func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, lim
 			  WHERE it.image_id = i.id
 			    AND it.source = 'ai'
 		  )
+		  AND NOT EXISTS (
+			  SELECT 1
+			  FROM platform_tasks pt
+			  WHERE pt.image_id = i.id
+			    AND pt.task_type = 'ai_tag_generation'
+			    AND pt.status IN ('pending', 'queued', 'running')
+		  )
 		ORDER BY i.id ASC
 		LIMIT ?
 	`, int64(limit))

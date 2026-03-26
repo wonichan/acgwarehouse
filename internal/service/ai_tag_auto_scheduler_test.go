@@ -136,6 +136,37 @@ func TestAutoSchedulingE2E(t *testing.T) {
 	TestAutoEnqueueCondition(t)
 }
 
+func TestAutoEnqueueBatchLimit(t *testing.T) {
+	t.Parallel()
+
+	env := newAITagAutoSchedulerIntegrationEnv(t)
+	for i := 0; i < 150; i++ {
+		env.saveImage(time.Now().Format("150405.000000000")+"-batch.png", "/thumb/batch.jpg")
+	}
+
+	queued, err := env.scheduler.ScanAndEnqueue(context.Background())
+	if err != nil {
+		t.Fatalf("first ScanAndEnqueue() error = %v", err)
+	}
+	if queued != 100 {
+		t.Fatalf("first queued = %d, want 100", queued)
+	}
+	if got := env.countPlatformTasks(); got != 100 {
+		t.Fatalf("platform task count after first scan = %d, want 100", got)
+	}
+
+	queued, err = env.scheduler.ScanAndEnqueue(context.Background())
+	if err != nil {
+		t.Fatalf("second ScanAndEnqueue() error = %v", err)
+	}
+	if queued != 50 {
+		t.Fatalf("second queued = %d, want 50", queued)
+	}
+	if got := env.countPlatformTasks(); got != 150 {
+		t.Fatalf("platform task count after second scan = %d, want 150", got)
+	}
+}
+
 func TestAITagAutoSchedulerScanAndEnqueueCallsFindImagesWithoutAITags(t *testing.T) {
 	t.Parallel()
 
@@ -422,6 +453,7 @@ func newAITagAutoSchedulerIntegrationEnv(t *testing.T) *aiTagAutoSchedulerIntegr
 }
 
 func (e *aiTagAutoSchedulerIntegrationEnv) saveImage(filename, thumbnailSmallURL string) *domain.Image {
+	e.nextTagSeq++
 	image := &domain.Image{
 		Path:              "/auto-scheduler/" + filename,
 		Filename:          filename,
