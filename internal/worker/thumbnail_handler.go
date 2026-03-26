@@ -50,17 +50,18 @@ func (h *ThumbnailHandler) Handle(ctx context.Context, jobID int64, payload stri
 	if p.ImageID <= 0 || p.Path == "" {
 		return fmt.Errorf("invalid thumbnail job payload")
 	}
+	uploadName := fmt.Sprintf("%d-%s", p.ImageID, p.Filename)
 
 	small, large, err := h.thumbnailSvc.GenerateBoth(p.Path)
 	if err != nil {
 		return fmt.Errorf("generate thumbnails: %w", err)
 	}
 
-	smallURL, err := h.cosSvc.Upload(ctx, p.Filename, "small", small.Data)
+	smallURL, err := h.cosSvc.Upload(ctx, uploadName, "small", small.Data)
 	if err != nil {
 		return fmt.Errorf("upload small thumbnail: %w", err)
 	}
-	largeURL, err := h.cosSvc.Upload(ctx, p.Filename, "large", large.Data)
+	largeURL, err := h.cosSvc.Upload(ctx, uploadName, "large", large.Data)
 	if err != nil {
 		return fmt.Errorf("upload large thumbnail: %w", err)
 	}

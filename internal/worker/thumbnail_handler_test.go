@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
@@ -100,7 +101,7 @@ func (s *stubThumbnailUploader) Upload(ctx context.Context, filename, size strin
 			return url, nil
 		}
 	}
-	return "https://cos.local/" + size, nil
+	return fmt.Sprintf("https://cos.local/thumbnails/%s-%s.jpg", filename, size), nil
 }
 
 type stubThumbnailImageRepo struct {
