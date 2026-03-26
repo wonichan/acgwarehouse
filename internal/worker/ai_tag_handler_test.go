@@ -187,6 +187,9 @@ func TestAITagHandler_PersistsPendingImageTagsForReview(t *testing.T) {
 		if imageTag.ReviewState != "pending" {
 			t.Fatalf("image tag review state = %q, want pending", imageTag.ReviewState)
 		}
+		if imageTag.Source != domain.ImageTagSourceAI {
+			t.Fatalf("image tag source = %q, want %q", imageTag.Source, domain.ImageTagSourceAI)
+		}
 		if imageTag.SourceObservationID == nil || *imageTag.SourceObservationID != observations[0].ID {
 			t.Fatalf("image tag source observation = %v, want %d", imageTag.SourceObservationID, observations[0].ID)
 		}
@@ -245,6 +248,9 @@ func (m *mockJobRepoForAI) Save(job *domain.AsyncJob) error {
 	return nil
 }
 func (m *mockJobRepoForAI) FindByID(id int64) (*domain.AsyncJob, error) { return &m.AsyncJob, nil }
+func (m *mockJobRepoForAI) FindByPlatformTaskID(platformTaskID int64) ([]domain.AsyncJob, error) {
+	return nil, nil
+}
 func (m *mockJobRepoForAI) FindByStatus(status string) ([]domain.AsyncJob, error) {
 	return nil, nil
 }

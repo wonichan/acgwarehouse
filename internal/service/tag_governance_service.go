@@ -81,13 +81,16 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 		}
 
 		var sourceObservationID *int64
+		source := domain.ImageTagSourceManual
 		if observationID > 0 {
 			sourceObservationID = &observationID
+			source = domain.ImageTagSourceAI
 		}
 
 		if err := s.imageTagRepo.Save(ctx, &domain.ImageTag{
 			ImageID:             imageID,
 			TagID:               tag.ID,
+			Source:              source,
 			SourceObservationID: sourceObservationID,
 			Confidence:          confidence,
 			ReviewState:         "pending",
