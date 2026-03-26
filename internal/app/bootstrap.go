@@ -73,6 +73,17 @@ func (a *App) startAutoScheduler() {
 	log.Printf("AI 标签自动调度服务已启动，扫描间隔: %d 分钟", a.config.AI.AutoScanIntervalMinutes)
 }
 
+func (a *App) stopAutoScheduler() {
+	a.autoSchedulerMu.Lock()
+	defer a.autoSchedulerMu.Unlock()
+	if a.autoSchedulerControl == nil || !a.autoSchedulerStarted {
+		return
+	}
+	a.autoSchedulerControl.Stop()
+	a.autoSchedulerStarted = false
+	log.Printf("AI 标签自动调度服务已停止")
+}
+
 // initWorkerManager initializes the worker manager and registers all handlers.
 func (a *App) initWorkerManager() error {
 	// Create job manager with config

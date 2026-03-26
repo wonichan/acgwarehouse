@@ -86,6 +86,27 @@ func TestAutoSchedulerStartSkipsWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestShutdownStopsAutoSchedulerOnlyOnce(t *testing.T) {
+	t.Parallel()
+
+	tracker := &schedulerLifecycleTracker{}
+	app := newTestLifecycleApp(tracker, &config.Config{AI: config.AIConfig{AutoAITagOnImport: true}})
+	app.startAutoScheduler()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := app.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+	if err := app.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown() second call error = %v", err)
+	}
+
+	if tracker.stops != 1 {
+		t.Fatalf("stops = %d, want 1", tracker.stops)
+	}
+}
+
 type schedulerLifecycleTracker struct {
 	mu     sync.Mutex
 	starts int

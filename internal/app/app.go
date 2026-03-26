@@ -49,6 +49,7 @@ type App struct {
 	// Background task control
 	refillStopMu         sync.Mutex
 	refillStopCh         chan struct{}
+	shutdownOnce         sync.Once
 	autoSchedulerMu      sync.Mutex
 	autoSchedulerControl autoSchedulerLifecycle
 	newAutoScheduler     func(*config.Config) autoSchedulerLifecycle
@@ -159,33 +160,39 @@ func (a *App) Run() error {
 
 // Shutdown gracefully stops the application.
 func (a *App) Shutdown(ctx context.Context) error {
-	// Stop refill loop
-	a.refillStopMu.Lock()
-	close(a.refillStopCh)
-	a.refillStopMu.Unlock()
+	var shutdownErr error
+	a.shutdownOnce.Do(func() {
+		a.stopAutoScheduler()
 
-	// Stop config reloader
-	if a.cfgReloader != nil {
-		a.cfgReloader.Stop()
-	}
+		// Stop refill loop
+		a.refillStopMu.Lock()
+		close(a.refillStopCh)
+		a.refillStopMu.Unlock()
 
-	// Stop job manager
-	if a.jobManager != nil {
-		a.jobManager.Stop()
-	}
-
-	// Shutdown HTTP server
-	if a.httpServer != nil {
-		if err := a.httpServer.Shutdown(ctx); err != nil {
-			return err
+		// Stop config reloader
+		if a.cfgReloader != nil {
+			a.cfgReloader.Stop()
 		}
-	}
 
-	// Close database
-	if a.db != nil {
-		return a.db.Close()
-	}
-	return nil
+		// Stop job manager
+		if a.jobManager != nil {
+			a.jobManager.Stop()
+		}
+
+		// Shutdown HTTP server
+		if a.httpServer != nil {
+			if err := a.httpServer.Shutdown(ctx); err != nil {
+				shutdownErr = err
+				return
+			}
+		}
+
+		// Close database
+		if a.db != nil {
+			shutdownErr = a.db.Close()
+		}
+	})
+	return shutdownErr
 }
 
 // runRefillLoop periodically checks for ready jobs and loads them into the queue.
