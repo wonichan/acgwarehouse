@@ -64,10 +64,15 @@ func (r *imageTagRepository) syncImageFTS(ctx context.Context, imageID int64) er
 }
 
 func (r *imageTagRepository) Save(ctx context.Context, imageTag *domain.ImageTag) error {
+	source := imageTag.Source
+	if source == "" {
+		source = domain.ImageTagSourceManual
+	}
+
 	_, err := r.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO image_tags (image_id, tag_id, source_observation_id, confidence, review_state)
-		VALUES (?, ?, ?, ?, ?)
-	`, imageTag.ImageID, imageTag.TagID, imageTag.SourceObservationID, imageTag.Confidence, imageTag.ReviewState)
+		INSERT OR REPLACE INTO image_tags (image_id, tag_id, source, source_observation_id, confidence, review_state)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, imageTag.ImageID, imageTag.TagID, source, imageTag.SourceObservationID, imageTag.Confidence, imageTag.ReviewState)
 	if err != nil {
 		return err
 	}
@@ -78,7 +83,7 @@ func (r *imageTagRepository) Save(ctx context.Context, imageTag *domain.ImageTag
 
 func (r *imageTagRepository) FindByImageID(ctx context.Context, imageID int64) ([]*domain.ImageTag, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT it.image_id, it.tag_id, it.source_observation_id, it.confidence, it.review_state
+		SELECT it.image_id, it.tag_id, it.source, it.source_observation_id, it.confidence, it.review_state
 		FROM image_tags it
 		INNER JOIN tags t ON t.id = it.tag_id
 		WHERE it.image_id = ?
@@ -98,7 +103,7 @@ func (r *imageTagRepository) FindByTagID(ctx context.Context, tagID int64, limit
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT image_id, tag_id, source_observation_id, confidence, review_state
+		SELECT image_id, tag_id, source, source_observation_id, confidence, review_state
 		FROM image_tags WHERE tag_id = ?
 		ORDER BY image_id ASC
 		LIMIT ? OFFSET ?
@@ -161,8 +166,11 @@ func scanImageTags(rows *sql.Rows) ([]*domain.ImageTag, error) {
 	imageTags := make([]*domain.ImageTag, 0)
 	for rows.Next() {
 		imageTag := &domain.ImageTag{}
-		if err := rows.Scan(&imageTag.ImageID, &imageTag.TagID, &imageTag.SourceObservationID, &imageTag.Confidence, &imageTag.ReviewState); err != nil {
+		if err := rows.Scan(&imageTag.ImageID, &imageTag.TagID, &imageTag.Source, &imageTag.SourceObservationID, &imageTag.Confidence, &imageTag.ReviewState); err != nil {
 			return nil, err
+		}
+		if imageTag.Source == "" {
+			imageTag.Source = domain.ImageTagSourceManual
 		}
 		imageTags = append(imageTags, imageTag)
 	}
@@ -176,13 +184,17 @@ func (r *imageTagRepository) MergeImageTag(ctx context.Context, imageID, sourceT
 	// Get the existing image-tag to preserve confidence and review_state
 	var confidence float64
 	var reviewState string
+	var source string
 	var sourceObsID *int64
 	err := r.db.QueryRowContext(ctx, `
-		SELECT confidence, review_state, source_observation_id
+		SELECT confidence, review_state, source, source_observation_id
 		FROM image_tags WHERE image_id = ? AND tag_id = ?
-	`, imageID, sourceTagID).Scan(&confidence, &reviewState, &sourceObsID)
+	`, imageID, sourceTagID).Scan(&confidence, &reviewState, &source, &sourceObsID)
 	if err != nil {
 		return err
+	}
+	if source == "" {
+		source = domain.ImageTagSourceManual
 	}
 
 	// Delete the old association
@@ -192,9 +204,9 @@ func (r *imageTagRepository) MergeImageTag(ctx context.Context, imageID, sourceT
 
 	// Create new association with target tag
 	_, err = r.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO image_tags (image_id, tag_id, source_observation_id, confidence, review_state)
-		VALUES (?, ?, ?, ?, ?)
-	`, imageID, targetTagID, sourceObsID, confidence, reviewState)
+		INSERT OR REPLACE INTO image_tags (image_id, tag_id, source, source_observation_id, confidence, review_state)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, imageID, targetTagID, source, sourceObsID, confidence, reviewState)
 	if err != nil {
 		return err
 	}

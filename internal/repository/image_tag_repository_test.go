@@ -251,6 +251,50 @@ func TestImageTagRepositoryGetTagStatsReturnsStatistics(t *testing.T) {
 	}
 }
 
+func TestImageTagRepositorySavePersistsSource(t *testing.T) {
+	t.Parallel()
+
+	repo := newImageTagRepositoryForTest(t)
+	ctx := context.Background()
+
+	if err := repo.Save(ctx, &domain.ImageTag{ImageID: 1, TagID: 1, Source: domain.ImageTagSourceAI, ReviewState: "pending"}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	items, err := repo.FindByImageID(ctx, 1)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	if items[0].Source != domain.ImageTagSourceAI {
+		t.Fatalf("items[0].Source = %q, want %q", items[0].Source, domain.ImageTagSourceAI)
+	}
+}
+
+func TestImageTagRepositorySaveDefaultsSourceToManual(t *testing.T) {
+	t.Parallel()
+
+	repo := newImageTagRepositoryForTest(t)
+	ctx := context.Background()
+
+	if err := repo.Save(ctx, &domain.ImageTag{ImageID: 2, TagID: 2, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	items, err := repo.FindByImageID(ctx, 2)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	if items[0].Source != domain.ImageTagSourceManual {
+		t.Fatalf("items[0].Source = %q, want %q", items[0].Source, domain.ImageTagSourceManual)
+	}
+}
+
 // getDBFromRepo extracts the underlying db from the repository test setup
 func getDBFromRepo(t *testing.T, repo ImageTagRepository) *sql.DB {
 	t.Helper()
