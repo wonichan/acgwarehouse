@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 导入后任务平台化
 status: in_progress
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-03-26T16:19:47.924Z"
-last_activity: 2026-03-26 — Phase 12 plan 02 complete, ready for plan 03
+stopped_at: Completed 12-03-PLAN.md
+last_updated: "2026-03-26T16:36:59.843Z"
+last_activity: 2026-03-26 — Phase 12 plan 03 complete, ready for plan 04
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 15
-  completed_plans: 6
-  percent: 40
+  completed_plans: 7
+  percent: 47
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 ## Current Position
 
 Phase: 12 of 14 (导入后任务接入与自动调度)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In Progress
-Last activity: 2026-03-26 — Phase 12 plan 02 complete, ready for plan 03
+Last activity: 2026-03-26 — Phase 12 plan 03 complete, ready for plan 04
 
-Progress: [████░░░░░░] 40% (6/15 plans complete)
+Progress: [█████░░░░░] 47% (7/15 plans complete)
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [████░░░░░░] 40% (6/15 plans complete)
 | Phase 11-task-platform-batch-model P04 | 10 min | 2 tasks | 9 files |
 | Phase 12 P01 | 10 min | 3 tasks | 9 files |
 | Phase 12 P02 | 5 min | 3 tasks | 7 files |
+| Phase 12-import-task-auto-scheduling P03 | 40 min | 4 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,8 @@ Recent decisions affecting current work:
 - [Phase 12]: Nested AI auto scheduling settings under config.AI — The existing config structure already keeps operational AI settings inside the ai block, so adding the scheduler knobs there avoids a parallel top-level config shape.
 - [Phase 12]: Reused TaskPlatformService for AI auto enqueue — Using PlanBatch and QueueTask preserves the existing dedupe and lifecycle rules for automatically scheduled AI work.
 - [Phase 12]: Set AI tag source in TagGovernanceService — The worker delegates image tag persistence to governance, so the source flag must be assigned at that save boundary to guarantee correct stored semantics.
+- [Phase 12-import-task-auto-scheduling]: Keep the production field as *service.AITagAutoScheduler while lifecycle helpers own start/stop/reload behavior for testability.
+- [Phase 12-import-task-auto-scheduling]: Restart the scheduler when auto AI enablement, scan interval, or batch size changes so hot reload never uses stale config.
 
 ### Pending Todos
 
@@ -85,6 +88,6 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-26T16:19:47.921Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-03-26T16:36:59.841Z
+Stopped at: Completed 12-03-PLAN.md
 Resume file: None
