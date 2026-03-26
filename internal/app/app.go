@@ -47,14 +47,19 @@ type App struct {
 	autoScheduler *service.AITagAutoScheduler
 
 	// Background task control
-	refillStopMu sync.Mutex
-	refillStopCh chan struct{}
+	refillStopMu         sync.Mutex
+	refillStopCh         chan struct{}
+	autoSchedulerMu      sync.Mutex
+	autoSchedulerControl autoSchedulerLifecycle
+	newAutoScheduler     func(*config.Config) autoSchedulerLifecycle
+	autoSchedulerStarted bool
 }
 
 // New creates a new App instance with all dependencies initialized.
 func New(cfgPath string) (*App, error) {
 	app := &App{
-		refillStopCh: make(chan struct{}),
+		refillStopCh:     make(chan struct{}),
+		newAutoScheduler: nil,
 	}
 
 	// Load configuration
@@ -115,6 +120,7 @@ func (a *App) Run() error {
 
 	// Start refill loop in background
 	go a.runRefillLoop()
+	a.startAutoScheduler()
 	// Setup HTTP routes
 	r := gin.New()
 	r.Use(gin.Recovery())

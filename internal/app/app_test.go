@@ -4,8 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/wonichan/acgwarehouse-backend/internal/config"
 )
 
 func TestNewInitializesAdminActionsWithWorkerManager(t *testing.T) {
@@ -53,6 +56,59 @@ func TestNewInitializesAutoScheduler(t *testing.T) {
 
 	if app.autoScheduler == nil {
 		t.Fatal("expected autoScheduler to be initialized")
+	}
+}
+
+func TestAutoSchedulerStartStartsOnlyOnceWhenEnabled(t *testing.T) {
+	t.Parallel()
+
+	tracker := &schedulerLifecycleTracker{}
+	app := newTestLifecycleApp(tracker, &config.Config{AI: config.AIConfig{AutoAITagOnImport: true}})
+
+	app.startAutoScheduler()
+	app.startAutoScheduler()
+
+	if tracker.starts != 1 {
+		t.Fatalf("starts = %d, want 1", tracker.starts)
+	}
+}
+
+func TestAutoSchedulerStartSkipsWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	tracker := &schedulerLifecycleTracker{}
+	app := newTestLifecycleApp(tracker, &config.Config{AI: config.AIConfig{AutoAITagOnImport: false}})
+
+	app.startAutoScheduler()
+
+	if tracker.starts != 0 {
+		t.Fatalf("starts = %d, want 0", tracker.starts)
+	}
+}
+
+type schedulerLifecycleTracker struct {
+	mu     sync.Mutex
+	starts int
+	stops  int
+}
+
+func (s *schedulerLifecycleTracker) Start(context.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.starts++
+}
+
+func (s *schedulerLifecycleTracker) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stops++
+}
+
+func newTestLifecycleApp(tracker autoSchedulerLifecycle, cfg *config.Config) *App {
+	return &App{
+		config:               cfg,
+		refillStopCh:         make(chan struct{}),
+		autoSchedulerControl: tracker,
 	}
 }
 

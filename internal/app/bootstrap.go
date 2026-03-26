@@ -16,6 +16,11 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
+type autoSchedulerLifecycle interface {
+	Start(ctx context.Context)
+	Stop()
+}
+
 // initRepositories initializes all repositories.
 func (a *App) initRepositories() {
 	a.imageRepo = repository.NewImageRepository(a.db)
@@ -41,7 +46,31 @@ func (a *App) initAutoScheduler(cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
-	a.autoScheduler = service.NewAITagAutoScheduler(a.imageRepo, a.newTaskPlatformService(), cfg)
+	if a.newAutoScheduler == nil {
+		a.newAutoScheduler = func(cfg *config.Config) autoSchedulerLifecycle {
+			scheduler := service.NewAITagAutoScheduler(a.imageRepo, a.newTaskPlatformService(), cfg)
+			a.autoScheduler = scheduler
+			return scheduler
+		}
+	}
+	a.autoSchedulerMu.Lock()
+	defer a.autoSchedulerMu.Unlock()
+	a.autoSchedulerControl = a.newAutoScheduler(cfg)
+	a.autoSchedulerStarted = false
+	if scheduler, ok := a.autoSchedulerControl.(*service.AITagAutoScheduler); ok {
+		a.autoScheduler = scheduler
+	}
+}
+
+func (a *App) startAutoScheduler() {
+	a.autoSchedulerMu.Lock()
+	defer a.autoSchedulerMu.Unlock()
+	if a.config == nil || !a.config.AI.AutoAITagOnImport || a.autoSchedulerControl == nil || a.autoSchedulerStarted {
+		return
+	}
+	a.autoSchedulerControl.Start(context.Background())
+	a.autoSchedulerStarted = true
+	log.Printf("AI 标签自动调度服务已启动，扫描间隔: %d 分钟", a.config.AI.AutoScanIntervalMinutes)
 }
 
 // initWorkerManager initializes the worker manager and registers all handlers.
