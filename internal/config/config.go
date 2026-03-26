@@ -38,11 +38,14 @@ type StorageConfig struct {
 }
 
 type AIConfig struct {
-	Provider          string `yaml:"provider"`
-	APIKey            string `yaml:"api_key"`
-	Model             string `yaml:"model"`
-	RequestsPerMinute int    `yaml:"requests_per_minute"` // 限流：每分钟请求数，默认 60
-	MaxConcurrency    int    `yaml:"max_concurrency"`     // 并发限制：同时执行的最大AI请求数，默认 3
+	Provider                string `yaml:"provider"`
+	APIKey                  string `yaml:"api_key"`
+	Model                   string `yaml:"model"`
+	RequestsPerMinute       int    `yaml:"requests_per_minute"` // 限流：每分钟请求数，默认 60
+	MaxConcurrency          int    `yaml:"max_concurrency"`     // 并发限制：同时执行的最大AI请求数，默认 3
+	AutoAITagOnImport       bool   `yaml:"auto_ai_tag_on_import"`
+	AutoScanIntervalMinutes int    `yaml:"auto_scan_interval_minutes"`
+	AutoScanBatchSize       int    `yaml:"auto_scan_batch_size"`
 }
 
 type COSConfig struct {
@@ -187,7 +190,13 @@ func loadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 
-	var cfg Config
+	cfg := Config{
+		AI: AIConfig{
+			AutoAITagOnImport:       true,
+			AutoScanIntervalMinutes: 5,
+			AutoScanBatchSize:       100,
+		},
+	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
@@ -229,6 +238,12 @@ func applyDefaults(cfg *Config) {
 	if cfg.AI.MaxConcurrency <= 0 {
 		cfg.AI.MaxConcurrency = 3
 	}
+	if cfg.AI.AutoScanIntervalMinutes <= 0 {
+		cfg.AI.AutoScanIntervalMinutes = 5
+	}
+	if cfg.AI.AutoScanBatchSize <= 0 {
+		cfg.AI.AutoScanBatchSize = 100
+	}
 }
 
 func applyEnvOverrides(cfg *Config) {
@@ -268,6 +283,21 @@ func applyEnvOverrides(cfg *Config) {
 
 	if v := os.Getenv("AI_MODEL"); v != "" {
 		cfg.AI.Model = v
+	}
+	if v := os.Getenv("AUTO_AI_TAG_ON_IMPORT"); v != "" {
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			cfg.AI.AutoAITagOnImport = enabled
+		}
+	}
+	if v := os.Getenv("AUTO_AI_TAG_SCAN_INTERVAL_MINUTES"); v != "" {
+		if interval, err := strconv.Atoi(v); err == nil && interval > 0 {
+			cfg.AI.AutoScanIntervalMinutes = interval
+		}
+	}
+	if v := os.Getenv("AUTO_AI_TAG_BATCH_SIZE"); v != "" {
+		if batchSize, err := strconv.Atoi(v); err == nil && batchSize > 0 {
+			cfg.AI.AutoScanBatchSize = batchSize
+		}
 	}
 
 	if v := os.Getenv("AI_REQUESTS_PER_MINUTE"); v != "" {

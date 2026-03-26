@@ -21,6 +21,30 @@ ai:
   provider: "qwen"
   api_key: ""
   model: "qwen-vl-max"
+  auto_ai_tag_on_import: false
+  auto_scan_interval_minutes: 9
+  auto_scan_batch_size: 42
+cos:
+  bucket_url: "https://example.cos.ap-shanghai.myqcloud.com"
+  secret_id: ""
+  secret_key: ""
+`
+
+const sampleConfigWithoutAutoAITag = `server:
+  host: "127.0.0.1"
+  port: 8080
+  env: "development"
+database:
+  type: "sqlite"
+  path: "./data/test.db"
+  connection_string: ""
+storage:
+  scan_roots:
+    - "./images"
+ai:
+  provider: "qwen"
+  api_key: ""
+  model: "qwen-vl-max"
 cos:
   bucket_url: "https://example.cos.ap-shanghai.myqcloud.com"
   secret_id: ""
@@ -66,6 +90,9 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	t.Setenv("AI_PROVIDER", "doubao")
 	t.Setenv("AI_API_KEY", "secret")
 	t.Setenv("AI_MODEL", "doubao-vision")
+	t.Setenv("AUTO_AI_TAG_ON_IMPORT", "true")
+	t.Setenv("AUTO_AI_TAG_SCAN_INTERVAL_MINUTES", "7")
+	t.Setenv("AUTO_AI_TAG_BATCH_SIZE", "33")
 	t.Setenv("COS_SECRET_ID", "cos-id")
 	t.Setenv("COS_SECRET_KEY", "cos-key")
 	t.Setenv("COS_BUCKET_URL", "https://override.cos.test")
@@ -110,5 +137,60 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	}
 	if cfg.COS.BucketURL != "https://override.cos.test" {
 		t.Fatalf("expected overridden COS bucket url, got %q", cfg.COS.BucketURL)
+	}
+	if !cfg.AI.AutoAITagOnImport {
+		t.Fatal("expected AUTO_AI_TAG_ON_IMPORT override to set true")
+	}
+	if cfg.AI.AutoScanIntervalMinutes != 7 {
+		t.Fatalf("expected overridden auto scan interval 7, got %d", cfg.AI.AutoScanIntervalMinutes)
+	}
+	if cfg.AI.AutoScanBatchSize != 33 {
+		t.Fatalf("expected overridden auto scan batch size 33, got %d", cfg.AI.AutoScanBatchSize)
+	}
+}
+
+func TestLoadConfigReadsAutoAITagFields(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(sampleConfig), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig returned error: %v", err)
+	}
+
+	if cfg.AI.AutoAITagOnImport {
+		t.Fatal("expected auto_ai_tag_on_import false from config file")
+	}
+	if cfg.AI.AutoScanIntervalMinutes != 9 {
+		t.Fatalf("expected auto scan interval 9, got %d", cfg.AI.AutoScanIntervalMinutes)
+	}
+	if cfg.AI.AutoScanBatchSize != 42 {
+		t.Fatalf("expected auto scan batch size 42, got %d", cfg.AI.AutoScanBatchSize)
+	}
+}
+
+func TestLoadConfigAppliesAutoAITagDefaults(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(sampleConfigWithoutAutoAITag), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig returned error: %v", err)
+	}
+
+	if !cfg.AI.AutoAITagOnImport {
+		t.Fatal("expected auto_ai_tag_on_import default true")
+	}
+	if cfg.AI.AutoScanIntervalMinutes != 5 {
+		t.Fatalf("expected default auto scan interval 5, got %d", cfg.AI.AutoScanIntervalMinutes)
+	}
+	if cfg.AI.AutoScanBatchSize != 100 {
+		t.Fatalf("expected default auto scan batch size 100, got %d", cfg.AI.AutoScanBatchSize)
 	}
 }

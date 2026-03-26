@@ -41,7 +41,13 @@ ai:
   # Rate limiting: requests per minute (default: 60)
   requests_per_minute: 60
   # 同时执行的最大AI请求数，默认3
-  max_concurrency: 3  
+  max_concurrency: 3
+  # 导入后是否自动补扫并入队 AI 标签任务
+  auto_ai_tag_on_import: true
+  # 自动补扫间隔（分钟）
+  auto_scan_interval_minutes: 5
+  # 每次自动补扫最多入队图片数
+  auto_scan_batch_size: 100
 
 # Optional: Tencent Cloud COS for thumbnail storage
 # cos:
