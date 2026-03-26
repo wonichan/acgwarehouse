@@ -84,6 +84,41 @@ func (a *App) stopAutoScheduler() {
 	log.Printf("AI 标签自动调度服务已停止")
 }
 
+func (a *App) handleAutoSchedulerConfigChange(old, new *config.Config) {
+	a.config = new
+	if old == nil || new == nil {
+		return
+	}
+	oldAI := old.AI
+	newAI := new.AI
+	if oldAI.AutoAITagOnImport == newAI.AutoAITagOnImport &&
+		oldAI.AutoScanIntervalMinutes == newAI.AutoScanIntervalMinutes &&
+		oldAI.AutoScanBatchSize == newAI.AutoScanBatchSize {
+		return
+	}
+
+	a.autoSchedulerMu.Lock()
+	started := a.autoSchedulerStarted
+	current := a.autoSchedulerControl
+	a.autoSchedulerMu.Unlock()
+
+	if !newAI.AutoAITagOnImport {
+		if started && current != nil {
+			a.stopAutoScheduler()
+		}
+		return
+	}
+
+	if started && current != nil {
+		a.stopAutoScheduler()
+	}
+	a.initAutoScheduler(new)
+	a.startAutoScheduler()
+	if started {
+		log.Printf("AI 标签自动调度服务已重启，新间隔: %d 分钟", newAI.AutoScanIntervalMinutes)
+	}
+}
+
 // initWorkerManager initializes the worker manager and registers all handlers.
 func (a *App) initWorkerManager() error {
 	// Create job manager with config

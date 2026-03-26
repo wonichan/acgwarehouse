@@ -116,6 +116,9 @@ func (a *App) Run() error {
 	if err := a.cfgReloader.Start(); err != nil {
 		log.Printf("配置热重载启动失败: %v", err)
 	}
+	a.cfgReloader.OnChange(func(old, new *config.Config) {
+		a.handleAutoSchedulerConfigChange(old, new)
+	})
 	// Start job recovery in background
 	go a.recoverJobs()
 

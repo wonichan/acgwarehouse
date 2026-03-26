@@ -107,10 +107,79 @@ func TestShutdownStopsAutoSchedulerOnlyOnce(t *testing.T) {
 	}
 }
 
+func TestAutoSchedulerConfigReloadRestartsOnRelevantChanges(t *testing.T) {
+	t.Parallel()
+
+	factory := &schedulerFactoryTracker{}
+	app := &App{
+		config:               &config.Config{AI: config.AIConfig{AutoAITagOnImport: true, AutoScanIntervalMinutes: 5, AutoScanBatchSize: 100}},
+		newAutoScheduler:     factory.new,
+		refillStopCh:         make(chan struct{}),
+		autoSchedulerControl: factory.new(&config.Config{AI: config.AIConfig{AutoAITagOnImport: true, AutoScanIntervalMinutes: 5, AutoScanBatchSize: 100}}),
+		autoSchedulerStarted: true,
+	}
+
+	oldCfg := &config.Config{AI: config.AIConfig{AutoAITagOnImport: true, AutoScanIntervalMinutes: 5, AutoScanBatchSize: 100}}
+	newCfg := &config.Config{AI: config.AIConfig{AutoAITagOnImport: true, AutoScanIntervalMinutes: 9, AutoScanBatchSize: 100}}
+
+	app.handleAutoSchedulerConfigChange(oldCfg, newCfg)
+
+	if len(factory.schedulers) != 2 {
+		t.Fatalf("scheduler instances = %d, want 2", len(factory.schedulers))
+	}
+	if factory.schedulers[0].stops != 1 {
+		t.Fatalf("old scheduler stops = %d, want 1", factory.schedulers[0].stops)
+	}
+	if factory.schedulers[1].starts != 1 {
+		t.Fatalf("new scheduler starts = %d, want 1", factory.schedulers[1].starts)
+	}
+}
+
+func TestAutoSchedulerConfigReloadStopsWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	factory := &schedulerFactoryTracker{}
+	app := &App{
+		config:               &config.Config{AI: config.AIConfig{AutoAITagOnImport: true, AutoScanIntervalMinutes: 5, AutoScanBatchSize: 100}},
+		newAutoScheduler:     factory.new,
+		refillStopCh:         make(chan struct{}),
+		autoSchedulerControl: factory.new(&config.Config{AI: config.AIConfig{AutoAITagOnImport: true, AutoScanIntervalMinutes: 5, AutoScanBatchSize: 100}}),
+		autoSchedulerStarted: true,
+	}
+
+	oldCfg := &config.Config{AI: config.AIConfig{AutoAITagOnImport: true, AutoScanIntervalMinutes: 5, AutoScanBatchSize: 100}}
+	newCfg := &config.Config{AI: config.AIConfig{AutoAITagOnImport: false, AutoScanIntervalMinutes: 5, AutoScanBatchSize: 100}}
+
+	app.handleAutoSchedulerConfigChange(oldCfg, newCfg)
+
+	if len(factory.schedulers) != 1 {
+		t.Fatalf("scheduler instances = %d, want 1", len(factory.schedulers))
+	}
+	if factory.schedulers[0].stops != 1 {
+		t.Fatalf("scheduler stops = %d, want 1", factory.schedulers[0].stops)
+	}
+	if app.autoSchedulerStarted {
+		t.Fatal("expected scheduler to be marked stopped")
+	}
+}
+
 type schedulerLifecycleTracker struct {
 	mu     sync.Mutex
 	starts int
 	stops  int
+}
+
+type schedulerFactoryTracker struct {
+	mu         sync.Mutex
+	schedulers []*schedulerLifecycleTracker
+}
+
+func (s *schedulerFactoryTracker) new(*config.Config) autoSchedulerLifecycle {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tracker := &schedulerLifecycleTracker{}
+	s.schedulers = append(s.schedulers, tracker)
+	return tracker
 }
 
 func (s *schedulerLifecycleTracker) Start(context.Context) {
