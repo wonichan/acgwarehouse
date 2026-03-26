@@ -451,3 +451,141 @@ func TestFindUntaggedReturnsEmptyWhenAllImagesHaveTags(t *testing.T) {
 		t.Fatalf("count = %d, want 0", count)
 	}
 }
+
+func TestFindImagesWithoutAITagsReturnsThumbnailReadyImagesWithoutAISource(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	imageIDs := seedImagesForFindImagesWithoutAITags(t, repo)
+	seedAITagSourcesForFindImagesWithoutAITags(t, db, imageIDs)
+
+	images, err := repo.FindImagesWithoutAITags(ctx, 10)
+	if err != nil {
+		t.Fatalf("FindImagesWithoutAITags() error = %v", err)
+	}
+
+	if len(images) != 2 {
+		t.Fatalf("len(images) = %d, want 2", len(images))
+	}
+	if images[0].ID != imageIDs[0] {
+		t.Fatalf("images[0].ID = %d, want %d", images[0].ID, imageIDs[0])
+	}
+	if images[1].ID != imageIDs[1] {
+		t.Fatalf("images[1].ID = %d, want %d", images[1].ID, imageIDs[1])
+	}
+}
+
+func TestFindImagesWithoutAITagsExcludesImagesWithAISourceTag(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	imageIDs := seedImagesForFindImagesWithoutAITags(t, repo)
+	seedAITagSourcesForFindImagesWithoutAITags(t, db, imageIDs)
+
+	images, err := repo.FindImagesWithoutAITags(ctx, 10)
+	if err != nil {
+		t.Fatalf("FindImagesWithoutAITags() error = %v", err)
+	}
+
+	for _, image := range images {
+		if image.ID == imageIDs[2] {
+			t.Fatalf("image %d has AI source tag and should be excluded", imageIDs[2])
+		}
+	}
+}
+
+func TestFindImagesWithoutAITagsRespectsLimit(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	imageIDs := seedImagesForFindImagesWithoutAITags(t, repo)
+	seedAITagSourcesForFindImagesWithoutAITags(t, db, imageIDs)
+
+	images, err := repo.FindImagesWithoutAITags(ctx, 1)
+	if err != nil {
+		t.Fatalf("FindImagesWithoutAITags() error = %v", err)
+	}
+
+	if len(images) != 1 {
+		t.Fatalf("len(images) = %d, want 1", len(images))
+	}
+	if images[0].ID != imageIDs[0] {
+		t.Fatalf("images[0].ID = %d, want %d", images[0].ID, imageIDs[0])
+	}
+}
+
+func TestFindImagesWithoutAITagsExcludesImagesWithoutThumbnail(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	imageIDs := seedImagesForFindImagesWithoutAITags(t, repo)
+	seedAITagSourcesForFindImagesWithoutAITags(t, db, imageIDs)
+
+	images, err := repo.FindImagesWithoutAITags(ctx, 10)
+	if err != nil {
+		t.Fatalf("FindImagesWithoutAITags() error = %v", err)
+	}
+
+	for _, image := range images {
+		if image.ID == imageIDs[3] {
+			t.Fatalf("image %d has no thumbnail and should be excluded", imageIDs[3])
+		}
+	}
+}
+
+func seedImagesForFindImagesWithoutAITags(t *testing.T, repo ImageRepository) []int64 {
+	t.Helper()
+
+	images := []*domain.Image{
+		{Path: "/eligible-no-tags.png", Filename: "eligible-no-tags.png", SourceRoot: "/", Format: "png", ThumbnailSmallUrl: "/thumb/s1.jpg", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/eligible-manual-only.png", Filename: "eligible-manual-only.png", SourceRoot: "/", Format: "png", ThumbnailSmallUrl: "/thumb/s2.jpg", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/exclude-has-ai-tag.png", Filename: "exclude-has-ai-tag.png", SourceRoot: "/", Format: "png", ThumbnailSmallUrl: "/thumb/s3.jpg", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/exclude-no-thumbnail.png", Filename: "exclude-no-thumbnail.png", SourceRoot: "/", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+
+	ids := make([]int64, 0, len(images))
+	for _, image := range images {
+		if _, err := repo.SaveImage(image); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+		ids = append(ids, image.ID)
+	}
+
+	return ids
+}
+
+func seedAITagSourcesForFindImagesWithoutAITags(t *testing.T, db *sql.DB, imageIDs []int64) {
+	t.Helper()
+
+	tagRepo := NewTagRepository(db)
+	aiTag := &domain.Tag{PreferredLabel: "ai-tag", Slug: "ai-tag", ReviewState: "confirmed"}
+	manualTag := &domain.Tag{PreferredLabel: "manual-tag", Slug: "manual-tag", ReviewState: "confirmed"}
+	if err := tagRepo.Save(context.Background(), aiTag); err != nil {
+		t.Fatalf("save ai tag: %v", err)
+	}
+	if err := tagRepo.Save(context.Background(), manualTag); err != nil {
+		t.Fatalf("save manual tag: %v", err)
+	}
+
+	if _, err := db.Exec(`
+		INSERT INTO image_tags (image_id, tag_id, source, confidence, review_state)
+		VALUES (?, ?, ?, ?, ?)
+	`, imageIDs[1], manualTag.ID, "manual", 1.0, "confirmed"); err != nil {
+		t.Fatalf("insert manual image tag: %v", err)
+	}
+
+	if _, err := db.Exec(`
+		INSERT INTO image_tags (image_id, tag_id, source, confidence, review_state)
+		VALUES (?, ?, ?, ?, ?)
+	`, imageIDs[2], aiTag.ID, "ai", 0.98, "confirmed"); err != nil {
+		t.Fatalf("insert ai image tag: %v", err)
+	}
+}

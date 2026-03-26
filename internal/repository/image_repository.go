@@ -22,6 +22,7 @@ type ImageRepository interface {
 	CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
 	FindUntagged(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountUntagged(ctx context.Context) (int64, error)
+	FindImagesWithoutAITags(ctx context.Context, limit int) ([]domain.Image, error)
 	UpdateThumbnails(id int64, smallURL, largeURL string) error
 	Count() (int64, error)
 	Delete(id int64) error
@@ -394,6 +395,66 @@ func (r *sqliteImageRepository) CountUntagged(ctx context.Context) (int64, error
 		WHERE it.image_id IS NULL
 	`).Scan(&count)
 	return count, err
+}
+
+func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, limit int) ([]domain.Image, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
+		FROM images i
+		WHERE i.thumbnail_small_url IS NOT NULL
+		  AND i.thumbnail_small_url != ''
+		  AND NOT EXISTS (
+			  SELECT 1
+			  FROM image_tags it
+			  WHERE it.image_id = i.id
+			    AND it.source = 'ai'
+		  )
+		ORDER BY i.id ASC
+		LIMIT ?
+	`, int64(limit))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	images := make([]domain.Image, 0)
+	for rows.Next() {
+		var image domain.Image
+		var thumbnailSmallURL sql.NullString
+		var thumbnailLargeURL sql.NullString
+		if err := rows.Scan(
+			&image.ID,
+			&image.Path,
+			&image.Filename,
+			&image.SourceRoot,
+			&image.FileSize,
+			&image.Width,
+			&image.Height,
+			&image.Format,
+			&image.PHash,
+			&thumbnailSmallURL,
+			&thumbnailLargeURL,
+			&image.CreatedAt,
+			&image.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		if thumbnailSmallURL.Valid {
+			image.ThumbnailSmallUrl = thumbnailSmallURL.String
+		}
+		if thumbnailLargeURL.Valid {
+			image.ThumbnailLargeUrl = thumbnailLargeURL.String
+		}
+
+		images = append(images, image)
+	}
+
+	return images, rows.Err()
 }
 
 // Delete removes an image by ID. Due to ON DELETE CASCADE in the schema,
