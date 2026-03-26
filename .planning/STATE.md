@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 导入后任务平台化
 status: in_progress
-stopped_at: Completed 12-03-PLAN.md
-last_updated: "2026-03-26T16:36:59.843Z"
-last_activity: 2026-03-26 — Phase 12 plan 03 complete, ready for plan 04
+stopped_at: Completed 12-04-PLAN.md
+last_updated: "2026-03-26T16:51:25.782Z"
+last_activity: 2026-03-26 — Phase 12 plan 04 complete, ready for phase 13 plan 01
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 15
-  completed_plans: 7
-  percent: 47
+  completed_plans: 8
+  percent: 53
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
-**Current focus:** Phase 12 导入后任务接入与自动调度
+**Current focus:** Phase 13 后台监控与队列控制
 
 ## Current Position
 
-Phase: 12 of 14 (导入后任务接入与自动调度)
-Plan: 3 of 4 in current phase
+Phase: 13 of 14 (后台监控与队列控制)
+Plan: 1 of 4 in current phase
 Status: In Progress
-Last activity: 2026-03-26 — Phase 12 plan 03 complete, ready for plan 04
+Last activity: 2026-03-26 — Phase 12 plan 04 complete, ready for phase 13 plan 01
 
-Progress: [█████░░░░░] 47% (7/15 plans complete)
+Progress: [█████░░░░░] 53% (8/15 plans complete)
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [█████░░░░░] 47% (7/15 plans complete)
 | Phase 12 P01 | 10 min | 3 tasks | 9 files |
 | Phase 12 P02 | 5 min | 3 tasks | 7 files |
 | Phase 12-import-task-auto-scheduling P03 | 40 min | 4 tasks | 3 files |
+| Phase 12 P04 | 7 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,8 @@ Recent decisions affecting current work:
 - [Phase 12]: Set AI tag source in TagGovernanceService — The worker delegates image tag persistence to governance, so the source flag must be assigned at that save boundary to guarantee correct stored semantics.
 - [Phase 12-import-task-auto-scheduling]: Keep the production field as *service.AITagAutoScheduler while lifecycle helpers own start/stop/reload behavior for testability.
 - [Phase 12-import-task-auto-scheduling]: Restart the scheduler when auto AI enablement, scan interval, or batch size changes so hot reload never uses stale config.
+- [Phase 12]: Exclude active ai_tag_generation platform tasks from scheduler eligibility so repeated scans drain backlog correctly.
+- [Phase 12]: Prefer SQLite-backed scheduler integration tests to verify platform_tasks and async_jobs writes through TaskPlatformService.
 
 ### Pending Todos
 
@@ -88,6 +91,6 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-26T16:36:59.841Z
-Stopped at: Completed 12-03-PLAN.md
+Last session: 2026-03-26T16:51:25.779Z
+Stopped at: Completed 12-04-PLAN.md
 Resume file: None
