@@ -147,6 +147,7 @@ CREATE INDEX IF NOT EXISTS idx_tag_observations_provider ON tag_observations(pro
 CREATE TABLE IF NOT EXISTS image_tags (
     image_id INTEGER NOT NULL,
     tag_id INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual',
     source_observation_id INTEGER,
     confidence REAL,
     review_state TEXT DEFAULT 'pending',
@@ -241,7 +242,19 @@ func EnsureScanSchema(db *sql.DB) error {
 	if _, err := db.Exec(scanSchemaSQL); err != nil {
 		return err
 	}
-	return ensureColumnExists(db, "async_jobs", "platform_task_id", "INTEGER REFERENCES platform_tasks(id) ON DELETE SET NULL")
+	if err := ensureColumnExists(db, "async_jobs", "platform_task_id", "INTEGER REFERENCES platform_tasks(id) ON DELETE SET NULL"); err != nil {
+		return err
+	}
+	if err := ensureColumnExists(db, "image_tags", "source", "TEXT NOT NULL DEFAULT 'manual'"); err != nil {
+		return err
+	}
+	_, err := db.Exec(`
+		UPDATE image_tags
+		SET source = 'ai'
+		WHERE source_observation_id IS NOT NULL
+		  AND (source IS NULL OR source = '' OR source != 'ai')
+	`)
+	return err
 }
 
 func ensureColumnExists(db *sql.DB, tableName, columnName, definition string) error {
