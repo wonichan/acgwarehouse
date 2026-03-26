@@ -34,6 +34,28 @@ func TestNewInitializesAdminActionsWithWorkerManager(t *testing.T) {
 	}
 }
 
+func TestNewInitializesAutoScheduler(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.db")
+	cfgPath := writeTestConfig(t, dbPath)
+
+	app, err := New(cfgPath)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := app.Shutdown(ctx); err != nil {
+			t.Errorf("Shutdown() error = %v", err)
+		}
+	})
+
+	if app.autoScheduler == nil {
+		t.Fatal("expected autoScheduler to be initialized")
+	}
+}
+
 func writeTestConfig(t *testing.T, dbPath string) string {
 	t.Helper()
 

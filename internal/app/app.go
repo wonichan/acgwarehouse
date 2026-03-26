@@ -44,6 +44,7 @@ type App struct {
 	duplicateSvc  *service.DuplicateService
 	searchSvc     *service.SearchService
 	adminSvc      *service.AdminService
+	autoScheduler *service.AITagAutoScheduler
 
 	// Background task control
 	refillStopMu sync.Mutex
@@ -82,6 +83,7 @@ func New(cfgPath string) (*App, error) {
 
 	// Initialize services
 	app.initServices()
+	app.initAutoScheduler(app.config)
 
 	// Initialize worker manager
 	if err := app.initWorkerManager(); err != nil {
@@ -108,13 +110,11 @@ func (a *App) Run() error {
 	if err := a.cfgReloader.Start(); err != nil {
 		log.Printf("配置热重载启动失败: %v", err)
 	}
-
 	// Start job recovery in background
 	go a.recoverJobs()
 
 	// Start refill loop in background
 	go a.runRefillLoop()
-
 	// Setup HTTP routes
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -159,10 +159,14 @@ func (a *App) Shutdown(ctx context.Context) error {
 	a.refillStopMu.Unlock()
 
 	// Stop config reloader
-	a.cfgReloader.Stop()
+	if a.cfgReloader != nil {
+		a.cfgReloader.Stop()
+	}
 
 	// Stop job manager
-	a.jobManager.Stop()
+	if a.jobManager != nil {
+		a.jobManager.Stop()
+	}
 
 	// Shutdown HTTP server
 	if a.httpServer != nil {
@@ -172,7 +176,10 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 
 	// Close database
-	return a.db.Close()
+	if a.db != nil {
+		return a.db.Close()
+	}
+	return nil
 }
 
 // runRefillLoop periodically checks for ready jobs and loads them into the queue.

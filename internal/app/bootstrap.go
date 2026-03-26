@@ -37,6 +37,13 @@ func (a *App) initServices() {
 	a.searchSvc = service.NewSearchService(a.imageRepo, a.tagRepo, a.searchRepo)
 }
 
+func (a *App) initAutoScheduler(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	a.autoScheduler = service.NewAITagAutoScheduler(a.imageRepo, a.newTaskPlatformService(), cfg)
+}
+
 // initWorkerManager initializes the worker manager and registers all handlers.
 func (a *App) initWorkerManager() error {
 	// Create job manager with config
