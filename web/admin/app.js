@@ -137,6 +137,70 @@ function getTaskLabel(task) {
     return task?.image_filename || task?.image_path || `任务 #${task?.id || '-'}`;
 }
 
+function describeRetryResult(data) {
+    const retryCount = Number(data?.data?.retry_count ?? 0);
+    const batchId = Number(data?.data?.batch_id ?? 0);
+    return {
+        retryCount,
+        batchId,
+        label: retryCount === 1 ? '1 个任务' : `${retryCount} 个任务`,
+    };
+}
+
+async function retryBatch(batchId) {
+    try {
+        const response = await fetchWithAuth(`${API_BASE}/actions/task-batches/${batchId}/retry-failed`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            const retryInfo = describeRetryResult(data);
+            showToast(`已将 ${retryInfo.label} 重新创建为新批次 #${retryInfo.batchId}`, 'success');
+            setTimeout(async () => {
+                await loadSummary();
+                await loadBatches();
+                const target = batchesData.find((batch) => batch.id === retryInfo.batchId);
+                if (target) {
+                    selectBatch(target.id, getBatchLabel(target));
+                }
+            }, 500);
+            return;
+        }
+        showToast(data.message || '重试失败', 'error');
+    } catch (error) {
+        console.error('Batch retry error:', error);
+        showToast('重试失败', 'error');
+    }
+}
+
+async function retryTask(taskId) {
+    try {
+        const response = await fetchWithAuth(`${API_BASE}/actions/tasks/${taskId}/retry-failed`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            const retryInfo = describeRetryResult(data);
+            showToast(`已将 ${retryInfo.label} 重新创建为新批次 #${retryInfo.batchId}`, 'success');
+            setTimeout(async () => {
+                await loadSummary();
+                await loadBatches();
+                const target = batchesData.find((batch) => batch.id === retryInfo.batchId);
+                if (target) {
+                    selectBatch(target.id, getBatchLabel(target));
+                }
+            }, 500);
+            return;
+        }
+        showToast(data.message || '重试失败', 'error');
+    } catch (error) {
+        console.error('Task retry error:', error);
+        showToast('重试失败', 'error');
+    }
+}
+
 function confirmDestructiveAction(scope, count, detail) {
     return window.prompt(`${scope} 将影响 ${count} 项。${detail}\n\n请输入 YES 确认执行。`) === 'YES';
 }
@@ -347,7 +411,10 @@ function renderBatches() {
                 <td><span class="status-badge status-${batch.status || 'unknown'}">${formatStatus(batch.status)}</span></td>
                 <td>${statusCounts}</td>
                 <td>${typeCounts}</td>
-                <td class="error-cell">${batch.failure_summary ? escapeHtml(batch.failure_summary) : '-'}</td>
+                <td class="error-cell">
+                    <div>${batch.failure_summary ? escapeHtml(batch.failure_summary) : '-'}</div>
+                    ${['failed', 'partial_failed'].includes(batch.status) ? `<button class="btn btn-primary btn-sm batch-retry-btn" data-batch-id="${batch.id}" data-batch-label="${escapeHtml(label)}">重试失败任务</button>` : ''}
+                </td>
             </tr>
         `;
     }).join('');
@@ -454,7 +521,11 @@ function renderTasks() {
             <td>${escapeHtml(task.task_type) || '-'}</td>
             <td><span class="status-badge status-${task.status || 'unknown'}">${formatStatus(task.status)}</span></td>
             <td class="error-cell">${task.error_summary ? escapeHtml(task.error_summary) : (task.skip_reason ? escapeHtml(task.skip_reason) : '-')}</td>
-            <td>${['pending', 'queued', 'running'].includes(task.status) ? `<button class="btn btn-danger btn-sm task-cancel-btn" data-task-id="${task.id}" data-task-label="${escapeHtml(getTaskLabel(task))}">取消</button>` : '-'}</td>
+            <td>
+                ${['pending', 'queued', 'running'].includes(task.status) ? `<button class="btn btn-danger btn-sm task-cancel-btn" data-task-id="${task.id}" data-task-label="${escapeHtml(getTaskLabel(task))}">取消</button>` : ''}
+                ${task.status === 'failed' ? `<button class="btn btn-secondary btn-sm task-retry-btn" data-task-id="${task.id}" data-task-label="${escapeHtml(getTaskLabel(task))}">重试</button>` : ''}
+                ${!['pending', 'queued', 'running', 'failed'].includes(task.status) ? '-' : ''}
+            </td>
         </tr>
     `).join('');
     
@@ -550,6 +621,7 @@ function handleFilterChange() {
 }
 
 function handleBatchTableClick(event) {
+    if (event.target.closest('.batch-retry-btn[data-batch-id]')) return;
     const row = event.target.closest('.batch-row[data-batch-id]');
     if (!row) return;
 
@@ -564,6 +636,14 @@ function handleErrorListClick(event) {
 }
 
 function handleTaskTableClick(event) {
+    const retryButton = event.target.closest('.task-retry-btn[data-task-id]');
+    if (retryButton) {
+        const taskId = Number(retryButton.dataset.taskId);
+        if (!Number.isFinite(taskId) || taskId <= 0) return;
+        retryTask(taskId);
+        return;
+    }
+
     const button = event.target.closest('.task-cancel-btn[data-task-id]');
     if (!button) return;
 
@@ -618,6 +698,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (elements.batchTableBody) {
         elements.batchTableBody.addEventListener('click', handleBatchTableClick);
+        elements.batchTableBody.addEventListener('click', (event) => {
+            const button = event.target.closest('.batch-retry-btn[data-batch-id]');
+            if (!button) return;
+            const batchId = Number(button.dataset.batchId);
+            if (!Number.isFinite(batchId) || batchId <= 0) return;
+            retryBatch(batchId);
+        });
     }
 
     if (elements.errorList) {

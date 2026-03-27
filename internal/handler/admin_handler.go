@@ -23,6 +23,8 @@ type AdminServiceInterface interface {
 	GetTasks(ctx context.Context, filter service.TaskReadFilter) ([]service.TaskReadModel, error)
 	TriggerScan(ctx context.Context) (int64, error)
 	RetryFailedJobs(ctx context.Context) (int, error)
+	RetryFailedBatchTasks(ctx context.Context, batchID int64) (*service.RetryBatchResult, error)
+	RetryFailedTask(ctx context.Context, taskID int64) (*service.RetryBatchResult, error)
 	PauseBackgroundTasks(ctx context.Context) error
 	ResumeBackgroundTasks(ctx context.Context) error
 	ClearTaskQueue(ctx context.Context) (int, error)
@@ -391,5 +393,61 @@ func (h *AdminHandler) RetryFailedJobs(c *gin.Context) {
 		"success": true,
 		"message": "retry initiated",
 		"data":    gin.H{"count": count},
+	})
+}
+
+// RetryFailedBatchTasks retries failed tasks in a batch by creating a new batch.
+// POST /admin/api/actions/task-batches/:batch_id/retry-failed
+func (h *AdminHandler) RetryFailedBatchTasks(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "admin service not configured"})
+		return
+	}
+	batchID, ok := parseRequiredPositiveInt(c, "batch_id")
+	if !ok {
+		return
+	}
+	result, err := h.adminSvc.RetryFailedBatchTasks(c.Request.Context(), batchID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("retry created %d tasks in batch %d", result.RetryCount, result.Batch.ID),
+		"data": gin.H{
+			"retry_count": result.RetryCount,
+			"batch_id":    result.Batch.ID,
+			"batch":       result.Batch,
+			"tasks":       result.CreatedTasks,
+		},
+	})
+}
+
+// RetryFailedTask retries a single failed task by creating a new batch.
+// POST /admin/api/actions/tasks/:task_id/retry-failed
+func (h *AdminHandler) RetryFailedTask(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "admin service not configured"})
+		return
+	}
+	taskID, ok := parseRequiredPositiveInt(c, "task_id")
+	if !ok {
+		return
+	}
+	result, err := h.adminSvc.RetryFailedTask(c.Request.Context(), taskID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("retry created %d task in batch %d", result.RetryCount, result.Batch.ID),
+		"data": gin.H{
+			"retry_count": result.RetryCount,
+			"batch_id":    result.Batch.ID,
+			"batch":       result.Batch,
+			"tasks":       result.CreatedTasks,
+		},
 	})
 }

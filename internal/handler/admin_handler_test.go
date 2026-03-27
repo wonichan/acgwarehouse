@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
 
@@ -22,6 +23,8 @@ type mockAdminService struct {
 	tasks        []service.TaskReadModel
 	scanJobID    int64
 	retryCount   int
+	retryBatch   *service.RetryBatchResult
+	retryTask    *service.RetryBatchResult
 	clearCount   int
 	batchCancel  int
 	cancelCount  int
@@ -57,6 +60,20 @@ func (m *mockAdminService) TriggerScan(ctx context.Context) (int64, error) {
 
 func (m *mockAdminService) RetryFailedJobs(ctx context.Context) (int, error) {
 	return m.retryCount, m.err
+}
+
+func (m *mockAdminService) RetryFailedBatchTasks(ctx context.Context, batchID int64) (*service.RetryBatchResult, error) {
+	if m.retryBatch != nil {
+		return m.retryBatch, m.err
+	}
+	return &service.RetryBatchResult{Batch: &domain.TaskBatch{ID: batchID}, RetryCount: m.retryCount}, m.err
+}
+
+func (m *mockAdminService) RetryFailedTask(ctx context.Context, taskID int64) (*service.RetryBatchResult, error) {
+	if m.retryTask != nil {
+		return m.retryTask, m.err
+	}
+	return &service.RetryBatchResult{Batch: &domain.TaskBatch{ID: taskID}, RetryCount: m.retryCount}, m.err
 }
 
 func (m *mockAdminService) PauseBackgroundTasks(ctx context.Context) error {
@@ -308,6 +325,84 @@ func TestAdminHandler_RetryFailedJobs(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected 200, got %d", w.Code)
+	}
+}
+
+func TestAdminHandler_RetryFailedBatchTasks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{
+		retryBatch: &service.RetryBatchResult{
+			Batch:        &domain.TaskBatch{ID: 88, SourceType: domain.TaskBatchSourceRetry},
+			RetryCount:   2,
+			CreatedTasks: []domain.PlatformTask{{ID: 1}, {ID: 2}},
+		},
+	}
+	handler := NewAdminHandler(cfg, mockSvc)
+
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.POST("/actions/task-batches/:batch_id/retry-failed", handler.RetryFailedBatchTasks)
+
+	req := httptest.NewRequest("POST", "/admin/api/actions/task-batches/42/retry-failed", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"success":true`) {
+		t.Fatalf("Expected success response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"retry_count":2`) {
+		t.Fatalf("Expected retry_count in response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"batch_id":88`) {
+		t.Fatalf("Expected batch_id in response, got %s", w.Body.String())
+	}
+}
+
+func TestAdminHandler_RetryFailedTask(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{
+		retryTask: &service.RetryBatchResult{
+			Batch:        &domain.TaskBatch{ID: 99, SourceType: domain.TaskBatchSourceRetry},
+			RetryCount:   1,
+			CreatedTasks: []domain.PlatformTask{{ID: 11}},
+		},
+	}
+	handler := NewAdminHandler(cfg, mockSvc)
+
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.POST("/actions/tasks/:task_id/retry-failed", handler.RetryFailedTask)
+
+	req := httptest.NewRequest("POST", "/admin/api/actions/tasks/abc/retry-failed", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("Expected 400, got %d", w.Code)
+	}
+
+	req = httptest.NewRequest("POST", "/admin/api/actions/tasks/33/retry-failed", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"retry_count":1`) {
+		t.Fatalf("Expected retry_count in response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"batch_id":99`) {
+		t.Fatalf("Expected batch_id in response, got %s", w.Body.String())
 	}
 }
 
