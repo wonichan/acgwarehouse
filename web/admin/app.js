@@ -1,6 +1,7 @@
 // ACGWarehouse Admin Dashboard - Batch Monitor JavaScript
 
 const API_BASE = '/admin/api';
+const AUTO_REFRESH_MS = 30000;
 
 // State
 let summaryData = null;
@@ -11,6 +12,7 @@ let currentFilters = {
     status: '',
     sourceType: ''
 };
+let autoRefreshTimer = null;
 
 // DOM Elements
 const elements = {
@@ -95,6 +97,68 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function getBatchLabel(batch) {
+    return batch?.summary_label || batch?.source_type || `批次 #${batch?.id || '-'}`;
+}
+
+function batchPriority(batch) {
+    const priority = {
+        running: 0,
+        pending: 1,
+        queued: 2,
+        partial_failed: 3,
+        failed: 4,
+        cancelled: 5,
+        completed: 6,
+        skipped: 7
+    };
+
+    return priority[batch?.status] ?? 8;
+}
+
+function taskPriority(task) {
+    const priority = {
+        failed: 0,
+        running: 1,
+        pending: 2,
+        queued: 3,
+        partial_failed: 4,
+        cancelled: 5,
+        completed: 6,
+        skipped: 7
+    };
+
+    return priority[task?.status] ?? 8;
+}
+
+function getSelectedBatch() {
+    return batchesData.find((batch) => batch.id === selectedBatchId) || null;
+}
+
+function setAutoRefreshLabel() {
+    if (document.getElementById('autoRefreshIndicator')) {
+        document.getElementById('autoRefreshIndicator').textContent = '自动刷新：30 秒';
+    }
+}
+
+function syncSelectedBatchLabel(batchLabel) {
+    if (!elements.selectedBatchLabel) return;
+    elements.selectedBatchLabel.textContent = batchLabel ? `- ${batchLabel}` : '';
+}
+
+function normalizeBatchSelection() {
+    if (selectedBatchId == null) return;
+
+    const exists = batchesData.some((batch) => batch.id === selectedBatchId);
+    if (!exists) {
+        selectedBatchId = null;
+        if (elements.taskDetailSection) {
+            elements.taskDetailSection.hidden = true;
+        }
+        syncSelectedBatchLabel('');
+    }
+}
+
 // API Functions
 async function fetchWithAuth(url, options = {}) {
     const response = await fetch(url, {
@@ -139,11 +203,27 @@ async function loadBatches() {
         
         const response = await fetchWithAuth(`${API_BASE}/task-batches?${params.toString()}`);
         if (!response.ok) throw new Error('Failed to load batches');
-        
+
         const data = await response.json();
         batchesData = data.task_batches || [];
+        batchesData.sort((a, b) => {
+            const priorityDelta = batchPriority(a) - batchPriority(b);
+            if (priorityDelta !== 0) return priorityDelta;
+
+            const aTime = Date.parse(a.updated_at || a.created_at || '') || 0;
+            const bTime = Date.parse(b.updated_at || b.created_at || '') || 0;
+            if (aTime !== bTime) return bTime - aTime;
+
+            return (b.id || 0) - (a.id || 0);
+        });
+
+        normalizeBatchSelection();
         renderBatches();
         renderErrorsFromBatches();
+
+        if (selectedBatchId != null) {
+            await loadTasks(selectedBatchId);
+        }
     } catch (error) {
         console.error('加载批次列表失败:', error);
         if (elements.batchTableBody) {
@@ -158,7 +238,7 @@ async function loadTasks(batchId) {
     try {
         const response = await fetchWithAuth(`${API_BASE}/tasks?batch_id=${batchId}&limit=100`);
         if (!response.ok) throw new Error('Failed to load tasks');
-        
+
         const data = await response.json();
         tasksData = data.tasks || [];
         renderTasks();
@@ -195,7 +275,8 @@ function renderSummary() {
         elements.queueState.className = 'card-value ' + (isRunning ? 'status-healthy' : 'status-warning');
     }
     if (elements.queueSize) {
-        elements.queueSize.textContent = tasks ? `${tasks.ready || 0} 待处理` : '-';
+        const queued = tasks ? (tasks.pending || 0) + (tasks.ready || 0) + (tasks.queued || 0) : 0;
+        elements.queueSize.textContent = `${queued} 待处理`;
     }
     
     // Batch Stats - derive from batch status counts if available
@@ -236,24 +317,18 @@ function renderBatches() {
         return;
     }
     
-    // Sort batches: failed/running first, then by created_at desc
-    const sortedBatches = [...batchesData].sort((a, b) => {
-        const priority = { failed: 0, partial_failed: 1, running: 2, pending: 3, completed: 4, cancelled: 5 };
-        const aPriority = priority[a.status] ?? 6;
-        const bPriority = priority[b.status] ?? 6;
-        if (aPriority !== bPriority) return aPriority - bPriority;
-        return (b.id || 0) - (a.id || 0);
-    });
-    
+    const sortedBatches = [...batchesData];
+
     const html = sortedBatches.map(batch => {
         const isSelected = selectedBatchId === batch.id;
         const statusCounts = renderStatusCounts(batch.status_counts);
         const typeCounts = renderTypeCounts(batch.task_type_counts);
+        const label = getBatchLabel(batch);
         
         return `
             <tr class="batch-row ${isSelected ? 'selected' : ''} clickable" 
                 data-batch-id="${batch.id}"
-                onclick="selectBatch(${batch.id}, '${escapeHtml(batch.summary_label || batch.source_type || '批次 #' + batch.id)}')">
+                data-batch-label="${escapeHtml(label)}">
                 <td>${batch.id || '-'}</td>
                 <td>${escapeHtml(batch.source_type) || '-'}</td>
                 <td>${escapeHtml(batch.summary_label) || '-'}</td>
@@ -316,10 +391,10 @@ function selectBatch(batchId, batchLabel) {
     
     // Update UI
     if (elements.taskDetailSection) {
-        elements.taskDetailSection.style.display = 'block';
+        elements.taskDetailSection.hidden = false;
     }
     if (elements.selectedBatchLabel) {
-        elements.selectedBatchLabel.textContent = `- ${batchLabel}`;
+        syncSelectedBatchLabel(batchLabel);
     }
     
     // Update selected row styling
@@ -334,11 +409,14 @@ function selectBatch(batchId, batchLabel) {
 function closeTaskDetail() {
     selectedBatchId = null;
     if (elements.taskDetailSection) {
-        elements.taskDetailSection.style.display = 'none';
+        elements.taskDetailSection.hidden = true;
     }
     document.querySelectorAll('.batch-row.selected').forEach(row => {
         row.classList.remove('selected');
     });
+    if (elements.selectedBatchLabel) {
+        syncSelectedBatchLabel('');
+    }
 }
 
 function renderTasks() {
@@ -351,12 +429,9 @@ function renderTasks() {
         return;
     }
     
-    // Sort tasks: failed first, then running, then by ID
     const sortedTasks = [...tasksData].sort((a, b) => {
-        const priority = { failed: 0, running: 1, pending: 2, completed: 3, skipped: 4 };
-        const aPriority = priority[a.status] ?? 5;
-        const bPriority = priority[b.status] ?? 5;
-        if (aPriority !== bPriority) return aPriority - bPriority;
+        const priorityDelta = taskPriority(a) - taskPriority(b);
+        if (priorityDelta !== 0) return priorityDelta;
         return (a.id || 0) - (b.id || 0);
     });
     
@@ -387,7 +462,7 @@ function renderErrorsFromBatches() {
     }
     
     const html = errorBatches.map(batch => `
-        <div class="error-item" onclick="selectBatch(${batch.id}, '${escapeHtml(batch.summary_label || batch.source_type || '批次 #' + batch.id)}')" style="cursor: pointer;">
+        <div class="error-item" data-batch-id="${batch.id}" data-batch-label="${escapeHtml(getBatchLabel(batch))}">
             <div class="error-header">
                 <span class="error-id">批次 #${batch.id}</span>
                 <span class="error-type">${escapeHtml(batch.source_type)}</span>
@@ -433,21 +508,44 @@ function handleFilterChange() {
     loadBatches();
 }
 
+function handleBatchTableClick(event) {
+    const row = event.target.closest('.batch-row[data-batch-id]');
+    if (!row) return;
+
+    selectBatch(Number(row.dataset.batchId), row.dataset.batchLabel || `批次 #${row.dataset.batchId}`);
+}
+
+function handleErrorListClick(event) {
+    const item = event.target.closest('.error-item[data-batch-id]');
+    if (!item) return;
+
+    selectBatch(Number(item.dataset.batchId), item.dataset.batchLabel || `批次 #${item.dataset.batchId}`);
+}
+
+function toggleSection() {
+    const librarySection = document.getElementById('librarySection');
+    const toggleButton = librarySection?.querySelector('.section-toggle');
+
+    if (!librarySection || !toggleButton) return;
+
+    const collapsed = librarySection.classList.toggle('is-collapsed');
+    toggleButton.setAttribute('aria-expanded', String(!collapsed));
+}
+
+function refreshNow() {
+    loadSummary();
+    loadBatches();
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
     // Initial load
-    loadSummary();
-    loadBatches();
+    setAutoRefreshLabel();
+    refreshNow();
     
     // Refresh button
     if (elements.refreshBtn) {
-        elements.refreshBtn.addEventListener('click', () => {
-            loadSummary();
-            loadBatches();
-            if (selectedBatchId) {
-                loadTasks(selectedBatchId);
-            }
-        });
+        elements.refreshBtn.addEventListener('click', refreshNow);
     }
     
     // Filter changes
@@ -461,6 +559,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // Close task detail
     if (elements.closeTaskDetailBtn) {
         elements.closeTaskDetailBtn.addEventListener('click', closeTaskDetail);
+    }
+
+    if (elements.batchTableBody) {
+        elements.batchTableBody.addEventListener('click', handleBatchTableClick);
+    }
+
+    if (elements.errorList) {
+        elements.errorList.addEventListener('click', handleErrorListClick);
+    }
+
+    const librarySection = document.getElementById('librarySection');
+    const toggleButton = librarySection?.querySelector('.section-toggle');
+    if (toggleButton) {
+        toggleButton.addEventListener('click', toggleSection);
     }
     
     // Pause queue
@@ -492,11 +604,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Auto-refresh every 30 seconds
-    setInterval(() => {
-        loadSummary();
-        loadBatches();
-        if (selectedBatchId) {
-            loadTasks(selectedBatchId);
-        }
-    }, 30000);
+    autoRefreshTimer = setInterval(refreshNow, AUTO_REFRESH_MS);
 });
