@@ -14,6 +14,9 @@ type JobManagerControl interface {
 	Pause()
 	Resume()
 	IsPaused() bool
+	IsRunning() bool
+	QueueSize() int
+	GetWorkerCount() int
 	AddJob(ctx context.Context, jobType, payload string) (int64, error)
 }
 
@@ -76,6 +79,24 @@ type Summary struct {
 	Config  ConfigSummary `json:"config"`
 	Tasks   TaskSummary   `json:"tasks"`
 	Library LibraryStats  `json:"library"`
+}
+
+// QueueOverview is the runtime queue state for admin monitoring.
+type QueueOverview struct {
+	IsRunning   bool `json:"is_running"`
+	IsPaused    bool `json:"is_paused"`
+	QueueSize   int  `json:"queue_size"`
+	WorkerCount int  `json:"worker_count"`
+}
+
+// TaskPlatformOverview is the Phase 13 monitoring contract.
+type TaskPlatformOverview struct {
+	Health  HealthStatus     `json:"health"`
+	Config  ConfigSummary    `json:"config"`
+	Library LibraryStats     `json:"library"`
+	Queue   QueueOverview    `json:"queue"`
+	Batches map[string]int64 `json:"batches"`
+	Tasks   map[string]int64 `json:"tasks"`
 }
 
 // NewAdminService creates a new AdminService.
@@ -150,6 +171,58 @@ func (s *AdminService) GetSummary(ctx context.Context) (*Summary, error) {
 	summary.Library.TotalCollections, _ = s.collectionRepo.Count(ctx)
 
 	return summary, nil
+}
+
+// GetTaskPlatformOverview returns queue runtime + platform batch/task overview for Phase 13.
+func (s *AdminService) GetTaskPlatformOverview(ctx context.Context) (*TaskPlatformOverview, error) {
+	summary, err := s.GetSummary(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	overview := &TaskPlatformOverview{
+		Health:  summary.Health,
+		Config:  summary.Config,
+		Library: summary.Library,
+		Queue: QueueOverview{
+			IsRunning:   s.jobManager.IsRunning(),
+			IsPaused:    s.jobManager.IsPaused(),
+			QueueSize:   s.jobManager.QueueSize(),
+			WorkerCount: s.jobManager.GetWorkerCount(),
+		},
+		Batches: map[string]int64{},
+		Tasks:   map[string]int64{},
+	}
+
+	if s.taskReadSvc == nil {
+		return overview, nil
+	}
+
+	const pageSize = 200
+	offset := 0
+	for {
+		batches, err := s.taskReadSvc.ListBatches(ctx, TaskBatchReadFilter{Limit: pageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		if len(batches) == 0 {
+			break
+		}
+
+		for _, batch := range batches {
+			overview.Batches[batch.Status]++
+			for status, count := range batch.StatusCounts {
+				overview.Tasks[status] += count
+			}
+		}
+
+		if len(batches) < pageSize {
+			break
+		}
+		offset += len(batches)
+	}
+
+	return overview, nil
 }
 
 // GetJobs returns recent jobs for the admin dashboard.

@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"database/sql"
+	"os"
 	"testing"
 	"time"
 
@@ -15,7 +16,19 @@ import (
 
 func newTestAdminDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
+	tempFile, err := os.CreateTemp("", "admin-service-*.db")
+	if err != nil {
+		t.Fatalf("Failed to create temporary database file: %v", err)
+	}
+	dbPath := tempFile.Name()
+	if err := tempFile.Close(); err != nil {
+		t.Fatalf("Failed to close temporary database file handle: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Remove(dbPath)
+	})
+
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}
