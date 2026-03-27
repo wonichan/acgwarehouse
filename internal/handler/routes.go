@@ -58,6 +58,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		admin.Use(adminHandler.AuthMiddleware())
 		{
 			admin.GET("/summary", adminHandler.GetSummary)
+			admin.GET("/task-platform/overview", adminHandler.GetTaskPlatformOverview)
 			admin.GET("/jobs", adminHandler.GetJobs)
 			admin.GET("/task-batches", adminHandler.GetTaskBatches)
 			admin.GET("/tasks", adminHandler.GetTasks)

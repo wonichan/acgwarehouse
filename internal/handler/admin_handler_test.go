@@ -405,6 +405,12 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 			Tasks:   service.TaskSummary{Total: 5},
 			Library: service.LibraryStats{TotalImages: 100},
 		},
+		overview: &service.TaskPlatformOverview{
+			Health:  service.HealthStatus{Status: "healthy"},
+			Queue:   service.QueueOverview{IsRunning: true, QueueSize: 1, WorkerCount: 4},
+			Batches: map[string]int64{"running": 1},
+			Tasks:   map[string]int64{"pending": 1},
+		},
 		jobs:        []interface{}{},
 		taskBatches: []service.TaskBatchReadModel{},
 		tasks:       []service.TaskReadModel{},
@@ -421,6 +427,7 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 	admin := r.Group("/admin/api")
 	admin.Use(handler.AuthMiddleware())
 	admin.GET("/summary", handler.GetSummary)
+	admin.GET("/task-platform/overview", handler.GetTaskPlatformOverview)
 	admin.GET("/jobs", handler.GetJobs)
 	admin.GET("/task-batches", handler.GetTaskBatches)
 	admin.GET("/tasks", handler.GetTasks)
@@ -437,6 +444,16 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected 200, got %d", w.Code)
+	}
+
+	// Test /admin/api/task-platform/overview with auth
+	req = httptest.NewRequest("GET", "/admin/api/task-platform/overview", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200 for task-platform overview, got %d", w.Code)
 	}
 
 	// Test that action buttons work

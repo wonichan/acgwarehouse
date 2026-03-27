@@ -17,6 +17,7 @@ import (
 // This allows for both real implementations and mocks for testing.
 type AdminServiceInterface interface {
 	GetSummary(ctx context.Context) (*service.Summary, error)
+	GetTaskPlatformOverview(ctx context.Context) (*service.TaskPlatformOverview, error)
 	GetJobs(ctx context.Context, limit int) ([]interface{}, error)
 	GetTaskBatches(ctx context.Context, filter service.TaskBatchReadFilter) ([]service.TaskBatchReadModel, error)
 	GetTasks(ctx context.Context, filter service.TaskReadFilter) ([]service.TaskReadModel, error)
@@ -25,6 +26,25 @@ type AdminServiceInterface interface {
 	PauseBackgroundTasks(ctx context.Context) error
 	ResumeBackgroundTasks(ctx context.Context) error
 	IsBackgroundRunning() bool
+}
+
+// GetTaskPlatformOverview returns the Phase 13 platform overview contract.
+// GET /admin/api/task-platform/overview
+func (h *AdminHandler) GetTaskPlatformOverview(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "admin service not configured"})
+		return
+	}
+
+	overview, err := h.adminSvc.GetTaskPlatformOverview(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get task platform overview: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, overview)
 }
 
 // AdminHandler handles admin dashboard HTTP endpoints.

@@ -5,6 +5,7 @@ const AUTO_REFRESH_MS = 30000;
 
 // State
 let summaryData = null;
+let overviewData = null;
 let batchesData = [];
 let tasksData = [];
 let selectedBatchId = null;
@@ -176,10 +177,11 @@ async function fetchWithAuth(url, options = {}) {
 
 async function loadSummary() {
     try {
-        const response = await fetchWithAuth(`${API_BASE}/summary`);
-        if (!response.ok) throw new Error('Failed to load summary');
-        
-        summaryData = await response.json();
+        const response = await fetchWithAuth(`${API_BASE}/task-platform/overview`);
+        if (!response.ok) throw new Error('Failed to load task platform overview');
+
+        overviewData = await response.json();
+        summaryData = overviewData;
         renderSummary();
     } catch (error) {
         console.error('加载概览数据失败:', error);
@@ -254,9 +256,10 @@ async function loadTasks(batchId) {
 
 // Render Functions
 function renderSummary() {
-    if (!summaryData) return;
-    
-    const { health, config, tasks, library } = summaryData;
+    const source = overviewData || summaryData;
+    if (!source) return;
+
+    const { health, config, tasks, library, queue, batches } = source;
     
     // Health
     if (elements.healthStatus) {
@@ -268,25 +271,25 @@ function renderSummary() {
         elements.healthTimestamp.textContent = formatDate(health.timestamp);
     }
     
-    // Queue State - derive from background running state
+    // Queue State - prefer platform overview queue runtime
     if (elements.queueState) {
-        const isRunning = summaryData.background_running !== false;
-        elements.queueState.textContent = isRunning ? '运行中' : '已暂停';
-        elements.queueState.className = 'card-value ' + (isRunning ? 'status-healthy' : 'status-warning');
+        const isPaused = queue?.is_paused === true;
+        const isRunning = queue?.is_running === true;
+        const queueHealthy = !isPaused && isRunning;
+        elements.queueState.textContent = isPaused ? '已暂停' : (isRunning ? '运行中' : '未启动');
+        elements.queueState.className = 'card-value ' + (queueHealthy ? 'status-healthy' : 'status-warning');
     }
     if (elements.queueSize) {
-        const queued = tasks ? (tasks.pending || 0) + (tasks.ready || 0) + (tasks.queued || 0) : 0;
-        elements.queueSize.textContent = `${queued} 待处理`;
+        const queueSize = Number.isFinite(queue?.queue_size) ? queue.queue_size : ((tasks?.pending || 0) + (tasks?.queued || 0) + (tasks?.ready || 0));
+        const workerCount = Number.isFinite(queue?.worker_count) ? queue.worker_count : 0;
+        elements.queueSize.textContent = `${queueSize} 待处理 · ${workerCount} workers`;
     }
     
-    // Batch Stats - derive from batch status counts if available
-    if (summaryData.batches) {
-        const batches = summaryData.batches;
-        if (elements.pendingBatches) elements.pendingBatches.textContent = batches.pending || 0;
-        if (elements.runningBatches) elements.runningBatches.textContent = batches.running || 0;
-        if (elements.failedBatches) elements.failedBatches.textContent = batches.failed || 0;
-        if (elements.completedBatches) elements.completedBatches.textContent = batches.completed || 0;
-    }
+    // Batch Stats - from platform overview
+    if (elements.pendingBatches) elements.pendingBatches.textContent = batches?.pending || 0;
+    if (elements.runningBatches) elements.runningBatches.textContent = batches?.running || 0;
+    if (elements.failedBatches) elements.failedBatches.textContent = batches?.failed || 0;
+    if (elements.completedBatches) elements.completedBatches.textContent = batches?.completed || 0;
     
     // Library
     if (elements.totalImages) elements.totalImages.textContent = library?.total_images || 0;
