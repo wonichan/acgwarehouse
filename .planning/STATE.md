@@ -30,7 +30,7 @@ Plan: 4 of 4 in current phase
 Status: Complete
 Last activity: 2026-03-27
 
-Progress: [██████████] 100% (12/15 plans complete)
+Progress: [████████░░] 80% (12/15 plans complete)
 
 ## Performance Metrics
 
