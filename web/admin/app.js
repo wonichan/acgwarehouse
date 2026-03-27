@@ -1,11 +1,16 @@
-// ACGWarehouse Admin Dashboard - JavaScript
+// ACGWarehouse Admin Dashboard - Batch Monitor JavaScript
 
 const API_BASE = '/admin/api';
 
 // State
 let summaryData = null;
-let jobsData = [];
-let isPaused = false;
+let batchesData = [];
+let tasksData = [];
+let selectedBatchId = null;
+let currentFilters = {
+    status: '',
+    sourceType: ''
+};
 
 // DOM Elements
 const elements = {
@@ -13,16 +18,15 @@ const elements = {
     healthStatus: document.getElementById('healthStatus'),
     healthTimestamp: document.getElementById('healthTimestamp'),
     
-    // Config
-    envStatus: document.getElementById('envStatus'),
-    serverInfo: document.getElementById('serverInfo'),
+    // Queue State
+    queueState: document.getElementById('queueState'),
+    queueSize: document.getElementById('queueSize'),
     
-    // Tasks
-    taskTotal: document.getElementById('taskTotal'),
-    taskReady: document.getElementById('taskReady'),
-    taskRunning: document.getElementById('taskRunning'),
-    taskFinished: document.getElementById('taskFinished'),
-    taskFailed: document.getElementById('taskFailed'),
+    // Batch Stats
+    pendingBatches: document.getElementById('pendingBatches'),
+    runningBatches: document.getElementById('runningBatches'),
+    failedBatches: document.getElementById('failedBatches'),
+    completedBatches: document.getElementById('completedBatches'),
     
     // Library
     totalImages: document.getElementById('totalImages'),
@@ -34,8 +38,16 @@ const elements = {
     hasCOSKey: document.getElementById('hasCOSKey'),
     adminUsername: document.getElementById('adminUsername'),
     
-    // Jobs
-    jobsTableBody: document.getElementById('jobsTableBody'),
+    // Batch table
+    batchTableBody: document.getElementById('batchTableBody'),
+    batchStatusFilter: document.getElementById('batchStatusFilter'),
+    sourceTypeFilter: document.getElementById('sourceTypeFilter'),
+    
+    // Task detail
+    taskDetailSection: document.getElementById('taskDetailSection'),
+    selectedBatchLabel: document.getElementById('selectedBatchLabel'),
+    taskTableBody: document.getElementById('taskTableBody'),
+    closeTaskDetailBtn: document.getElementById('closeTaskDetailBtn'),
     
     // Errors
     errorList: document.getElementById('errorList'),
@@ -44,7 +56,6 @@ const elements = {
     refreshBtn: document.getElementById('refreshBtn'),
     pauseBtn: document.getElementById('pauseBtn'),
     resumeBtn: document.getElementById('resumeBtn'),
-    retryBtn: document.getElementById('retryBtn'),
     scanBtn: document.getElementById('scanBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
 };
@@ -108,25 +119,56 @@ async function loadSummary() {
         renderSummary();
     } catch (error) {
         console.error('加载概览数据失败:', error);
-        elements.healthStatus.textContent = '错误';
-        elements.healthStatus.classList.add('status-error');
+        if (elements.healthStatus) {
+            elements.healthStatus.textContent = '错误';
+            elements.healthStatus.classList.add('status-error');
+        }
     }
 }
 
-async function loadJobs() {
+async function loadBatches() {
     try {
-        const response = await fetchWithAuth(`${API_BASE}/jobs?limit=50`);
-        if (!response.ok) throw new Error('Failed to load jobs');
+        const params = new URLSearchParams();
+        if (currentFilters.status) {
+            params.append('status', currentFilters.status);
+        }
+        if (currentFilters.sourceType) {
+            params.append('source_type', currentFilters.sourceType);
+        }
+        params.append('limit', '50');
+        
+        const response = await fetchWithAuth(`${API_BASE}/task-batches?${params.toString()}`);
+        if (!response.ok) throw new Error('Failed to load batches');
         
         const data = await response.json();
-        jobsData = data.jobs || [];
-        renderJobs();
-        renderErrors();
+        batchesData = data.task_batches || [];
+        renderBatches();
+        renderErrorsFromBatches();
+    } catch (error) {
+        console.error('加载批次列表失败:', error);
+        if (elements.batchTableBody) {
+            elements.batchTableBody.innerHTML = `
+                <tr><td colspan="7" class="error-cell">加载批次失败: ${escapeHtml(error.message)}</td></tr>
+            `;
+        }
+    }
+}
+
+async function loadTasks(batchId) {
+    try {
+        const response = await fetchWithAuth(`${API_BASE}/tasks?batch_id=${batchId}&limit=100`);
+        if (!response.ok) throw new Error('Failed to load tasks');
+        
+        const data = await response.json();
+        tasksData = data.tasks || [];
+        renderTasks();
     } catch (error) {
         console.error('加载任务列表失败:', error);
-        elements.jobsTableBody.innerHTML = `
-            <tr><td colspan="6" class="error-cell">加载任务失败</td></tr>
-        `;
+        if (elements.taskTableBody) {
+            elements.taskTableBody.innerHTML = `
+                <tr><td colspan="5" class="error-cell">加载任务失败</td></tr>
+            `;
+        }
     }
 }
 
@@ -137,87 +179,225 @@ function renderSummary() {
     const { health, config, tasks, library } = summaryData;
     
     // Health
-    elements.healthStatus.textContent = health.status || '未知';
-    elements.healthStatus.className = 'card-value ' + 
-        (health.status === 'healthy' ? 'status-healthy' : 'status-unhealthy');
-    elements.healthTimestamp.textContent = formatDate(health.timestamp);
+    if (elements.healthStatus) {
+        elements.healthStatus.textContent = health.status || '未知';
+        elements.healthStatus.className = 'card-value ' + 
+            (health.status === 'healthy' ? 'status-healthy' : 'status-unhealthy');
+    }
+    if (elements.healthTimestamp) {
+        elements.healthTimestamp.textContent = formatDate(health.timestamp);
+    }
     
-    // Config
-    elements.envStatus.textContent = config.env || '-';
-    elements.serverInfo.textContent = `${config.server_host || '-'}:${config.server_port || '-'}`;
+    // Queue State - derive from background running state
+    if (elements.queueState) {
+        const isRunning = summaryData.background_running !== false;
+        elements.queueState.textContent = isRunning ? '运行中' : '已暂停';
+        elements.queueState.className = 'card-value ' + (isRunning ? 'status-healthy' : 'status-warning');
+    }
+    if (elements.queueSize) {
+        elements.queueSize.textContent = tasks ? `${tasks.ready || 0} 待处理` : '-';
+    }
     
-    // Tasks
-    elements.taskTotal.textContent = tasks.total || 0;
-    elements.taskReady.textContent = tasks.ready || 0;
-    elements.taskRunning.textContent = tasks.running || 0;
-    elements.taskFinished.textContent = tasks.finished || 0;
-    elements.taskFailed.textContent = tasks.failed || 0;
+    // Batch Stats - derive from batch status counts if available
+    if (summaryData.batches) {
+        const batches = summaryData.batches;
+        if (elements.pendingBatches) elements.pendingBatches.textContent = batches.pending || 0;
+        if (elements.runningBatches) elements.runningBatches.textContent = batches.running || 0;
+        if (elements.failedBatches) elements.failedBatches.textContent = batches.failed || 0;
+        if (elements.completedBatches) elements.completedBatches.textContent = batches.completed || 0;
+    }
     
     // Library
-    elements.totalImages.textContent = library.total_images || 0;
-    elements.totalTags.textContent = library.total_tags || 0;
-    elements.totalCollections.textContent = library.total_collections || 0;
+    if (elements.totalImages) elements.totalImages.textContent = library?.total_images || 0;
+    if (elements.totalTags) elements.totalTags.textContent = library?.total_tags || 0;
+    if (elements.totalCollections) elements.totalCollections.textContent = library?.total_collections || 0;
     
     // Config info
-    elements.hasAIKey.textContent = config.has_ai_key ? '✓ 已配置' : '✗ 未设置';
-    elements.hasAIKey.className = 'config-value ' + (config.has_ai_key ? 'status-healthy' : 'status-warning');
-    elements.hasCOSKey.textContent = config.has_cos_secret_key ? '✓ 已配置' : '✗ 未设置';
-    elements.hasCOSKey.className = 'config-value ' + (config.has_cos_secret_key ? 'status-healthy' : 'status-warning');
-    elements.adminUsername.textContent = config.admin_username || '(无)';
-    
-    // Update button states
-    updateButtonStates();
+    if (elements.hasAIKey) {
+        elements.hasAIKey.textContent = config?.has_ai_key ? '✓ 已配置' : '✗ 未设置';
+        elements.hasAIKey.className = 'config-value ' + (config?.has_ai_key ? 'status-healthy' : 'status-warning');
+    }
+    if (elements.hasCOSKey) {
+        elements.hasCOSKey.textContent = config?.has_cos_secret_key ? '✓ 已配置' : '✗ 未设置';
+        elements.hasCOSKey.className = 'config-value ' + (config?.has_cos_secret_key ? 'status-healthy' : 'status-warning');
+    }
+    if (elements.adminUsername) {
+        elements.adminUsername.textContent = config?.admin_username || '(无)';
+    }
 }
 
-function renderJobs() {
-    if (!jobsData.length) {
-        elements.jobsTableBody.innerHTML = `
-            <tr><td colspan="6" class="empty-cell">暂无任务</td></tr>
+function renderBatches() {
+    if (!elements.batchTableBody) return;
+    
+    if (!batchesData.length) {
+        elements.batchTableBody.innerHTML = `
+            <tr><td colspan="7" class="empty-cell">暂无批次数据</td></tr>
         `;
         return;
     }
     
-    const html = jobsData.map(job => `
-        <tr class="job-row job-${job.status || 'unknown'}">
-            <td>${job.id || '-'}</td>
-            <td>${escapeHtml(job.type) || '-'}</td>
-            <td><span class="status-badge status-${job.status || 'unknown'}">${job.status || '-'}</span></td>
-            <td>${job.progress || 0}%</td>
-            <td>${formatDate(job.created_at)}</td>
-            <td class="error-cell">${escapeHtml(job.error) || '-'}</td>
+    // Sort batches: failed/running first, then by created_at desc
+    const sortedBatches = [...batchesData].sort((a, b) => {
+        const priority = { failed: 0, partial_failed: 1, running: 2, pending: 3, completed: 4, cancelled: 5 };
+        const aPriority = priority[a.status] ?? 6;
+        const bPriority = priority[b.status] ?? 6;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return (b.id || 0) - (a.id || 0);
+    });
+    
+    const html = sortedBatches.map(batch => {
+        const isSelected = selectedBatchId === batch.id;
+        const statusCounts = renderStatusCounts(batch.status_counts);
+        const typeCounts = renderTypeCounts(batch.task_type_counts);
+        
+        return `
+            <tr class="batch-row ${isSelected ? 'selected' : ''} clickable" 
+                data-batch-id="${batch.id}"
+                onclick="selectBatch(${batch.id}, '${escapeHtml(batch.summary_label || batch.source_type || '批次 #' + batch.id)}')">
+                <td>${batch.id || '-'}</td>
+                <td>${escapeHtml(batch.source_type) || '-'}</td>
+                <td>${escapeHtml(batch.summary_label) || '-'}</td>
+                <td><span class="status-badge status-${batch.status || 'unknown'}">${formatStatus(batch.status)}</span></td>
+                <td>${statusCounts}</td>
+                <td>${typeCounts}</td>
+                <td class="error-cell">${batch.failure_summary ? escapeHtml(batch.failure_summary) : '-'}</td>
+            </tr>
+        `;
+    }).join('');
+    
+    elements.batchTableBody.innerHTML = html;
+}
+
+function renderStatusCounts(statusCounts) {
+    if (!statusCounts || Object.keys(statusCounts).length === 0) {
+        return '<span class="task-counts">-</span>';
+    }
+    
+    const items = Object.entries(statusCounts)
+        .filter(([_, count]) => count > 0)
+        .map(([status, count]) => {
+            const statusClass = ['running', 'failed', 'completed'].includes(status) ? status : '';
+            return `<span class="task-count-item ${statusClass}">${formatStatus(status)}: ${count}</span>`;
+        })
+        .join('');
+    
+    return `<span class="task-counts">${items || '-'}</span>`;
+}
+
+function renderTypeCounts(typeCounts) {
+    if (!typeCounts || Object.keys(typeCounts).length === 0) {
+        return '<span class="type-counts">-</span>';
+    }
+    
+    const items = Object.entries(typeCounts)
+        .filter(([_, count]) => count > 0)
+        .map(([type, count]) => `<span class="type-count-item">${escapeHtml(type)}: ${count}</span>`)
+        .join('');
+    
+    return `<span class="type-counts">${items || '-'}</span>`;
+}
+
+function formatStatus(status) {
+    const statusMap = {
+        'pending': '待处理',
+        'queued': '已入队',
+        'running': '运行中',
+        'completed': '已完成',
+        'failed': '失败',
+        'partial_failed': '部分失败',
+        'cancelled': '已取消',
+        'skipped': '已跳过'
+    };
+    return statusMap[status] || status || '未知';
+}
+
+function selectBatch(batchId, batchLabel) {
+    selectedBatchId = batchId;
+    
+    // Update UI
+    if (elements.taskDetailSection) {
+        elements.taskDetailSection.style.display = 'block';
+    }
+    if (elements.selectedBatchLabel) {
+        elements.selectedBatchLabel.textContent = `- ${batchLabel}`;
+    }
+    
+    // Update selected row styling
+    document.querySelectorAll('.batch-row').forEach(row => {
+        row.classList.toggle('selected', parseInt(row.dataset.batchId) === batchId);
+    });
+    
+    // Load tasks for this batch
+    loadTasks(batchId);
+}
+
+function closeTaskDetail() {
+    selectedBatchId = null;
+    if (elements.taskDetailSection) {
+        elements.taskDetailSection.style.display = 'none';
+    }
+    document.querySelectorAll('.batch-row.selected').forEach(row => {
+        row.classList.remove('selected');
+    });
+}
+
+function renderTasks() {
+    if (!elements.taskTableBody) return;
+    
+    if (!tasksData.length) {
+        elements.taskTableBody.innerHTML = `
+            <tr><td colspan="5" class="empty-cell">该批次暂无任务</td></tr>
+        `;
+        return;
+    }
+    
+    // Sort tasks: failed first, then running, then by ID
+    const sortedTasks = [...tasksData].sort((a, b) => {
+        const priority = { failed: 0, running: 1, pending: 2, completed: 3, skipped: 4 };
+        const aPriority = priority[a.status] ?? 5;
+        const bPriority = priority[b.status] ?? 5;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return (a.id || 0) - (b.id || 0);
+    });
+    
+    const html = sortedTasks.map(task => `
+        <tr class="task-row task-${task.status || 'unknown'}">
+            <td>${task.id || '-'}</td>
+            <td>${escapeHtml(task.image_filename) || escapeHtml(task.image_path) || '-'}</td>
+            <td>${escapeHtml(task.task_type) || '-'}</td>
+            <td><span class="status-badge status-${task.status || 'unknown'}">${formatStatus(task.status)}</span></td>
+            <td class="error-cell">${task.error_summary ? escapeHtml(task.error_summary) : (task.skip_reason ? escapeHtml(task.skip_reason) : '-')}</td>
         </tr>
     `).join('');
     
-    elements.jobsTableBody.innerHTML = html;
+    elements.taskTableBody.innerHTML = html;
 }
 
-function renderErrors() {
-    const errors = jobsData.filter(job => job.error);
+function renderErrorsFromBatches() {
+    if (!elements.errorList) return;
     
-    if (!errors.length) {
+    // Collect all errors from batches with failures
+    const errorBatches = batchesData
+        .filter(b => b.failure_summary || b.status === 'failed' || b.status === 'partial_failed')
+        .slice(0, 10);
+    
+    if (!errorBatches.length) {
         elements.errorList.innerHTML = '<div class="empty-state">暂无错误</div>';
         return;
     }
     
-    const html = errors.slice(0, 10).map(job => `
-        <div class="error-item">
+    const html = errorBatches.map(batch => `
+        <div class="error-item" onclick="selectBatch(${batch.id}, '${escapeHtml(batch.summary_label || batch.source_type || '批次 #' + batch.id)}')" style="cursor: pointer;">
             <div class="error-header">
-                <span class="error-id">任务 #${job.id}</span>
-                <span class="error-type">${escapeHtml(job.type)}</span>
-                <span class="error-time">${formatDate(job.created_at)}</span>
+                <span class="error-id">批次 #${batch.id}</span>
+                <span class="error-type">${escapeHtml(batch.source_type)}</span>
+                <span class="error-time">${formatStatus(batch.status)}</span>
             </div>
-            <div class="error-message">${escapeHtml(job.error)}</div>
+            <div class="error-message">${batch.failure_summary ? escapeHtml(batch.failure_summary) : '状态异常'}</div>
         </div>
     `).join('');
     
     elements.errorList.innerHTML = html;
-}
-
-function updateButtonStates() {
-    // Note: We don't have explicit "paused" state in summary, 
-    // but we can infer from the UI. For now, both buttons are always visible.
-    elements.pauseBtn.style.display = 'inline-block';
-    elements.resumeBtn.style.display = 'inline-block';
 }
 
 // Action Handlers
@@ -235,7 +415,7 @@ async function triggerAction(endpoint, successMessage, errorMessage) {
             // Refresh data after action
             setTimeout(() => {
                 loadSummary();
-                loadJobs();
+                loadBatches();
             }, 500);
         } else {
             showToast(data.message || errorMessage, 'error');
@@ -246,47 +426,77 @@ async function triggerAction(endpoint, successMessage, errorMessage) {
     }
 }
 
+// Filter Handlers
+function handleFilterChange() {
+    currentFilters.status = elements.batchStatusFilter?.value || '';
+    currentFilters.sourceType = elements.sourceTypeFilter?.value || '';
+    loadBatches();
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
     // Initial load
     loadSummary();
-    loadJobs();
+    loadBatches();
     
     // Refresh button
-    elements.refreshBtn.addEventListener('click', () => {
-        loadSummary();
-        loadJobs();
-    });
+    if (elements.refreshBtn) {
+        elements.refreshBtn.addEventListener('click', () => {
+            loadSummary();
+            loadBatches();
+            if (selectedBatchId) {
+                loadTasks(selectedBatchId);
+            }
+        });
+    }
+    
+    // Filter changes
+    if (elements.batchStatusFilter) {
+        elements.batchStatusFilter.addEventListener('change', handleFilterChange);
+    }
+    if (elements.sourceTypeFilter) {
+        elements.sourceTypeFilter.addEventListener('change', handleFilterChange);
+    }
+    
+    // Close task detail
+    if (elements.closeTaskDetailBtn) {
+        elements.closeTaskDetailBtn.addEventListener('click', closeTaskDetail);
+    }
     
     // Pause queue
-    elements.pauseBtn.addEventListener('click', () => {
-        triggerAction('actions/jobs/pause', '任务队列已暂停', '暂停队列失败');
-    });
+    if (elements.pauseBtn) {
+        elements.pauseBtn.addEventListener('click', () => {
+            triggerAction('actions/jobs/pause', '任务队列已暂停', '暂停队列失败');
+        });
+    }
     
     // Resume queue
-    elements.resumeBtn.addEventListener('click', () => {
-        triggerAction('actions/jobs/resume', '任务队列已恢复', '恢复队列失败');
-    });
-    
-    // Retry failed
-    elements.retryBtn.addEventListener('click', () => {
-        triggerAction('actions/jobs/retry-failed', '失败任务已加入重试队列', '重试任务失败');
-    });
+    if (elements.resumeBtn) {
+        elements.resumeBtn.addEventListener('click', () => {
+            triggerAction('actions/jobs/resume', '任务队列已恢复', '恢复队列失败');
+        });
+    }
     
     // Trigger scan
-    elements.scanBtn.addEventListener('click', () => {
-        triggerAction('actions/scan', '扫描任务已触发', '触发扫描失败');
-    });
+    if (elements.scanBtn) {
+        elements.scanBtn.addEventListener('click', () => {
+            triggerAction('actions/scan', '扫描任务已触发', '触发扫描失败');
+        });
+    }
     
-    // Logout - clear any cached auth and reload
-    elements.logoutBtn.addEventListener('click', () => {
-        // Force reload to clear any cached state
-        window.location.reload();
-    });
+    // Logout
+    if (elements.logoutBtn) {
+        elements.logoutBtn.addEventListener('click', () => {
+            window.location.reload();
+        });
+    }
     
     // Auto-refresh every 30 seconds
     setInterval(() => {
         loadSummary();
-        loadJobs();
+        loadBatches();
+        if (selectedBatchId) {
+            loadTasks(selectedBatchId);
+        }
     }, 30000);
 });
