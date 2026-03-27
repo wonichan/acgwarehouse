@@ -16,6 +16,7 @@ import (
 // mockAdminService implements AdminServiceInterface for testing
 type mockAdminService struct {
 	summary      *service.Summary
+	overview     *service.TaskPlatformOverview
 	jobs         []interface{}
 	taskBatches  []service.TaskBatchReadModel
 	tasks        []service.TaskReadModel
@@ -29,6 +30,10 @@ type mockAdminService struct {
 
 func (m *mockAdminService) GetSummary(ctx context.Context) (*service.Summary, error) {
 	return m.summary, m.err
+}
+
+func (m *mockAdminService) GetTaskPlatformOverview(ctx context.Context) (*service.TaskPlatformOverview, error) {
+	return m.overview, m.err
 }
 
 func (m *mockAdminService) GetJobs(ctx context.Context, limit int) ([]interface{}, error) {
@@ -151,6 +156,81 @@ func TestAdminHandler_GetSummary(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected 200, got %d", w.Code)
+	}
+}
+
+func TestAdminHandler_GetTaskPlatformOverview(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Admin: config.AdminConfig{
+			Username: "admin",
+			Password: "secret",
+		},
+	}
+
+	mockSvc := &mockAdminService{
+		overview: &service.TaskPlatformOverview{
+			Health: service.HealthStatus{Status: "healthy"},
+			Queue:  service.QueueOverview{IsRunning: true, IsPaused: false, QueueSize: 2, WorkerCount: 4},
+			Batches: map[string]int64{
+				"running": 1,
+			},
+			Tasks: map[string]int64{
+				"pending": 1,
+				"queued":  1,
+			},
+		},
+	}
+
+	handler := NewAdminHandler(cfg, mockSvc)
+
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.GET("/task-platform/overview", handler.GetTaskPlatformOverview)
+
+	req := httptest.NewRequest("GET", "/admin/api/task-platform/overview", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "\"queue\"") {
+		t.Fatalf("Expected queue field in overview response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"batches\"") {
+		t.Fatalf("Expected batches field in overview response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"tasks\"") {
+		t.Fatalf("Expected tasks field in overview response, got %s", w.Body.String())
+	}
+}
+
+func TestAdminHandler_GetTaskPlatformOverview_ServiceError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{err: context.DeadlineExceeded}
+	handler := NewAdminHandler(cfg, mockSvc)
+
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.GET("/task-platform/overview", handler.GetTaskPlatformOverview)
+
+	req := httptest.NewRequest("GET", "/admin/api/task-platform/overview", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("Expected 500, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "failed to get task platform overview") {
+		t.Fatalf("Expected task platform overview error message, got %s", w.Body.String())
 	}
 }
 
