@@ -332,6 +332,257 @@ func TestAdminService_PauseResumeBackgroundTasks(t *testing.T) {
 	}
 }
 
+func TestAdminService_GetTaskPlatformOverview_ReturnsQueueAndPlatformCounts(t *testing.T) {
+	db := newTestAdminDB(t)
+	defer db.Close()
+
+	jobRepo := repository.NewJobRepository(db)
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	collectionRepo := repository.NewCollectionRepository(db)
+	jobManager := worker.NewManagerWithConfig(jobRepo, 3, 32)
+	jobManager.Pause()
+
+	ctx := context.Background()
+	if _, err := jobManager.AddJob(ctx, "test_job", `{"n":1}`); err != nil {
+		t.Fatalf("Failed to add queued job #1: %v", err)
+	}
+	if _, err := jobManager.AddJob(ctx, "test_job", `{"n":2}`); err != nil {
+		t.Fatalf("Failed to add queued job #2: %v", err)
+	}
+
+	batchOneID := insertTaskBatchForOverviewTest(t, db, "running")
+	batchTwoID := insertTaskBatchForOverviewTest(t, db, "partial_failed")
+
+	insertImageForOverviewTest(t, db, 1001, "/test/overview-1.jpg", "overview-1.jpg")
+	insertImageForOverviewTest(t, db, 1002, "/test/overview-2.jpg", "overview-2.jpg")
+	insertImageForOverviewTest(t, db, 1003, "/test/overview-3.jpg", "overview-3.jpg")
+	insertImageForOverviewTest(t, db, 1004, "/test/overview-4.jpg", "overview-4.jpg")
+	insertImageForOverviewTest(t, db, 1005, "/test/overview-5.jpg", "overview-5.jpg")
+	insertImageForOverviewTest(t, db, 1006, "/test/overview-6.jpg", "overview-6.jpg")
+
+	insertPlatformTaskForOverviewTest(t, db, batchOneID, 1001, "pending")
+	insertPlatformTaskForOverviewTest(t, db, batchOneID, 1002, "queued")
+	insertPlatformTaskForOverviewTest(t, db, batchOneID, 1003, "running")
+	insertPlatformTaskForOverviewTest(t, db, batchTwoID, 1004, "completed")
+	insertPlatformTaskForOverviewTest(t, db, batchTwoID, 1005, "failed")
+	insertPlatformTaskForOverviewTest(t, db, batchTwoID, 1006, "cancelled")
+
+	taskReadSvc := service.NewTaskReadService(repository.NewTaskBatchReadRepository(db))
+	cfg := &config.Config{}
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager, taskReadSvc)
+
+	overview, err := svc.GetTaskPlatformOverview(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get task platform overview: %v", err)
+	}
+
+	if !overview.Queue.IsPaused {
+		t.Fatalf("Expected queue to be paused")
+	}
+	if overview.Queue.QueueSize != 2 {
+		t.Fatalf("Expected queue size 2, got %d", overview.Queue.QueueSize)
+	}
+	if overview.Queue.WorkerCount != 3 {
+		t.Fatalf("Expected worker count 3, got %d", overview.Queue.WorkerCount)
+	}
+
+	if overview.Batches["running"] != 1 {
+		t.Fatalf("Expected running batch count 1, got %d", overview.Batches["running"])
+	}
+	if overview.Batches["partial_failed"] != 1 {
+		t.Fatalf("Expected partial_failed batch count 1, got %d", overview.Batches["partial_failed"])
+	}
+
+	if overview.Tasks["pending"] != 1 {
+		t.Fatalf("Expected pending task count 1, got %d", overview.Tasks["pending"])
+	}
+	if overview.Tasks["queued"] != 1 {
+		t.Fatalf("Expected queued task count 1, got %d", overview.Tasks["queued"])
+	}
+	if overview.Tasks["running"] != 1 {
+		t.Fatalf("Expected running task count 1, got %d", overview.Tasks["running"])
+	}
+	if overview.Tasks["completed"] != 1 {
+		t.Fatalf("Expected completed task count 1, got %d", overview.Tasks["completed"])
+	}
+	if overview.Tasks["failed"] != 1 {
+		t.Fatalf("Expected failed task count 1, got %d", overview.Tasks["failed"])
+	}
+	if overview.Tasks["cancelled"] != 1 {
+		t.Fatalf("Expected cancelled task count 1, got %d", overview.Tasks["cancelled"])
+	}
+}
+
+func TestAdminService_GetTaskPlatformOverview_HandlesMissingTaskReadData(t *testing.T) {
+	db := newTestAdminDB(t)
+	defer db.Close()
+
+	jobRepo := repository.NewJobRepository(db)
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	collectionRepo := repository.NewCollectionRepository(db)
+	jobManager := worker.NewManager(jobRepo)
+
+	cfg := &config.Config{}
+
+	t.Run("without task read service", func(t *testing.T) {
+		svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+
+		overview, err := svc.GetTaskPlatformOverview(context.Background())
+		if err != nil {
+			t.Fatalf("Expected no error without taskReadSvc, got: %v", err)
+		}
+		if len(overview.Batches) != 0 {
+			t.Fatalf("Expected empty batch counts, got: %#v", overview.Batches)
+		}
+		if len(overview.Tasks) != 0 {
+			t.Fatalf("Expected empty task counts, got: %#v", overview.Tasks)
+		}
+	})
+
+	t.Run("with task read service but no batches", func(t *testing.T) {
+		svc := service.NewAdminService(
+			cfg,
+			jobRepo,
+			imageRepo,
+			tagRepo,
+			collectionRepo,
+			jobManager,
+			service.NewTaskReadService(repository.NewTaskBatchReadRepository(db)),
+		)
+
+		overview, err := svc.GetTaskPlatformOverview(context.Background())
+		if err != nil {
+			t.Fatalf("Expected no error with empty batches, got: %v", err)
+		}
+		if len(overview.Batches) != 0 {
+			t.Fatalf("Expected empty batch counts, got: %#v", overview.Batches)
+		}
+		if len(overview.Tasks) != 0 {
+			t.Fatalf("Expected empty task counts, got: %#v", overview.Tasks)
+		}
+	})
+}
+
+func TestAdminService_GetTaskPlatformOverview_PreservesLegacySummaryFields(t *testing.T) {
+	db := newTestAdminDB(t)
+	defer db.Close()
+
+	jobRepo := repository.NewJobRepository(db)
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	collectionRepo := repository.NewCollectionRepository(db)
+	jobManager := worker.NewManager(jobRepo)
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Host: "localhost",
+			Port: 8090,
+			Env:  "testing",
+		},
+		AI: config.AIConfig{
+			APIKey: "test-key",
+		},
+		COS: config.COSConfig{
+			SecretKey: "cos-secret",
+		},
+		Admin: config.AdminConfig{
+			Username: "ops-admin",
+			Password: "ops-secret",
+		},
+	}
+
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+
+	overview, err := svc.GetTaskPlatformOverview(context.Background())
+	if err != nil {
+		t.Fatalf("Failed to get task platform overview: %v", err)
+	}
+
+	if overview.Health.Status != "healthy" {
+		t.Fatalf("Expected health status healthy, got %s", overview.Health.Status)
+	}
+	if overview.Config.ServerHost != "localhost" {
+		t.Fatalf("Expected server host localhost, got %s", overview.Config.ServerHost)
+	}
+	if !overview.Config.HasAIKey {
+		t.Fatalf("Expected has_ai_key=true")
+	}
+	if !overview.Config.HasCOSSecretKey {
+		t.Fatalf("Expected has_cos_secret_key=true")
+	}
+	if overview.Config.AdminUsername != "ops-admin" {
+		t.Fatalf("Expected admin username ops-admin, got %s", overview.Config.AdminUsername)
+	}
+
+	if overview.Library.TotalImages != 0 || overview.Library.TotalTags != 0 || overview.Library.TotalCollections != 0 {
+		t.Fatalf("Expected empty library stats in fresh DB, got %+v", overview.Library)
+	}
+}
+
+func insertTaskBatchForOverviewTest(t *testing.T, db *sql.DB, status string) int64 {
+	t.Helper()
+
+	result, err := db.Exec(
+		`INSERT INTO task_batches (source_type, trigger_key, summary_label, status, total_images, new_images, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"import_scan",
+		"overview-trigger",
+		"overview batch",
+		status,
+		6,
+		6,
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("Failed to insert task batch: %v", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("Failed to fetch task batch id: %v", err)
+	}
+	return id
+}
+
+func insertImageForOverviewTest(t *testing.T, db *sql.DB, imageID int64, path, filename string) {
+	t.Helper()
+
+	_, err := db.Exec(
+		`INSERT INTO images (id, path, filename, source_root, thumbnail_small_url, thumbnail_large_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		imageID,
+		path,
+		filename,
+		"/test",
+		"thumb-small",
+		"thumb-large",
+		time.Now().UTC(),
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("Failed to insert image: %v", err)
+	}
+}
+
+func insertPlatformTaskForOverviewTest(t *testing.T, db *sql.DB, batchID, imageID int64, status string) {
+	t.Helper()
+
+	_, err := db.Exec(
+		`INSERT INTO platform_tasks (batch_id, image_id, task_type, source_type, status, dedupe_key, image_version_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		batchID,
+		imageID,
+		"ai_tag_generation",
+		"import_scan",
+		status,
+		"dedupe-"+status+"-"+time.Now().UTC().Format(time.RFC3339Nano),
+		"image-version-"+time.Now().UTC().Format(time.RFC3339Nano),
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("Failed to insert platform task: %v", err)
+	}
+}
+
 func strPtr(s string) *string {
 	return &s
 }
