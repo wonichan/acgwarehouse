@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 导入后任务平台化
-status: completed
-stopped_at: Completed 13-02-PLAN.md
-last_updated: "2026-03-27T15:56:38.935Z"
+status: in_progress
+stopped_at: Phase 13 complete, ready to plan Phase 14
+last_updated: "2026-03-27T16:45:00Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 12
+  total_plans: 15
   completed_plans: 12
   percent: 80
 ---
@@ -18,16 +18,16 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-24)
+See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
-**Current focus:** Phase 13 后台监控与队列控制
+**Current focus:** Phase 14 补跑恢复与运营收尾
 
 ## Current Position
 
 Phase: 14 of 14 (补跑恢复与运营收尾)
 Plan: Not started
-Status: Complete
+Status: Ready to plan
 Last activity: 2026-03-27
 
 Progress: [████████░░] 80% (12/15 plans complete)
@@ -46,7 +46,7 @@ Progress: [████████░░] 80% (12/15 plans complete)
 |-----------|--------|-------|--------|
 | v1.0 | 1-6 | 28 | Shipped |
 | v2.0 | 7-10 | 20 | Shipped |
-| v3.0 | 11-14 | 10/15 | In Progress |
+| v3.0 | 11-14 | 12/15 | In Progress |
 
 **Recent Trend:**
 
@@ -71,20 +71,11 @@ Progress: [████████░░] 80% (12/15 plans complete)
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- v3.0: 导入后任务统一纳入任务平台；AI 标签是首个重点任务类型
-- v3.0: 默认仅无 AI 标签图片自动入队；后台支持批量补入队
-- [Phase 11]: async_jobs 保持执行层角色，通过 platform_task_id 关联平台语义
-- [Phase 11]: 去重按 image_version_key + task_type 计算，避免未变更图片重复入队
-- [Phase 11]: 后台批次/任务读模型统一通过 TaskReadService 暴露
-- [Phase 12]: Use image_tags.source enum values ai/manual with manual default — Provides explicit AI/manual semantics for auto-queue eligibility and future filtering.
-- [Phase 12]: Eligibility query requires non-empty thumbnail_small_url and excludes source='ai' — Prevents scheduling non-thumbnail images and avoids re-queueing already AI-tagged images.
-- [Phase 12]: Nested AI auto scheduling settings under config.AI — The existing config structure already keeps operational AI settings inside the ai block, so adding the scheduler knobs there avoids a parallel top-level config shape.
-- [Phase 12]: Reused TaskPlatformService for AI auto enqueue — Using PlanBatch and QueueTask preserves the existing dedupe and lifecycle rules for automatically scheduled AI work.
-- [Phase 12]: Set AI tag source in TagGovernanceService — The worker delegates image tag persistence to governance, so the source flag must be assigned at that save boundary to guarantee correct stored semantics.
-- [Phase 12-import-task-auto-scheduling]: Keep the production field as *service.AITagAutoScheduler while lifecycle helpers own start/stop/reload behavior for testability.
-- [Phase 12-import-task-auto-scheduling]: Restart the scheduler when auto AI enablement, scan interval, or batch size changes so hot reload never uses stale config.
-- [Phase 12]: Exclude active ai_tag_generation platform tasks from scheduler eligibility so repeated scans drain backlog correctly.
-- [Phase 12]: Prefer SQLite-backed scheduler integration tests to verify platform_tasks and async_jobs writes through TaskPlatformService.
+- [Phase 13]: 后台主入口切换为“批次在上、任务明细在下”的 batch-first 监控台。
+- [Phase 13]: 顶部监控改用独立 task-platform overview 契约，直接暴露 queue / batches / tasks 运行态。
+- [Phase 13]: pause/resume 仅保留全局队列语义；cancel 以批次级为主入口，task 级为补充。
+- [Phase 13]: clear queue 只影响 pending/queued；running 任务必须保持不受影响。
+- [Phase 13]: failed retry 创建新批次，而不是把旧失败任务重置为 ready。
 
 ### Pending Todos
 
@@ -96,6 +87,6 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-26T16:51:25.779Z
-Stopped at: Completed 13-02-PLAN.md
+Last session: 2026-03-27T16:45:00Z
+Stopped at: Phase 13 complete, ready to plan Phase 14
 Resume file: None
