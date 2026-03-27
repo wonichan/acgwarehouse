@@ -6,6 +6,7 @@ const (
 	TaskBatchSourceImportScan   = "import_scan"
 	TaskBatchSourceManualSingle = "manual_single"
 	TaskBatchSourceManualBatch  = "manual_batch"
+	TaskBatchSourceRetry        = "retry"
 )
 
 const (

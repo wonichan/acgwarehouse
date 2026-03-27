@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
@@ -101,6 +102,12 @@ type TaskPlatformOverview struct {
 	Queue   QueueOverview    `json:"queue"`
 	Batches map[string]int64 `json:"batches"`
 	Tasks   map[string]int64 `json:"tasks"`
+}
+
+type RetryBatchResult struct {
+	Batch        *domain.TaskBatch
+	CreatedTasks []domain.PlatformTask
+	RetryCount   int
 }
 
 // NewAdminService creates a new AdminService.
@@ -371,21 +378,169 @@ func (s *AdminService) TriggerScan(ctx context.Context) (int64, error) {
 // RetryFailedJobs resets all failed jobs to ready status for reprocessing.
 // Returns the number of jobs retried.
 func (s *AdminService) RetryFailedJobs(ctx context.Context) (int, error) {
-	failedJobs, err := s.jobRepo.FindFailed()
+	if s.taskReadSvc == nil {
+		return 0, fmt.Errorf("task retry service not configured")
+	}
+	batches, err := s.taskReadSvc.ListBatches(ctx, TaskBatchReadFilter{Status: domain.TaskBatchStatusFailed, Limit: 200})
 	if err != nil {
 		return 0, err
 	}
-
 	count := 0
-	for _, job := range failedJobs {
-		// Reset status to ready and clear error
-		if err := s.jobRepo.UpdateStatus(job.ID, "ready", nil); err != nil {
+	for _, batch := range batches {
+		result, err := s.RetryFailedBatchTasks(ctx, batch.ID)
+		if err != nil {
 			continue
 		}
-		count++
+		count += result.RetryCount
+	}
+	return count, nil
+}
+
+func (s *AdminService) RetryFailedBatchTasks(ctx context.Context, batchID int64) (*RetryBatchResult, error) {
+	if batchID <= 0 {
+		return nil, fmt.Errorf("invalid batch_id")
+	}
+	if s.taskBatchRepo == nil || s.taskRepo == nil {
+		return nil, fmt.Errorf("task control repositories not configured")
+	}
+	originalBatch, err := s.taskBatchRepo.FindByID(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+	if originalBatch == nil {
+		return nil, fmt.Errorf("batch not found")
+	}
+	tasks, err := s.taskRepo.List(ctx, repository.PlatformTaskListFilter{BatchID: &batchID, Limit: 1000})
+	if err != nil {
+		return nil, err
+	}
+	return s.retryFailedPlatformTasks(ctx, originalBatch, tasks)
+}
+
+func (s *AdminService) RetryFailedTask(ctx context.Context, taskID int64) (*RetryBatchResult, error) {
+	if taskID <= 0 {
+		return nil, fmt.Errorf("invalid task_id")
+	}
+	if s.taskBatchRepo == nil || s.taskRepo == nil {
+		return nil, fmt.Errorf("task control repositories not configured")
+	}
+	task, err := s.taskRepo.FindByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, fmt.Errorf("task not found")
+	}
+	if task.Status != domain.PlatformTaskStatusFailed {
+		return nil, fmt.Errorf("only failed tasks can be retried")
+	}
+	originalBatch, err := s.taskBatchRepo.FindByID(ctx, task.BatchID)
+	if err != nil {
+		return nil, err
+	}
+	if originalBatch == nil {
+		return nil, fmt.Errorf("batch not found")
+	}
+	return s.retryFailedPlatformTasks(ctx, originalBatch, []domain.PlatformTask{*task})
+}
+
+func (s *AdminService) retryFailedPlatformTasks(ctx context.Context, originalBatch *domain.TaskBatch, tasks []domain.PlatformTask) (*RetryBatchResult, error) {
+	failedTasks := make([]domain.PlatformTask, 0, len(tasks))
+	for _, task := range tasks {
+		if task.Status == domain.PlatformTaskStatusFailed {
+			failedTasks = append(failedTasks, task)
+		}
+	}
+	if len(failedTasks) == 0 {
+		return nil, fmt.Errorf("no failed tasks available for retry")
+	}
+	sort.Slice(failedTasks, func(i, j int) bool { return failedTasks[i].ID < failedTasks[j].ID })
+
+	platformSvc := s.newTaskPlatformService()
+	if platformSvc == nil {
+		return nil, fmt.Errorf("task platform service not configured")
 	}
 
-	return count, nil
+	newBatch := &domain.TaskBatch{
+		SourceType:   domain.TaskBatchSourceRetry,
+		TriggerKey:   fmt.Sprintf("retry-batch-%d", originalBatch.ID),
+		SummaryLabel: fmt.Sprintf("retry failed tasks for batch #%d", originalBatch.ID),
+		Status:       domain.TaskBatchStatusPending,
+		TotalImages:  int64(len(failedTasks)),
+		CreatedAt:    time.Now(),
+	}
+	if err := s.taskBatchRepo.Create(ctx, newBatch); err != nil {
+		return nil, err
+	}
+	if sources, err := s.taskBatchRepo.ListSources(ctx, originalBatch.ID); err == nil {
+		seen := make(map[string]struct{}, len(sources))
+		for _, source := range sources {
+			if _, ok := seen[source.SourceRoot]; ok {
+				continue
+			}
+			seen[source.SourceRoot] = struct{}{}
+			if err := s.taskBatchRepo.AddSource(ctx, &domain.TaskBatchSource{BatchID: newBatch.ID, SourceRoot: source.SourceRoot, SourceLabel: source.SourceLabel}); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	createdTasks := make([]domain.PlatformTask, 0, len(failedTasks))
+	for _, failedTask := range failedTasks {
+		payload, err := s.retryTaskPayload(failedTask)
+		if err != nil {
+			return nil, err
+		}
+		newTask := domain.PlatformTask{
+			BatchID:         newBatch.ID,
+			ImageID:         failedTask.ImageID,
+			TaskType:        failedTask.TaskType,
+			SourceType:      domain.TaskBatchSourceRetry,
+			Status:          domain.PlatformTaskStatusPending,
+			DedupeKey:       failedTask.DedupeKey,
+			ImageVersionKey: failedTask.ImageVersionKey,
+			CreatedAt:       time.Now(),
+		}
+		if err := s.taskRepo.Create(ctx, &newTask); err != nil {
+			return nil, err
+		}
+		job, err := platformSvc.QueueTask(ctx, &newTask, failedTask.TaskType, payload)
+		if err != nil {
+			return nil, err
+		}
+		_ = job
+		createdTasks = append(createdTasks, newTask)
+	}
+
+	refreshedBatch, err := s.taskBatchRepo.RefreshStatus(ctx, newBatch.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &RetryBatchResult{Batch: refreshedBatch, CreatedTasks: createdTasks, RetryCount: len(createdTasks)}, nil
+}
+
+func (s *AdminService) retryTaskPayload(task domain.PlatformTask) (string, error) {
+	if task.LatestAsyncJobID != nil {
+		job, err := s.jobRepo.FindByID(*task.LatestAsyncJobID)
+		if err == nil && job != nil && job.Payload != "" {
+			return job.Payload, nil
+		}
+	}
+	jobs, err := s.jobRepo.FindByPlatformTaskID(task.ID)
+	if err != nil {
+		return "", err
+	}
+	if len(jobs) == 0 {
+		return "", fmt.Errorf("retry payload not found")
+	}
+	return jobs[len(jobs)-1].Payload, nil
+}
+
+func (s *AdminService) newTaskPlatformService() *TaskPlatformService {
+	if s.taskBatchRepo == nil || s.taskRepo == nil || s.jobRepo == nil {
+		return nil
+	}
+	return NewTaskPlatformService(s.taskBatchRepo, s.taskRepo, s.jobRepo)
 }
 
 // PauseBackgroundTasks pauses the job manager from processing new jobs.

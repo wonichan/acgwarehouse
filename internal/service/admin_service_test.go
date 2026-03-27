@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,7 +228,7 @@ func TestAdminService_TriggerScan(t *testing.T) {
 	}
 }
 
-func TestAdminService_RetryFailedJobs(t *testing.T) {
+func TestAdminService_RetryFailedBatchTasks_CreatesNewBatchFromFailedTasks(t *testing.T) {
 	db := newTestAdminDB(t)
 	defer db.Close()
 
@@ -236,73 +237,241 @@ func TestAdminService_RetryFailedJobs(t *testing.T) {
 	tagRepo := repository.NewTagRepository(db)
 	collectionRepo := repository.NewCollectionRepository(db)
 	jobManager := worker.NewManager(jobRepo)
+	taskBatchRepo := repository.NewTaskBatchRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	taskPlatformSvc := service.NewTaskPlatformService(taskBatchRepo, taskRepo, jobRepo)
 
 	cfg := &config.Config{}
-	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager, taskPlatformSvc, taskBatchRepo, taskRepo)
 
-	// Create failed jobs
-	var failedJobIDs []int64
-	for i := 0; i < 3; i++ {
-		job := &domain.AsyncJob{
-			Type:      "test_job",
-			Status:    "failed",
-			Error:     strPtr("some error"),
-			CreatedAt: time.Now(),
-		}
-		_ = jobRepo.Save(job)
-		failedJobIDs = append(failedJobIDs, job.ID)
+	ctx := context.Background()
+	image := &domain.Image{Path: "/test/retry-batch.png", Filename: "retry-batch.png", SourceRoot: "/test", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if _, err := imageRepo.SaveImage(image); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
 	}
 
-	// Create a running job - should NOT be retried
-	runningJob := &domain.AsyncJob{
-		Type:      "test_job",
-		Status:    "running",
-		CreatedAt: time.Now(),
-	}
-	_ = jobRepo.Save(runningJob)
-
-	// Create a finished job - should NOT be retried
-	finishedJob := &domain.AsyncJob{
-		Type:      "test_job",
-		Status:    "finished",
-		CreatedAt: time.Now(),
-	}
-	_ = jobRepo.Save(finishedJob)
-
-	// Retry failed jobs
-	count, err := svc.RetryFailedJobs(context.Background())
+	plan, err := taskPlatformSvc.PlanBatch(ctx, service.TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "retry batch seed",
+		SourceRoots:  []string{"/test"},
+		TaskTypes:    []string{domain.PlatformTaskTypeThumbnailGenerate, domain.PlatformTaskTypeAITagGeneration},
+		Items: []service.TaskPlatformPlanItem{{
+			ImageID:          image.ID,
+			ImageVersionKey:  service.BuildImageVersionKey(image),
+			SourceDescriptor: image.Path,
+		}},
+	})
 	if err != nil {
-		t.Fatalf("Failed to retry failed jobs: %v", err)
+		t.Fatalf("PlanBatch() error = %v", err)
+	}
+	if len(plan.CreatedTasks) != 2 {
+		t.Fatalf("len(CreatedTasks) = %d, want 2", len(plan.CreatedTasks))
 	}
 
-	if count != 3 {
-		t.Errorf("Expected 3 jobs retried, got %d", count)
-	}
-
-	// Verify failed jobs are now ready
-	for _, id := range failedJobIDs {
-		job, err := jobRepo.FindByID(id)
+	for i := range plan.CreatedTasks {
+		payload := `{"image_id":1,"path":"/test/retry-batch.png","filename":"retry-batch.png"}`
+		job, err := taskPlatformSvc.QueueTask(ctx, &plan.CreatedTasks[i], plan.CreatedTasks[i].TaskType, payload)
 		if err != nil {
-			t.Fatalf("Failed to find job %d: %v", id, err)
+			t.Fatalf("QueueTask(%d) error = %v", i, err)
 		}
-		if job.Status != "ready" {
-			t.Errorf("Expected job %d status 'ready', got '%s'", id, job.Status)
-		}
-		if job.Error != nil {
-			t.Errorf("Expected job %d error to be cleared, got '%s'", id, *job.Error)
+		if err := jobRepo.UpdateStatus(job.ID, "failed", strPtr("queue failed")); err != nil {
+			t.Fatalf("UpdateStatus(failed job) error = %v", err)
 		}
 	}
 
-	// Verify running job unchanged
-	running, _ := jobRepo.FindByID(runningJob.ID)
-	if running.Status != "running" {
-		t.Errorf("Running job should not be affected, status: '%s'", running.Status)
+	failedTask := plan.CreatedTasks[0]
+	failedTask.Status = domain.PlatformTaskStatusFailed
+	failedTask.ErrorSummary = strPtr("thumbnail failed")
+	failedFinished := time.Now()
+	failedTask.FinishedAt = &failedFinished
+	if err := taskRepo.Update(ctx, &failedTask); err != nil {
+		t.Fatalf("Update(failed task) error = %v", err)
 	}
 
-	// Verify finished job unchanged
-	finished, _ := jobRepo.FindByID(finishedJob.ID)
-	if finished.Status != "finished" {
-		t.Errorf("Finished job should not be affected, status: '%s'", finished.Status)
+	completedTask := plan.CreatedTasks[1]
+	completedTask.Status = domain.PlatformTaskStatusCompleted
+	completedFinished := time.Now()
+	completedTask.FinishedAt = &completedFinished
+	if err := taskRepo.Update(ctx, &completedTask); err != nil {
+		t.Fatalf("Update(completed task) error = %v", err)
+	}
+
+	result, err := svc.RetryFailedBatchTasks(ctx, plan.Batch.ID)
+	if err != nil {
+		t.Fatalf("RetryFailedBatchTasks() error = %v", err)
+	}
+
+	if result.Batch == nil {
+		t.Fatal("expected retry batch result")
+	}
+	if result.Batch.ID == plan.Batch.ID {
+		t.Fatalf("retry batch ID = %d, want new batch", result.Batch.ID)
+	}
+	if result.Batch.SourceType != domain.TaskBatchSourceRetry {
+		t.Fatalf("retry batch source type = %q, want %q", result.Batch.SourceType, domain.TaskBatchSourceRetry)
+	}
+	if len(result.CreatedTasks) != 1 {
+		t.Fatalf("len(CreatedTasks) = %d, want 1", len(result.CreatedTasks))
+	}
+	if result.CreatedTasks[0].Status != domain.PlatformTaskStatusQueued {
+		t.Fatalf("retry task status = %q, want %q", result.CreatedTasks[0].Status, domain.PlatformTaskStatusQueued)
+	}
+
+	refreshedBatch, err := taskBatchRepo.FindByID(ctx, result.Batch.ID)
+	if err != nil {
+		t.Fatalf("FindByID(retry batch) error = %v", err)
+	}
+	if refreshedBatch.Status != domain.TaskBatchStatusRunning && refreshedBatch.Status != domain.TaskBatchStatusPending {
+		t.Fatalf("retry batch status = %q, want pending or running", refreshedBatch.Status)
+	}
+
+	reloadedFailed, err := taskRepo.FindByID(ctx, failedTask.ID)
+	if err != nil {
+		t.Fatalf("FindByID(failed task) error = %v", err)
+	}
+	if reloadedFailed.Status != domain.PlatformTaskStatusFailed {
+		t.Fatalf("failed task status = %q, want %q", reloadedFailed.Status, domain.PlatformTaskStatusFailed)
+	}
+
+	reloadedCompleted, err := taskRepo.FindByID(ctx, completedTask.ID)
+	if err != nil {
+		t.Fatalf("FindByID(completed task) error = %v", err)
+	}
+	if reloadedCompleted.Status != domain.PlatformTaskStatusCompleted {
+		t.Fatalf("completed task status = %q, want %q", reloadedCompleted.Status, domain.PlatformTaskStatusCompleted)
+	}
+}
+
+func TestAdminService_RetryFailedTask_RejectsNonFailedTasks(t *testing.T) {
+	db := newTestAdminDB(t)
+	defer db.Close()
+
+	jobRepo := repository.NewJobRepository(db)
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	collectionRepo := repository.NewCollectionRepository(db)
+	jobManager := worker.NewManager(jobRepo)
+	taskBatchRepo := repository.NewTaskBatchRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	taskPlatformSvc := service.NewTaskPlatformService(taskBatchRepo, taskRepo, jobRepo)
+
+	svc := service.NewAdminService(&config.Config{}, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager, taskPlatformSvc, taskBatchRepo, taskRepo)
+
+	ctx := context.Background()
+	image := &domain.Image{Path: "/test/retry-task.png", Filename: "retry-task.png", SourceRoot: "/test", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if _, err := imageRepo.SaveImage(image); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
+	}
+	plan, err := taskPlatformSvc.PlanBatch(ctx, service.TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "retry task seed",
+		TaskTypes:    []string{domain.PlatformTaskTypeThumbnailGenerate},
+		Items: []service.TaskPlatformPlanItem{{
+			ImageID:          image.ID,
+			ImageVersionKey:  service.BuildImageVersionKey(image),
+			SourceDescriptor: image.Path,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PlanBatch() error = %v", err)
+	}
+	payload := `{"image_id":1,"path":"/test/retry-task.png","filename":"retry-task.png"}`
+	job, err := taskPlatformSvc.QueueTask(ctx, &plan.CreatedTasks[0], plan.CreatedTasks[0].TaskType, payload)
+	if err != nil {
+		t.Fatalf("QueueTask() error = %v", err)
+	}
+	if err := jobRepo.UpdateStatus(job.ID, "failed", strPtr("queue failed")); err != nil {
+		t.Fatalf("UpdateStatus(failed job) error = %v", err)
+	}
+	failedTask := plan.CreatedTasks[0]
+	failedTask.Status = domain.PlatformTaskStatusCompleted
+	finished := time.Now()
+	failedTask.FinishedAt = &finished
+	if err := taskRepo.Update(ctx, &failedTask); err != nil {
+		t.Fatalf("Update(completed task) error = %v", err)
+	}
+
+	_, err = svc.RetryFailedTask(ctx, failedTask.ID)
+	if err == nil {
+		t.Fatal("expected error retrying non-failed task")
+	}
+	if !strings.Contains(err.Error(), "failed") {
+		t.Fatalf("expected failed-only retry error, got %v", err)
+	}
+}
+
+func TestAdminService_RetryFailedTask_CreatesNewBatchForSingleFailedTask(t *testing.T) {
+	db := newTestAdminDB(t)
+	defer db.Close()
+
+	jobRepo := repository.NewJobRepository(db)
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	collectionRepo := repository.NewCollectionRepository(db)
+	jobManager := worker.NewManager(jobRepo)
+	taskBatchRepo := repository.NewTaskBatchRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	taskPlatformSvc := service.NewTaskPlatformService(taskBatchRepo, taskRepo, jobRepo)
+
+	svc := service.NewAdminService(&config.Config{}, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager, taskPlatformSvc, taskBatchRepo, taskRepo)
+
+	ctx := context.Background()
+	image := &domain.Image{Path: "/test/retry-task-failed.png", Filename: "retry-task-failed.png", SourceRoot: "/test", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if _, err := imageRepo.SaveImage(image); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
+	}
+	plan, err := taskPlatformSvc.PlanBatch(ctx, service.TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "retry failed task seed",
+		TaskTypes:    []string{domain.PlatformTaskTypeThumbnailGenerate},
+		Items: []service.TaskPlatformPlanItem{{
+			ImageID:          image.ID,
+			ImageVersionKey:  service.BuildImageVersionKey(image),
+			SourceDescriptor: image.Path,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PlanBatch() error = %v", err)
+	}
+	payload := `{"image_id":1,"path":"/test/retry-task-failed.png","filename":"retry-task-failed.png"}`
+	job, err := taskPlatformSvc.QueueTask(ctx, &plan.CreatedTasks[0], plan.CreatedTasks[0].TaskType, payload)
+	if err != nil {
+		t.Fatalf("QueueTask() error = %v", err)
+	}
+	if err := jobRepo.UpdateStatus(job.ID, "failed", strPtr("queue failed")); err != nil {
+		t.Fatalf("UpdateStatus(failed job) error = %v", err)
+	}
+	failedTask := plan.CreatedTasks[0]
+	failedTask.Status = domain.PlatformTaskStatusFailed
+	failedError := "thumbnail failed"
+	failedTask.ErrorSummary = &failedError
+	finished := time.Now()
+	failedTask.FinishedAt = &finished
+	if err := taskRepo.Update(ctx, &failedTask); err != nil {
+		t.Fatalf("Update(failed task) error = %v", err)
+	}
+
+	result, err := svc.RetryFailedTask(ctx, failedTask.ID)
+	if err != nil {
+		t.Fatalf("RetryFailedTask() error = %v", err)
+	}
+	if result.Batch == nil {
+		t.Fatal("expected retry batch result")
+	}
+	if result.Batch.ID == plan.Batch.ID {
+		t.Fatalf("retry batch ID = %d, want a new batch", result.Batch.ID)
+	}
+	if len(result.CreatedTasks) != 1 {
+		t.Fatalf("len(CreatedTasks) = %d, want 1", len(result.CreatedTasks))
+	}
+	if result.CreatedTasks[0].TaskType != domain.PlatformTaskTypeThumbnailGenerate {
+		t.Fatalf("retry task type = %q, want %q", result.CreatedTasks[0].TaskType, domain.PlatformTaskTypeThumbnailGenerate)
+	}
+	if result.CreatedTasks[0].Status != domain.PlatformTaskStatusQueued {
+		t.Fatalf("retry task status = %q, want %q", result.CreatedTasks[0].Status, domain.PlatformTaskStatusQueued)
+	}
+	if result.Batch.SourceType != domain.TaskBatchSourceRetry {
+		t.Fatalf("retry batch source type = %q, want %q", result.Batch.SourceType, domain.TaskBatchSourceRetry)
 	}
 }
 
