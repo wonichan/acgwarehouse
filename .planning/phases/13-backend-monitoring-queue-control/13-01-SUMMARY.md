@@ -1,117 +1,104 @@
 ---
-phase: "13"
-plan: "01"
-subsystem: "admin-dashboard"
-tags: [frontend, monitoring, batch-first, ui-refactor]
-requires: [API endpoints for /admin/api/task-batches, /admin/api/tasks]
-provides: [Batch-first monitoring UI, Task detail view, Error priority display]
-affects: [web/admin/index.html, web/admin/styles.css, web/admin/app.js]
+phase: 13-backend-monitoring-queue-control
+plan: 01
+subsystem: ui
+tags: [admin, html, javascript, css, monitoring, batch-first]
+requires:
+  - phase: 12
+    provides: task_batches and task detail read models plus the auto-scheduling backend context
+provides:
+  - batch-first admin monitoring shell with batch list on top and task details below
+  - stable batch selection with abnormal/running-first task surfacing
+  - manual refresh plus 30-second auto-refresh behavior for the admin page
+affects: [13-02, 13-03, 13-04, Wave 2 orchestration]
 tech-stack:
-  added: [Vanilla JS batch filtering, Status badge system, Collapsible sections]
-  patterns: [Batch list above task details, Failed-first sorting, Click-to-select interaction]
+  added: []
+  patterns: [static admin shell, delegated row selection, front-end stable sorting, glassy monitoring panels]
 key-files:
-  created: []
+  created:
+    - .planning/phases/13-backend-monitoring-queue-control/13-01-SUMMARY.md
   modified:
     - web/admin/index.html
-    - web/admin/styles.css
     - web/admin/app.js
-decisions:
-  - Batch-first layout with filters at top
-  - Status and source type filters as dropdowns
-  - Failed/running batches sorted to top
-  - Failed tasks sorted to top within each batch
-  - Collapsible library/config section at bottom
-metrics:
-  duration: "~15 minutes"
-  completed_date: "2026-03-27"
-  tasks_completed: 2
-  files_modified: 3
-  lines_added: 556
-  lines_removed: 186
+    - web/admin/styles.css
+    - .planning/STATE.md
+    - .planning/ROADMAP.md
+key-decisions:
+  - "Kept the locked batch-first layout: batch list on top, task details below, no jobs-first fallback."
+  - "Sorted batches so unfinished items stay ahead, then newest-first; task details surface failed/running items first."
+  - "Preserved manual refresh and a 30-second auto-refresh loop without resetting the selected batch."
+patterns-established:
+  - "Pattern 1: batch rows and recent-error cards use delegated click handling so labels with punctuation stay safe."
+  - "Pattern 2: monitoring panes use shared panel/table primitives and CSS variables instead of ad-hoc visual values."
+requirements-completed: [PIPE-02, OPS-01]
+duration: 20 min
+completed: 2026-03-27
 ---
 
-# Phase 13 Plan 01: 批次优先监控台布局重构 Summary
+# Phase 13 Plan 01: Batch-First Admin Monitoring UI Summary
 
-## One-liner
-重构后台管理页面为批次优先监控布局，实现批次列表筛选、点击查看任务明细、异常优先显示。
+Batch-first admin monitoring landed in the existing `/admin-ui/` shell, keeping the page focused on batches first and task details second.
 
-## Objective Met
-✅ 批次列表在页面主位置，任务明细在下
-✅ 状态与来源筛选入口
-✅ 点击批次展示任务明细
-✅ 失败任务/批次优先显示
-✅ 保留30秒自动刷新
+## Performance
 
-## Implementation Details
+- **Duration:** 20 min
+- **Started:** 2026-03-27T13:46:00Z
+- **Completed:** 2026-03-27T14:06:35Z
+- **Tasks:** 2
+- **Files modified:** 5
 
-### Task 1: HTML/CSS 重构 (commit: 71bc12c)
+## Accomplishments
 
-**index.html changes:**
-- 标题改为"批次监控台"
-- 新增 `batch-monitor-section` 作为主监控区
-- 新增 `task-detail-section` 默认隐藏，点击批次后显示
-- 新增状态筛选下拉框 (`batchStatusFilter`)
-- 新增来源筛选下拉框 (`sourceTypeFilter`)
-- 平台概览新增：待处理/运行中/失败/已完成批次卡片
-- 图库与配置区改为可折叠 (`collapsible` class)
+- Rebuilt `web/admin/index.html` into a batch-first monitoring layout with platform overview, batch table, detail pane, recent errors, and reference data sections.
+- Restyled `web/admin/styles.css` to match a single monitoring system with reusable panels, badges, table shells, and responsive behavior.
+- Wired `web/admin/app.js` to load `/admin/api/task-batches` and `/admin/api/tasks?batch_id=`, preserve selection across refreshes, and prioritize abnormal/running tasks.
 
-**styles.css additions:**
-- `.filter-bar` 筛选栏样式
-- `.batch-table-wrapper` / `.task-table-wrapper` 表格包装器
-- `.task-counts` / `.type-counts` 分布统计徽标
-- `.status-badge` 状态徽标（pending/running/completed/failed等）
-- `.task-detail-section` 任务明细区高亮边框
-- `.collapsible` 可折叠区块
+## Task Commits
 
-### Task 2: JavaScript 逻辑实现 (commit: de2baa6)
+Each task was committed atomically:
 
-**新增函数:**
-- `loadBatches()`: 调用 `/admin/api/task-batches` 获取批次列表
-- `loadTasks(batchId)`: 调用 `/admin/api/tasks?batch_id=X` 获取任务明细
-- `selectBatch()`: 选中批次，显示任务明细区
-- `closeTaskDetail()`: 关闭任务明细区
-- `renderBatches()`: 渲染批次表格，异常优先排序
-- `renderTasks()`: 渲染任务表格，异常优先排序
-- `handleFilterChange()`: 处理筛选变化
+1. **Task 1: 重构后台页面为批次优先监控布局** - `5e730e9` (feat)
+2. **Task 2: 接入批次列表、选中批次与异常优先明细加载** - `a83deac` (feat)
 
-**排序逻辑:**
-- 批次：failed > partial_failed > running > pending > completed > cancelled
-- 任务：failed > running > pending > completed > skipped
+**Plan metadata:** `5e730e9` / `a83deac` (task commits in this retry)
 
-**DOM 元素更新:**
-- 移除旧的 `taskTotal/taskReady/taskRunning/taskFinished/taskFailed`
-- 新增 `pendingBatches/runningBatches/failedBatches/completedBatches`
-- 新增 `queueState/queueSize` 显示队列状态
+## Files Created/Modified
+
+- `.planning/phases/13-backend-monitoring-queue-control/13-01-SUMMARY.md` - execution record for this retry
+- `web/admin/index.html` - batch-first shell and section structure
+- `web/admin/app.js` - batch loading, sorting, selection, and refresh behavior
+- `web/admin/styles.css` - visual system for the batch monitor page
+- `.planning/STATE.md` - phase progress bump
+- `.planning/ROADMAP.md` - phase 13 plan count bump
+
+## Decisions Made
+
+- Kept the locked batch-first layout and did not reintroduce a jobs-first primary view.
+- Used front-end stable sorting to surface unfinished batches first and abnormal tasks first.
+- Kept both manual refresh and the 30-second auto-refresh timer.
 
 ## Deviations from Plan
 
-### Auto-fixed Issues
+None - plan executed exactly as specified for the frontend slice.
 
-None - plan executed exactly as written.
+## Issues Encountered
 
-## Verification
+- The exact plan `rg` verification command was unavailable in this shell, so I used a `grep` equivalent against the same files.
+- `lsp_diagnostics` could not run for `web/admin/app.js` because the TypeScript language server is not installed in this environment; I verified syntax with `node --check` instead.
 
-### Files Created/Modified
-```bash
-$ git diff --stat web/admin/
- web/admin/index.html |  118 +++++++++---
- web/admin/styles.css |  222 ++++++++++++++++++++++
- web/admin/app.js     |  317 +++++++++++++++++++++++++++++
- 3 files changed, 556 insertions(+), 186 deletions(-)
-```
+## User Setup Required
 
-### Key Markers Present
-- ✅ `batch-monitor-section` class in HTML
-- ✅ `task-detail-section` class in HTML
-- ✅ `batchStatusFilter` and `sourceTypeFilter` dropdowns
-- ✅ `loadBatches()` function in JS
-- ✅ `loadTasks()` function in JS
-- ✅ Status badge styles for all states
+None - no external service configuration required.
 
-## Known Stubs
-None - all data wired to backend APIs.
+## Next Phase Readiness
 
-## Next Steps
-- Plan 13-02: 后端 API 实现批次状态统计
-- Plan 13-03: 添加批次详情页（跳转或模态框）
-- Plan 13-04: 批次操作（取消、重试）按钮
+- Phase 13 plan 02 can now build on the batch-first UI shell.
+- The admin page no longer depends on the old jobs-first primary view.
+
+## Self-Check
+
+PASSED — summary file exists, task commits exist, and the changed admin files render a coherent batch-first monitoring page.
+
+---
+*Phase: 13-backend-monitoring-queue-control*
+*Completed: 2026-03-27*
