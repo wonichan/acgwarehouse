@@ -3,138 +3,178 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ACGWarehouse 管理后台</title>
+    <title>ACGWarehouse 管理后台 - 批次监控台</title>
     <link rel="stylesheet" href="/admin-ui/styles.css">
 </head>
 <body>
     <div class="dashboard">
         <header class="dashboard-header">
-            <h1>ACGWarehouse 管理后台</h1>
+            <h1>ACGWarehouse 批次监控台</h1>
             <div class="header-actions">
+                <span class="auto-refresh-indicator" id="autoRefreshIndicator">自动刷新: 30秒</span>
                 <button id="refreshBtn" class="btn btn-secondary">刷新</button>
                 <button id="logoutBtn" class="btn btn-outline">退出登录</button>
             </div>
         </header>
 
-        <!-- Health & Status Section -->
+        <!-- Platform Overview Section -->
         <section class="section">
-            <h2>服务状态</h2>
+            <h2>平台概览</h2>
             <div class="status-cards">
                 <div class="status-card" id="healthCard">
                     <div class="card-label">健康状态</div>
                     <div class="card-value" id="healthStatus">加载中...</div>
                     <div class="card-subtitle" id="healthTimestamp">-</div>
                 </div>
-                <div class="status-card" id="configCard">
-                    <div class="card-label">运行环境</div>
-                    <div class="card-value" id="envStatus">加载中...</div>
-                    <div class="card-subtitle" id="serverInfo">-</div>
+                <div class="status-card" id="queueStateCard">
+                    <div class="card-label">队列状态</div>
+                    <div class="card-value" id="queueState">加载中...</div>
+                    <div class="card-subtitle" id="queueSize">-</div>
                 </div>
-            </div>
-        </section>
-
-        <!-- Task Queue Section -->
-        <section class="section">
-            <h2>任务队列</h2>
-            <div class="status-cards">
-                <div class="status-card">
-                    <div class="card-label">总计</div>
-                    <div class="card-value" id="taskTotal">-</div>
-                </div>
-                <div class="status-card status-ready">
-                    <div class="card-label">待处理</div>
-                    <div class="card-value" id="taskReady">-</div>
+                <div class="status-card status-pending">
+                    <div class="card-label">待处理批次</div>
+                    <div class="card-value" id="pendingBatches">-</div>
                 </div>
                 <div class="status-card status-running">
-                    <div class="card-label">运行中</div>
-                    <div class="card-value" id="taskRunning">-</div>
-                </div>
-                <div class="status-card status-finished">
-                    <div class="card-label">已完成</div>
-                    <div class="card-value" id="taskFinished">-</div>
+                    <div class="card-label">运行中批次</div>
+                    <div class="card-value" id="runningBatches">-</div>
                 </div>
                 <div class="status-card status-failed">
-                    <div class="card-label">失败</div>
-                    <div class="card-value" id="taskFailed">-</div>
+                    <div class="card-label">失败批次</div>
+                    <div class="card-value" id="failedBatches">-</div>
+                </div>
+                <div class="status-card status-finished">
+                    <div class="card-label">已完成批次</div>
+                    <div class="card-value" id="completedBatches">-</div>
                 </div>
             </div>
             <div class="queue-controls">
                 <button id="pauseBtn" class="btn btn-warning">暂停队列</button>
                 <button id="resumeBtn" class="btn btn-success">恢复队列</button>
-                <button id="retryBtn" class="btn btn-danger">重试失败任务</button>
             </div>
         </section>
 
-        <!-- Library Stats Section -->
-        <section class="section">
-            <h2>图库规模</h2>
-            <div class="status-cards">
-                <div class="status-card">
-                    <div class="card-label">图片总数</div>
-                    <div class="card-value" id="totalImages">-</div>
-                </div>
-                <div class="status-card">
-                    <div class="card-label">标签总数</div>
-                    <div class="card-value" id="totalTags">-</div>
-                </div>
-                <div class="status-card">
-                    <div class="card-label">收藏夹</div>
-                    <div class="card-value" id="totalCollections">-</div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Config Info Section -->
-        <section class="section">
-            <h2>系统配置</h2>
-            <div class="config-grid">
-                <div class="config-item">
-                    <span class="config-label">AI API 密钥:</span>
-                    <span class="config-value" id="hasAIKey">-</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-label">COS 存储:</span>
-                    <span class="config-value" id="hasCOSKey">-</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-label">管理员账号:</span>
-                    <span class="config-value" id="adminUsername">-</span>
+        <!-- Batch Monitor Section -->
+        <section class="section batch-monitor-section">
+            <div class="section-header">
+                <h2>批次监控</h2>
+                <div class="filter-bar">
+                    <label>
+                        <span>状态:</span>
+                        <select id="batchStatusFilter">
+                            <option value="">全部状态</option>
+                            <option value="pending">待处理</option>
+                            <option value="running">运行中</option>
+                            <option value="completed">已完成</option>
+                            <option value="failed">失败</option>
+                            <option value="partial_failed">部分失败</option>
+                            <option value="cancelled">已取消</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>来源:</span>
+                        <select id="sourceTypeFilter">
+                            <option value="">全部来源</option>
+                            <option value="import">导入</option>
+                            <option value="ai_tag">AI标签</option>
+                            <option value="retry">重试</option>
+                        </select>
+                    </label>
                 </div>
             </div>
-            <div class="scan-control">
-                <button id="scanBtn" class="btn btn-primary">触发扫描</button>
-            </div>
-        </section>
-
-        <!-- Recent Jobs Section -->
-        <section class="section">
-            <h2>最近任务</h2>
-            <div class="jobs-table-wrapper">
-                <table class="jobs-table">
+            <div class="batch-table-wrapper">
+                <table class="data-table batch-table">
                     <thead>
                         <tr>
-                            <th>任务ID</th>
-                            <th>类型</th>
+                            <th>批次ID</th>
+                            <th>来源</th>
+                            <th>摘要</th>
                             <th>状态</th>
-                            <th>进度</th>
-                            <th>创建时间</th>
-                            <th>错误信息</th>
+                            <th>任务分布</th>
+                            <th>类型分布</th>
+                            <th>失败摘要</th>
                         </tr>
                     </thead>
-                    <tbody id="jobsTableBody">
+                    <tbody id="batchTableBody">
                         <tr>
-                            <td colspan="6" class="loading-cell">加载中...</td>
+                            <td colspan="7" class="loading-cell">加载中...</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
         </section>
 
-        <!-- Error Log Section -->
+        <!-- Task Detail Section -->
+        <section class="section task-detail-section" id="taskDetailSection" style="display: none;">
+            <div class="section-header">
+                <h2>任务明细 <span id="selectedBatchLabel"></span></h2>
+                <button id="closeTaskDetailBtn" class="btn btn-secondary btn-sm">关闭</button>
+            </div>
+            <div class="task-table-wrapper">
+                <table class="data-table task-table">
+                    <thead>
+                        <tr>
+                            <th>任务ID</th>
+                            <th>文件名</th>
+                            <th>类型</th>
+                            <th>状态</th>
+                            <th>错误摘要</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody">
+                        <tr>
+                            <td colspan="5" class="loading-cell">选择批次查看任务明细</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Recent Errors Section -->
         <section class="section">
             <h2>最近错误</h2>
             <div class="error-list" id="errorList">
                 <div class="empty-state">暂无错误</div>
+            </div>
+        </section>
+
+        <!-- Library Stats & Config Section -->
+        <section class="section collapsible">
+            <div class="section-toggle" onclick="this.parentElement.classList.toggle('collapsed')">
+                <h2>图库与配置 <span class="toggle-icon">▼</span></h2>
+            </div>
+            <div class="section-content">
+                <div class="status-cards">
+                    <div class="status-card">
+                        <div class="card-label">图片总数</div>
+                        <div class="card-value" id="totalImages">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="card-label">标签总数</div>
+                        <div class="card-value" id="totalTags">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="card-label">收藏夹</div>
+                        <div class="card-value" id="totalCollections">-</div>
+                    </div>
+                </div>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <span class="config-label">AI API 密钥:</span>
+                        <span class="config-value" id="hasAIKey">-</span>
+                    </div>
+                    <div class="config-item">
+                        <span class="config-label">COS 存储:</span>
+                        <span class="config-value" id="hasCOSKey">-</span>
+                    </div>
+                    <div class="config-item">
+                        <span class="config-label">管理员账号:</span>
+                        <span class="config-value" id="adminUsername">-</span>
+                    </div>
+                </div>
+                <div class="scan-control">
+                    <button id="scanBtn" class="btn btn-primary">触发扫描</button>
+                </div>
             </div>
         </section>
     </div>
