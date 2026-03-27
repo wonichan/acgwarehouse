@@ -47,7 +47,8 @@ func main() {
 	metadataSvc := service.NewMetadataService()
 	imageRepo := repository.NewImageRepository(db)
 	jobRepo := repository.NewJobRepository(db)
-	scannerSvc := service.NewScannerService(metadataSvc, imageRepo, jobRepo, *workers)
+	taskPlatformSvc := service.NewTaskPlatformService(repository.NewTaskBatchRepository(db), repository.NewPlatformTaskRepository(db), jobRepo)
+	scannerSvc := service.NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, *workers)
 
 	result, err := scannerSvc.Scan(nil, paths)
 	if err != nil {

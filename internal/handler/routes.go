@@ -65,7 +65,10 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 			admin.POST("/actions/scan", adminHandler.TriggerScan)
 			admin.POST("/actions/jobs/pause", adminHandler.PauseBackgroundTasks)
 			admin.POST("/actions/jobs/resume", adminHandler.ResumeBackgroundTasks)
+			admin.POST("/actions/jobs/clear-queue", adminHandler.ClearTaskQueue)
 			admin.POST("/actions/jobs/retry-failed", adminHandler.RetryFailedJobs)
+			admin.POST("/actions/task-batches/:batch_id/cancel", adminHandler.CancelTaskBatch)
+			admin.POST("/actions/tasks/:task_id/cancel", adminHandler.CancelTask)
 			// FTS rebuild endpoint for fixing search index
 			if deps != nil && deps.DB != nil {
 				admin.POST("/actions/search/rebuild-fts", func(c *gin.Context) {

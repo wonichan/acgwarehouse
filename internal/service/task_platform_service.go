@@ -194,6 +194,9 @@ func (s *TaskPlatformService) updateTaskStatusForJob(ctx context.Context, jobID 
 	if err != nil {
 		return err
 	}
+	if task.Status == domain.PlatformTaskStatusCancelled {
+		return nil
+	}
 	now := time.Now()
 	switch status {
 	case domain.PlatformTaskStatusRunning:

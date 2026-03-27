@@ -63,6 +63,7 @@
                 <div class="queue-controls">
                     <button id="pauseBtn" class="btn btn-warning">暂停队列</button>
                     <button id="resumeBtn" class="btn btn-success">恢复队列</button>
+                    <button id="clearQueueBtn" class="btn btn-danger">清空待执行队列</button>
                 </div>
             </section>
 
@@ -139,11 +140,12 @@
                                 <th>类型</th>
                                 <th>状态</th>
                                 <th>错误摘要</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="taskTableBody">
                             <tr>
-                                <td colspan="5" class="loading-cell">选择批次查看任务明细</td>
+                                <td colspan="6" class="loading-cell">选择批次查看任务明细</td>
                             </tr>
                         </tbody>
                     </table>

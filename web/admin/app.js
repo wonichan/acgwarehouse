@@ -59,6 +59,7 @@ const elements = {
     refreshBtn: document.getElementById('refreshBtn'),
     pauseBtn: document.getElementById('pauseBtn'),
     resumeBtn: document.getElementById('resumeBtn'),
+    clearQueueBtn: document.getElementById('clearQueueBtn'),
     scanBtn: document.getElementById('scanBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
 };
@@ -130,6 +131,14 @@ function taskPriority(task) {
     };
 
     return priority[task?.status] ?? 8;
+}
+
+function getTaskLabel(task) {
+    return task?.image_filename || task?.image_path || `任务 #${task?.id || '-'}`;
+}
+
+function confirmDestructiveAction(scope, count, detail) {
+    return window.prompt(`${scope} 将影响 ${count} 项。${detail}\n\n请输入 YES 确认执行。`) === 'YES';
 }
 
 function getSelectedBatch() {
@@ -427,7 +436,7 @@ function renderTasks() {
     
     if (!tasksData.length) {
         elements.taskTableBody.innerHTML = `
-            <tr><td colspan="5" class="empty-cell">该批次暂无任务</td></tr>
+            <tr><td colspan="6" class="empty-cell">该批次暂无任务</td></tr>
         `;
         return;
     }
@@ -445,6 +454,7 @@ function renderTasks() {
             <td>${escapeHtml(task.task_type) || '-'}</td>
             <td><span class="status-badge status-${task.status || 'unknown'}">${formatStatus(task.status)}</span></td>
             <td class="error-cell">${task.error_summary ? escapeHtml(task.error_summary) : (task.skip_reason ? escapeHtml(task.skip_reason) : '-')}</td>
+            <td>${['pending', 'queued', 'running'].includes(task.status) ? `<button class="btn btn-danger btn-sm task-cancel-btn" data-task-id="${task.id}" data-task-label="${escapeHtml(getTaskLabel(task))}">取消</button>` : '-'}</td>
         </tr>
     `).join('');
     
@@ -504,6 +514,34 @@ async function triggerAction(endpoint, successMessage, errorMessage) {
     }
 }
 
+async function triggerActionWithFeedback(endpoint, successMessage, errorMessage) {
+    try {
+        const response = await fetchWithAuth(`${API_BASE}/${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            const count = data?.data?.count ?? 0;
+            showToast(`${successMessage}（影响 ${count} 项）`, 'success');
+            setTimeout(() => {
+                loadSummary();
+                loadBatches();
+                if (selectedBatchId != null) {
+                    loadTasks(selectedBatchId);
+                }
+            }, 500);
+        } else {
+            showToast(data.message || errorMessage, 'error');
+        }
+    } catch (error) {
+        console.error('Action error:', error);
+        showToast(errorMessage, 'error');
+    }
+}
+
 // Filter Handlers
 function handleFilterChange() {
     currentFilters.status = elements.batchStatusFilter?.value || '';
@@ -523,6 +561,20 @@ function handleErrorListClick(event) {
     if (!item) return;
 
     selectBatch(Number(item.dataset.batchId), item.dataset.batchLabel || `批次 #${item.dataset.batchId}`);
+}
+
+function handleTaskTableClick(event) {
+    const button = event.target.closest('.task-cancel-btn[data-task-id]');
+    if (!button) return;
+
+    const taskId = Number(button.dataset.taskId);
+    if (!Number.isFinite(taskId) || taskId <= 0) return;
+
+    if (!confirmDestructiveAction(`取消任务 #${taskId}`, 1, `任务：${button.dataset.taskLabel || taskId}`)) {
+        return;
+    }
+
+    triggerActionWithFeedback(`actions/tasks/${taskId}/cancel`, '任务已取消', '取消任务失败');
 }
 
 function toggleSection() {
@@ -572,6 +624,10 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.errorList.addEventListener('click', handleErrorListClick);
     }
 
+    if (elements.taskTableBody) {
+        elements.taskTableBody.addEventListener('click', handleTaskTableClick);
+    }
+
     const librarySection = document.getElementById('librarySection');
     const toggleButton = librarySection?.querySelector('.section-toggle');
     if (toggleButton) {
@@ -589,6 +645,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (elements.resumeBtn) {
         elements.resumeBtn.addEventListener('click', () => {
             triggerAction('actions/jobs/resume', '任务队列已恢复', '恢复队列失败');
+        });
+    }
+
+    if (elements.clearQueueBtn) {
+        elements.clearQueueBtn.addEventListener('click', () => {
+            const count = Number(overviewData?.tasks?.pending || 0) + Number(overviewData?.tasks?.queued || 0);
+            if (!confirmDestructiveAction('清空待执行队列', count, '仅 pending/queued 会被取消，running 不受影响。')) {
+                return;
+            }
+            triggerActionWithFeedback('actions/jobs/clear-queue', '待执行队列已清空', '清空待执行队列失败');
         });
     }
     

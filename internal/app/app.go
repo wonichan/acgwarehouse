@@ -105,6 +105,8 @@ func New(cfgPath string) (*App, error) {
 		app.collectionRepo,
 		app.jobManager,
 		service.NewTaskReadService(repository.NewTaskBatchReadRepository(app.db)),
+		repository.NewTaskBatchRepository(app.db),
+		repository.NewPlatformTaskRepository(app.db),
 	)
 
 	return app, nil

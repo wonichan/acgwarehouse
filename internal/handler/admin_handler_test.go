@@ -22,6 +22,9 @@ type mockAdminService struct {
 	tasks        []service.TaskReadModel
 	scanJobID    int64
 	retryCount   int
+	clearCount   int
+	batchCancel  int
+	cancelCount  int
 	pauseCalled  bool
 	resumeCalled bool
 	isRunning    bool
@@ -64,6 +67,18 @@ func (m *mockAdminService) PauseBackgroundTasks(ctx context.Context) error {
 func (m *mockAdminService) ResumeBackgroundTasks(ctx context.Context) error {
 	m.resumeCalled = true
 	return m.err
+}
+
+func (m *mockAdminService) ClearTaskQueue(ctx context.Context) (int, error) {
+	return m.clearCount, m.err
+}
+
+func (m *mockAdminService) CancelTaskBatch(ctx context.Context, batchID int64) (int, error) {
+	return m.batchCancel, m.err
+}
+
+func (m *mockAdminService) CancelTask(ctx context.Context, taskID int64) (int, error) {
+	return m.cancelCount, m.err
 }
 
 func (m *mockAdminService) IsBackgroundRunning() bool {
@@ -362,6 +377,89 @@ func TestAdminHandler_Resume(t *testing.T) {
 	}
 }
 
+func TestAdminHandler_ClearTaskQueue(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{clearCount: 2}
+	handler := NewAdminHandler(cfg, mockSvc)
+
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.POST("/actions/jobs/clear-queue", handler.ClearTaskQueue)
+
+	req := httptest.NewRequest("POST", "/admin/api/actions/jobs/clear-queue", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "count") {
+		t.Fatalf("Expected count in response, got %s", w.Body.String())
+	}
+}
+
+func TestAdminHandler_CancelTaskBatch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{batchCancel: 3}
+	handler := NewAdminHandler(cfg, mockSvc)
+
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.POST("/actions/task-batches/:batch_id/cancel", handler.CancelTaskBatch)
+
+	req := httptest.NewRequest("POST", "/admin/api/actions/task-batches/abc/cancel", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("Expected 400 for invalid batch id, got %d", w.Code)
+	}
+
+	req = httptest.NewRequest("POST", "/admin/api/actions/task-batches/12/cancel", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for valid batch id, got %d", w.Code)
+	}
+}
+
+func TestAdminHandler_CancelTask(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{cancelCount: 1}
+	handler := NewAdminHandler(cfg, mockSvc)
+
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.POST("/actions/tasks/:task_id/cancel", handler.CancelTask)
+
+	req := httptest.NewRequest("POST", "/admin/api/actions/tasks/0/cancel", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("Expected 400 for invalid task id, got %d", w.Code)
+	}
+
+	req = httptest.NewRequest("POST", "/admin/api/actions/tasks/9/cancel", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for valid task id, got %d", w.Code)
+	}
+}
+
 func TestAdminRoutes_ServeStaticFiles(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -434,7 +532,10 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 	admin.POST("/actions/scan", handler.TriggerScan)
 	admin.POST("/actions/jobs/pause", handler.PauseBackgroundTasks)
 	admin.POST("/actions/jobs/resume", handler.ResumeBackgroundTasks)
+	admin.POST("/actions/jobs/clear-queue", handler.ClearTaskQueue)
 	admin.POST("/actions/jobs/retry-failed", handler.RetryFailedJobs)
+	admin.POST("/actions/task-batches/:batch_id/cancel", handler.CancelTaskBatch)
+	admin.POST("/actions/tasks/:task_id/cancel", handler.CancelTask)
 
 	// Test /admin/api/summary with auth
 	req := httptest.NewRequest("GET", "/admin/api/summary", nil)
@@ -467,6 +568,9 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 	admin2 := r2.Group("/admin/api")
 	admin2.Use(handler2.AuthMiddleware())
 	admin2.POST("/actions/scan", handler2.TriggerScan)
+	admin2.POST("/actions/jobs/clear-queue", handler2.ClearTaskQueue)
+	admin2.POST("/actions/task-batches/:batch_id/cancel", handler2.CancelTaskBatch)
+	admin2.POST("/actions/tasks/:task_id/cancel", handler2.CancelTask)
 
 	req = httptest.NewRequest("POST", "/admin/api/actions/scan", nil)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))

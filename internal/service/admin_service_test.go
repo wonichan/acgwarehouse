@@ -382,8 +382,10 @@ func TestAdminService_GetTaskPlatformOverview_ReturnsQueueAndPlatformCounts(t *t
 	insertPlatformTaskForOverviewTest(t, db, batchTwoID, 1006, "cancelled")
 
 	taskReadSvc := service.NewTaskReadService(repository.NewTaskBatchReadRepository(db))
+	taskBatchRepo := repository.NewTaskBatchRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
 	cfg := &config.Config{}
-	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager, taskReadSvc)
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager, taskReadSvc, taskBatchRepo, taskRepo)
 
 	overview, err := svc.GetTaskPlatformOverview(ctx)
 	if err != nil {
@@ -440,7 +442,7 @@ func TestAdminService_GetTaskPlatformOverview_HandlesMissingTaskReadData(t *test
 	cfg := &config.Config{}
 
 	t.Run("without task read service", func(t *testing.T) {
-		svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+		svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager, repository.NewTaskBatchRepository(db), repository.NewPlatformTaskRepository(db))
 
 		overview, err := svc.GetTaskPlatformOverview(context.Background())
 		if err != nil {
@@ -463,6 +465,8 @@ func TestAdminService_GetTaskPlatformOverview_HandlesMissingTaskReadData(t *test
 			collectionRepo,
 			jobManager,
 			service.NewTaskReadService(repository.NewTaskBatchReadRepository(db)),
+			repository.NewTaskBatchRepository(db),
+			repository.NewPlatformTaskRepository(db),
 		)
 
 		overview, err := svc.GetTaskPlatformOverview(context.Background())
@@ -506,7 +510,7 @@ func TestAdminService_GetTaskPlatformOverview_PreservesLegacySummaryFields(t *te
 		},
 	}
 
-	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager, repository.NewTaskBatchRepository(db), repository.NewPlatformTaskRepository(db))
 
 	overview, err := svc.GetTaskPlatformOverview(context.Background())
 	if err != nil {
@@ -531,6 +535,143 @@ func TestAdminService_GetTaskPlatformOverview_PreservesLegacySummaryFields(t *te
 
 	if overview.Library.TotalImages != 0 || overview.Library.TotalTags != 0 || overview.Library.TotalCollections != 0 {
 		t.Fatalf("Expected empty library stats in fresh DB, got %+v", overview.Library)
+	}
+}
+
+func TestAdminService_ClearQueueAndCancelControls(t *testing.T) {
+	db := newTestAdminDB(t)
+	defer db.Close()
+
+	jobRepo := repository.NewJobRepository(db)
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	collectionRepo := repository.NewCollectionRepository(db)
+	jobManager := worker.NewManager(jobRepo)
+	taskBatchRepo := repository.NewTaskBatchRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	taskReadSvc := service.NewTaskReadService(repository.NewTaskBatchReadRepository(db))
+	cfg := &config.Config{}
+
+	ctx := context.Background()
+	image := &domain.Image{Path: "/test/cancel.png", Filename: "cancel.png", SourceRoot: "/test", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if _, err := imageRepo.SaveImage(image); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
+	}
+	batch := &domain.TaskBatch{SourceType: domain.TaskBatchSourceImportScan, SummaryLabel: "admin controls", Status: domain.TaskBatchStatusPending, CreatedAt: time.Now()}
+	if err := taskBatchRepo.Create(ctx, batch); err != nil {
+		t.Fatalf("Create(batch) error = %v", err)
+	}
+	makeTask := func(status string) *domain.PlatformTask {
+		task := &domain.PlatformTask{
+			BatchID:         batch.ID,
+			ImageID:         image.ID,
+			TaskType:        domain.PlatformTaskTypeThumbnailGenerate,
+			SourceType:      domain.TaskBatchSourceImportScan,
+			Status:          status,
+			ImageVersionKey: "test-version",
+			DedupeKey:       "test-version:" + status,
+			CreatedAt:       time.Now(),
+		}
+		if status == domain.PlatformTaskStatusRunning || status == domain.PlatformTaskStatusCompleted {
+			now := time.Now()
+			task.StartedAt = &now
+		}
+		if status == domain.PlatformTaskStatusCompleted || status == domain.PlatformTaskStatusCancelled {
+			now := time.Now()
+			task.FinishedAt = &now
+		}
+		if err := taskRepo.Create(ctx, task); err != nil {
+			t.Fatalf("Create(task %s) error = %v", status, err)
+		}
+		return task
+	}
+	pendingTask := makeTask(domain.PlatformTaskStatusPending)
+	queuedTask := makeTask(domain.PlatformTaskStatusQueued)
+	runningTask := makeTask(domain.PlatformTaskStatusRunning)
+	_ = makeTask(domain.PlatformTaskStatusCompleted)
+	if err := taskRepo.SetLatestAsyncJob(ctx, queuedTask.ID, nil); err != nil {
+		t.Fatalf("SetLatestAsyncJob() error = %v", err)
+	}
+	if err := taskRepo.SetLatestAsyncJob(ctx, runningTask.ID, nil); err != nil {
+		t.Fatalf("SetLatestAsyncJob(running) error = %v", err)
+	}
+
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager, taskReadSvc, taskBatchRepo, taskRepo)
+
+	cleared, err := svc.ClearTaskQueue(ctx)
+	if err != nil {
+		t.Fatalf("ClearTaskQueue() error = %v", err)
+	}
+	if cleared != 2 {
+		t.Fatalf("ClearTaskQueue() = %d, want 2", cleared)
+	}
+	clearedPending, _ := taskRepo.FindByID(ctx, pendingTask.ID)
+	if clearedPending.Status != domain.PlatformTaskStatusCancelled {
+		t.Fatalf("pending task status = %q, want %q", clearedPending.Status, domain.PlatformTaskStatusCancelled)
+	}
+	clearedQueued, _ := taskRepo.FindByID(ctx, queuedTask.ID)
+	if clearedQueued.Status != domain.PlatformTaskStatusCancelled {
+		t.Fatalf("queued task status = %q, want %q", clearedQueued.Status, domain.PlatformTaskStatusCancelled)
+	}
+	stillRunning, _ := taskRepo.FindByID(ctx, runningTask.ID)
+	if stillRunning.Status != domain.PlatformTaskStatusRunning {
+		t.Fatalf("running task status = %q, want %q", stillRunning.Status, domain.PlatformTaskStatusRunning)
+	}
+
+	secondBatch := &domain.TaskBatch{SourceType: domain.TaskBatchSourceImportScan, SummaryLabel: "batch cancel", Status: domain.TaskBatchStatusPending, CreatedAt: time.Now()}
+	if err := taskBatchRepo.Create(ctx, secondBatch); err != nil {
+		t.Fatalf("Create(second batch) error = %v", err)
+	}
+	batchTaskOne := &domain.PlatformTask{BatchID: secondBatch.ID, ImageID: image.ID, TaskType: domain.PlatformTaskTypeThumbnailGenerate, SourceType: domain.TaskBatchSourceImportScan, Status: domain.PlatformTaskStatusPending, ImageVersionKey: "test-version-2", DedupeKey: "test-version-2:pending", CreatedAt: time.Now()}
+	batchTaskTwo := &domain.PlatformTask{BatchID: secondBatch.ID, ImageID: image.ID, TaskType: domain.PlatformTaskTypeThumbnailGenerate, SourceType: domain.TaskBatchSourceImportScan, Status: domain.PlatformTaskStatusRunning, ImageVersionKey: "test-version-2", DedupeKey: "test-version-2:running", CreatedAt: time.Now()}
+	started := time.Now()
+	batchTaskTwo.StartedAt = &started
+	if err := taskRepo.Create(ctx, batchTaskOne); err != nil {
+		t.Fatalf("Create(batchTaskOne) error = %v", err)
+	}
+	if err := taskRepo.Create(ctx, batchTaskTwo); err != nil {
+		t.Fatalf("Create(batchTaskTwo) error = %v", err)
+	}
+
+	cancelled, err := svc.CancelTaskBatch(ctx, secondBatch.ID)
+	if err != nil {
+		t.Fatalf("CancelTaskBatch() error = %v", err)
+	}
+	if cancelled != 2 {
+		t.Fatalf("CancelTaskBatch() = %d, want 2", cancelled)
+	}
+	refreshedBatch, err := taskBatchRepo.FindByID(ctx, secondBatch.ID)
+	if err != nil {
+		t.Fatalf("FindByID(second batch) error = %v", err)
+	}
+	if refreshedBatch.Status != domain.TaskBatchStatusCancelled {
+		t.Fatalf("batch status = %q, want %q", refreshedBatch.Status, domain.TaskBatchStatusCancelled)
+	}
+
+	thirdBatch := &domain.TaskBatch{SourceType: domain.TaskBatchSourceImportScan, SummaryLabel: "single cancel", Status: domain.TaskBatchStatusPending, CreatedAt: time.Now()}
+	if err := taskBatchRepo.Create(ctx, thirdBatch); err != nil {
+		t.Fatalf("Create(third batch) error = %v", err)
+	}
+	singleTask := &domain.PlatformTask{BatchID: thirdBatch.ID, ImageID: image.ID, TaskType: domain.PlatformTaskTypeThumbnailGenerate, SourceType: domain.TaskBatchSourceImportScan, Status: domain.PlatformTaskStatusPending, ImageVersionKey: "test-version-3", DedupeKey: "test-version-3:pending", CreatedAt: time.Now()}
+	if err := taskRepo.Create(ctx, singleTask); err != nil {
+		t.Fatalf("Create(single task) error = %v", err)
+	}
+	singleCancelCount, err := svc.CancelTask(ctx, singleTask.ID)
+	if err != nil {
+		t.Fatalf("CancelTask() error = %v", err)
+	}
+	if singleCancelCount != 1 {
+		t.Fatalf("CancelTask() = %d, want 1", singleCancelCount)
+	}
+	reloadedSingle, err := taskRepo.FindByID(ctx, singleTask.ID)
+	if err != nil {
+		t.Fatalf("FindByID(single task) error = %v", err)
+	}
+	if reloadedSingle.Status != domain.PlatformTaskStatusCancelled {
+		t.Fatalf("single task status = %q, want %q", reloadedSingle.Status, domain.PlatformTaskStatusCancelled)
+	}
+	if reloadedSingle.FinishedAt == nil {
+		t.Fatal("expected finished_at on cancelled task")
 	}
 }
 

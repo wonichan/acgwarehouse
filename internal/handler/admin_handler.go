@@ -25,6 +25,9 @@ type AdminServiceInterface interface {
 	RetryFailedJobs(ctx context.Context) (int, error)
 	PauseBackgroundTasks(ctx context.Context) error
 	ResumeBackgroundTasks(ctx context.Context) error
+	ClearTaskQueue(ctx context.Context) (int, error)
+	CancelTaskBatch(ctx context.Context, batchID int64) (int, error)
+	CancelTask(ctx context.Context, taskID int64) (int, error)
 	IsBackgroundRunning() bool
 }
 
@@ -235,6 +238,15 @@ func parsePositiveIntWithCap(raw string, fallback, max int) int {
 	return value
 }
 
+func parseRequiredPositiveInt(c *gin.Context, key string) (int64, bool) {
+	value, err := strconv.ParseInt(strings.TrimSpace(c.Param(key)), 10, 64)
+	if err != nil || value <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid " + key})
+		return 0, false
+	}
+	return value, true
+}
+
 // TriggerScan triggers a manual scan job.
 // POST /admin/api/actions/scan
 func (h *AdminHandler) TriggerScan(c *gin.Context) {
@@ -303,6 +315,59 @@ func (h *AdminHandler) ResumeBackgroundTasks(c *gin.Context) {
 		"success": true,
 		"message": "jobs resumed",
 	})
+}
+
+// ClearTaskQueue clears pending/queued platform tasks.
+// POST /admin/api/actions/jobs/clear-queue
+func (h *AdminHandler) ClearTaskQueue(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "admin service not configured"})
+		return
+	}
+	count, err := h.adminSvc.ClearTaskQueue(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to clear queue: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": fmt.Sprintf("cleared %d queued tasks", count), "data": gin.H{"count": count}})
+}
+
+// CancelTaskBatch cancels a platform task batch.
+// POST /admin/api/actions/task-batches/:batch_id/cancel
+func (h *AdminHandler) CancelTaskBatch(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "admin service not configured"})
+		return
+	}
+	batchID, ok := parseRequiredPositiveInt(c, "batch_id")
+	if !ok {
+		return
+	}
+	count, err := h.adminSvc.CancelTaskBatch(c.Request.Context(), batchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to cancel batch: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": fmt.Sprintf("cancelled %d tasks in batch", count), "data": gin.H{"count": count}})
+}
+
+// CancelTask cancels a single platform task.
+// POST /admin/api/actions/tasks/:task_id/cancel
+func (h *AdminHandler) CancelTask(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "admin service not configured"})
+		return
+	}
+	taskID, ok := parseRequiredPositiveInt(c, "task_id")
+	if !ok {
+		return
+	}
+	count, err := h.adminSvc.CancelTask(c.Request.Context(), taskID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to cancel task: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": fmt.Sprintf("cancelled %d task", count), "data": gin.H{"count": count}})
 }
 
 // RetryFailedJobs retries all failed jobs.

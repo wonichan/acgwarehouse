@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -37,6 +39,8 @@ type AdminService struct {
 	collectionRepo repository.CollectionRepository
 	jobManager     JobManagerControl
 	taskReadSvc    *TaskReadService
+	taskBatchRepo  repository.TaskBatchRepository
+	taskRepo       repository.PlatformTaskRepository
 }
 
 // HealthStatus represents the health of the system.
@@ -107,11 +111,20 @@ func NewAdminService(
 	tagRepo repository.TagRepository,
 	collectionRepo repository.CollectionRepository,
 	jobManager JobManagerControl,
-	taskReadSvcOpt ...*TaskReadService,
+	extras ...any,
 ) *AdminService {
 	var taskReadSvc *TaskReadService
-	if len(taskReadSvcOpt) > 0 {
-		taskReadSvc = taskReadSvcOpt[0]
+	var taskBatchRepo repository.TaskBatchRepository
+	var taskRepo repository.PlatformTaskRepository
+	for _, extra := range extras {
+		switch v := extra.(type) {
+		case *TaskReadService:
+			taskReadSvc = v
+		case repository.TaskBatchRepository:
+			taskBatchRepo = v
+		case repository.PlatformTaskRepository:
+			taskRepo = v
+		}
 	}
 	return &AdminService{
 		cfg:            cfg,
@@ -121,6 +134,8 @@ func NewAdminService(
 		collectionRepo: collectionRepo,
 		jobManager:     jobManager,
 		taskReadSvc:    taskReadSvc,
+		taskBatchRepo:  taskBatchRepo,
+		taskRepo:       taskRepo,
 	}
 }
 
@@ -223,6 +238,98 @@ func (s *AdminService) GetTaskPlatformOverview(ctx context.Context) (*TaskPlatfo
 	}
 
 	return overview, nil
+}
+
+func (s *AdminService) ClearTaskQueue(ctx context.Context) (int, error) {
+	if s.taskRepo == nil || s.taskBatchRepo == nil {
+		return 0, fmt.Errorf("task control repositories not configured")
+	}
+	tasks, err := s.taskRepo.List(ctx, repository.PlatformTaskListFilter{Limit: 1000})
+	if err != nil {
+		return 0, err
+	}
+	return s.cancelTasks(ctx, tasks, false, true)
+}
+
+func (s *AdminService) CancelTaskBatch(ctx context.Context, batchID int64) (int, error) {
+	if batchID <= 0 {
+		return 0, fmt.Errorf("invalid batch_id")
+	}
+	if s.taskRepo == nil || s.taskBatchRepo == nil {
+		return 0, fmt.Errorf("task control repositories not configured")
+	}
+	tasks, err := s.taskRepo.List(ctx, repository.PlatformTaskListFilter{BatchID: &batchID, Limit: 1000})
+	if err != nil {
+		return 0, err
+	}
+	return s.cancelTasks(ctx, tasks, true, false)
+}
+
+func (s *AdminService) CancelTask(ctx context.Context, taskID int64) (int, error) {
+	if taskID <= 0 {
+		return 0, fmt.Errorf("invalid task_id")
+	}
+	if s.taskRepo == nil || s.taskBatchRepo == nil {
+		return 0, fmt.Errorf("task control repositories not configured")
+	}
+	task, err := s.taskRepo.FindByID(ctx, taskID)
+	if err != nil {
+		return 0, err
+	}
+	if task == nil {
+		return 0, fmt.Errorf("task not found")
+	}
+	count, err := s.cancelTasks(ctx, []domain.PlatformTask{*task}, false, false)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (s *AdminService) cancelTasks(ctx context.Context, tasks []domain.PlatformTask, includeRunning bool, clearOnly bool) (int, error) {
+	if len(tasks) == 0 {
+		return 0, nil
+	}
+	count := 0
+	affectedBatches := make(map[int64]struct{})
+	now := time.Now()
+	for _, task := range tasks {
+		if task.Status != domain.PlatformTaskStatusPending && task.Status != domain.PlatformTaskStatusQueued {
+			if !includeRunning || task.Status != domain.PlatformTaskStatusRunning {
+				continue
+			}
+		}
+		if clearOnly && task.Status == domain.PlatformTaskStatusRunning {
+			continue
+		}
+		task.Status = domain.PlatformTaskStatusCancelled
+		task.FinishedAt = &now
+		if err := s.taskRepo.Update(ctx, &task); err != nil {
+			return count, err
+		}
+		if task.LatestAsyncJobID != nil {
+			jobs, err := s.jobRepo.FindByPlatformTaskID(task.ID)
+			if err != nil {
+				return count, err
+			}
+			for i := range jobs {
+				if jobs[i].Status == "ready" {
+					status := domain.PlatformTaskStatusCancelled
+					if err := s.jobRepo.UpdateStatus(jobs[i].ID, status, nil); err != nil {
+						return count, err
+					}
+				}
+			}
+		}
+		affectedBatches[task.BatchID] = struct{}{}
+		count++
+	}
+	for batchID := range affectedBatches {
+		if _, err := s.taskBatchRepo.RefreshStatus(ctx, batchID); err != nil {
+			return count, err
+		}
+	}
+	return count, nil
 }
 
 // GetJobs returns recent jobs for the admin dashboard.

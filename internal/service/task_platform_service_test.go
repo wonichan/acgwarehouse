@@ -277,6 +277,57 @@ func TestTaskPlatformServiceSyncsJobLifecycleBackToPlatformTask(t *testing.T) {
 	}
 }
 
+func TestTaskPlatformServiceIgnoresJobLifecycleForCancelledTasks(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	env := newTaskPlatformServiceTestEnv(t)
+	image := saveTaskPlatformServiceImage(t, env.db, "cancelled-task.png")
+	plan, err := env.service.PlanBatch(ctx, TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "cancelled lifecycle",
+		TaskTypes:    []string{domain.PlatformTaskTypeThumbnailGenerate},
+		Items: []TaskPlatformPlanItem{{
+			ImageID:          image.ID,
+			ImageVersionKey:  BuildImageVersionKey(image),
+			SourceDescriptor: image.Path,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PlanBatch() error = %v", err)
+	}
+	job, err := env.service.QueueTask(ctx, &plan.CreatedTasks[0], domain.PlatformTaskTypeThumbnailGenerate, `{}`)
+	if err != nil {
+		t.Fatalf("QueueTask() error = %v", err)
+	}
+	task, err := env.taskRepo.FindByID(ctx, plan.CreatedTasks[0].ID)
+	if err != nil {
+		t.Fatalf("FindByID(task) error = %v", err)
+	}
+	task.Status = domain.PlatformTaskStatusCancelled
+	if err := env.taskRepo.Update(ctx, task); err != nil {
+		t.Fatalf("Update(cancelled task) error = %v", err)
+	}
+
+	if err := env.service.MarkJobRunning(ctx, job.ID); err != nil {
+		t.Fatalf("MarkJobRunning() error = %v", err)
+	}
+	if err := env.service.MarkJobCompleted(ctx, job.ID); err != nil {
+		t.Fatalf("MarkJobCompleted() error = %v", err)
+	}
+	if err := env.service.MarkJobFailed(ctx, job.ID, "should be ignored"); err != nil {
+		t.Fatalf("MarkJobFailed() error = %v", err)
+	}
+
+	reloaded, err := env.taskRepo.FindByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("FindByID(reloaded task) error = %v", err)
+	}
+	if reloaded.Status != domain.PlatformTaskStatusCancelled {
+		t.Fatalf("cancelled task status = %q, want %q", reloaded.Status, domain.PlatformTaskStatusCancelled)
+	}
+}
+
 type taskPlatformServiceTestEnv struct {
 	db        *sql.DB
 	service   *TaskPlatformService
