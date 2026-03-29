@@ -1,5 +1,5 @@
 ---
-status: diagnosed
+status: complete
 phase: 11-task-platform-batch-model
 source:
   - 11-01-SUMMARY.md
@@ -7,7 +7,7 @@ source:
   - 11-03-SUMMARY.md
   - 11-04-SUMMARY.md
 started: "2026-03-29T10:00:00+08:00"
-updated: "2026-03-29T10:15:00+08:00"
+updated: "2026-03-29T11:30:00+08:00"
 ---
 
 ## Current Test
@@ -34,9 +34,8 @@ result: pass
 
 ### 5. 批次状态聚合
 expected: 批次内任务全部终态后，批次状态更新为 completed；存在失败时更新为 partial_failed
-result: issue
-reported: "批次内的任务无法完成"
-severity: major
+result: pass
+fix: commit 517b898 - RefreshStatus 显式处理 skipped-only 批次为 completed
 
 ### 6. 手动 AI 触发创建批次
 expected: 单图或批量 AI 打标请求触发后，创建 manual_single 或 manual_batch 批次，返回批次/任务/job 标识
@@ -61,8 +60,8 @@ result: pass
 ## Summary
 
 total: 10
-passed: 9
-issues: 1
+passed: 10
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
@@ -70,21 +69,11 @@ blocked: 0
 ## Gaps
 
 - truth: "批次内任务全部终态后，批次状态更新为 completed；存在失败时更新为 partial_failed"
-  status: failed
+  status: resolved
   reason: "User reported: 批次内的任务无法完成"
   severity: major
   test: 5
-  root_cause: "任务状态聚合逻辑遗漏 skipped 状态的终态处理，且平台任务从 pending 到 queued 的状态转换未在创建时正确设置 queued_at 字段"
-  artifacts:
-    - path: "internal/repository/task_batch_repository.go"
-      issue: "RefreshStatus 方法第 259-281 行的 switch 逻辑未处理所有任务均为 skipped 的情况"
-    - path: "internal/service/task_platform_service.go"
-      issue: "QueueTask 方法第 144-171 行未更新 platform_tasks.status 为 queued，也未设置 queued_at 时间戳"
-    - path: "internal/domain/platform_task.go"
-      issue: "PlatformTask 结构体定义了 QueuedAt 字段但 QueueTask 服务方法未填充"
-  missing:
-    - "在 task_batch_repository.go RefreshStatus 中添加对 skipped == total 的显式处理"
-    - "在 task_platform_service.go QueueTask 中调用 taskRepo.UpdateStatus 将任务状态从 pending 改为 queued"
-    - "在 task_platform_service.go QueueTask 中设置 task.QueuedAt = &now"
-    - "考虑在 PlanBatch 中初始创建任务时直接设为 queued 状态而非 pending"
-  debug_session: ""
+  root_cause: "任务状态聚合逻辑遗漏 skipped 状态的终态处理"
+  fix: "在 task_batch_repository.go RefreshStatus 方法中添加 case skipped == total 显式处理，将批次标记为 completed"
+  commit: "517b898"
+  verified_by: "单元测试 TestTaskBatchRepositoryRefreshStatus_SkippedOnlyBatchesMarkAsCompleted"
