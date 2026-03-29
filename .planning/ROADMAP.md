@@ -97,9 +97,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] `14-01-PLAN.md` — Define filtered backfill preview and execute contracts
-- [ ] `14-02-PLAN.md` — Prove per-image failure isolation and add grouped failure summaries
-- [ ] `14-03-PLAN.md` — Wire admin recovery UX and final operator verification
+- [x] `14-01-PLAN.md` — Define filtered backfill preview and execute contracts
+- [x] `14-02-PLAN.md` — Prove per-image failure isolation and add grouped failure summaries
+- [x] `14-03-PLAN.md` — Wire admin recovery UX and final operator verification
 
 ## Progress
 
