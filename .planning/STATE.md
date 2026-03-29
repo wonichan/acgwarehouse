@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 Phase: 14 (backfill-recovery-operations) — COMPLETE ✅
 Plan: 3 of 3
 Status: Verified and shipped
-Last activity: 2026-03-29
+Last activity: 2026-03-29 - Completed quick task 260329-q5e: Fix AI tag generation pixel limit error
 
 Progress: [██████████] 100% (15/15 plans complete) — v3.0 MILESTONE COMPLETE
 
@@ -88,6 +88,12 @@ None yet.
 ### Blockers/Concerns
 
 None currently.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260329-q5e | Fix AI tag generation pixel limit error | 2026-03-29 | c36bcd9 | [260329-q5e-fix-ai-tag-generation-image-size-limit-e](./quick/260329-q5e-fix-ai-tag-generation-image-size-limit-e/) |
 
 ## Session Continuity
 
