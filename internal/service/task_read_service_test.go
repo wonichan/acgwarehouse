@@ -173,6 +173,200 @@ func TestTaskReadServiceListBatchesSortsDescendingAndSupportsFilters(t *testing.
 	}
 }
 
+func TestTaskReadServiceFailureSummary_GroupedReasonsWithCounts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	env := newTaskPlatformServiceTestEnv(t)
+	service := NewTaskReadService(repository.NewTaskBatchReadRepository(env.db))
+
+	img1 := saveTaskPlatformServiceImage(t, env.db, "failure-a.png")
+	img2 := saveTaskPlatformServiceImage(t, env.db, "failure-b.png")
+	img3 := saveTaskPlatformServiceImage(t, env.db, "failure-c.png")
+	img4 := saveTaskPlatformServiceImage(t, env.db, "failure-d.png")
+
+	batch := &domain.TaskBatch{
+		SourceType:         domain.TaskBatchSourceImportScan,
+		SummaryLabel:       "failure grouping test",
+		Status:             domain.TaskBatchStatusPartialFailed,
+		TotalImages:        4,
+		NewImages:          4,
+		LatestErrorSummary: strPtr("timeout: AI provider rate limit exceeded"),
+		CreatedAt:          time.Now(),
+	}
+	if err := env.batchRepo.Create(ctx, batch); err != nil {
+		t.Fatalf("Create(batch) error = %v", err)
+	}
+
+	// 2 tasks with same "timeout" error, 1 with "auth" error, 1 completed
+	seedTaskReadPlatformTask(t, env, batch.ID, img1.ID, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusFailed, "image:fa:v1", nil, strPtr("timeout: AI provider rate limit exceeded"))
+	seedTaskReadPlatformTask(t, env, batch.ID, img2.ID, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusFailed, "image:fb:v1", nil, strPtr("timeout: AI provider rate limit exceeded"))
+	seedTaskReadPlatformTask(t, env, batch.ID, img3.ID, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusFailed, "image:fc:v1", nil, strPtr("auth: invalid API key"))
+	seedTaskReadPlatformTask(t, env, batch.ID, img4.ID, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusCompleted, "image:fd:v1", nil, nil)
+
+	batches, err := service.ListBatches(ctx, TaskBatchReadFilter{BatchID: &batch.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListBatches() error = %v", err)
+	}
+	if len(batches) != 1 {
+		t.Fatalf("len(batches) = %d, want 1", len(batches))
+	}
+	got := batches[0]
+
+	// Must have grouped failure reasons with counts
+	if len(got.FailureGroups) < 2 {
+		t.Fatalf("len(FailureGroups) = %d, want >= 2", len(got.FailureGroups))
+	}
+
+	// Find the timeout group
+	var timeoutGroup *TaskBatchFailureGroup
+	var authGroup *TaskBatchFailureGroup
+	for i := range got.FailureGroups {
+		if got.FailureGroups[i].ReasonKey == "timeout" {
+			timeoutGroup = &got.FailureGroups[i]
+		}
+		if got.FailureGroups[i].ReasonKey == "auth" {
+			authGroup = &got.FailureGroups[i]
+		}
+	}
+	if timeoutGroup == nil {
+		t.Fatal("expected failure group with reason_key 'timeout', not found")
+	}
+	if timeoutGroup.Count != 2 {
+		t.Errorf("timeout group count = %d, want 2", timeoutGroup.Count)
+	}
+	if authGroup == nil {
+		t.Fatal("expected failure group with reason_key 'auth', not found")
+	}
+	if authGroup.Count != 1 {
+		t.Errorf("auth group count = %d, want 1", authGroup.Count)
+	}
+
+	// Preserve existing FailureSummary for backward compat
+	if got.FailureSummary != "timeout: AI provider rate limit exceeded" {
+		t.Fatalf("FailureSummary = %q, want %q", got.FailureSummary, "timeout: AI provider rate limit exceeded")
+	}
+}
+
+func TestTaskReadServiceRetryHint_TransientVsNonRetryable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	env := newTaskPlatformServiceTestEnv(t)
+	service := NewTaskReadService(repository.NewTaskBatchReadRepository(env.db))
+
+	img1 := saveTaskPlatformServiceImage(t, env.db, "retry-transient.png")
+	img2 := saveTaskPlatformServiceImage(t, env.db, "retry-auth.png")
+	img3 := saveTaskPlatformServiceImage(t, env.db, "retry-config.png")
+	img4 := saveTaskPlatformServiceImage(t, env.db, "retry-network.png")
+
+	batch := &domain.TaskBatch{
+		SourceType:         domain.TaskBatchSourceImportScan,
+		SummaryLabel:       "retry hint test",
+		Status:             domain.TaskBatchStatusFailed,
+		TotalImages:        4,
+		NewImages:          4,
+		LatestErrorSummary: strPtr("network: connection refused"),
+		CreatedAt:          time.Now(),
+	}
+	if err := env.batchRepo.Create(ctx, batch); err != nil {
+		t.Fatalf("Create(batch) error = %v", err)
+	}
+
+	seedTaskReadPlatformTask(t, env, batch.ID, img1.ID, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusFailed, "image:rt:v1", nil, strPtr("timeout: request timed out after 30s"))
+	seedTaskReadPlatformTask(t, env, batch.ID, img2.ID, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusFailed, "image:ra:v1", nil, strPtr("auth: invalid API key"))
+	seedTaskReadPlatformTask(t, env, batch.ID, img3.ID, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusFailed, "image:rc:v1", nil, strPtr("config: model not found"))
+	seedTaskReadPlatformTask(t, env, batch.ID, img4.ID, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusFailed, "image:rn:v1", nil, strPtr("network: connection refused"))
+
+	batches, err := service.ListBatches(ctx, TaskBatchReadFilter{BatchID: &batch.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListBatches() error = %v", err)
+	}
+	if len(batches) != 1 {
+		t.Fatalf("len(batches) = %d, want 1", len(batches))
+	}
+	got := batches[0]
+
+	// Build lookup by reason_key
+	groupMap := make(map[string]TaskBatchFailureGroup)
+	for _, fg := range got.FailureGroups {
+		groupMap[fg.ReasonKey] = fg
+	}
+
+	// timeout and network should be retry-recommended (transient)
+	timeoutGrp, ok := groupMap["timeout"]
+	if !ok {
+		t.Fatal("expected failure group 'timeout'")
+	}
+	if !timeoutGrp.RetryRecommended {
+		t.Errorf("timeout group RetryRecommended = false, want true (transient failure)")
+	}
+
+	networkGrp, ok := groupMap["network"]
+	if !ok {
+		t.Fatal("expected failure group 'network'")
+	}
+	if !networkGrp.RetryRecommended {
+		t.Errorf("network group RetryRecommended = false, want true (transient failure)")
+	}
+
+	// auth and config should NOT be retry-recommended
+	authGrp, ok := groupMap["auth"]
+	if !ok {
+		t.Fatal("expected failure group 'auth'")
+	}
+	if authGrp.RetryRecommended {
+		t.Errorf("auth group RetryRecommended = true, want false (configuration error)")
+	}
+
+	configGrp, ok := groupMap["config"]
+	if !ok {
+		t.Fatal("expected failure group 'config'")
+	}
+	if configGrp.RetryRecommended {
+		t.Errorf("config group RetryRecommended = true, want false (configuration error)")
+	}
+
+	// All groups should have non-empty retry hints
+	for _, fg := range got.FailureGroups {
+		if fg.RetryHint == "" {
+			t.Errorf("failure group %q has empty RetryHint", fg.ReasonKey)
+		}
+	}
+}
+
+func TestTaskReadServiceTaskReadReturnsErrorSummaryPerTask(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	env := newTaskPlatformServiceTestEnv(t)
+	service := NewTaskReadService(repository.NewTaskBatchReadRepository(env.db))
+
+	image := saveTaskPlatformServiceImage(t, env.db, "task-error.png")
+	batch := &domain.TaskBatch{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "task error test",
+		Status:       domain.TaskBatchStatusFailed,
+		CreatedAt:    time.Now(),
+	}
+	if err := env.batchRepo.Create(ctx, batch); err != nil {
+		t.Fatalf("Create(batch) error = %v", err)
+	}
+
+	seedTaskReadPlatformTask(t, env, batch.ID, image.ID, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusFailed, "image:te:v1", nil, strPtr("timeout: AI provider did not respond"))
+
+	tasks, err := service.ListTasks(ctx, TaskReadFilter{BatchID: &batch.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListTasks() error = %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("len(tasks) = %d, want 1", len(tasks))
+	}
+	if tasks[0].ErrorSummary != "timeout: AI provider did not respond" {
+		t.Fatalf("ErrorSummary = %q, want %q", tasks[0].ErrorSummary, "timeout: AI provider did not respond")
+	}
+}
+
 func seedTaskReadPlatformTask(t *testing.T, env *taskPlatformServiceTestEnv, batchID, imageID int64, taskType, status, versionKey string, skipReason, errorSummary *string) int64 {
 	t.Helper()
 

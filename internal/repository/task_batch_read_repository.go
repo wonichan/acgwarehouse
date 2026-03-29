@@ -56,9 +56,17 @@ type TaskReadRecord struct {
 	FinishedAt       *time.Time
 }
 
+// FailureGroupRecord holds aggregated failure data grouped by reason.
+type FailureGroupRecord struct {
+	ReasonKey   string
+	Count       int64
+	SampleError string
+}
+
 type TaskBatchReadRepository interface {
 	ListBatches(ctx context.Context, filter TaskBatchReadFilter) ([]TaskBatchReadRecord, error)
 	ListTasks(ctx context.Context, filter TaskReadFilter) ([]TaskReadRecord, error)
+	LoadFailureGroups(ctx context.Context, batchID int64) ([]FailureGroupRecord, error)
 }
 
 type sqliteTaskBatchReadRepository struct {
@@ -244,4 +252,37 @@ func (r *sqliteTaskBatchReadRepository) loadBatchCounts(ctx context.Context, bat
 		counts[key] = count
 	}
 	return counts, rows.Err()
+}
+
+// LoadFailureGroups aggregates failed task error_summaries by reason key for a batch.
+// The reason key is extracted as the prefix before the first ": " in error_summary.
+// Tasks with empty error_summary are grouped under "unknown".
+func (r *sqliteTaskBatchReadRepository) LoadFailureGroups(ctx context.Context, batchID int64) ([]FailureGroupRecord, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			CASE
+				WHEN error_summary IS NULL OR error_summary = '' THEN 'unknown'
+				WHEN INSTR(error_summary, ': ') > 0 THEN SUBSTR(error_summary, 1, INSTR(error_summary, ': ') - 1)
+				ELSE 'unknown'
+			END AS reason_key,
+			COUNT(*) AS cnt,
+			MIN(error_summary) AS sample_error
+		FROM platform_tasks
+		WHERE batch_id = ? AND status = 'failed'
+		GROUP BY reason_key
+		ORDER BY cnt DESC`, batchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	groups := make([]FailureGroupRecord, 0)
+	for rows.Next() {
+		var g FailureGroupRecord
+		if err := rows.Scan(&g.ReasonKey, &g.Count, &g.SampleError); err != nil {
+			return nil, err
+		}
+		groups = append(groups, g)
+	}
+	return groups, rows.Err()
 }
