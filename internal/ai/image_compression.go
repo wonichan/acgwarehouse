@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,68 +15,103 @@ import (
 
 const (
 	maxAIImageSize      = 10 * 1024 * 1024 // 10MB - target max size for AI
+	maxAIPixelCount     = 36000000         // 36M pixels - API pixel limit
+	targetPixelCount    = 30000000         // 30M pixels - target to stay safely under limit
 	smallFileThreshold  = 5 * 1024 * 1024  // 5MB - use Lanczos
 	mediumFileThreshold = 10 * 1024 * 1024 // 10MB - use Linear
 	// > 10MB: use Box with pre-scale
 )
 
+// calculateResizeDimensions returns new dimensions that fit within maxPixels
+// while preserving the aspect ratio.
+func calculateResizeDimensions(width, height int, maxPixels int) (int, int) {
+	pixels := width * height
+	if pixels <= maxPixels {
+		return width, height
+	}
+
+	// Calculate scale factor to fit within limit
+	// scale = sqrt(maxPixels / pixels)
+	scale := math.Sqrt(float64(maxPixels) / float64(pixels))
+	newWidth := int(float64(width) * scale)
+	newHeight := int(float64(height) * scale)
+
+	// Ensure at least 1 pixel
+	if newWidth < 1 {
+		newWidth = 1
+	}
+	if newHeight < 1 {
+		newHeight = 1
+	}
+
+	return newWidth, newHeight
+}
+
 // CompressImageIfNeeded reads an image file and returns bytes ready for base64 encoding.
-// If the file exceeds 10MB, it compresses the image until under the limit.
-// Uses tiered strategy based on original file size:
-// - < 5MB: Lanczos (highest quality)
-// - 5-10MB: Linear (good quality, faster)
-// - > 10MB: Box with pre-scale (fastest)
+// Checks pixel count FIRST (36M limit) before file size (10MB limit).
+// If pixel count exceeds 36M, resizes proportionally to fit under limit.
+// If file size exceeds 10MB after resize, compresses further.
+// Small files (<=10MB AND <=36M pixels) are returned unchanged, preserving original format.
 // Returns: (imageData, contentType, error)
 func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
-	// 1. Get file size to determine strategy
+	// 1. Get file size first for early check
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return nil, "", fmt.Errorf("stat file: %w", err)
 	}
 	fileSize := fileInfo.Size()
 
-	// 2. Read original file
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, "", fmt.Errorf("read file: %w", err)
-	}
-
-	// Detect content type from file extension
-	contentType := detectContentType(filePath)
-
-	// 3. If size <= 10MB, return as-is
-	if len(data) <= maxAIImageSize {
-		return data, contentType, nil
-	}
-
-	// 4. Load image with imaging.Open
+	// 2. Load image to check pixel dimensions
 	img, err := imaging.Open(filePath)
 	if err != nil {
 		return nil, "", fmt.Errorf("open image: %w", err)
 	}
 
-	// 5. Select filter based on file size tier
-	filter := selectResizeFilterForAI(fileSize)
+	width := img.Bounds().Dx()
+	height := img.Bounds().Dy()
+	pixels := width * height
 
-	// 6. Pre-scale large images to reduce memory and processing time
-	workingImg := img
-	if fileSize >= mediumFileThreshold {
-		// Estimate target width based on desired output size
-		// For AI, we typically need max 2000px width for good quality
-		maxWidth := 2000
-		if img.Bounds().Dx() > maxWidth {
-			workingImg = imaging.Resize(img, maxWidth, 0, imaging.Box)
+	// 3. Early return: if pixel count AND file size are under limits, return original unchanged
+	if pixels <= maxAIPixelCount && fileSize <= int64(maxAIImageSize) {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, "", fmt.Errorf("read file: %w", err)
 		}
+		contentType := detectContentType(filePath)
+		return data, contentType, nil
 	}
 
-	// 7. Compress the image
-	compressedData, err := compressImageWithFilter(workingImg, filter)
+	// 4. Resize if pixel count exceeds API limit
+	if pixels > maxAIPixelCount {
+		newWidth, newHeight := calculateResizeDimensions(width, height, targetPixelCount)
+		img = imaging.Resize(img, newWidth, newHeight, imaging.Lanczos)
+		// Update dimensions for subsequent checks
+		width, height = newWidth, newHeight
+	}
+
+	// 5. Encode the (possibly resized) image to check file size
+	var buf bytes.Buffer
+	if err := imaging.Encode(&buf, img, imaging.JPEG, imaging.JPEGQuality(85)); err != nil {
+		return nil, "", fmt.Errorf("encode image: %w", err)
+	}
+	data := buf.Bytes()
+	contentType := "image/jpeg" // Processed output is always JPEG
+
+	// 6. If size <= 10MB, return as-is
+	if len(data) <= maxAIImageSize {
+		return data, contentType, nil
+	}
+
+	// 7. Select filter based on file size tier
+	filter := selectResizeFilterForAI(fileSize)
+
+	// 8. Compress the image further
+	compressedData, err := compressImageWithFilter(img, filter)
 	if err != nil {
 		return nil, "", fmt.Errorf("compress image: %w", err)
 	}
 
-	// Compressed output is always JPEG
-	return compressedData, "image/jpeg", nil
+	return compressedData, contentType, nil
 }
 
 // detectContentType returns the content type based on file extension
