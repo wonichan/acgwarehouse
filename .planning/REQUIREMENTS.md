@@ -28,8 +28,8 @@
 
 ### Reliability & Recovery（稳定性与恢复）
 
-- [ ] **SAFE-01**: 单个图片任务失败不会阻塞同批次其它图片继续处理
-- [ ] **SAFE-02**: 管理员可以看到任务失败状态与失败原因摘要，便于重试和排查
+- [x] **SAFE-01**: 单个图片任务失败不会阻塞同批次其它图片继续处理
+- [x] **SAFE-02**: 管理员可以看到任务失败状态与失败原因摘要，便于重试和排查
 - [x] **SAFE-03**: 同一批未变更图片不会因重复触发而被无限重复入队
 
 ## Future Requirements
@@ -75,8 +75,8 @@
 | OPS-05 | Phase 13 | Pending |
 | OPS-06 | Phase 13 | Pending |
 | AIQ-03 | Phase 14 | Pending |
-| SAFE-01 | Phase 14 | Pending |
-| SAFE-02 | Phase 14 | Pending |
+| SAFE-01 | Phase 14 | Complete |
+| SAFE-02 | Phase 14 | Complete |
 
 **Coverage:**
 - v3.0 requirements: 15 total

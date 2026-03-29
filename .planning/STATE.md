@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 导入后任务平台化
-status: in_progress
-stopped_at: Phase 14 context gathered
-last_updated: "2026-03-28T17:17:42.298Z"
-last_activity: 2026-03-27
+status: executing
+stopped_at: Completed 14-02-PLAN.md
+last_updated: "2026-03-29T04:22:25.553Z"
+last_activity: 2026-03-29 -- Phase 14 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 15
-  completed_plans: 12
+  completed_plans: 13
   percent: 80
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。
-**Current focus:** Phase 14 补跑恢复与运营收尾
+**Current focus:** Phase 14 — backfill-recovery-operations
 
 ## Current Position
 
-Phase: 14 of 14 (补跑恢复与运营收尾)
-Plan: Context captured
-Status: Ready to plan
-Last activity: 2026-03-29
+Phase: 14 (backfill-recovery-operations) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 14
+Last activity: 2026-03-29 -- Phase 14 execution started
 
 Progress: [████████░░] 80% (12/15 plans complete)
 
@@ -76,6 +76,9 @@ Recent decisions affecting current work:
 - [Phase 13]: pause/resume 仅保留全局队列语义；cancel 以批次级为主入口，task 级为补充。
 - [Phase 13]: clear queue 只影响 pending/queued；running 任务必须保持不受影响。
 - [Phase 13]: failed retry 创建新批次，而不是把旧失败任务重置为 ready。
+- [Phase 14]: 失败原因聚合使用 error_summary 的冒号前缀作为分组键，按数量降序排列
+- [Phase 14]: retryability 分类器在后端确定性判断，不依赖前端推理（timeout/network=可重试，auth/config=不可重试）
+- [Phase 14]: FailureSummary 保留兼容，FailureGroups 新增在旁侧，不破坏现有消费者
 
 ### Pending Todos
 
@@ -87,6 +90,6 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-28T17:17:42.298Z
-Stopped at: Phase 14 context gathered
-Resume file: .planning/phases/14-backfill-recovery-operations/14-CONTEXT.md
+Last session: 2026-03-29T04:22:25.549Z
+Stopped at: Completed 14-02-PLAN.md
+Resume file: None

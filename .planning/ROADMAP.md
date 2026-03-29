@@ -97,9 +97,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 14-01: 实现“未打标签图片”批量补入队入口
-- [ ] 14-02: 强化单图失败隔离与批次继续执行逻辑
-- [ ] 14-03: 收敛失败可见性、恢复反馈与里程碑验收
+- [ ] `14-01-PLAN.md` — Define filtered backfill preview and execute contracts
+- [ ] `14-02-PLAN.md` — Prove per-image failure isolation and add grouped failure summaries
+- [ ] `14-03-PLAN.md` — Wire admin recovery UX and final operator verification
 
 ## Progress
 
@@ -121,4 +121,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 11. 任务平台基础与批次模型 | v3.0 | complete | Complete | 2026-03-24 |
 | 12. 导入后任务接入与自动调度 | v3.0 | 4/4 | Complete | 2026-03-26 |
 | 13. 后台监控与队列控制 | v3.0 | 4/4 | Complete    | 2026-03-27 |
-| 14. 补跑恢复与运营收尾 | v3.0 | 0/3 | Not started | - |
+| 14. 补跑恢复与运营收尾 | v3.0 | 1/3 | In Progress|  |
