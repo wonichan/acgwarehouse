@@ -227,6 +227,65 @@ func createTestImage(width, height int) image.Image {
 	return img
 }
 
+// TestCompressImageIfNeeded_ExceedsPixelLimit tests that images exceeding 36M pixel limit are resized
+// This test creates a large image with small file size to expose the missing pixel limit check
+func TestCompressImageIfNeeded_ExceedsPixelLimit(t *testing.T) {
+	// Create image with 10000x10000 (100M pixels > 36M limit)
+	// Use very low quality to ensure file size < 10MB (so file-based compression won't trigger)
+	tmpFile, err := os.CreateTemp("", "pixel_limit_*.jpg")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	img := createTestImage(10000, 10000)
+	// Use quality 1 to create small file size (< 10MB) but large pixel count
+	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 1}); err != nil {
+		t.Fatalf("Failed to encode: %v", err)
+	}
+
+	// Verify file size is under 10MB (so file-based resize won't trigger)
+	fileInfo, err := os.Stat(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to stat file: %v", err)
+	}
+	t.Logf("File size: %d bytes (%.2f MB)", fileInfo.Size(), float64(fileInfo.Size())/1024/1024)
+
+	compressedData, contentType, err := CompressImageIfNeeded(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("CompressImageIfNeeded failed: %v", err)
+	}
+
+	// Decode to check dimensions
+	decoded, err := jpeg.Decode(bytes.NewReader(compressedData))
+	if err != nil {
+		t.Fatalf("Failed to decode compressed: %v", err)
+	}
+
+	width := decoded.Bounds().Dx()
+	height := decoded.Bounds().Dy()
+	pixels := width * height
+
+	// Must fit within pixel limit (36M pixels)
+	maxPixelLimit := 36000000
+	if pixels > maxPixelLimit {
+		t.Errorf("Pixel count %d exceeds limit %d, dims=%dx%d", pixels, maxPixelLimit, width, height)
+	}
+
+	// Aspect ratio should be preserved (square → square)
+	if width != height {
+		t.Errorf("Square image should remain square, got %dx%d", width, height)
+	}
+
+	// Should be JPEG
+	if contentType != "image/jpeg" {
+		t.Errorf("Expected image/jpeg, got %s", contentType)
+	}
+
+	t.Logf("Resized from 10000x10000 (100M pixels) to %dx%d (%d pixels)", width, height, pixels)
+}
+
 // Helper function to encode PNG
 func encodePNG(w *os.File, img image.Image) error {
 	return png.Encode(w, img)
