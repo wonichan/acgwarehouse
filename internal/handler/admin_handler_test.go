@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
 
@@ -760,4 +763,186 @@ func TestAdminHandler_GetTasksByBatchID(t *testing.T) {
 
 func int64Ptr(v int64) *int64 {
 	return &v
+}
+
+// --- Phase 14: Backfill handler tests ---
+
+// mockBackfillService implements BackfillServiceInterface for testing.
+type mockBackfillService struct {
+	previewResult *service.BackfillPreviewResult
+	executeResult *service.BackfillExecuteResult
+	err           error
+}
+
+func (m *mockBackfillService) PreviewBackfill(_ context.Context, _ repository.BackfillCandidateFilter) (*service.BackfillPreviewResult, error) {
+	return m.previewResult, m.err
+}
+
+func (m *mockBackfillService) ExecuteBackfill(_ context.Context, _ repository.BackfillCandidateFilter, _ string) (*service.BackfillExecuteResult, error) {
+	return m.executeResult, m.err
+}
+
+func setupBackfillRouter(backfillSvc BackfillServiceInterface) (*gin.Engine, *AdminHandler) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{}
+	handler := NewAdminHandlerWithBackfill(cfg, mockSvc, backfillSvc)
+
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.POST("/actions/backfill/preview", handler.BackfillPreview)
+	admin.POST("/actions/backfill/execute", handler.BackfillExecute)
+	return r, handler
+}
+
+func authHeader() string {
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:secret"))
+}
+
+func TestBackfillPreview_RejectsMissingFilters(t *testing.T) {
+	mock := &mockBackfillService{}
+	r, _ := setupBackfillRouter(mock)
+
+	// Empty JSON body — no tag_ids or has_tags
+	body := `{}`
+	req := httptest.NewRequest("POST", "/admin/api/actions/backfill/preview", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", authHeader())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unfiltered request, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "narrowing filter") {
+		t.Fatalf("expected narrowing filter error, got %s", w.Body.String())
+	}
+}
+
+func TestBackfillPreview_ReturnsStructuredCounts(t *testing.T) {
+	mock := &mockBackfillService{
+		previewResult: &service.BackfillPreviewResult{
+			HitCount:              20,
+			EnqueueableCount:      12,
+			SkippedWithAITag:      5,
+			SkippedWithActiveTask: 3,
+			SkippedTotal:          8,
+		},
+	}
+	r, _ := setupBackfillRouter(mock)
+
+	body := `{"tag_ids": [1, 2], "has_tags": false}`
+	req := httptest.NewRequest("POST", "/admin/api/actions/backfill/preview", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", authHeader())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp["success"] != true {
+		t.Errorf("expected success=true, got %v", resp["success"])
+	}
+
+	data, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object in response, got %T", resp["data"])
+	}
+	if data["hit_count"].(float64) != 20 {
+		t.Errorf("expected hit_count=20, got %v", data["hit_count"])
+	}
+	if data["enqueueable_count"].(float64) != 12 {
+		t.Errorf("expected enqueueable_count=12, got %v", data["enqueueable_count"])
+	}
+	if data["skipped_with_ai_tag"].(float64) != 5 {
+		t.Errorf("expected skipped_with_ai_tag=5, got %v", data["skipped_with_ai_tag"])
+	}
+	if data["skipped_with_active_task"].(float64) != 3 {
+		t.Errorf("expected skipped_with_active_task=3, got %v", data["skipped_with_active_task"])
+	}
+}
+
+func TestBackfillExecute_ReturnsNoOpForZeroEligible(t *testing.T) {
+	mock := &mockBackfillService{
+		executeResult: &service.BackfillExecuteResult{
+			Success:           false,
+			CreatedTasks:      0,
+			SkippedTotal:      5,
+			SkippedWithAITag:  3,
+			SkippedWithActive: 2,
+			NoOpReason:        "当前筛选结果中没有可补跑的图片（3 张已有 AI 标签， 2 张已有在途任务）",
+		},
+	}
+	r, _ := setupBackfillRouter(mock)
+
+	body := `{"tag_ids": [1]}`
+	req := httptest.NewRequest("POST", "/admin/api/actions/backfill/execute", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", authHeader())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp["success"] != false {
+		t.Errorf("expected success=false for no-op, got %v", resp["success"])
+	}
+	if resp["no_op_reason"] == nil || resp["no_op_reason"].(string) == "" {
+		t.Error("expected non-empty no_op_reason")
+	}
+}
+
+func TestBackfillExecute_ReturnsBatchOnSuccess(t *testing.T) {
+	mock := &mockBackfillService{
+		executeResult: &service.BackfillExecuteResult{
+			Success:           true,
+			BatchID:           42,
+			CreatedTasks:      7,
+			SkippedTotal:      3,
+			SkippedWithAITag:  2,
+			SkippedWithActive: 1,
+		},
+	}
+	r, _ := setupBackfillRouter(mock)
+
+	bodyBytes, _ := json.Marshal(map[string]interface{}{
+		"has_tags": false,
+		"prompt":   "describe this image",
+	})
+	req := httptest.NewRequest("POST", "/admin/api/actions/backfill/execute", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", authHeader())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp["success"] != true {
+		t.Errorf("expected success=true, got %v", resp["success"])
+	}
+	if resp["batch_id"].(float64) != 42 {
+		t.Errorf("expected batch_id=42, got %v", resp["batch_id"])
+	}
+	if resp["created_tasks"].(float64) != 7 {
+		t.Errorf("expected created_tasks=7, got %v", resp["created_tasks"])
+	}
 }

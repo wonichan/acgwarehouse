@@ -10,8 +10,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
+
+// BackfillServiceInterface defines the interface for backfill operations.
+type BackfillServiceInterface interface {
+	PreviewBackfill(ctx context.Context, filter repository.BackfillCandidateFilter) (*service.BackfillPreviewResult, error)
+	ExecuteBackfill(ctx context.Context, filter repository.BackfillCandidateFilter, prompt string) (*service.BackfillExecuteResult, error)
+}
 
 // AdminServiceInterface defines the interface for admin service operations.
 // This allows for both real implementations and mocks for testing.
@@ -54,8 +61,9 @@ func (h *AdminHandler) GetTaskPlatformOverview(c *gin.Context) {
 
 // AdminHandler handles admin dashboard HTTP endpoints.
 type AdminHandler struct {
-	cfg      *config.Config
-	adminSvc AdminServiceInterface
+	cfg         *config.Config
+	adminSvc    AdminServiceInterface
+	backfillSvc BackfillServiceInterface
 }
 
 // NewAdminHandler creates a new AdminHandler.
@@ -65,6 +73,118 @@ func NewAdminHandler(cfg *config.Config, adminSvc AdminServiceInterface) *AdminH
 		cfg:      cfg,
 		adminSvc: adminSvc,
 	}
+}
+
+// NewAdminHandlerWithBackfill creates a new AdminHandler with backfill service.
+func NewAdminHandlerWithBackfill(cfg *config.Config, adminSvc AdminServiceInterface, backfillSvc BackfillServiceInterface) *AdminHandler {
+	return &AdminHandler{
+		cfg:         cfg,
+		adminSvc:    adminSvc,
+		backfillSvc: backfillSvc,
+	}
+}
+
+// BackfillPreview handles POST /admin/api/actions/backfill/preview
+// It returns preview counts for a backfill operation without creating any tasks.
+func (h *AdminHandler) BackfillPreview(c *gin.Context) {
+	if h.backfillSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "backfill service not configured"})
+		return
+	}
+
+	filter, err := parseBackfillFilter(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	result, err := h.backfillSvc.PreviewBackfill(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"hit_count":                result.HitCount,
+			"enqueueable_count":        result.EnqueueableCount,
+			"skipped_total":            result.SkippedTotal,
+			"skipped_with_ai_tag":      result.SkippedWithAITag,
+			"skipped_with_active_task": result.SkippedWithActiveTask,
+		},
+	})
+}
+
+// BackfillExecute handles POST /admin/api/actions/backfill/execute
+// It creates a manual batch for eligible candidates and returns structured results.
+func (h *AdminHandler) BackfillExecute(c *gin.Context) {
+	if h.backfillSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "backfill service not configured"})
+		return
+	}
+
+	filter, err := parseBackfillFilter(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	prompt := c.DefaultPostForm("prompt", "")
+
+	result, err := h.backfillSvc.ExecuteBackfill(c.Request.Context(), filter, prompt)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	response := gin.H{
+		"success":                  result.Success,
+		"created_tasks":            result.CreatedTasks,
+		"skipped_total":            result.SkippedTotal,
+		"skipped_with_ai_tag":      result.SkippedWithAITag,
+		"skipped_with_active_task": result.SkippedWithActive,
+	}
+	if result.NoOpReason != "" {
+		response["no_op_reason"] = result.NoOpReason
+	}
+	if result.BatchID > 0 {
+		response["batch_id"] = result.BatchID
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// parseBackfillFilter extracts and validates backfill filter from request body.
+func parseBackfillFilter(c *gin.Context) (repository.BackfillCandidateFilter, error) {
+	var req struct {
+		TagIDs  []int64 `json:"tag_ids"`
+		HasTags *bool   `json:"has_tags"`
+		SortBy  string  `json:"sort_by"`
+		SortDir string  `json:"sort_dir"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		return repository.BackfillCandidateFilter{}, fmt.Errorf("invalid request body: %w", err)
+	}
+
+	filter := repository.BackfillCandidateFilter{
+		TagIDs:  req.TagIDs,
+		HasTags: req.HasTags,
+		SortBy:  req.SortBy,
+		SortDir: req.SortDir,
+	}
+
+	if !service.IsFilterNarrowed(filter) {
+		return filter, fmt.Errorf("backfill requires at least one narrowing filter (tag_ids or has_tags); unfiltered full-library scans are not allowed")
+	}
+
+	return filter, nil
 }
 
 // AuthMiddleware returns a Basic Auth middleware for the admin routes.

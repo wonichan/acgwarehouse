@@ -50,7 +50,16 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	// Admin routes - protected with Basic Auth
 	var adminHandler *AdminHandler
 	if deps != nil && deps.AdminSvc != nil && deps.AdminCfg != nil {
-		adminHandler = NewAdminHandler(deps.AdminCfg, deps.AdminSvc)
+		// Create admin handler; wire backfill service if image repo and DB are available
+		if deps.ImageRepo != nil && deps.JobRepo != nil && deps.DB != nil {
+			taskRepo := repository.NewPlatformTaskRepository(deps.DB)
+			batchRepo := repository.NewTaskBatchRepository(deps.DB)
+			taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, deps.JobRepo)
+			backfillSvc := service.NewAIBackfillService(deps.ImageRepo, taskPlatformSvc)
+			adminHandler = NewAdminHandlerWithBackfill(deps.AdminCfg, deps.AdminSvc, backfillSvc)
+		} else {
+			adminHandler = NewAdminHandler(deps.AdminCfg, deps.AdminSvc)
+		}
 	}
 
 	admin := r.Group("/admin/api")
@@ -71,6 +80,9 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 			admin.POST("/actions/task-batches/:batch_id/cancel", adminHandler.CancelTaskBatch)
 			admin.POST("/actions/tasks/:task_id/cancel", adminHandler.CancelTask)
 			admin.POST("/actions/tasks/:task_id/retry-failed", adminHandler.RetryFailedTask)
+			// Phase 14: Backfill preview and execute endpoints
+			admin.POST("/actions/backfill/preview", adminHandler.BackfillPreview)
+			admin.POST("/actions/backfill/execute", adminHandler.BackfillExecute)
 			// FTS rebuild endpoint for fixing search index
 			if deps != nil && deps.DB != nil {
 				admin.POST("/actions/search/rebuild-fts", func(c *gin.Context) {
