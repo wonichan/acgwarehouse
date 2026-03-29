@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 导入后任务平台化
 status: executing
-stopped_at: Completed 14-02-PLAN.md
-last_updated: "2026-03-29T04:22:25.553Z"
-last_activity: 2026-03-29 -- Phase 14 execution started
+stopped_at: Completed 14-03-PLAN.md (human-verify checkpoint pending)
+last_updated: "2026-03-29T05:28:43.426Z"
+last_activity: 2026-03-29
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 15
   percent: 80
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 ## Current Position
 
 Phase: 14 (backfill-recovery-operations) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 14
-Last activity: 2026-03-29 -- Phase 14 execution started
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-03-29
 
 Progress: [████████░░] 80% (12/15 plans complete)
 
@@ -79,6 +79,7 @@ Recent decisions affecting current work:
 - [Phase 14]: 失败原因聚合使用 error_summary 的冒号前缀作为分组键，按数量降序排列
 - [Phase 14]: retryability 分类器在后端确定性判断，不依赖前端推理（timeout/network=可重试，auth/config=不可重试）
 - [Phase 14]: FailureSummary 保留兼容，FailureGroups 新增在旁侧，不破坏现有消费者
+- [Phase 14]: Backfill控制区与重试保持为独立区域；分组失败在批次列表层直接渲染;分组失败渲染使用结构化payload数据;修复BackfillExecute从 JSON body读取prompt
 
 ### Pending Todos
 
@@ -90,6 +91,6 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-29T04:22:25.549Z
-Stopped at: Completed 14-02-PLAN.md
+Last session: 2026-03-29T05:28:43.422Z
+Stopped at: Completed 14-03-PLAN.md (human-verify checkpoint pending)
 Resume file: None

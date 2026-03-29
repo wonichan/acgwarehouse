@@ -15,7 +15,7 @@
 
 - [x] **AIQ-01**: 用户导入图片后，系统会自动把符合条件的图片加入 AI 打标签队列
 - [x] **AIQ-02**: 默认只有没有 AI 标签的图片会自动进入 AI 打标签队列
-- [ ] **AIQ-03**: 管理员可以批量把未打过 AI 标签的图片加入队列处理
+- [x] **AIQ-03**: 管理员可以批量把未打过 AI 标签的图片加入队列处理
 
 ### Operations（后台监控与控制）
 
@@ -74,7 +74,7 @@
 | OPS-04 | Phase 13 | Pending |
 | OPS-05 | Phase 13 | Pending |
 | OPS-06 | Phase 13 | Pending |
-| AIQ-03 | Phase 14 | Pending |
+| AIQ-03 | Phase 14 | Complete |
 | SAFE-01 | Phase 14 | Complete |
 | SAFE-02 | Phase 14 | Complete |
 
