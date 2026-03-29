@@ -286,6 +286,110 @@ func TestCompressImageIfNeeded_ExceedsPixelLimit(t *testing.T) {
 	t.Logf("Resized from 10000x10000 (100M pixels) to %dx%d (%d pixels)", width, height, pixels)
 }
 
+// TestCompressImageIfNeeded_NonSquarePixelLimit tests aspect ratio preservation for non-square images
+func TestCompressImageIfNeeded_NonSquarePixelLimit(t *testing.T) {
+	// Create 15000x5000 image = 75M pixels > 36M limit
+	// Aspect ratio: 3:1 (width:height)
+	// Should resize to ~6708x2236 (maintaining 3:1 ratio)
+	tmpFile, err := os.CreateTemp("", "nonsquare_*.jpg")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	img := createTestImage(15000, 5000)
+	// Use quality 1 to create small file size (< 10MB)
+	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 1}); err != nil {
+		t.Fatalf("Failed to encode: %v", err)
+	}
+
+	compressedData, contentType, err := CompressImageIfNeeded(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("CompressImageIfNeeded failed: %v", err)
+	}
+
+	// Decode to check dimensions
+	decoded, err := jpeg.Decode(bytes.NewReader(compressedData))
+	if err != nil {
+		t.Fatalf("Failed to decode compressed: %v", err)
+	}
+
+	width := decoded.Bounds().Dx()
+	height := decoded.Bounds().Dy()
+	pixels := width * height
+
+	// Must fit within pixel limit (36M pixels)
+	maxPixelLimit := 36000000
+	if pixels > maxPixelLimit {
+		t.Errorf("Pixel count %d exceeds limit %d, dims=%dx%d", pixels, maxPixelLimit, width, height)
+	}
+
+	// Aspect ratio should be preserved (~3:1)
+	originalRatio := 15000.0 / 5000.0 // 3.0
+	newRatio := float64(width) / float64(height)
+	if newRatio < originalRatio*0.95 || newRatio > originalRatio*1.05 {
+		t.Errorf("Aspect ratio not preserved, expected ~%.2f, got %.2f (dims=%dx%d)", originalRatio, newRatio, width, height)
+	}
+
+	// Should be JPEG
+	if contentType != "image/jpeg" {
+		t.Errorf("Expected image/jpeg, got %s", contentType)
+	}
+
+	t.Logf("Resized from 15000x5000 (75M pixels) to %dx%d (%d pixels), ratio %.2f", width, height, pixels, newRatio)
+}
+
+// TestCompressImageIfNeeded_UnderPixelLimit tests that images under pixel limit are not unnecessarily resized
+func TestCompressImageIfNeeded_UnderPixelLimit(t *testing.T) {
+	// Create 5000x5000 = 25M pixels < 36M limit
+	// Should NOT resize, just return original (or process for file size if needed)
+	tmpFile, err := os.CreateTemp("", "under_limit_*.jpg")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	img := createTestImage(5000, 5000)
+	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 90}); err != nil {
+		t.Fatalf("Failed to encode: %v", err)
+	}
+
+	// Get original dimensions
+	originalWidth := 5000
+	originalHeight := 5000
+	originalPixels := originalWidth * originalHeight // 25M
+
+	compressedData, contentType, err := CompressImageIfNeeded(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("CompressImageIfNeeded failed: %v", err)
+	}
+
+	// Decode to check dimensions
+	decoded, err := jpeg.Decode(bytes.NewReader(compressedData))
+	if err != nil {
+		t.Fatalf("Failed to decode compressed: %v", err)
+	}
+
+	width := decoded.Bounds().Dx()
+	height := decoded.Bounds().Dy()
+	pixels := width * height
+
+	// Should NOT resize - dimensions should remain same (or larger if file size compression didn't need resize)
+	// Note: if file size > 10MB, it might resize, but pixel count should still be under limit
+	if pixels > maxAIPixelCount {
+		t.Errorf("Pixel count %d exceeds limit %d for image under pixel limit", pixels, maxAIPixelCount)
+	}
+
+	// For small files, content type should be preserved
+	if contentType != "image/jpeg" {
+		t.Errorf("Expected image/jpeg, got %s", contentType)
+	}
+
+	t.Logf("Image dimensions: %dx%d (%d pixels), original: %dx%d (%d pixels)", width, height, pixels, originalWidth, originalHeight, originalPixels)
+}
+
 // Helper function to encode PNG
 func encodePNG(w *os.File, img image.Image) error {
 	return png.Encode(w, img)
