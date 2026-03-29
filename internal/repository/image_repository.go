@@ -10,6 +10,22 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 )
 
+// BackfillCandidateFilter defines filter criteria for backfill candidate queries.
+type BackfillCandidateFilter struct {
+	TagIDs  []int64
+	HasTags *bool // false = untagged only; nil = no has_tags filter
+	SortBy  string
+	SortDir string
+}
+
+// BackfillCandidateStats holds skip-reason counts for a backfill preview.
+type BackfillCandidateStats struct {
+	HitCount              int64
+	EnqueueableCount      int64
+	SkippedWithAITag      int64
+	SkippedWithActiveTask int64
+}
+
 type ImageRepository interface {
 	// SaveImage saves an image to the database.
 	// Returns (isNew, error) where isNew is true if a new record was inserted,
@@ -23,6 +39,17 @@ type ImageRepository interface {
 	FindUntagged(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountUntagged(ctx context.Context) (int64, error)
 	FindImagesWithoutAITags(ctx context.Context, limit int) ([]domain.Image, error)
+	// FindBackfillCandidates returns images matching the filter that are eligible for AI backfill:
+	// no AI source tags and no active (pending/queued/running) AI tasks.
+	FindBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) ([]domain.Image, error)
+	// CountBackfillCandidates returns the count of images matching the filter that are eligible for AI backfill.
+	CountBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
+	// CountBackfillSkippedWithAITag returns the count of images matching the filter that already have AI source tags.
+	CountBackfillSkippedWithAITag(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
+	// CountBackfillSkippedWithActiveTask returns the count of images matching the filter that already have active AI tasks.
+	CountBackfillSkippedWithActiveTask(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
+	// CountBackfillHitCount returns the total count of images matching the filter (before any skip classification).
+	CountBackfillHitCount(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
 	UpdateThumbnails(id int64, smallURL, largeURL string) error
 	Count() (int64, error)
 	Delete(id int64) error
@@ -469,4 +496,34 @@ func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, lim
 func (r *sqliteImageRepository) Delete(id int64) error {
 	_, err := r.db.Exec(`DELETE FROM images WHERE id = ?`, id)
 	return err
+}
+
+// FindBackfillCandidates returns images matching the filter that are eligible for AI backfill.
+// Stub implementation - full implementation provided by Phase 14 Plan 01.
+func (r *sqliteImageRepository) FindBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) ([]domain.Image, error) {
+	return nil, nil
+}
+
+// CountBackfillCandidates returns the count of images matching the filter that are eligible for AI backfill.
+// Stub implementation - full implementation provided by Phase 14 Plan 01.
+func (r *sqliteImageRepository) CountBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
+	return 0, nil
+}
+
+// CountBackfillSkippedWithAITag returns the count of images matching the filter that already have AI source tags.
+// Stub implementation - full implementation provided by Phase 14 Plan 01.
+func (r *sqliteImageRepository) CountBackfillSkippedWithAITag(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
+	return 0, nil
+}
+
+// CountBackfillSkippedWithActiveTask returns the count of images matching the filter that already have active AI tasks.
+// Stub implementation - full implementation provided by Phase 14 Plan 01.
+func (r *sqliteImageRepository) CountBackfillSkippedWithActiveTask(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
+	return 0, nil
+}
+
+// CountBackfillHitCount returns the total count of images matching the filter (before any skip classification).
+// Stub implementation - full implementation provided by Phase 14 Plan 01.
+func (r *sqliteImageRepository) CountBackfillHitCount(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
+	return 0, nil
 }
