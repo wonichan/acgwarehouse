@@ -1,5 +1,5 @@
 ---
-status: partial
+status: diagnosed
 phase: 11-task-platform-batch-model
 source:
   - 11-01-SUMMARY.md
@@ -74,7 +74,17 @@ blocked: 0
   reason: "User reported: 批次内的任务无法完成"
   severity: major
   test: 5
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "任务状态聚合逻辑遗漏 skipped 状态的终态处理，且平台任务从 pending 到 queued 的状态转换未在创建时正确设置 queued_at 字段"
+  artifacts:
+    - path: "internal/repository/task_batch_repository.go"
+      issue: "RefreshStatus 方法第 259-281 行的 switch 逻辑未处理所有任务均为 skipped 的情况"
+    - path: "internal/service/task_platform_service.go"
+      issue: "QueueTask 方法第 144-171 行未更新 platform_tasks.status 为 queued，也未设置 queued_at 时间戳"
+    - path: "internal/domain/platform_task.go"
+      issue: "PlatformTask 结构体定义了 QueuedAt 字段但 QueueTask 服务方法未填充"
+  missing:
+    - "在 task_batch_repository.go RefreshStatus 中添加对 skipped == total 的显式处理"
+    - "在 task_platform_service.go QueueTask 中调用 taskRepo.UpdateStatus 将任务状态从 pending 改为 queued"
+    - "在 task_platform_service.go QueueTask 中设置 task.QueuedAt = &now"
+    - "考虑在 PlanBatch 中初始创建任务时直接设为 queued 状态而非 pending"
   debug_session: ""
