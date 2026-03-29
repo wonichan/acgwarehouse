@@ -75,8 +75,16 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 				return err
 			}
 		} else {
-			if err := s.tagRepo.IncrementUsageCount(ctx, tag.ID); err != nil {
+			// Check if image-tag association already exists before incrementing count
+			// This prevents double-counting when retrying failed AI tag generation tasks
+			exists, err := s.imageTagRepo.Exists(ctx, imageID, tag.ID)
+			if err != nil {
 				return err
+			}
+			if !exists {
+				if err := s.tagRepo.IncrementUsageCount(ctx, tag.ID); err != nil {
+					return err
+				}
 			}
 		}
 

@@ -93,13 +93,13 @@ None currently.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260329-rwt | 修复重试失败任务时AI标签计数错误增加的bug | 2026-03-29 | e106d5e | [260329-rwt-ai-bug](./quick/260329-rwt-ai-bug/) |
 | 260329-q5e | Fix AI tag generation pixel limit error | 2026-03-29 | c36bcd9 | [260329-q5e-fix-ai-tag-generation-image-size-limit-e](./quick/260329-q5e-fix-ai-tag-generation-image-size-limit-e/) |
 
 ## Session Continuity
 
-Last session: 2026-03-29T08:30:00.000Z
-Stopped at: Phase 14 VERIFIED — v3.0 milestone complete
-Resume file: None
+Last session: 2026-03-29T12:05:00.000Z
+Last activity: 2026-03-29 - Completed quick task 260329-rwt: 修复重试失败任务时AI标签计数错误增加的bug
 
 ---
 

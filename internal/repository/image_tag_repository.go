@@ -21,6 +21,7 @@ type ImageTagRepository interface {
 	MergeImageTag(ctx context.Context, imageID, sourceTagID, targetTagID int64) error
 	GetTagStats(ctx context.Context, tagID int64) (*TagStats, error)
 	SyncFTSForTag(ctx context.Context, tagID int64) error
+	Exists(ctx context.Context, imageID, tagID int64) (bool, error)
 }
 
 type TagStats struct {
@@ -275,4 +276,17 @@ func (r *imageTagRepository) GetTagStats(ctx context.Context, tagID int64) (*Tag
 	stats.ManualCount = stats.UsageCount - stats.AICount
 
 	return stats, nil
+}
+
+// Exists checks if an image-tag association already exists.
+// Returns true if the association exists, false otherwise.
+func (r *imageTagRepository) Exists(ctx context.Context, imageID, tagID int64) (bool, error) {
+	var count int64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM image_tags WHERE image_id = ? AND tag_id = ?
+	`, imageID, tagID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }

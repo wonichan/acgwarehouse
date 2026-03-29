@@ -202,3 +202,52 @@ func mustSaveGovernanceAlias(t *testing.T, repo repository.TagAliasRepository, a
 
 	return alias
 }
+
+// TestTagGovernanceMergeTagsDoesNotIncrementCountWhenAssociationExists verifies the bug fix:
+// When retrying a failed AI tag generation task, the image-tag association may already exist
+// from a previous partial success. In this case, we should NOT increment the usage count again.
+func TestTagGovernanceMergeTagsDoesNotIncrementCountWhenAssociationExists(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, imageTagRepo := newTagGovernanceServiceForTest(t)
+	// Create a tag with initial usage count
+	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "sunset", Slug: "sunset", ReviewState: "confirmed", UsageCount: 5})
+
+	// First merge: create image-tag association and increment count
+	if err := service.MergeTags(context.Background(), 1, []string{"sunset"}, 1, 0.9); err != nil {
+		t.Fatalf("first MergeTags() error = %v", err)
+	}
+
+	// Verify count incremented to 6
+	tag, err := tagRepo.FindByID(context.Background(), existing.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if tag.UsageCount != 6 {
+		t.Fatalf("after first merge: UsageCount = %d, want 6", tag.UsageCount)
+	}
+
+	// Second merge (simulating retry): association already exists
+	// Use same observation ID=1 (retry scenario may reuse the same observation)
+	if err := service.MergeTags(context.Background(), 1, []string{"sunset"}, 1, 0.9); err != nil {
+		t.Fatalf("second MergeTags() error = %v", err)
+	}
+
+	// Verify count is still 6 (not incremented again)
+	tag, err = tagRepo.FindByID(context.Background(), existing.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if tag.UsageCount != 6 {
+		t.Fatalf("after second merge (retry): UsageCount = %d, want 6 (should not increment again)", tag.UsageCount)
+	}
+
+	// Verify the image-tag association exists
+	items, err := imageTagRepo.FindByImageID(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	if len(items) != 1 || items[0].TagID != existing.ID {
+		t.Fatalf("unexpected image tag association count: got %d items, want 1", len(items))
+	}
+}
