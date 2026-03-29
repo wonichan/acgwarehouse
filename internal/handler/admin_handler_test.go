@@ -769,16 +769,20 @@ func int64Ptr(v int64) *int64 {
 
 // mockBackfillService implements BackfillServiceInterface for testing.
 type mockBackfillService struct {
-	previewResult *service.BackfillPreviewResult
-	executeResult *service.BackfillExecuteResult
-	err           error
+	previewResult          *service.BackfillPreviewResult
+	executeResult          *service.BackfillExecuteResult
+	executeBackfillCapture *string // captures prompt argument if non-nil
+	err                    error
 }
 
 func (m *mockBackfillService) PreviewBackfill(_ context.Context, _ repository.BackfillCandidateFilter) (*service.BackfillPreviewResult, error) {
 	return m.previewResult, m.err
 }
 
-func (m *mockBackfillService) ExecuteBackfill(_ context.Context, _ repository.BackfillCandidateFilter, _ string) (*service.BackfillExecuteResult, error) {
+func (m *mockBackfillService) ExecuteBackfill(_ context.Context, _ repository.BackfillCandidateFilter, prompt string) (*service.BackfillExecuteResult, error) {
+	if m.executeBackfillCapture != nil {
+		*m.executeBackfillCapture = prompt
+	}
 	return m.executeResult, m.err
 }
 
@@ -902,6 +906,182 @@ func TestBackfillExecute_ReturnsNoOpForZeroEligible(t *testing.T) {
 	}
 	if resp["no_op_reason"] == nil || resp["no_op_reason"].(string) == "" {
 		t.Error("expected non-empty no_op_reason")
+	}
+}
+
+// --- Phase 14-03: Backfill UX contract and failure group tests ---
+
+func TestGetTaskBatches_PayloadIncludesFailureGroups(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{
+		taskBatches: []service.TaskBatchReadModel{{
+			ID:             15,
+			SourceType:     "import_scan",
+			SummaryLabel:   "import batch",
+			Status:         "partial_failed",
+			SourceSummary:  "root-a",
+			StatusCounts:   map[string]int64{"completed": 3, "failed": 2},
+			TaskTypeCounts: map[string]int64{"ai_tag_generation": 5},
+			FailureSummary: "timeout: API request exceeded 30s; network: connection refused",
+			FailureGroups: []service.TaskBatchFailureGroup{
+				{ReasonKey: "timeout", ReasonLabel: "超时", Count: 1, RetryRecommended: true, RetryHint: "可安全重试，通常为临时性问题"},
+				{ReasonKey: "network", ReasonLabel: "网络错误", Count: 1, RetryRecommended: true, RetryHint: "可安全重试，通常为临时性问题"},
+			},
+		}},
+	}
+
+	handler := NewAdminHandler(cfg, mockSvc)
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.GET("/task-batches", handler.GetTaskBatches)
+
+	req := httptest.NewRequest("GET", "/admin/api/task-batches", nil)
+	req.Header.Set("Authorization", authHeader())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	batches, ok := resp["task_batches"].([]interface{})
+	if !ok {
+		t.Fatalf("expected task_batches array, got %T", resp["task_batches"])
+	}
+	if len(batches) == 0 {
+		t.Fatal("expected at least one batch")
+	}
+
+	batch := batches[0].(map[string]interface{})
+
+	// Verify failure_groups is present in the payload
+	fg, ok := batch["failure_groups"]
+	if !ok {
+		t.Fatal("expected failure_groups field in batch payload")
+	}
+	groups, ok := fg.([]interface{})
+	if !ok {
+		t.Fatalf("expected failure_groups to be an array, got %T", fg)
+	}
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 failure groups, got %d", len(groups))
+	}
+
+	// Verify first group has the required fields for admin UI rendering
+	g0 := groups[0].(map[string]interface{})
+	requiredKeys := []string{"reason_key", "reason_label", "count", "retry_recommended", "retry_hint"}
+	for _, key := range requiredKeys {
+		if _, exists := g0[key]; !exists {
+			t.Errorf("failure group missing required field: %s", key)
+		}
+	}
+	if g0["reason_key"].(string) != "timeout" {
+		t.Errorf("expected first group reason_key=timeout, got %v", g0["reason_key"])
+	}
+	if g0["retry_recommended"] != true {
+		t.Errorf("expected timeout group retry_recommended=true, got %v", g0["retry_recommended"])
+	}
+}
+
+func TestBackfillExecute_ReadsPromptFromJSONBody(t *testing.T) {
+	// Verify that execute endpoint reads the prompt field from JSON body (not form data)
+	var capturedPrompt string
+	mock := &mockBackfillService{
+		executeResult: &service.BackfillExecuteResult{
+			Success:      true,
+			BatchID:      55,
+			CreatedTasks: 3,
+		},
+	}
+	// Override ExecuteBackfill to capture prompt
+	origExecuteBackfill := mock.ExecuteBackfill
+	_ = origExecuteBackfill // keep reference
+	mock.executeBackfillCapture = &capturedPrompt
+
+	r, _ := setupBackfillRouter(mock)
+
+	body := `{"has_tags": false, "prompt": "custom prompt for backfill"}`
+	req := httptest.NewRequest("POST", "/admin/api/actions/backfill/execute", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", authHeader())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp["success"] != true {
+		t.Errorf("expected success=true, got %v", resp["success"])
+	}
+	if capturedPrompt != "custom prompt for backfill" {
+		t.Errorf("expected prompt to be passed through from JSON body, got %q", capturedPrompt)
+	}
+}
+
+func TestGetTaskBatches_FailedBatchShowsRetryableGuidance(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{
+		taskBatches: []service.TaskBatchReadModel{{
+			ID:             20,
+			SourceType:     "ai_tag",
+			SummaryLabel:   "AI 标签生成",
+			Status:         "failed",
+			SourceSummary:  "manual",
+			StatusCounts:   map[string]int64{"failed": 5},
+			TaskTypeCounts: map[string]int64{"ai_tag_generation": 5},
+			FailureSummary: "auth: invalid API key",
+			FailureGroups: []service.TaskBatchFailureGroup{
+				{ReasonKey: "auth", ReasonLabel: "认证失败", Count: 5, RetryRecommended: false, RetryHint: "不建议重试，请检查配置或数据"},
+			},
+		}},
+	}
+
+	handler := NewAdminHandler(cfg, mockSvc)
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.GET("/task-batches", handler.GetTaskBatches)
+
+	req := httptest.NewRequest("GET", "/admin/api/task-batches", nil)
+	req.Header.Set("Authorization", authHeader())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	batches := resp["task_batches"].([]interface{})
+	batch := batches[0].(map[string]interface{})
+	groups := batch["failure_groups"].([]interface{})
+	g0 := groups[0].(map[string]interface{})
+
+	// Non-retryable: auth failure should have retry_recommended=false
+	if g0["retry_recommended"] != false {
+		t.Errorf("expected auth group retry_recommended=false, got %v", g0["retry_recommended"])
+	}
+	if g0["retry_hint"] == nil || g0["retry_hint"].(string) == "" {
+		t.Error("expected non-empty retry_hint for auth failure group")
 	}
 }
 
