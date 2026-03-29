@@ -272,6 +272,9 @@ func (r *sqliteTaskBatchRepository) RefreshStatus(ctx context.Context, batchID i
 	case cancelled == total:
 		batch.Status = domain.TaskBatchStatusCancelled
 		batch.FinishedAt = &now
+	case skipped == total:
+		batch.Status = domain.TaskBatchStatusCompleted
+		batch.FinishedAt = &now
 	case failed > 0:
 		batch.Status = domain.TaskBatchStatusPartialFailed
 		batch.FinishedAt = &now

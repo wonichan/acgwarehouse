@@ -121,7 +121,55 @@ func TestTaskBatchRepositoryRefreshStatusAggregatesLifecycle(t *testing.T) {
 		t.Fatalf("partial failure aggregate status = %q, want %q", refreshed.Status, domain.TaskBatchStatusPartialFailed)
 	}
 	if refreshed.FinishedAt == nil {
-		t.Fatal("expected finished_at to be set once all tasks reached terminal states")
+		t.Fatal("expected finished_at to be set once all tasks reach terminal states")
+	}
+}
+
+func TestTaskBatchRepositoryRefreshStatus_SkippedOnlyBatchesMarkAsCompleted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := newTaskPlatformSchemaTestDB(t)
+	defer db.Close()
+
+	batchRepo := NewTaskBatchRepository(db)
+	taskRepo := NewPlatformTaskRepository(db)
+	image := saveTaskPlatformTestImage(t, db, "skipped-only.png")
+
+	batch := &domain.TaskBatch{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "skipped only",
+		Status:       domain.TaskBatchStatusPending,
+		CreatedAt:    time.Now(),
+	}
+	if err := batchRepo.Create(ctx, batch); err != nil {
+		t.Fatalf("Create(batch) error = %v", err)
+	}
+
+	versionKey := "image:" + image.Filename + ":v1"
+	task := domain.PlatformTask{
+		BatchID:         batch.ID,
+		ImageID:         image.ID,
+		TaskType:        domain.PlatformTaskTypeThumbnailGenerate,
+		SourceType:      domain.TaskBatchSourceImportScan,
+		Status:          domain.PlatformTaskStatusSkipped,
+		ImageVersionKey: versionKey,
+		DedupeKey:       versionKey + ":thumbnail",
+		CreatedAt:       time.Now(),
+	}
+	if err := taskRepo.Create(ctx, &task); err != nil {
+		t.Fatalf("Create(task) error = %v", err)
+	}
+
+	refreshed, err := batchRepo.RefreshStatus(ctx, batch.ID)
+	if err != nil {
+		t.Fatalf("RefreshStatus(skipped only) error = %v", err)
+	}
+	if refreshed.Status != domain.TaskBatchStatusCompleted {
+		t.Fatalf("skipped-only batch status = %q, want %q", refreshed.Status, domain.TaskBatchStatusCompleted)
+	}
+	if refreshed.FinishedAt == nil {
+		t.Fatal("expected finished_at to be set for skipped-only batch")
 	}
 }
 
