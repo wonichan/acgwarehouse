@@ -186,6 +186,34 @@ func (s *ScannerService) Scan(ctx context.Context, roots []string) (*ScanResult,
 		for _, task := range planResult.CreatedTasks {
 			result.CreatedPlatformTaskIDs = append(result.CreatedPlatformTaskIDs, task.ID)
 		}
+
+		// Build imageID→path map for payload construction
+		imageIDToPath := make(map[int64]string, len(items))
+		for _, item := range items {
+			imageIDToPath[item.ImageID] = item.SourceDescriptor
+		}
+
+		// Queue thumbnail tasks for worker processing
+		for i := range planResult.CreatedTasks {
+			task := &planResult.CreatedTasks[i]
+			path := imageIDToPath[task.ImageID]
+
+			// Extract filename without extension for thumbnail naming
+			filename := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+
+			payload, err := json.Marshal(map[string]any{
+				"image_id": task.ImageID,
+				"path":     path,
+				"filename": filename,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("marshal thumbnail payload for task %d: %w", task.ID, err)
+			}
+
+			if _, err := s.taskSvc.QueueTask(ctx, task, domain.PlatformTaskTypeThumbnailGenerate, string(payload)); err != nil {
+				return nil, fmt.Errorf("queue thumbnail task %d: %w", task.ID, err)
+			}
+		}
 	}
 
 	result.Duration = time.Since(start)

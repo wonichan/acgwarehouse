@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -103,8 +104,8 @@ func TestScannerCreatesImportBatchAndPlatformTask(t *testing.T) {
 	if err := db.QueryRow("SELECT COUNT(*) FROM async_jobs").Scan(&jobs); err != nil {
 		t.Fatalf("query async_jobs count: %v", err)
 	}
-	if jobs != 0 {
-		t.Fatalf("async_jobs row count = %d, want 0 before dispatcher wiring", jobs)
+	if jobs != 1 {
+		t.Fatalf("async_jobs row count = %d, want 1 (thumbnail task should be queued)", jobs)
 	}
 	if result.CreatedTasks != 1 {
 		t.Fatalf("CreatedTasks = %d, want 1", result.CreatedTasks)
@@ -156,6 +157,103 @@ func TestScannerCreatesImportBatchAndPlatformTask(t *testing.T) {
 	}
 	if len(result.ImportedImagePaths) != 1 || result.ImportedImagePaths[0] != imagePath {
 		t.Fatalf("ImportedImagePaths = %+v, want [%q]", result.ImportedImagePaths, imagePath)
+	}
+}
+
+func TestScannerServiceScanQueuesThumbnailTasks(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	imagePath := filepath.Join(root, "test.png")
+	if err := os.WriteFile(imagePath, tinyPNGFixture(), 0o600); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "queue-test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	metadataSvc := NewMetadataService()
+	imageRepo := repository.NewImageRepository(db)
+	jobRepo := repository.NewJobRepository(db)
+	taskPlatformSvc := NewTaskPlatformService(
+		repository.NewTaskBatchRepository(db),
+		repository.NewPlatformTaskRepository(db),
+		jobRepo,
+	)
+	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, 1)
+
+	result, err := scanner.Scan(context.Background(), []string{root})
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+
+	if result.Imported != 1 {
+		t.Fatalf("Imported = %d, want 1", result.Imported)
+	}
+	if result.CreatedTasks != 1 {
+		t.Fatalf("CreatedTasks = %d, want 1", result.CreatedTasks)
+	}
+
+	// After Scan(), thumbnail tasks should be queued as AsyncJobs with "ready" status
+	// This is the critical test - it should FAIL because current code doesn't call QueueTask
+	jobs, err := jobRepo.FindByStatus("ready")
+	if err != nil {
+		t.Fatalf("FindByStatus(ready) error = %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("len(jobs) = %d, want 1 (thumbnail task should be queued)", len(jobs))
+	}
+
+	job := jobs[0]
+	if job.Type != domain.PlatformTaskTypeThumbnailGenerate {
+		t.Fatalf("job.Type = %q, want %q", job.Type, domain.PlatformTaskTypeThumbnailGenerate)
+	}
+	if job.Status != "ready" {
+		t.Fatalf("job.Status = %q, want ready", job.Status)
+	}
+	if job.PlatformTaskID == nil {
+		t.Fatal("job.PlatformTaskID is nil, want non-nil")
+	}
+	if *job.PlatformTaskID != result.CreatedPlatformTaskIDs[0] {
+		t.Fatalf("job.PlatformTaskID = %d, want %d", *job.PlatformTaskID, result.CreatedPlatformTaskIDs[0])
+	}
+
+	// Verify payload contains required fields: image_id, path, filename
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(job.Payload), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload["image_id"] == nil {
+		t.Fatal("payload missing image_id")
+	}
+	if payload["path"] == nil {
+		t.Fatal("payload missing path")
+	}
+	if payload["filename"] == nil {
+		t.Fatal("payload missing filename")
+	}
+	if payload["path"] != imagePath {
+		t.Fatalf("payload.path = %v, want %q", payload["path"], imagePath)
+	}
+	if payload["filename"] != "test" {
+		t.Fatalf("payload.filename = %v, want test", payload["filename"])
+	}
+
+	// Verify task status is "queued" (not "pending")
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	task, err := taskRepo.FindByID(context.Background(), result.CreatedPlatformTaskIDs[0])
+	if err != nil {
+		t.Fatalf("FindByID(task) error = %v", err)
+	}
+	if task.Status != domain.PlatformTaskStatusQueued {
+		t.Fatalf("task.Status = %q, want %q", task.Status, domain.PlatformTaskStatusQueued)
 	}
 }
 
