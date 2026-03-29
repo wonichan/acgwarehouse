@@ -265,6 +265,41 @@ button {
     margin-top: 18px;
 }
 
+.backfill-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+    margin-top: 18px;
+}
+
+.backfill-controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.backfill-controls select {
+    min-width: 180px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: rgba(9, 17, 29, 0.9);
+    color: var(--text);
+}
+
+.backfill-controls select:focus {
+    outline: none;
+    border-color: rgba(56, 189, 248, 0.6);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
 .btn {
     display: inline-flex;
     align-items: center;
@@ -319,6 +354,25 @@ button {
     padding: 0 12px;
     border-radius: 10px;
     font-size: 13px;
+}
+
+.backfill-result {
+    margin-top: 16px;
+    padding: 16px 18px;
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid var(--border);
+    color: var(--muted);
+}
+
+.backfill-preview strong,
+.backfill-noop strong {
+    color: var(--text);
+}
+
+.backfill-noop p,
+.backfill-preview p {
+    font-size: 14px;
 }
 
 .monitor-panel {
@@ -521,6 +575,54 @@ button {
     background: rgba(99, 102, 241, 0.12);
     color: #c7d2fe;
     border-color: rgba(99, 102, 241, 0.18);
+}
+
+.error-cell {
+    white-space: normal;
+}
+
+.failure-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.failure-group:last-child {
+    margin-bottom: 0;
+}
+
+.failure-reason {
+    color: var(--text);
+    font-weight: 700;
+}
+
+.retry-hint {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.retry-yes {
+    color: #bbf7d0;
+    background: rgba(34, 197, 94, 0.14);
+    border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.retry-no {
+    color: #fecaca;
+    background: rgba(248, 113, 113, 0.14);
+    border: 1px solid rgba(248, 113, 113, 0.22);
+}
+
+.retry-hint-text {
+    color: var(--muted);
+    font-size: 12px;
 }
 
 .detail-panel {

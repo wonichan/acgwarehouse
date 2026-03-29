@@ -10,7 +10,7 @@
     <div class="app-shell">
         <header class="hero panel">
             <div class="hero-copy">
-                <p class="eyebrow">Phase 13 · batch-first monitoring</p>
+                <p class="eyebrow">Phase 14 · backfill &amp; recovery</p>
                 <h1>ACGWarehouse 批次监控台</h1>
                 <p class="hero-desc">批次列表始终在上，任务明细在下。先看异常与进行中内容，再按批次下钻处理。</p>
             </div>
@@ -67,6 +67,28 @@
                 </div>
             </section>
 
+            <section class="panel" id="backfillSection">
+                <div class="section-heading section-heading--compact">
+                    <div>
+                        <p class="section-kicker">Phase 14 · backfill</p>
+                        <h2>AI 标签补跑</h2>
+                    </div>
+                </div>
+                <p class="detail-intro">对当前缺少 AI 标签的图片执行批量补跑。必须先缩小筛选范围（按标签或按"无标签"），不可对整个图库盲跑。</p>
+                <div class="backfill-controls">
+                    <label>
+                        <span>筛选条件</span>
+                        <select id="backfillFilterType">
+                            <option value="">请选择筛选范围</option>
+                            <option value="has_tags_false">无标签图片</option>
+                        </select>
+                    </label>
+                    <button id="backfillPreviewBtn" class="btn btn-secondary" disabled>预览</button>
+                    <button id="backfillExecuteBtn" class="btn btn-primary" disabled>执行补跑</button>
+                </div>
+                <div id="backfillResult" class="backfill-result" hidden></div>
+            </section>
+
             <section class="panel monitor-panel">
                 <div class="section-heading section-heading--compact">
                     <div>
@@ -93,6 +115,7 @@
                                 <option value="">全部来源</option>
                                 <option value="import">导入</option>
                                 <option value="ai_tag">AI 标签</option>
+                                <option value="manual_batch">手动批次</option>
                                 <option value="retry">重试</option>
                             </select>
                         </label>

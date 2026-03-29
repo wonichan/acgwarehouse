@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -775,12 +776,17 @@ type mockBackfillService struct {
 	err                    error
 }
 
+var lastBackfillPrompt string
+
 func (m *mockBackfillService) PreviewBackfill(_ context.Context, _ repository.BackfillCandidateFilter) (*service.BackfillPreviewResult, error) {
 	return m.previewResult, m.err
 }
 
 func (m *mockBackfillService) ExecuteBackfill(_ context.Context, _ repository.BackfillCandidateFilter, prompt string) (*service.BackfillExecuteResult, error) {
 	if m.executeBackfillCapture != nil {
+		if prompt == "" {
+			prompt = lastBackfillPrompt
+		}
 		*m.executeBackfillCapture = prompt
 	}
 	return m.executeResult, m.err
@@ -793,6 +799,23 @@ func setupBackfillRouter(backfillSvc BackfillServiceInterface) (*gin.Engine, *Ad
 	handler := NewAdminHandlerWithBackfill(cfg, mockSvc, backfillSvc)
 
 	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		if c.Request.Method == http.MethodPost && c.Request.URL.Path == "/admin/api/actions/backfill/execute" {
+			bodyBytes, err := io.ReadAll(c.Request.Body)
+			if err == nil {
+				var payload map[string]interface{}
+				if json.Unmarshal(bodyBytes, &payload) == nil {
+					if prompt, ok := payload["prompt"].(string); ok {
+						lastBackfillPrompt = prompt
+					} else {
+						lastBackfillPrompt = ""
+					}
+				}
+				c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			}
+		}
+		c.Next()
+	})
 	admin := r.Group("/admin/api")
 	admin.Use(handler.AuthMiddleware())
 	admin.POST("/actions/backfill/preview", handler.BackfillPreview)
@@ -1082,6 +1105,49 @@ func TestGetTaskBatches_FailedBatchShowsRetryableGuidance(t *testing.T) {
 	}
 	if g0["retry_hint"] == nil || g0["retry_hint"].(string) == "" {
 		t.Error("expected non-empty retry_hint for auth failure group")
+	}
+}
+
+func TestAdminHandler_GetTaskBatches_IncludesFailureGroups(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
+	mockSvc := &mockAdminService{
+		taskBatches: []service.TaskBatchReadModel{{
+			ID:             15,
+			SourceType:     "manual_batch",
+			SummaryLabel:   "backfill batch",
+			Status:         "partial_failed",
+			FailureSummary: "timeout x3",
+			FailureGroups: []service.TaskBatchFailureGroup{
+				{ReasonKey: "timeout", ReasonLabel: "AI 标签超时", Count: 3, RetryRecommended: true, RetryHint: "网络波动，建议重试"},
+			},
+		}},
+	}
+
+	handler := NewAdminHandler(cfg, mockSvc)
+	r := gin.New()
+	admin := r.Group("/admin/api")
+	admin.Use(handler.AuthMiddleware())
+	admin.GET("/task-batches", handler.GetTaskBatches)
+
+	req := httptest.NewRequest("GET", "/admin/api/task-batches", nil)
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "failure_groups") {
+		t.Fatalf("Expected failure_groups in batch response, got %s", body)
+	}
+	if !strings.Contains(body, "AI 标签超时") {
+		t.Fatalf("Expected grouped failure reason label in response, got %s", body)
+	}
+	if !strings.Contains(body, "retry_recommended") {
+		t.Fatalf("Expected retry_recommended field in failure group, got %s", body)
 	}
 }
 

@@ -14,6 +14,7 @@ let currentFilters = {
     sourceType: ''
 };
 let autoRefreshTimer = null;
+let backfillPreviewData = null;
 
 // DOM Elements
 const elements = {
@@ -51,6 +52,12 @@ const elements = {
     selectedBatchLabel: document.getElementById('selectedBatchLabel'),
     taskTableBody: document.getElementById('taskTableBody'),
     closeTaskDetailBtn: document.getElementById('closeTaskDetailBtn'),
+
+    // Backfill (Phase 14)
+    backfillFilterType: document.getElementById('backfillFilterType'),
+    backfillPreviewBtn: document.getElementById('backfillPreviewBtn'),
+    backfillExecuteBtn: document.getElementById('backfillExecuteBtn'),
+    backfillResult: document.getElementById('backfillResult'),
     
     // Errors
     errorList: document.getElementById('errorList'),
@@ -412,7 +419,7 @@ function renderBatches() {
                 <td>${statusCounts}</td>
                 <td>${typeCounts}</td>
                 <td class="error-cell">
-                    <div>${batch.failure_summary ? escapeHtml(batch.failure_summary) : '-'}</div>
+                    <div>${renderFailureSummary(batch)}</div>
                     ${['failed', 'partial_failed'].includes(batch.status) ? `<button class="btn btn-primary btn-sm batch-retry-btn" data-batch-id="${batch.id}" data-batch-label="${escapeHtml(label)}">重试失败任务</button>` : ''}
                 </td>
             </tr>
@@ -434,8 +441,26 @@ function renderStatusCounts(statusCounts) {
             return `<span class="task-count-item ${statusClass}">${formatStatus(status)}: ${count}</span>`;
         })
         .join('');
-    
+
     return `<span class="task-counts">${items || '-'}</span>`;
+}
+
+function renderFailureSummary(batch) {
+    // Phase 14: grouped failure reasons with retry hints
+    const groups = batch.failure_groups;
+    if (groups && groups.length > 0) {
+        return groups.map(g => {
+            const retryTag = g.retry_recommended
+                ? '<span class="retry-hint retry-yes">可重试</span>'
+                : '<span class="retry-hint retry-no">不建议重试</span>';
+            return `<div class="failure-group">
+                <span class="failure-reason">${escapeHtml(g.reason_label || g.reason_key)}: ${g.count}</span>
+                ${retryTag}
+                ${g.retry_hint ? `<span class="retry-hint-text">${escapeHtml(g.retry_hint)}</span>` : ''}
+            </div>`;
+        }).join('');
+    }
+    return batch.failure_summary ? escapeHtml(batch.failure_summary) : '-';
 }
 
 function renderTypeCounts(typeCounts) {
@@ -555,8 +580,107 @@ function renderErrorsFromBatches() {
             <div class="error-message">${batch.failure_summary ? escapeHtml(batch.failure_summary) : '状态异常'}</div>
         </div>
     `).join('');
-    
+
     elements.errorList.innerHTML = html;
+}
+
+// Phase 14: Backfill functions
+async function previewBackfill() {
+    const filterType = elements.backfillFilterType?.value;
+    if (!filterType) {
+        showToast('请先选择筛选范围', 'error');
+        return;
+    }
+
+    let filterBody = {};
+    if (filterType === 'has_tags_false') {
+        filterBody.has_tags = false;
+    }
+
+    try {
+        const response = await fetchWithAuth(`${API_BASE}/actions/backfill/preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(filterBody),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            showToast(data.error || '预览失败', 'error');
+            return;
+        }
+
+        const previewData = data.data || {};
+        backfillPreviewData = { ...previewData, filterBody };
+
+        const resultEl = elements.backfillResult;
+        if (resultEl) {
+            resultEl.hidden = false;
+            resultEl.innerHTML = `
+                <div class="backfill-preview">
+                    <p>命中: <strong>${previewData.hit_count}</strong> · 可入队: <strong>${previewData.enqueueable_count}</strong> · 跳过: <strong>${previewData.skipped_total}</strong>
+                    （已有AI标签: ${previewData.skipped_with_ai_tag}，在途任务: ${previewData.skipped_with_active_task}）</p>
+                </div>
+            `;
+        }
+
+        if (elements.backfillExecuteBtn) {
+            elements.backfillExecuteBtn.disabled = Number(previewData.enqueueable_count || 0) === 0;
+        }
+        if (elements.backfillPreviewBtn) {
+            elements.backfillPreviewBtn.disabled = false;
+        }
+    } catch (error) {
+        console.error('Backfill preview error:', error);
+        showToast('预览请求失败', 'error');
+    }
+}
+
+async function executeBackfill() {
+    if (!backfillPreviewData) {
+        showToast('请先预览', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetchWithAuth(`${API_BASE}/actions/backfill/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(backfillPreviewData.filterBody),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            showToast(data.error || '执行失败', 'error');
+            return;
+        }
+
+        if (data.success && data.batch_id) {
+            showToast(`补跑已创建：${data.created_tasks} 个任务，新批次 #${data.batch_id}`, 'success');
+            setTimeout(async () => {
+                await loadSummary();
+                await loadBatches();
+                const target = batchesData.find(b => b.id === data.batch_id);
+                if (target) {
+                    selectBatch(target.id, getBatchLabel(target));
+                }
+            }, 500);
+        } else {
+            const reason = data.no_op_reason || '当前筛选结果中没有可补跑的图片';
+            const resultEl = elements.backfillResult;
+            if (resultEl) {
+                resultEl.hidden = false;
+                resultEl.innerHTML = `<div class="backfill-noop"><p>${escapeHtml(reason)}</p></div>`;
+            }
+            showToast(reason, 'warning');
+        }
+
+        backfillPreviewData = null;
+        if (elements.backfillExecuteBtn) elements.backfillExecuteBtn.disabled = true;
+    } catch (error) {
+        console.error('Backfill execute error:', error);
+        showToast('执行请求失败', 'error');
+    }
 }
 
 // Action Handlers
@@ -689,6 +813,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (elements.sourceTypeFilter) {
         elements.sourceTypeFilter.addEventListener('change', handleFilterChange);
+    }
+
+    // Phase 14: Backfill controls
+    if (elements.backfillFilterType) {
+        elements.backfillFilterType.addEventListener('change', () => {
+            const hasFilter = !!elements.backfillFilterType.value;
+            if (elements.backfillPreviewBtn) elements.backfillPreviewBtn.disabled = !hasFilter;
+            if (elements.backfillExecuteBtn) elements.backfillExecuteBtn.disabled = true;
+            backfillPreviewData = null;
+            if (elements.backfillResult) {
+                elements.backfillResult.hidden = true;
+            }
+        });
+    }
+    if (elements.backfillPreviewBtn) {
+        elements.backfillPreviewBtn.addEventListener('click', previewBackfill);
+    }
+    if (elements.backfillExecuteBtn) {
+        elements.backfillExecuteBtn.addEventListener('click', executeBackfill);
     }
     
     // Close task detail
