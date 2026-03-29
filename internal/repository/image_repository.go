@@ -498,32 +498,169 @@ func (r *sqliteImageRepository) Delete(id int64) error {
 	return err
 }
 
-// FindBackfillCandidates returns images matching the filter that are eligible for AI backfill.
-// Stub implementation - full implementation provided by Phase 14 Plan 01.
+// buildBackfillBaseWhere constructs the WHERE clause fragment and args for the base filter.
+// It handles TagIDs (AND semantics) and HasTags filtering.
+func buildBackfillBaseWhere(filter BackfillCandidateFilter) (string, []any) {
+	var conds []string
+	var args []any
+
+	if len(filter.TagIDs) > 0 {
+		placeholders := make([]string, len(filter.TagIDs))
+		for i, id := range filter.TagIDs {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+		cond := fmt.Sprintf(`i.id IN (
+			SELECT it.image_id FROM image_tags it
+			WHERE it.tag_id IN (%s) AND it.review_state != 'rejected'
+			GROUP BY it.image_id
+			HAVING COUNT(DISTINCT it.tag_id) = ?
+		)`, strings.Join(placeholders, ", "))
+		args = append(args, int64(len(filter.TagIDs)))
+		conds = append(conds, cond)
+	}
+
+	if filter.HasTags != nil {
+		if !*filter.HasTags {
+			conds = append(conds, `NOT EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id)`)
+		} else {
+			conds = append(conds, `EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id)`)
+		}
+	}
+
+	if len(conds) > 0 {
+		return " AND " + strings.Join(conds, " AND "), args
+	}
+	return "", args
+}
+
+// FindBackfillCandidates returns images matching the filter that are eligible for AI backfill:
+// no AI source tags and no active (pending/queued/running) AI tasks.
 func (r *sqliteImageRepository) FindBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) ([]domain.Image, error) {
-	return nil, nil
+	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+
+	query := fmt.Sprintf(`
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format,
+		       COALESCE(i.phash, 0), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
+		FROM images i
+		WHERE 1=1
+		%s
+		AND NOT EXISTS (
+			SELECT 1 FROM image_tags it3 WHERE it3.image_id = i.id AND it3.source = 'ai'
+		)
+		AND NOT EXISTS (
+			SELECT 1 FROM platform_tasks pt WHERE pt.image_id = i.id
+			AND pt.task_type = 'ai_tag_generation'
+			AND pt.status IN ('pending', 'queued', 'running')
+		)
+		ORDER BY i.id ASC
+	`, baseWhere)
+
+	rows, err := r.db.QueryContext(ctx, query, baseArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	images := make([]domain.Image, 0)
+	for rows.Next() {
+		var image domain.Image
+		var thumbnailSmallURL, thumbnailLargeURL sql.NullString
+		if err := rows.Scan(
+			&image.ID, &image.Path, &image.Filename, &image.SourceRoot,
+			&image.FileSize, &image.Width, &image.Height, &image.Format,
+			&image.PHash, &thumbnailSmallURL, &thumbnailLargeURL,
+			&image.CreatedAt, &image.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if thumbnailSmallURL.Valid {
+			image.ThumbnailSmallUrl = thumbnailSmallURL.String
+		}
+		if thumbnailLargeURL.Valid {
+			image.ThumbnailLargeUrl = thumbnailLargeURL.String
+		}
+		images = append(images, image)
+	}
+	return images, rows.Err()
 }
 
 // CountBackfillCandidates returns the count of images matching the filter that are eligible for AI backfill.
-// Stub implementation - full implementation provided by Phase 14 Plan 01.
 func (r *sqliteImageRepository) CountBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
-	return 0, nil
+	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+
+	query := fmt.Sprintf(`
+		SELECT COUNT(i.id)
+		FROM images i
+		WHERE 1=1
+		%s
+		AND NOT EXISTS (
+			SELECT 1 FROM image_tags it3 WHERE it3.image_id = i.id AND it3.source = 'ai'
+		)
+		AND NOT EXISTS (
+			SELECT 1 FROM platform_tasks pt WHERE pt.image_id = i.id
+			AND pt.task_type = 'ai_tag_generation'
+			AND pt.status IN ('pending', 'queued', 'running')
+		)
+	`, baseWhere)
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
+	return count, err
 }
 
 // CountBackfillSkippedWithAITag returns the count of images matching the filter that already have AI source tags.
-// Stub implementation - full implementation provided by Phase 14 Plan 01.
 func (r *sqliteImageRepository) CountBackfillSkippedWithAITag(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
-	return 0, nil
+	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+
+	query := fmt.Sprintf(`
+		SELECT COUNT(i.id)
+		FROM images i
+		WHERE 1=1
+		%s
+		AND EXISTS (
+			SELECT 1 FROM image_tags it3 WHERE it3.image_id = i.id AND it3.source = 'ai'
+		)
+	`, baseWhere)
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
+	return count, err
 }
 
 // CountBackfillSkippedWithActiveTask returns the count of images matching the filter that already have active AI tasks.
-// Stub implementation - full implementation provided by Phase 14 Plan 01.
 func (r *sqliteImageRepository) CountBackfillSkippedWithActiveTask(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
-	return 0, nil
+	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+
+	query := fmt.Sprintf(`
+		SELECT COUNT(i.id)
+		FROM images i
+		WHERE 1=1
+		%s
+		AND EXISTS (
+			SELECT 1 FROM platform_tasks pt WHERE pt.image_id = i.id
+			AND pt.task_type = 'ai_tag_generation'
+			AND pt.status IN ('pending', 'queued', 'running')
+		)
+	`, baseWhere)
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
+	return count, err
 }
 
 // CountBackfillHitCount returns the total count of images matching the filter (before any skip classification).
-// Stub implementation - full implementation provided by Phase 14 Plan 01.
 func (r *sqliteImageRepository) CountBackfillHitCount(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
-	return 0, nil
+	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+
+	query := fmt.Sprintf(`
+		SELECT COUNT(i.id)
+		FROM images i
+		WHERE 1=1
+		%s
+	`, baseWhere)
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
+	return count, err
 }

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -560,6 +561,352 @@ func seedImagesForFindImagesWithoutAITags(t *testing.T, repo ImageRepository) []
 	}
 
 	return ids
+}
+
+// --- Backfill candidate query tests ---
+
+func TestCountBackfillHitCountWithHasTagsFilter(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	// Seed: 5 images total
+	// img1, img2 have tags; img3, img4, img5 have no tags
+	tagRepo := NewTagRepository(db)
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	imageTagRepo := NewImageTagRepository(db)
+	for i := 0; i < 5; i++ {
+		img := &domain.Image{
+			Path:       filepath.Join("/img", string(rune('a'+i))+".png"),
+			Filename:   string(rune('a'+i)) + ".png",
+			SourceRoot: "/img",
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+		// Tag first 2 images
+		if i < 2 {
+			if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: img.ID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+				t.Fatalf("save image-tag: %v", err)
+			}
+		}
+	}
+
+	// has_tags=false: should count 3 untagged images
+	hasTagsFalse := false
+	hitCount, err := repo.CountBackfillHitCount(ctx, BackfillCandidateFilter{HasTags: &hasTagsFalse})
+	if err != nil {
+		t.Fatalf("CountBackfillHitCount() error = %v", err)
+	}
+	if hitCount != 3 {
+		t.Errorf("hitCount with has_tags=false = %d, want 3", hitCount)
+	}
+
+	// has_tags=true: should count 2 tagged images
+	hasTagsTrue := true
+	hitCount, err = repo.CountBackfillHitCount(ctx, BackfillCandidateFilter{HasTags: &hasTagsTrue})
+	if err != nil {
+		t.Fatalf("CountBackfillHitCount() error = %v", err)
+	}
+	if hitCount != 2 {
+		t.Errorf("hitCount with has_tags=true = %d, want 2", hitCount)
+	}
+}
+
+func TestCountBackfillHitCountWithTagIDsFilter(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	tagRepo := NewTagRepository(db)
+	tag1 := &domain.Tag{PreferredLabel: "tag1", Slug: "tag1", ReviewState: "confirmed"}
+	tag2 := &domain.Tag{PreferredLabel: "tag2", Slug: "tag2", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, tag1); err != nil {
+		t.Fatalf("save tag1: %v", err)
+	}
+	if err := tagRepo.Save(ctx, tag2); err != nil {
+		t.Fatalf("save tag2: %v", err)
+	}
+
+	// img1 has tag1, img2 has tag1+tag2, img3 untagged
+	images := []*domain.Image{
+		{Path: "/a.png", Filename: "a.png", SourceRoot: "/", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/b.png", Filename: "b.png", SourceRoot: "/", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/c.png", Filename: "c.png", SourceRoot: "/", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	for _, img := range images {
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	imageTagRepo := NewImageTagRepository(db)
+	// img1 has tag1
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[0].ID, TagID: tag1.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	// img2 has tag1 and tag2
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[1].ID, TagID: tag1.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[1].ID, TagID: tag2.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	// Filter by tag1: 2 images
+	hitCount, err := repo.CountBackfillHitCount(ctx, BackfillCandidateFilter{TagIDs: []int64{tag1.ID}})
+	if err != nil {
+		t.Fatalf("CountBackfillHitCount() error = %v", err)
+	}
+	if hitCount != 2 {
+		t.Errorf("hitCount with tag1 = %d, want 2", hitCount)
+	}
+
+	// Filter by tag1 AND tag2: only img2
+	hitCount, err = repo.CountBackfillHitCount(ctx, BackfillCandidateFilter{TagIDs: []int64{tag1.ID, tag2.ID}})
+	if err != nil {
+		t.Fatalf("CountBackfillHitCount() error = %v", err)
+	}
+	if hitCount != 1 {
+		t.Errorf("hitCount with tag1+tag2 = %d, want 1", hitCount)
+	}
+}
+
+func TestBackfillCandidateCountClassifiesSkipReasons(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	// Create tags
+	tagRepo := NewTagRepository(db)
+	aiTag := &domain.Tag{PreferredLabel: "ai-tag", Slug: "ai-tag", ReviewState: "confirmed"}
+	manualTag := &domain.Tag{PreferredLabel: "manual-tag", Slug: "manual-tag", ReviewState: "confirmed"}
+	filterTag := &domain.Tag{PreferredLabel: "filter-tag", Slug: "filter-tag", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, aiTag); err != nil {
+		t.Fatalf("save ai tag: %v", err)
+	}
+	if err := tagRepo.Save(ctx, manualTag); err != nil {
+		t.Fatalf("save manual tag: %v", err)
+	}
+	if err := tagRepo.Save(ctx, filterTag); err != nil {
+		t.Fatalf("save filter tag: %v", err)
+	}
+
+	// Create 5 images, all with filter-tag for narrowing
+	images := make([]*domain.Image, 5)
+	for i := range images {
+		images[i] = &domain.Image{
+			Path:       fmt.Sprintf("/img%d.png", i),
+			Filename:   fmt.Sprintf("img%d.png", i),
+			SourceRoot: "/",
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(images[i]); err != nil {
+			t.Fatalf("save image %d: %v", i, err)
+		}
+	}
+
+	imageTagRepo := NewImageTagRepository(db)
+	for _, img := range images {
+		// All images have filter-tag to satisfy narrowing
+		if err := imageTagRepo.Save(ctx, &domain.ImageTag{
+			ImageID: img.ID, TagID: filterTag.ID, ReviewState: "confirmed",
+		}); err != nil {
+			t.Fatalf("save filter-tag: %v", err)
+		}
+	}
+
+	// img0: eligible (no AI tag, no active task)
+	// img1: has AI tag → skipped_with_ai_tag
+	if _, err := db.Exec(`INSERT INTO image_tags (image_id, tag_id, source, confidence, review_state) VALUES (?, ?, 'ai', 0.95, 'confirmed')`, images[1].ID, aiTag.ID); err != nil {
+		t.Fatalf("insert ai tag: %v", err)
+	}
+	// Create the batch BEFORE the task (FK constraint)
+	if _, err := db.Exec(`INSERT INTO task_batches (id, source_type, summary_label, status) VALUES (1, 'manual_batch', 'test', 'running')`); err != nil {
+		t.Fatalf("insert batch: %v", err)
+	}
+	// img2: has active task → skipped_with_active_task
+	if _, err := db.Exec(`INSERT INTO platform_tasks (batch_id, image_id, task_type, source_type, status, dedupe_key, image_version_key) VALUES (1, ?, 'ai_tag_generation', 'manual_batch', 'queued', 'dk1', 'vk1')`, images[2].ID); err != nil {
+		t.Fatalf("insert active task: %v", err)
+	}
+	// img3: has both AI tag AND active task → counted in both skip reasons
+	if _, err := db.Exec(`INSERT INTO image_tags (image_id, tag_id, source, confidence, review_state) VALUES (?, ?, 'ai', 0.9, 'confirmed')`, images[3].ID, aiTag.ID); err != nil {
+		t.Fatalf("insert ai tag: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO platform_tasks (batch_id, image_id, task_type, source_type, status, dedupe_key, image_version_key) VALUES (1, ?, 'ai_tag_generation', 'manual_batch', 'running', 'dk2', 'vk2')`, images[3].ID); err != nil {
+		t.Fatalf("insert active task: %v", err)
+	}
+	// img4: eligible (no AI tag, no active task)
+
+	filter := BackfillCandidateFilter{TagIDs: []int64{filterTag.ID}}
+
+	hitCount, err := repo.CountBackfillHitCount(ctx, filter)
+	if err != nil {
+		t.Fatalf("CountBackfillHitCount() error = %v", err)
+	}
+	if hitCount != 5 {
+		t.Errorf("hitCount = %d, want 5", hitCount)
+	}
+
+	enqueueable, err := repo.CountBackfillCandidates(ctx, filter)
+	if err != nil {
+		t.Fatalf("CountBackfillCandidates() error = %v", err)
+	}
+	if enqueueable != 2 {
+		t.Errorf("enqueueable = %d, want 2 (img0 + img4)", enqueueable)
+	}
+
+	skippedAITag, err := repo.CountBackfillSkippedWithAITag(ctx, filter)
+	if err != nil {
+		t.Fatalf("CountBackfillSkippedWithAITag() error = %v", err)
+	}
+	if skippedAITag != 2 {
+		t.Errorf("skippedWithAITag = %d, want 2 (img1 + img3)", skippedAITag)
+	}
+
+	skippedActiveTask, err := repo.CountBackfillSkippedWithActiveTask(ctx, filter)
+	if err != nil {
+		t.Fatalf("CountBackfillSkippedWithActiveTask() error = %v", err)
+	}
+	if skippedActiveTask != 2 {
+		t.Errorf("skippedWithActiveTask = %d, want 2 (img2 + img3)", skippedActiveTask)
+	}
+}
+
+func TestFindBackfillCandidatesReturnsOnlyEligible(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	tagRepo := NewTagRepository(db)
+	aiTag := &domain.Tag{PreferredLabel: "ai-tag", Slug: "ai-tag", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, aiTag); err != nil {
+		t.Fatalf("save ai tag: %v", err)
+	}
+
+	// img1: eligible, img2: has AI tag, img3: has active task, img4: eligible
+	images := []*domain.Image{
+		{Path: "/eligible1.png", Filename: "eligible1.png", SourceRoot: "/", Format: "png", ThumbnailSmallUrl: "/thumb/s1.jpg", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/has-ai.png", Filename: "has-ai.png", SourceRoot: "/", Format: "png", ThumbnailSmallUrl: "/thumb/s2.jpg", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/has-task.png", Filename: "has-task.png", SourceRoot: "/", Format: "png", ThumbnailSmallUrl: "/thumb/s3.jpg", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/eligible2.png", Filename: "eligible2.png", SourceRoot: "/", Format: "png", ThumbnailSmallUrl: "/thumb/s4.jpg", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	for _, img := range images {
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	// img2 has AI tag
+	if _, err := db.Exec(`INSERT INTO image_tags (image_id, tag_id, source, confidence, review_state) VALUES (?, ?, 'ai', 0.9, 'confirmed')`, images[1].ID, aiTag.ID); err != nil {
+		t.Fatalf("insert ai tag: %v", err)
+	}
+
+	// img3 has active task
+	if _, err := db.Exec(`INSERT INTO task_batches (id, source_type, summary_label, status) VALUES (1, 'manual_batch', 'test', 'running')`); err != nil {
+		t.Fatalf("insert batch: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO platform_tasks (batch_id, image_id, task_type, source_type, status, dedupe_key, image_version_key) VALUES (1, ?, 'ai_tag_generation', 'manual_batch', 'queued', 'dk1', 'vk1')`, images[2].ID); err != nil {
+		t.Fatalf("insert active task: %v", err)
+	}
+
+	// Use has_tags=false filter (no tags = untagged)
+	hasTagsFalse := false
+	candidates, err := repo.FindBackfillCandidates(ctx, BackfillCandidateFilter{HasTags: &hasTagsFalse})
+	if err != nil {
+		t.Fatalf("FindBackfillCandidates() error = %v", err)
+	}
+
+	if len(candidates) != 2 {
+		t.Fatalf("len(candidates) = %d, want 2 (img1 + img4)", len(candidates))
+	}
+	// Should be ordered by id ASC
+	if candidates[0].ID != images[0].ID {
+		t.Errorf("candidates[0].ID = %d, want %d", candidates[0].ID, images[0].ID)
+	}
+	if candidates[1].ID != images[3].ID {
+		t.Errorf("candidates[1].ID = %d, want %d", candidates[1].ID, images[3].ID)
+	}
+}
+
+func TestBackfillCountsWithHasTagsFalseFilter(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	tagRepo := NewTagRepository(db)
+	aiTag := &domain.Tag{PreferredLabel: "ai-tag", Slug: "ai-tag", ReviewState: "confirmed"}
+	manualTag := &domain.Tag{PreferredLabel: "manual-tag", Slug: "manual-tag", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, aiTag); err != nil {
+		t.Fatalf("save ai tag: %v", err)
+	}
+	if err := tagRepo.Save(ctx, manualTag); err != nil {
+		t.Fatalf("save manual tag: %v", err)
+	}
+
+	// 4 images, all untagged (no entries in image_tags)
+	images := make([]*domain.Image, 4)
+	for i := range images {
+		images[i] = &domain.Image{
+			Path:       fmt.Sprintf("/img%d.png", i),
+			Filename:   fmt.Sprintf("img%d.png", i),
+			SourceRoot: "/",
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(images[i]); err != nil {
+			t.Fatalf("save image %d: %v", i, err)
+		}
+	}
+
+	// img0, img1: eligible (no tags, no tasks)
+	// img2: has active task (but no AI tag since untagged)
+	// Create batch BEFORE task (FK constraint)
+	if _, err := db.Exec(`INSERT INTO task_batches (id, source_type, summary_label, status) VALUES (1, 'manual_batch', 'test', 'running')`); err != nil {
+		t.Fatalf("insert batch: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO platform_tasks (batch_id, image_id, task_type, source_type, status, dedupe_key, image_version_key) VALUES (1, ?, 'ai_tag_generation', 'manual_batch', 'queued', 'dk1', 'vk1')`, images[2].ID); err != nil {
+		t.Fatalf("insert active task: %v", err)
+	}
+	// img3: eligible
+
+	hasTagsFalse := false
+	filter := BackfillCandidateFilter{HasTags: &hasTagsFalse}
+
+	hitCount, _ := repo.CountBackfillHitCount(ctx, filter)
+	if hitCount != 4 {
+		t.Errorf("hitCount = %d, want 4", hitCount)
+	}
+
+	enqueueable, _ := repo.CountBackfillCandidates(ctx, filter)
+	if enqueueable != 3 {
+		t.Errorf("enqueueable = %d, want 3 (img0, img1, img3)", enqueueable)
+	}
+
+	skippedAITag, _ := repo.CountBackfillSkippedWithAITag(ctx, filter)
+	if skippedAITag != 0 {
+		t.Errorf("skippedAITag = %d, want 0 (none have AI tags)", skippedAITag)
+	}
+
+	skippedActive, _ := repo.CountBackfillSkippedWithActiveTask(ctx, filter)
+	if skippedActive != 1 {
+		t.Errorf("skippedActive = %d, want 1 (img2)", skippedActive)
+	}
 }
 
 func seedAITagSourcesForFindImagesWithoutAITags(t *testing.T, db *sql.DB, imageIDs []int64) {
