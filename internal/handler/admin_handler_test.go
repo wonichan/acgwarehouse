@@ -209,6 +209,12 @@ func TestAdminHandler_GetTaskPlatformOverview(t *testing.T) {
 		overview: &service.TaskPlatformOverview{
 			Health: service.HealthStatus{Status: "healthy"},
 			Queue:  service.QueueOverview{IsRunning: true, IsPaused: false, QueueSize: 2, WorkerCount: 4},
+			Sidecar: service.SidecarDiagnosticsOverview{
+				State:            "degraded",
+				LastProbeAt:      "2026-04-04T10:00:00Z",
+				LastProbeResult:  "failed",
+				LastErrorSummary: "startup timeout",
+			},
 			Batches: map[string]int64{
 				"running": 1,
 			},
@@ -242,6 +248,18 @@ func TestAdminHandler_GetTaskPlatformOverview(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "\"tasks\"") {
 		t.Fatalf("Expected tasks field in overview response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"sidecar\"") {
+		t.Fatalf("Expected sidecar field in overview response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"last_probe_at\"") {
+		t.Fatalf("Expected sidecar.last_probe_at in overview response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"last_probe_result\"") {
+		t.Fatalf("Expected sidecar.last_probe_result in overview response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"last_error_summary\"") {
+		t.Fatalf("Expected sidecar.last_error_summary in overview response, got %s", w.Body.String())
 	}
 }
 

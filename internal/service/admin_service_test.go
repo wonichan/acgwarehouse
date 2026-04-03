@@ -958,6 +958,38 @@ func TestAdminService_GetTaskPlatformOverview_PreservesLegacySummaryFields(t *te
 	}
 }
 
+func TestAdminService_GetTaskPlatformOverview_IncludesSidecarDiagnostics(t *testing.T) {
+	db := newTestAdminDB(t)
+	defer db.Close()
+
+	jobRepo := repository.NewJobRepository(db)
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	collectionRepo := repository.NewCollectionRepository(db)
+	jobManager := worker.NewManager(jobRepo)
+
+	cfg := &config.Config{}
+	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
+
+	overview, err := svc.GetTaskPlatformOverview(context.Background())
+	if err != nil {
+		t.Fatalf("GetTaskPlatformOverview() error = %v", err)
+	}
+
+	if overview.Sidecar.State == "" {
+		t.Fatalf("expected sidecar.state to be populated")
+	}
+	if overview.Sidecar.LastProbeAt == "" {
+		t.Fatalf("expected sidecar.last_probe_at to be populated")
+	}
+	if overview.Sidecar.LastProbeResult == "" {
+		t.Fatalf("expected sidecar.last_probe_result to be populated")
+	}
+	if overview.Sidecar.LastErrorSummary == "" {
+		t.Fatalf("expected sidecar.last_error_summary to be populated")
+	}
+}
+
 func TestAdminService_ClearQueueAndCancelControls(t *testing.T) {
 	db := newTestAdminDB(t)
 	defer db.Close()
