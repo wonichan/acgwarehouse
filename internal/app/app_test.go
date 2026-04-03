@@ -309,6 +309,90 @@ func TestShutdownStopsSidecarRuntimeOnlyOnce(t *testing.T) {
 	}
 }
 
+func TestAppAdminOverviewReportsDegradedWhenSidecarStartupFails(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.db")
+	cfgPath := writeTestConfig(t, dbPath)
+
+	app, err := New(cfgPath)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := app.Shutdown(ctx); err != nil {
+			t.Errorf("Shutdown() error = %v", err)
+		}
+	})
+
+	tracker := &sidecarRuntimeTracker{startErr: errors.New("startup timeout")}
+	app.sidecarRuntime = tracker
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := app.prepareSidecarStartup(ctx); err != nil {
+		t.Fatalf("prepareSidecarStartup() error = %v", err)
+	}
+
+	overview, err := app.adminSvc.GetTaskPlatformOverview(context.Background())
+	if err != nil {
+		t.Fatalf("GetTaskPlatformOverview() error = %v", err)
+	}
+
+	if overview.Sidecar.State != "degraded" {
+		t.Fatalf("sidecar.state = %q, want degraded", overview.Sidecar.State)
+	}
+	if overview.Sidecar.LastProbeResult != "failed" {
+		t.Fatalf("sidecar.last_probe_result = %q, want failed", overview.Sidecar.LastProbeResult)
+	}
+	if overview.Sidecar.LastErrorSummary == "" {
+		t.Fatal("expected non-empty sidecar.last_error_summary")
+	}
+}
+
+func TestAppAdminOverviewUpdatesWhenSidecarCrashesAfterStartup(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.db")
+	cfgPath := writeTestConfig(t, dbPath)
+
+	app, err := New(cfgPath)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := app.Shutdown(ctx); err != nil {
+			t.Errorf("Shutdown() error = %v", err)
+		}
+	})
+
+	tracker := &sidecarRuntimeTracker{state: sidecar.StateReady}
+	app.sidecarRuntime = tracker
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := app.prepareSidecarStartup(ctx); err != nil {
+		t.Fatalf("prepareSidecarStartup() error = %v", err)
+	}
+
+	tracker.setStateAndError(sidecar.StateDegraded, "process exited")
+
+	overview, err := app.adminSvc.GetTaskPlatformOverview(context.Background())
+	if err != nil {
+		t.Fatalf("GetTaskPlatformOverview() error = %v", err)
+	}
+
+	if overview.Sidecar.State != "degraded" {
+		t.Fatalf("sidecar.state = %q, want degraded", overview.Sidecar.State)
+	}
+	if overview.Sidecar.LastProbeResult != "failed" {
+		t.Fatalf("sidecar.last_probe_result = %q, want failed", overview.Sidecar.LastProbeResult)
+	}
+	if overview.Sidecar.LastErrorSummary != "process exited" {
+		t.Fatalf("sidecar.last_error_summary = %q, want process exited", overview.Sidecar.LastErrorSummary)
+	}
+}
+
 type schedulerLifecycleTracker struct {
 	mu     sync.Mutex
 	starts int
@@ -351,6 +435,13 @@ func (s *sidecarRuntimeTracker) State() sidecar.State {
 
 func (s *sidecarRuntimeTracker) Status() sidecar.Status {
 	return sidecar.Status{State: s.State()}
+}
+
+func (s *sidecarRuntimeTracker) setStateAndError(state sidecar.State, summary string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.state = state
+	s.startErr = errors.New(summary)
 }
 
 type schedulerFactoryTracker struct {
