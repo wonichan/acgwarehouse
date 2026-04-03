@@ -393,6 +393,46 @@ func TestAppAdminOverviewUpdatesWhenSidecarCrashesAfterStartup(t *testing.T) {
 	}
 }
 
+func TestAppAdminOverviewTreatsStoppedSidecarAsFailedProbe(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.db")
+	cfgPath := writeTestConfig(t, dbPath)
+
+	app, err := New(cfgPath)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := app.Shutdown(ctx); err != nil {
+			t.Errorf("Shutdown() error = %v", err)
+		}
+	})
+
+	tracker := &sidecarRuntimeTracker{state: sidecar.StateReady}
+	app.sidecarRuntime = tracker
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := app.prepareSidecarStartup(ctx); err != nil {
+		t.Fatalf("prepareSidecarStartup() error = %v", err)
+	}
+
+	tracker.setStateAndError(sidecar.StateStopped, "sidecar process stopped")
+
+	overview, err := app.adminSvc.GetTaskPlatformOverview(context.Background())
+	if err != nil {
+		t.Fatalf("GetTaskPlatformOverview() error = %v", err)
+	}
+
+	if overview.Sidecar.LastProbeResult != "failed" {
+		t.Fatalf("sidecar.last_probe_result = %q, want failed", overview.Sidecar.LastProbeResult)
+	}
+	if overview.Sidecar.LastErrorSummary != "sidecar process stopped" {
+		t.Fatalf("sidecar.last_error_summary = %q, want sidecar process stopped", overview.Sidecar.LastErrorSummary)
+	}
+}
+
 type schedulerLifecycleTracker struct {
 	mu     sync.Mutex
 	starts int
