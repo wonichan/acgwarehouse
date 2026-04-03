@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -56,6 +57,7 @@ type App struct {
 	autoSchedulerControl autoSchedulerLifecycle
 	newAutoScheduler     func(*config.Config) autoSchedulerLifecycle
 	autoSchedulerStarted bool
+	runtimeManifestPath  string
 }
 
 // New creates a new App instance with all dependencies initialized.
@@ -161,8 +163,31 @@ func (a *App) Run() error {
 		Handler: r,
 	}
 
-	log.Printf("ACGWarehouse server starting on %s", addr)
-	return a.httpServer.ListenAndServe()
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen server address: %w", err)
+	}
+
+	manifestBaseURL, err := ResolveRuntimeManifestBaseURL(listener.Addr(), a.config.Server.Host)
+	if err != nil {
+		_ = listener.Close()
+		return err
+	}
+	payload, err := BuildRuntimeManifestPayload(manifestBaseURL, time.Now().UTC())
+	if err != nil {
+		_ = listener.Close()
+		return err
+	}
+
+	a.runtimeManifestPath = ResolveRuntimeManifestPath()
+	if err := WriteRuntimeManifestAtomic(a.runtimeManifestPath, payload); err != nil {
+		_ = listener.Close()
+		return err
+	}
+
+	log.Printf("ACGWarehouse server starting on %s", manifestBaseURL)
+	log.Printf("runtime manifest generated at %s", a.runtimeManifestPath)
+	return a.httpServer.Serve(listener)
 }
 
 // Shutdown gracefully stops the application.
@@ -184,6 +209,10 @@ func (a *App) Shutdown(ctx context.Context) error {
 		// Stop job manager
 		if a.jobManager != nil {
 			a.jobManager.Stop()
+		}
+
+		if err := RemoveRuntimeManifest(a.runtimeManifestPath); err != nil {
+			log.Printf("runtime manifest cleanup failed: %v", err)
 		}
 
 		// Shutdown HTTP server

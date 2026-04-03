@@ -42,8 +42,6 @@ func TestBuildRuntimeManifestPayloadIncludesRequiredFields(t *testing.T) {
 }
 
 func TestWriteRuntimeManifestAtomicUsesTempThenRename(t *testing.T) {
-	t.Parallel()
-
 	manifestPath := filepath.Join(t.TempDir(), "runtime-manifest.json")
 	payload, err := BuildRuntimeManifestPayload("http://127.0.0.1:51423", time.Now().UTC())
 	if err != nil {
@@ -87,8 +85,6 @@ func TestWriteRuntimeManifestAtomicUsesTempThenRename(t *testing.T) {
 }
 
 func TestWriteRuntimeManifestAtomicDoesNotLeavePartialJSONOnRenameFailure(t *testing.T) {
-	t.Parallel()
-
 	manifestPath := filepath.Join(t.TempDir(), "runtime-manifest.json")
 	original := []byte(`{"version":1,"go":{"base_url":"http://127.0.0.1:50000","ready":true},"generated_at":"2026-04-04T09:30:15Z"}`)
 	if err := os.WriteFile(manifestPath, original, 0o600); err != nil {
