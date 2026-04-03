@@ -10,6 +10,7 @@ import (
 func HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
+		"scope":   "go",
 		"message": "ACGWarehouse is running",
 		"version": "1.0.0",
 	})
@@ -19,5 +20,6 @@ func HealthCheck(c *gin.Context) {
 func ReadyCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ready",
+		"scope":  "go",
 	})
 }
