@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
 status: executing
-stopped_at: Completed 15-02-PLAN.md
-last_updated: "2026-04-03T16:59:40.788Z"
+stopped_at: Completed 15-01-PLAN.md
+last_updated: "2026-04-03T17:03:25.910Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-04-03)
 
 Milestone: `v4.0` started ◆  
 Phase: 15 (compute-sidecar-infrastructure) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-03
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0% — 0/8 phases complete
 | v3.0 | 11-14 | 15 | Shipped |
 | v4.0 | 15-22 | TBD | In progress |
 | Phase 15 P02 | 8 min | 2 tasks | 12 files |
+| Phase 15 P01 | 8 h 11 m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,9 @@ Most recent milestone-level decisions:
 - **Key architecture:** Go orchestrator + Python compute sidecar + Flutter UI, HTTP localhost communication
 - [Phase 15]: Manifest schema remains Flutter-facing go.base_url only (Python endpoint remains internal).
 - [Phase 15]: Flutter startup now applies runtime manifest URL before runApp with dev-only localhost fallback.
+- [Phase 15]: App startup records degraded mode when sidecar startup fails instead of aborting Go service startup.
+- [Phase 15]: Sidecar shutdown enforces graceful attempt then kill/reap fallback to avoid leaked child processes.
+- [Phase 15]: Base /health and /ready responses remain explicitly Go-scoped and do not expose sidecar diagnostics.
 
 ### Pending Todos
 
@@ -84,8 +88,8 @@ Research completed: `.planning/research/SUMMARY.md` (HIGH confidence)
 
 ## Session Continuity
 
-Last session: 2026-04-03T16:59:40.785Z
-Stopped at: Completed 15-02-PLAN.md
+Last session: 2026-04-03T17:03:25.907Z
+Stopped at: Completed 15-01-PLAN.md
 Resume file: None
 
 ---
