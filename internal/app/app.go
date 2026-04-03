@@ -322,6 +322,8 @@ func (a *App) currentSidecarStatusSnapshot() service.SidecarStatusSnapshot {
 		probeResult = "ok"
 	case sidecar.StateDegraded:
 		probeResult = "failed"
+	case sidecar.StateStopped:
+		probeResult = "failed"
 	case sidecar.StateStarting:
 		probeResult = "starting"
 	}
