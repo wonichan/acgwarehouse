@@ -38,7 +38,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Application enters usable state only after both Go and Python confirm readiness
   3. Flutter frontend can connect to Go backend without relying on hardcoded fixed ports
   4. Admin can observe Python sidecar running status through process monitoring
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] `15-01-PLAN.md` — Build Go-owned sidecar lifecycle, startup/shutdown orchestration, and layered health boundaries
+- [ ] `15-02-PLAN.md` — Implement runtime manifest generation and Flutter startup discovery without hardcoded ports
+- [ ] `15-03-PLAN.md` — Add admin diagnostics, degraded-mode regressions, and phase-closing cross-stack verification
 **UI hint**: no
 
 ### Phase 16: Duplicate Detection Migration
@@ -127,7 +131,7 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 15. Compute Sidecar Infrastructure | v4.0 | 0/TBD | Not started | - |
+| 15. Compute Sidecar Infrastructure | v4.0 | 1/3 | In Progress|  |
 | 16. Duplicate Detection Migration | v4.0 | 0/TBD | Not started | - |
 | 17. Desktop Shell Foundation | v4.0 | 0/TBD | Not started | - |
 | 18. Independent Viewer & Filmstrip | v4.0 | 0/TBD | Not started | - |

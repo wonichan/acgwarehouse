@@ -26,7 +26,7 @@
 - [ ] **COMP-03**: 系统会把重复检测、图像哈希和相似度计算从现有 Go 直接计算迁移到 Python 侧车执行
 - [ ] **COMP-04**: 用户在重复检测结果中可以看到每组图片的推荐保留项与推荐依据
 - [ ] **COMP-05**: 当 Python 侧车不可用时，系统仍能给出可诊断的失败状态与恢复提示，而不是静默失效
-- [ ] **COMP-06**: Flutter 端可以获取当前 Go 本地服务地址并在应用启动过程中完成连接，而不依赖写死的固定端口
+- [x] **COMP-06**: Flutter 端可以获取当前 Go 本地服务地址并在应用启动过程中完成连接，而不依赖写死的固定端口
 
 ### Operations（运营与诊断）
 
@@ -84,7 +84,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMP-03 | Phase 16 | Pending |
 | COMP-04 | Phase 16 | Pending |
 | COMP-05 | Phase 22 | Pending |
-| COMP-06 | Phase 15 | Pending |
+| COMP-06 | Phase 15 | Complete |
 | OPS-01 | Phase 20 | Pending |
 | OPS-02 | Phase 20 | Pending |
 | OPS-03 | Phase 21 | Pending |
