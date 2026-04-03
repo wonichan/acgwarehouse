@@ -4,7 +4,7 @@ milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
 status: verifying
 stopped_at: Completed 15-03-PLAN.md
-last_updated: "2026-04-03T17:17:07.929Z"
+last_updated: "2026-04-03T17:28:39.316Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 8
@@ -26,8 +26,8 @@ See: `.planning/PROJECT.md` (updated 2026-04-03)
 ## Current Position
 
 Milestone: `v4.0` started ◆  
-Phase: 15 (compute-sidecar-infrastructure) — EXECUTING
-Plan: 3 of 3
+Phase: 16
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-04-03
 
