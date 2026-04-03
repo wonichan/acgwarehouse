@@ -40,9 +40,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Admin can observe Python sidecar running status through process monitoring
 **Plans**: 3 plans
 Plans:
-- [ ] `15-01-PLAN.md` — Build Go-owned sidecar lifecycle, startup/shutdown orchestration, and layered health boundaries
-- [ ] `15-02-PLAN.md` — Implement runtime manifest generation and Flutter startup discovery without hardcoded ports
-- [ ] `15-03-PLAN.md` — Add admin diagnostics, degraded-mode regressions, and phase-closing cross-stack verification
+- [x] `15-01-PLAN.md` — Build Go-owned sidecar lifecycle, startup/shutdown orchestration, and layered health boundaries
+- [x] `15-02-PLAN.md` — Implement runtime manifest generation and Flutter startup discovery without hardcoded ports
+- [x] `15-03-PLAN.md` — Add admin diagnostics, degraded-mode regressions, and phase-closing cross-stack verification
 **UI hint**: no
 
 ### Phase 16: Duplicate Detection Migration
