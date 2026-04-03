@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
@@ -247,10 +249,108 @@ func TestRefillReadyJobsSkipsAITasksBeyondQueueLimitAndLoadsThumbnailJobs(t *tes
 	}
 }
 
+func TestPrepareSidecarStartupMarksDegradedWhenSidecarFails(t *testing.T) {
+	t.Parallel()
+
+	runtime := &sidecarRuntimeTracker{startErr: errors.New("startup timeout")}
+	app := &App{sidecarRuntime: runtime, refillStopCh: make(chan struct{})}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err := app.prepareSidecarStartup(ctx); err != nil {
+		t.Fatalf("prepareSidecarStartup() error = %v", err)
+	}
+	if app.sidecarMode != sidecarModeDegraded {
+		t.Fatalf("sidecarMode = %q, want %q", app.sidecarMode, sidecarModeDegraded)
+	}
+	if app.fullyReady {
+		t.Fatal("fullyReady = true, want false when sidecar startup fails")
+	}
+}
+
+func TestPrepareSidecarStartupMarksFullyReadyWhenSidecarReady(t *testing.T) {
+	t.Parallel()
+
+	runtime := &sidecarRuntimeTracker{state: sidecar.StateReady}
+	app := &App{sidecarRuntime: runtime, refillStopCh: make(chan struct{})}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err := app.prepareSidecarStartup(ctx); err != nil {
+		t.Fatalf("prepareSidecarStartup() error = %v", err)
+	}
+	if app.sidecarMode != sidecarModeReady {
+		t.Fatalf("sidecarMode = %q, want %q", app.sidecarMode, sidecarModeReady)
+	}
+	if !app.fullyReady {
+		t.Fatal("fullyReady = false, want true when Go and sidecar are ready")
+	}
+}
+
+func TestShutdownStopsSidecarRuntimeOnlyOnce(t *testing.T) {
+	t.Parallel()
+
+	runtime := &sidecarRuntimeTracker{state: sidecar.StateReady}
+	app := &App{sidecarRuntime: runtime, refillStopCh: make(chan struct{})}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err := app.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+	if err := app.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown() second call error = %v", err)
+	}
+	if runtime.stops != 1 {
+		t.Fatalf("sidecar Stop calls = %d, want 1", runtime.stops)
+	}
+}
+
 type schedulerLifecycleTracker struct {
 	mu     sync.Mutex
 	starts int
 	stops  int
+}
+
+type sidecarRuntimeTracker struct {
+	mu       sync.Mutex
+	startErr error
+	state    sidecar.State
+	starts   int
+	stops    int
+}
+
+func (s *sidecarRuntimeTracker) Start(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.starts++
+	if s.startErr != nil {
+		s.state = sidecar.StateDegraded
+		return s.startErr
+	}
+	s.state = sidecar.StateReady
+	return nil
+}
+
+func (s *sidecarRuntimeTracker) Stop(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stops++
+	s.state = sidecar.StateStopped
+	return nil
+}
+
+func (s *sidecarRuntimeTracker) State() sidecar.State {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.state
+}
+
+func (s *sidecarRuntimeTracker) Status() sidecar.Status {
+	return sidecar.Status{State: s.State()}
 }
 
 type schedulerFactoryTracker struct {
