@@ -19,6 +19,8 @@ func TestRoutesRegistersTagAndImageTagEndpoints(t *testing.T) {
 		method string
 		path   string
 	}{
+		{method: http.MethodGet, path: "/health"},
+		{method: http.MethodGet, path: "/ready"},
 		{method: http.MethodGet, path: "/api/v1/tags"},
 		{method: http.MethodPost, path: "/api/v1/tags"},
 		{method: http.MethodGet, path: "/api/v1/images/1/tags"},
@@ -30,5 +32,12 @@ func TestRoutesRegistersTagAndImageTagEndpoints(t *testing.T) {
 		if w.Code == http.StatusNotFound {
 			t.Fatalf("%s %s returned 404, route not registered", tc.method, tc.path)
 		}
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/python/health", nil)
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /python/health status = %d, want 404 (no direct python route)", w.Code)
 	}
 }
