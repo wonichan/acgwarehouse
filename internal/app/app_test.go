@@ -400,11 +400,12 @@ type schedulerLifecycleTracker struct {
 }
 
 type sidecarRuntimeTracker struct {
-	mu       sync.Mutex
-	startErr error
-	state    sidecar.State
-	starts   int
-	stops    int
+	mu        sync.Mutex
+	startErr  error
+	lastError string
+	state     sidecar.State
+	starts    int
+	stops     int
 }
 
 func (s *sidecarRuntimeTracker) Start(context.Context) error {
@@ -413,9 +414,11 @@ func (s *sidecarRuntimeTracker) Start(context.Context) error {
 	s.starts++
 	if s.startErr != nil {
 		s.state = sidecar.StateDegraded
+		s.lastError = s.startErr.Error()
 		return s.startErr
 	}
 	s.state = sidecar.StateReady
+	s.lastError = ""
 	return nil
 }
 
@@ -434,14 +437,16 @@ func (s *sidecarRuntimeTracker) State() sidecar.State {
 }
 
 func (s *sidecarRuntimeTracker) Status() sidecar.Status {
-	return sidecar.Status{State: s.State()}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return sidecar.Status{State: s.state, LastError: s.lastError}
 }
 
 func (s *sidecarRuntimeTracker) setStateAndError(state sidecar.State, summary string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state = state
-	s.startErr = errors.New(summary)
+	s.lastError = summary
 }
 
 type schedulerFactoryTracker struct {

@@ -38,6 +38,17 @@ const (
 	sidecarModeDegraded      appSidecarMode = "degraded"
 )
 
+type appSidecarStatusProvider struct {
+	app *App
+}
+
+func (p appSidecarStatusProvider) SidecarStatus(context.Context) service.SidecarStatusSnapshot {
+	if p.app == nil {
+		return service.SidecarStatusSnapshot{}
+	}
+	return p.app.currentSidecarStatusSnapshot()
+}
+
 // App represents the application with all its dependencies and lifecycle management.
 type App struct {
 	config      *config.Config
@@ -132,6 +143,7 @@ func New(cfgPath string) (*App, error) {
 		service.NewTaskReadService(repository.NewTaskBatchReadRepository(app.db)),
 		repository.NewTaskBatchRepository(app.db),
 		repository.NewPlatformTaskRepository(app.db),
+		appSidecarStatusProvider{app: app},
 	)
 
 	return app, nil
@@ -285,6 +297,46 @@ func (a *App) prepareSidecarStartup(ctx context.Context) error {
 	a.sidecarMode = sidecarModeDegraded
 	a.fullyReady = false
 	return nil
+}
+
+func (a *App) currentSidecarStatusSnapshot() service.SidecarStatusSnapshot {
+	now := time.Now().UTC()
+	if a.sidecarRuntime == nil {
+		return service.SidecarStatusSnapshot{
+			State:            string(sidecarModeNotConfigured),
+			LastProbeAt:      now,
+			LastProbeResult:  "unknown",
+			LastErrorSummary: "not configured",
+		}
+	}
+
+	status := a.sidecarRuntime.Status()
+	state := string(status.State)
+	if state == "" {
+		state = string(a.sidecarMode)
+	}
+
+	probeResult := "unknown"
+	switch status.State {
+	case sidecar.StateReady:
+		probeResult = "ok"
+	case sidecar.StateDegraded:
+		probeResult = "failed"
+	case sidecar.StateStarting:
+		probeResult = "starting"
+	}
+
+	lastError := status.LastError
+	if probeResult == "failed" && lastError == "" {
+		lastError = "sidecar unavailable"
+	}
+
+	return service.SidecarStatusSnapshot{
+		State:            state,
+		LastProbeAt:      now,
+		LastProbeResult:  probeResult,
+		LastErrorSummary: lastError,
+	}
 }
 
 // runRefillLoop periodically checks for ready jobs and loads them into the queue.
