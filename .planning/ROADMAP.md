@@ -6,7 +6,9 @@
   - 详见: `.planning/milestones/v1.0-ROADMAP.md`
 - ✅ **v2.0 UI/UX 重构** — Phases 7-10 (shipped 2026-03-22)
   - 详见: `.planning/milestones/v2.0-ROADMAP.md`
-- 📋 **v3.0 导入后任务平台化** — Phases 11-14 (planned)
+- ✅ **v3.0 导入后任务平台化** — Phases 11-14 (shipped 2026-03-29)
+  - 详见: `.planning/milestones/v3.0-ROADMAP.md`
+- 📋 **Next milestone 待定义** — 使用 `/gsd-new-milestone` 重新生成下一轮 requirements 与 roadmap
 
 ## Completed Phases
 
@@ -32,74 +34,15 @@
 
 </details>
 
----
+<details>
+<summary>✅ v3.0 导入后任务平台化 (Phases 11-14) — SHIPPED 2026-03-29</summary>
 
-### 📋 v3.0 导入后任务平台化 (Planned)
+- [x] Phase 11: 任务平台基础与批次模型
+- [x] Phase 12: 导入后任务接入与自动调度
+- [x] Phase 13: 后台监控与队列控制
+- [x] Phase 14: 补跑恢复与运营收尾
 
-**Milestone Goal:** 将导入后的 AI 标签等后台处理任务统一纳入可观测、可控制、可恢复的平台，解决海量导入后仍需逐张人工触发的问题。
-
-#### Phase 11: 任务平台基础与批次模型
-**Goal**: 建立统一的导入批次、后处理任务与状态流转模型，为所有导入后任务提供同一平台入口。
-**Depends on**: Phase 10 (v2.0 complete)
-**Requirements**: PIPE-01, PIPE-03, SAFE-03
-**Success Criteria** (what must be TRUE):
-1. 用户导入图片后，系统会生成一个可追踪的导入后处理批次。
-2. 导入后任务在统一状态机中流转，而不是分散在各个独立入口里手动触发。
-3. 同一批未变更图片不会因为重复触发而无限重复入队。
-**Plans**: 4 plans
-
-Plans:
-- [x] 11-01: 定义导入批次、任务与任务状态模型
-- [x] 11-02: 建立任务持久化与状态流转规则
-- [x] 11-03: 接入统一调度入口与分发骨架
-- [x] 11-04: 提供后台查询所需的批次 / 任务读模型
-
-#### Phase 12: 导入后任务接入与自动调度
-**Goal**: 将 AI 标签与导入后处理链路接入统一平台，实现导入完成后的自动入队与条件过滤。
-**Depends on**: Phase 11
-**Requirements**: AIQ-01, AIQ-02
-**Success Criteria** (what must be TRUE):
-1. 用户导入图片后，符合条件的图片会自动加入 AI 打标签队列。
-2. 默认只有没有 AI 标签的图片才会被自动加入 AI 打标签队列。
-3. 导入后的处理不再依赖逐图人工触发。
-**Plans**: 4 plans
-
-Plans:
-- [x] 12-01: 数据模型变更与查询基础（image_tag.source 字段 + FindImagesWithoutAITags）
-- [x] 12-02: 定时扫描服务实现（AITagAutoScheduler + 配置项）
-- [x] 12-03: 集成调度服务到应用启动流程
-- [x] 12-04: 端到端验证与真实批次测试
-
-#### Phase 13: 后台监控与队列控制
-**Goal**: 在后台管理页面提供按批次监控、队列状态查看和核心控制动作。
-**Depends on**: Phase 12
-**Requirements**: PIPE-02, OPS-01, OPS-02, OPS-03, OPS-04, OPS-05, OPS-06
-**Success Criteria** (what must be TRUE):
-1. 管理员可以按批次查看队列中的待处理、执行中、成功、失败、已取消状态。
-2. 管理员可以暂停、继续、取消、清空队列，而不需要逐图干预。
-3. 管理员可以对失败任务执行重试操作。
-**Plans**: 4 plans
-
-Plans:
-- [x] `13-01-PLAN.md` — 设计后台任务平台页的批次与状态视图
-- [x] `13-02-PLAN.md` — 提供队列统计与任务明细接口
-- [x] `13-03-PLAN.md` — 实现暂停 / 继续 / 取消 / 清空控制动作
-- [x] `13-04-PLAN.md` — 实现失败任务重试与操作反馈
-
-#### Phase 14: 补跑恢复与运营收尾
-**Goal**: 完成“未打标签图片”批量补入队、失败隔离与恢复体验，补齐运营闭环。
-**Depends on**: Phase 13
-**Requirements**: AIQ-03, SAFE-01, SAFE-02
-**Success Criteria** (what must be TRUE):
-1. 管理员可以批量把未打过 AI 标签的图片加入处理队列。
-2. 单个图片任务失败不会阻塞同批次其它图片继续处理。
-3. 管理员可以看到失败状态与失败原因摘要，并据此进行恢复操作。
-**Plans**: 3 plans
-
-Plans:
-- [x] `14-01-PLAN.md` — Define filtered backfill preview and execute contracts
-- [x] `14-02-PLAN.md` — Prove per-image failure isolation and add grouped failure summaries
-- [x] `14-03-PLAN.md` — Wire admin recovery UX and final operator verification
+</details>
 
 ## Progress
 
@@ -120,5 +63,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 10. 主题统一与优化 | v2.0 | complete | Complete | 2026-03-22 |
 | 11. 任务平台基础与批次模型 | v3.0 | complete | Complete | 2026-03-24 |
 | 12. 导入后任务接入与自动调度 | v3.0 | 4/4 | Complete | 2026-03-26 |
-| 13. 后台监控与队列控制 | v3.0 | 4/4 | Complete    | 2026-03-27 |
-| 14. 补跑恢复与运营收尾 | v3.0 | 3/3 | Complete   | 2026-03-29 |
+| 13. 后台监控与队列控制 | v3.0 | 4/4 | Complete | 2026-03-27 |
+| 14. 补跑恢复与运营收尾 | v3.0 | 3/3 | Complete | 2026-03-29 |
+
+---
+*Roadmap archived through v3.0 on 2026-04-03*
