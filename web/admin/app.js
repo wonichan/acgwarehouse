@@ -67,6 +67,7 @@ const elements = {
     pauseBtn: document.getElementById('pauseBtn'),
     resumeBtn: document.getElementById('resumeBtn'),
     clearQueueBtn: document.getElementById('clearQueueBtn'),
+    retryFailedJobsBtn: document.getElementById('retryFailedJobsBtn'),
     scanBtn: document.getElementById('scanBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
 };
@@ -737,6 +738,34 @@ async function triggerActionWithFeedback(endpoint, successMessage, errorMessage)
     }
 }
 
+async function retryFailedJobs() {
+    try {
+        const response = await fetchWithAuth(`${API_BASE}/actions/jobs/retry-failed`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            const count = data?.data?.count ?? 0;
+            showToast(`已重试所有失败任务（影响 ${count} 项）`, 'success');
+            setTimeout(() => {
+                loadSummary();
+                loadBatches();
+                if (selectedBatchId != null) {
+                    loadTasks(selectedBatchId);
+                }
+            }, 500);
+        } else {
+            showToast(data.message || '重试失败任务失败', 'error');
+        }
+    } catch (error) {
+        console.error('Retry failed jobs error:', error);
+        showToast('重试失败任务失败', 'error');
+    }
+}
+
 // Filter Handlers
 function handleFilterChange() {
     currentFilters.status = elements.batchStatusFilter?.value || '';
@@ -886,6 +915,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             triggerActionWithFeedback('actions/jobs/clear-queue', '待执行队列已清空', '清空待执行队列失败');
         });
+    }
+
+    if (elements.retryFailedJobsBtn) {
+        elements.retryFailedJobsBtn.addEventListener('click', retryFailedJobs);
     }
     
     // Trigger scan

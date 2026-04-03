@@ -246,7 +246,7 @@ func (a *App) registerAIHandlers() {
 	worker.InitAITagConcurrencyLimiter(a.config.AI.MaxConcurrency)
 
 	client := ai.NewRateLimitedClient(provider, a.config.AI.RequestsPerMinute)
-	aiHandler := worker.NewAITagJobHandler(client, a.obsRepo, a.governanceSvc)
+	aiHandler := worker.NewAITagJobHandler(client, a.obsRepo, a.governanceSvc, a.imageTagRepo)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagGeneration, aiHandler)
 }
 

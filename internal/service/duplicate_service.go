@@ -349,15 +349,22 @@ func (s *DuplicateService) GetDuplicateGroups(limit, offset int) ([]domain.Dupli
 				continue
 			}
 			images[j] = domain.DuplicateImage{
-				ID:            img.ID,
-				Path:          img.Path,
-				Filename:      img.Filename,
-				Width:         img.Width,
-				Height:        img.Height,
-				FileSize:      img.FileSize,
-				IsRecommended: rel.IsRecommended,
-				FileHash:      rel.FileHash,
-				PHashDistance: rel.PHashDistance,
+				ID:                img.ID,
+				Path:              img.Path,
+				Filename:          img.Filename,
+				SourceRoot:        img.SourceRoot,
+				Width:             img.Width,
+				Height:            img.Height,
+				FileSize:          img.FileSize,
+				Format:            img.Format,
+				PHash:             img.PHash,
+				ThumbnailSmallUrl: img.ThumbnailSmallUrl,
+				ThumbnailLargeUrl: img.ThumbnailLargeUrl,
+				CreatedAt:         img.CreatedAt,
+				UpdatedAt:         img.UpdatedAt,
+				IsRecommended:     rel.IsRecommended,
+				FileHash:          rel.FileHash,
+				PHashDistance:     rel.PHashDistance,
 			}
 		}
 
@@ -392,15 +399,22 @@ func (s *DuplicateService) GetDuplicateGroup(id int64) (*domain.DuplicateGroupWi
 			continue
 		}
 		images[i] = domain.DuplicateImage{
-			ID:            img.ID,
-			Path:          img.Path,
-			Filename:      img.Filename,
-			Width:         img.Width,
-			Height:        img.Height,
-			FileSize:      img.FileSize,
-			IsRecommended: rel.IsRecommended,
-			FileHash:      rel.FileHash,
-			PHashDistance: rel.PHashDistance,
+			ID:                img.ID,
+			Path:              img.Path,
+			Filename:          img.Filename,
+			SourceRoot:        img.SourceRoot,
+			Width:             img.Width,
+			Height:            img.Height,
+			FileSize:          img.FileSize,
+			Format:            img.Format,
+			PHash:             img.PHash,
+			ThumbnailSmallUrl: img.ThumbnailSmallUrl,
+			ThumbnailLargeUrl: img.ThumbnailLargeUrl,
+			CreatedAt:         img.CreatedAt,
+			UpdatedAt:         img.UpdatedAt,
+			IsRecommended:     rel.IsRecommended,
+			FileHash:          rel.FileHash,
+			PHashDistance:     rel.PHashDistance,
 		}
 	}
 

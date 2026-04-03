@@ -1,15 +1,18 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 /// Service for batch operations on images
 class BatchService {
   final http.Client _client;
-  final String baseUrl;
+  final String? _baseUrlOverride;
 
-  BatchService({
-    http.Client? client,
-    this.baseUrl = 'http://localhost:8080',
-  }) : _client = client ?? http.Client();
+  /// Dynamic base URL - reads from ApiConfig unless override is set
+  String get baseUrl => _baseUrlOverride ?? ApiConfig.hostUrl;
+
+  BatchService({http.Client? client, String? baseUrl})
+    : _client = client ?? http.Client(),
+      _baseUrlOverride = baseUrl;
 
   /// Batch adds tags to multiple images
   Future<int> batchAddTags(List<int> imageIds, List<int> tagIds) async {
@@ -18,10 +21,7 @@ class BatchService {
     final response = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'image_ids': imageIds,
-        'tag_ids': tagIds,
-      }),
+      body: jsonEncode({'image_ids': imageIds, 'tag_ids': tagIds}),
     );
 
     if (response.statusCode != 200) {
@@ -39,10 +39,7 @@ class BatchService {
     final response = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'image_ids': imageIds,
-        'tag_ids': tagIds,
-      }),
+      body: jsonEncode({'image_ids': imageIds, 'tag_ids': tagIds}),
     );
 
     if (response.statusCode != 200) {
@@ -54,16 +51,16 @@ class BatchService {
   }
 
   /// Batch moves images to a collection
-  Future<int> batchMoveToCollection(List<int> imageIds, int collectionId) async {
+  Future<int> batchMoveToCollection(
+    List<int> imageIds,
+    int collectionId,
+  ) async {
     final uri = Uri.parse('$baseUrl/api/v1/batch/collections/move');
 
     final response = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'image_ids': imageIds,
-        'collection_id': collectionId,
-      }),
+      body: jsonEncode({'image_ids': imageIds, 'collection_id': collectionId}),
     );
 
     if (response.statusCode != 200) {
@@ -75,20 +72,22 @@ class BatchService {
   }
 
   /// Batch removes images from a collection
-  Future<int> batchRemoveFromCollection(List<int> imageIds, int collectionId) async {
+  Future<int> batchRemoveFromCollection(
+    List<int> imageIds,
+    int collectionId,
+  ) async {
     final uri = Uri.parse('$baseUrl/api/v1/batch/collections/remove');
 
     final response = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'image_ids': imageIds,
-        'collection_id': collectionId,
-      }),
+      body: jsonEncode({'image_ids': imageIds, 'collection_id': collectionId}),
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to remove images from collection: ${response.statusCode}');
+      throw Exception(
+        'Failed to remove images from collection: ${response.statusCode}',
+      );
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
@@ -102,9 +101,7 @@ class BatchService {
     final response = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'image_ids': imageIds,
-      }),
+      body: jsonEncode({'image_ids': imageIds}),
     );
 
     if (response.statusCode != 200) {

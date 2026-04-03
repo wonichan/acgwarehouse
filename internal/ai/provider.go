@@ -8,6 +8,8 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 )
 
+const defaultAIRequestTimeout = 120 * time.Second
+
 // TagResult 表示 AI 生成的标签结果
 type TagResult struct {
 	Tags        []string `json:"tags"`         // 生成的标签列表
@@ -34,7 +36,7 @@ func NewProvider(cfg *config.AIConfig) (AIProvider, error) {
 	}
 
 	httpClient := &http.Client{
-		Timeout: 60 * time.Second,
+		Timeout: defaultAIRequestTimeout,
 	}
 
 	switch cfg.Provider {

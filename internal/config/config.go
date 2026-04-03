@@ -71,6 +71,9 @@ type WorkerPoolConfig struct {
 	RefillIntervalSeconds int `yaml:"refill_interval_seconds"`
 	// RefillThreshold is the queue size below which refill is triggered (fraction of QueueSize, e.g., 0.5)
 	RefillThreshold float64 `yaml:"refill_threshold"`
+	// RefillBatchSize is the max number of ready jobs loaded into the in-memory queue per refill tick.
+	// When unset or <= 0, it defaults to QueueSize to preserve the previous behavior.
+	RefillBatchSize int `yaml:"refill_batch_size"`
 }
 
 // ConfigChangeCallback is called when configuration changes.
@@ -350,5 +353,13 @@ func applyEnvOverrides(cfg *Config) {
 		if rt, err := strconv.ParseFloat(v, 64); err == nil && rt > 0 && rt <= 1 {
 			cfg.WorkerPool.RefillThreshold = rt
 		}
+	}
+	if v := os.Getenv("WORKER_REFILL_BATCH_SIZE"); v != "" {
+		if rb, err := strconv.Atoi(v); err == nil && rb > 0 {
+			cfg.WorkerPool.RefillBatchSize = rb
+		}
+	}
+	if cfg.WorkerPool.RefillBatchSize <= 0 {
+		cfg.WorkerPool.RefillBatchSize = cfg.WorkerPool.QueueSize
 	}
 }

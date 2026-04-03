@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
@@ -19,10 +20,11 @@ type AITagHandler struct {
 	jobRepo         repository.JobRepository
 	taskRepo        repository.PlatformTaskRepository
 	taskPlatformSvc *service.TaskPlatformService
+	configProvider  func() *config.Config
 }
 
-func NewAITagHandler(jobManager *worker.Manager, imageRepo repository.ImageRepository, jobRepo repository.JobRepository, taskRepo repository.PlatformTaskRepository, taskPlatformSvc *service.TaskPlatformService) *AITagHandler {
-	return &AITagHandler{jobManager: jobManager, imageRepo: imageRepo, jobRepo: jobRepo, taskRepo: taskRepo, taskPlatformSvc: taskPlatformSvc}
+func NewAITagHandler(jobManager *worker.Manager, imageRepo repository.ImageRepository, jobRepo repository.JobRepository, taskRepo repository.PlatformTaskRepository, taskPlatformSvc *service.TaskPlatformService, configProvider func() *config.Config) *AITagHandler {
+	return &AITagHandler{jobManager: jobManager, imageRepo: imageRepo, jobRepo: jobRepo, taskRepo: taskRepo, taskPlatformSvc: taskPlatformSvc, configProvider: configProvider}
 }
 
 func (h *AITagHandler) TriggerAITags(c *gin.Context) {
@@ -164,7 +166,7 @@ func (h *AITagHandler) enqueueAITagBatch(ctx context.Context, sourceType string,
 		if err != nil {
 			return nil, err
 		}
-		payload, err := json.Marshal(worker.AITagPayload{ImageID: task.ImageID, Path: image.Path, Prompt: prompt})
+		payload, err := json.Marshal(worker.AITagPayload{ImageID: task.ImageID, Path: service.ResolveAITagImagePath(image), Prompt: prompt})
 		if err != nil {
 			return nil, err
 		}
@@ -174,7 +176,7 @@ func (h *AITagHandler) enqueueAITagBatch(ctx context.Context, sourceType string,
 		}
 		response.PlatformTaskIDs = append(response.PlatformTaskIDs, task.ID)
 		response.JobIDs = append(response.JobIDs, job.ID)
-		if h.jobManager != nil {
+		if h.jobManager != nil && h.jobManager.QueuedByType(domain.PlatformTaskTypeAITagGeneration) < service.ResolveAITagQueueLimit(h.currentConfig()) {
 			h.jobManager.LoadExistingJob(job)
 		}
 	}
@@ -211,6 +213,13 @@ func (h *AITagHandler) findLatestJobForImage(imageID int64) (*repositoryJobView,
 		}
 	}
 	return nil, sql.ErrNoRows
+}
+
+func (h *AITagHandler) currentConfig() *config.Config {
+	if h == nil || h.configProvider == nil {
+		return nil
+	}
+	return h.configProvider()
 }
 
 type repositoryJobView struct {

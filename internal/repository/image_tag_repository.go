@@ -13,6 +13,7 @@ type ImageTagRepository interface {
 	Save(ctx context.Context, imageTag *domain.ImageTag) error
 	FindByImageID(ctx context.Context, imageID int64) ([]*domain.ImageTag, error)
 	FindByTagID(ctx context.Context, tagID int64, limit, offset int) ([]*domain.ImageTag, error)
+	HasAITags(ctx context.Context, imageID int64) (bool, error)
 	UpdateReviewState(ctx context.Context, imageID, tagID int64, state string) error
 	// Delete removes the image-tag association and returns the number of rows affected.
 	// Returns 0 if the association didn't exist.
@@ -115,6 +116,19 @@ func (r *imageTagRepository) FindByTagID(ctx context.Context, tagID int64, limit
 	defer rows.Close()
 
 	return scanImageTags(rows)
+}
+
+func (r *imageTagRepository) HasAITags(ctx context.Context, imageID int64) (bool, error) {
+	var count int64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM image_tags
+		WHERE image_id = ? AND source = ?
+	`, imageID, domain.ImageTagSourceAI).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (r *imageTagRepository) UpdateReviewState(ctx context.Context, imageID, tagID int64, state string) error {

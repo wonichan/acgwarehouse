@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
 func TestNewInitializesAdminActionsWithWorkerManager(t *testing.T) {
@@ -163,6 +165,88 @@ func TestAutoSchedulerConfigReloadStopsWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestRefillReadyJobsRespectsBatchSize(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: sqlite\n  path: \":memory:\"\nstorage:\n  scan_roots: []\nai: {}\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 2\n")
+	if err := os.WriteFile(cfgPath, configYAML, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	reloader, err := config.NewReloader(cfgPath)
+	if err != nil {
+		t.Fatalf("NewReloader() error = %v", err)
+	}
+
+	repo := &refillTestJobRepo{jobs: []domain.AsyncJob{
+		{ID: 1, Status: "ready"},
+		{ID: 2, Status: "ready"},
+		{ID: 3, Status: "ready"},
+		{ID: 4, Status: "ready"},
+	}}
+	manager := worker.NewManagerWithConfig(repo, 1, 8)
+	app := &App{
+		cfgReloader:  reloader,
+		jobRepo:      repo,
+		jobManager:   manager,
+		refillStopCh: make(chan struct{}),
+	}
+
+	loaded := app.refillReadyJobs()
+	if loaded != 2 {
+		t.Fatalf("refillReadyJobs() loaded = %d, want 2", loaded)
+	}
+	if manager.QueueSize() != 2 {
+		t.Fatalf("QueueSize() = %d, want 2", manager.QueueSize())
+	}
+	if repo.findByStatusCalls != 1 {
+		t.Fatalf("FindByStatus calls = %d, want 1", repo.findByStatusCalls)
+	}
+}
+
+func TestRefillReadyJobsSkipsAITasksBeyondQueueLimitAndLoadsThumbnailJobs(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: sqlite\n  path: \":memory:\"\nstorage:\n  scan_roots: []\nai:\n  auto_scan_batch_size: 1\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 3\n")
+	if err := os.WriteFile(cfgPath, configYAML, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	reloader, err := config.NewReloader(cfgPath)
+	if err != nil {
+		t.Fatalf("NewReloader() error = %v", err)
+	}
+
+	repo := &refillTestJobRepo{jobs: []domain.AsyncJob{
+		{ID: 1, Type: domain.PlatformTaskTypeAITagGeneration, Status: "ready"},
+		{ID: 2, Type: domain.PlatformTaskTypeAITagGeneration, Status: "ready"},
+		{ID: 3, Type: domain.PlatformTaskTypeThumbnailGenerate, Status: "ready"},
+	}}
+	manager := worker.NewManagerWithConfig(repo, 1, 8)
+	app := &App{
+		cfgReloader:  reloader,
+		jobRepo:      repo,
+		jobManager:   manager,
+		refillStopCh: make(chan struct{}),
+	}
+
+	loaded := app.refillReadyJobs()
+	if loaded != 2 {
+		t.Fatalf("refillReadyJobs() loaded = %d, want 2", loaded)
+	}
+	if got := manager.QueuedByType(domain.PlatformTaskTypeAITagGeneration); got != 1 {
+		t.Fatalf("QueuedByType(ai_tag_generation) = %d, want 1", got)
+	}
+	if got := manager.QueuedByType(domain.PlatformTaskTypeThumbnailGenerate); got != 1 {
+		t.Fatalf("QueuedByType(thumbnail_generate) = %d, want 1", got)
+	}
+	if manager.QueueSize() != 2 {
+		t.Fatalf("QueueSize() = %d, want 2", manager.QueueSize())
+	}
+}
+
 type schedulerLifecycleTracker struct {
 	mu     sync.Mutex
 	starts int
@@ -206,10 +290,38 @@ func writeTestConfig(t *testing.T, dbPath string) string {
 	t.Helper()
 
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: sqlite\n  path: " + dbPath + "\nstorage:\n  scan_roots: []\nai: {}\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n")
+	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: sqlite\n  path: " + dbPath + "\nstorage:\n  scan_roots: []\nai: {}\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 0\n")
 	if err := os.WriteFile(cfgPath, configYAML, 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
 	return cfgPath
 }
+
+type refillTestJobRepo struct {
+	jobs              []domain.AsyncJob
+	findByStatusCalls int
+}
+
+func (r *refillTestJobRepo) Save(*domain.AsyncJob) error                           { return nil }
+func (r *refillTestJobRepo) FindByID(int64) (*domain.AsyncJob, error)              { return nil, os.ErrNotExist }
+func (r *refillTestJobRepo) FindByPlatformTaskID(int64) ([]domain.AsyncJob, error) { return nil, nil }
+func (r *refillTestJobRepo) FindByStatus(status string) ([]domain.AsyncJob, error) {
+	r.findByStatusCalls++
+	if status != "ready" {
+		return []domain.AsyncJob{}, nil
+	}
+	result := make([]domain.AsyncJob, len(r.jobs))
+	copy(result, r.jobs)
+	return result, nil
+}
+func (r *refillTestJobRepo) FindByType(string) ([]domain.AsyncJob, error) { return nil, nil }
+func (r *refillTestJobRepo) FindByTypeAndStatus(string, string) ([]domain.AsyncJob, error) {
+	return nil, nil
+}
+func (r *refillTestJobRepo) Update(*domain.AsyncJob) error             { return nil }
+func (r *refillTestJobRepo) FindRecent(int) ([]domain.AsyncJob, error) { return nil, nil }
+func (r *refillTestJobRepo) FindFailed() ([]domain.AsyncJob, error)    { return nil, nil }
+func (r *refillTestJobRepo) UpdateStatus(int64, string, *string) error { return nil }
+func (r *refillTestJobRepo) CountByStatus(string) (int64, error)       { return 0, nil }
+func (r *refillTestJobRepo) ResetRunningToReady() (int64, error)       { return 0, nil }

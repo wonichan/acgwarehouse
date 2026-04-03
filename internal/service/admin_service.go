@@ -110,6 +110,8 @@ type RetryBatchResult struct {
 	RetryCount   int
 }
 
+const maxFailedRetryAttempts = 5
+
 // NewAdminService creates a new AdminService.
 func NewAdminService(
 	cfg *config.Config,
@@ -375,16 +377,13 @@ func (s *AdminService) TriggerScan(ctx context.Context) (int64, error) {
 	return s.jobManager.AddJob(ctx, "manual_scan", "{}")
 }
 
-// RetryFailedJobs resets all failed jobs to ready status for reprocessing.
-// Returns the number of jobs retried.
+// RetryFailedJobs retries eligible failed tasks across failed and partial_failed batches.
 func (s *AdminService) RetryFailedJobs(ctx context.Context) (int, error) {
-	if s.taskReadSvc == nil {
+	batches, err := s.listRetryableBatches(ctx)
+	if err != nil {
 		return 0, fmt.Errorf("task retry service not configured")
 	}
-	batches, err := s.taskReadSvc.ListBatches(ctx, TaskBatchReadFilter{Status: domain.TaskBatchStatusFailed, Limit: 200})
-	if err != nil {
-		return 0, err
-	}
+
 	count := 0
 	for _, batch := range batches {
 		result, err := s.RetryFailedBatchTasks(ctx, batch.ID)
@@ -447,12 +446,19 @@ func (s *AdminService) RetryFailedTask(ctx context.Context, taskID int64) (*Retr
 func (s *AdminService) retryFailedPlatformTasks(ctx context.Context, originalBatch *domain.TaskBatch, tasks []domain.PlatformTask) (*RetryBatchResult, error) {
 	failedTasks := make([]domain.PlatformTask, 0, len(tasks))
 	for _, task := range tasks {
-		if task.Status == domain.PlatformTaskStatusFailed {
+		if task.Status != domain.PlatformTaskStatusFailed {
+			continue
+		}
+		canRetry, err := s.canRetryFailedTask(ctx, task)
+		if err != nil {
+			return nil, err
+		}
+		if canRetry {
 			failedTasks = append(failedTasks, task)
 		}
 	}
 	if len(failedTasks) == 0 {
-		return nil, fmt.Errorf("no failed tasks available for retry")
+		return nil, fmt.Errorf("no failed tasks available for retry: retry limit reached")
 	}
 	sort.Slice(failedTasks, func(i, j int) bool { return failedTasks[i].ID < failedTasks[j].ID })
 
@@ -534,6 +540,75 @@ func (s *AdminService) retryTaskPayload(task domain.PlatformTask) (string, error
 		return "", fmt.Errorf("retry payload not found")
 	}
 	return jobs[len(jobs)-1].Payload, nil
+}
+
+func (s *AdminService) listRetryableBatches(ctx context.Context) ([]domain.TaskBatch, error) {
+	if s.taskBatchRepo == nil {
+		return nil, fmt.Errorf("task retry service not configured")
+	}
+
+	batches := make([]domain.TaskBatch, 0, 200)
+	seen := make(map[int64]struct{})
+	statuses := []string{domain.TaskBatchStatusFailed, domain.TaskBatchStatusPartialFailed}
+	for _, status := range statuses {
+		items, err := s.taskBatchRepo.List(ctx, repository.TaskBatchListFilter{Status: status, Limit: 200})
+		if err != nil {
+			return nil, err
+		}
+		for _, batch := range items {
+			if _, ok := seen[batch.ID]; ok {
+				continue
+			}
+			seen[batch.ID] = struct{}{}
+			batches = append(batches, batch)
+		}
+	}
+	return batches, nil
+}
+
+func (s *AdminService) canRetryFailedTask(ctx context.Context, task domain.PlatformTask) (bool, error) {
+	if s.taskRepo == nil {
+		return false, fmt.Errorf("task control repositories not configured")
+	}
+
+	history, err := s.taskRepo.ListByImageAndTypes(ctx, task.ImageID, []string{task.TaskType})
+	if err != nil {
+		return false, err
+	}
+
+	failedAttempts := 0
+	for _, historicalTask := range history {
+		if !sameRetryChain(task, historicalTask) {
+			continue
+		}
+		if historicalTask.ID > task.ID {
+			switch historicalTask.Status {
+			case domain.PlatformTaskStatusPending,
+				domain.PlatformTaskStatusQueued,
+				domain.PlatformTaskStatusRunning,
+				domain.PlatformTaskStatusCompleted:
+				return false, nil
+			}
+		}
+		if historicalTask.Status == domain.PlatformTaskStatusFailed {
+			failedAttempts++
+		}
+	}
+
+	return failedAttempts < maxFailedRetryAttempts, nil
+}
+
+func sameRetryChain(base, candidate domain.PlatformTask) bool {
+	if base.ImageID != candidate.ImageID || base.TaskType != candidate.TaskType {
+		return false
+	}
+	if base.DedupeKey != "" {
+		return candidate.DedupeKey == base.DedupeKey
+	}
+	if base.ImageVersionKey != "" {
+		return candidate.ImageVersionKey == base.ImageVersionKey
+	}
+	return true
 }
 
 func (s *AdminService) newTaskPlatformService() *TaskPlatformService {

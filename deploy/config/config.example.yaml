@@ -66,3 +66,6 @@ worker_pool:
   # Refill is triggered when queue size drops below this fraction of queue_size (default: 0.5)
   # For example, 0.5 means refill when queue has less than half capacity
   refill_threshold: 0.5
+  # Maximum number of ready jobs loaded from the database into the in-memory queue per refill cycle
+  # Set to 0 to keep the historical behavior: keep loading until the queue is full or no ready jobs remain
+  refill_batch_size: 0

@@ -279,8 +279,12 @@ func (r *sqliteTaskBatchReadRepository) LoadFailureGroups(ctx context.Context, b
 	groups := make([]FailureGroupRecord, 0)
 	for rows.Next() {
 		var g FailureGroupRecord
-		if err := rows.Scan(&g.ReasonKey, &g.Count, &g.SampleError); err != nil {
+		var sampleError sql.NullString
+		if err := rows.Scan(&g.ReasonKey, &g.Count, &sampleError); err != nil {
 			return nil, err
+		}
+		if sampleError.Valid {
+			g.SampleError = sampleError.String
 		}
 		groups = append(groups, g)
 	}

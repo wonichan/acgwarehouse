@@ -28,6 +28,12 @@ cos:
   bucket_url: "https://example.cos.ap-shanghai.myqcloud.com"
   secret_id: ""
   secret_key: ""
+worker_pool:
+  worker_count: 2
+  queue_size: 8
+  refill_interval_seconds: 3
+  refill_threshold: 0.25
+  refill_batch_size: 7
 `
 
 const sampleConfigWithoutAutoAITag = `server:
@@ -51,6 +57,32 @@ cos:
   secret_key: ""
 `
 
+const sampleConfigWithoutRefillBatchSize = `server:
+  host: "127.0.0.1"
+  port: 8080
+  env: "development"
+database:
+  type: "sqlite"
+  path: "./data/test.db"
+  connection_string: ""
+storage:
+  scan_roots:
+    - "./images"
+ai:
+  provider: "qwen"
+  api_key: ""
+  model: "qwen-vl-max"
+cos:
+  bucket_url: "https://example.cos.ap-shanghai.myqcloud.com"
+  secret_id: ""
+  secret_key: ""
+worker_pool:
+  worker_count: 2
+  queue_size: 8
+  refill_interval_seconds: 3
+  refill_threshold: 0.25
+`
+
 func TestLoadConfigUsesExplicitPath(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "custom.yaml")
@@ -71,6 +103,9 @@ func TestLoadConfigUsesExplicitPath(t *testing.T) {
 	}
 	if cfg.Database.Path != "./data/test.db" {
 		t.Fatalf("expected database path ./data/test.db, got %q", cfg.Database.Path)
+	}
+	if cfg.WorkerPool.RefillBatchSize != 7 {
+		t.Fatalf("expected refill batch size 7, got %d", cfg.WorkerPool.RefillBatchSize)
 	}
 }
 
@@ -93,6 +128,7 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	t.Setenv("AUTO_AI_TAG_ON_IMPORT", "true")
 	t.Setenv("AUTO_AI_TAG_SCAN_INTERVAL_MINUTES", "7")
 	t.Setenv("AUTO_AI_TAG_BATCH_SIZE", "33")
+	t.Setenv("WORKER_REFILL_BATCH_SIZE", "21")
 	t.Setenv("COS_SECRET_ID", "cos-id")
 	t.Setenv("COS_SECRET_KEY", "cos-key")
 	t.Setenv("COS_BUCKET_URL", "https://override.cos.test")
@@ -147,6 +183,9 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	if cfg.AI.AutoScanBatchSize != 33 {
 		t.Fatalf("expected overridden auto scan batch size 33, got %d", cfg.AI.AutoScanBatchSize)
 	}
+	if cfg.WorkerPool.RefillBatchSize != 21 {
+		t.Fatalf("expected overridden refill batch size 21, got %d", cfg.WorkerPool.RefillBatchSize)
+	}
 }
 
 func TestLoadConfigReadsAutoAITagFields(t *testing.T) {
@@ -170,6 +209,9 @@ func TestLoadConfigReadsAutoAITagFields(t *testing.T) {
 	if cfg.AI.AutoScanBatchSize != 42 {
 		t.Fatalf("expected auto scan batch size 42, got %d", cfg.AI.AutoScanBatchSize)
 	}
+	if cfg.WorkerPool.RefillBatchSize != 7 {
+		t.Fatalf("expected refill batch size 7, got %d", cfg.WorkerPool.RefillBatchSize)
+	}
 }
 
 func TestLoadConfigAppliesAutoAITagDefaults(t *testing.T) {
@@ -192,5 +234,22 @@ func TestLoadConfigAppliesAutoAITagDefaults(t *testing.T) {
 	}
 	if cfg.AI.AutoScanBatchSize != 100 {
 		t.Fatalf("expected default auto scan batch size 100, got %d", cfg.AI.AutoScanBatchSize)
+	}
+}
+
+func TestLoadConfigAppliesRefillBatchSizeDefault(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(sampleConfigWithoutRefillBatchSize), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig returned error: %v", err)
+	}
+
+	if cfg.WorkerPool.RefillBatchSize != cfg.WorkerPool.QueueSize {
+		t.Fatalf("expected refill batch size default to queue size %d, got %d", cfg.WorkerPool.QueueSize, cfg.WorkerPool.RefillBatchSize)
 	}
 }

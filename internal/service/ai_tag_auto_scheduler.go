@@ -158,7 +158,7 @@ func (s *AITagAutoScheduler) ScanAndEnqueue(ctx context.Context) (int, error) {
 		}
 		payload, err := json.Marshal(map[string]any{
 			"image_id": image.ID,
-			"path":     image.Path,
+			"path":     ResolveAITagImagePath(&image),
 		})
 		if err != nil {
 			return queued, fmt.Errorf("marshal AI tag payload: %w", err)

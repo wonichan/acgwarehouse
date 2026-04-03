@@ -68,8 +68,8 @@ func insertTestImagesForHandler(t *testing.T, db *sql.DB) {
 
 	for _, img := range images {
 		_, err := db.Exec(`
-			INSERT INTO images (path, filename, source_root, file_size, width, height, format, phash, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO images (path, filename, source_root, file_size, width, height, format, phash, thumbnail_small_url, thumbnail_large_url, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
 			img.path,
 			img.path[len(img.path)-5:],
@@ -79,12 +79,68 @@ func insertTestImagesForHandler(t *testing.T, db *sql.DB) {
 			100,
 			"jpg",
 			img.pHash,
+			"https://example.com/thumb-small.jpg",
+			"https://example.com/thumb-large.jpg",
 			now,
 			now,
 		)
 		if err != nil {
 			t.Fatalf("Failed to insert test image: %v", err)
 		}
+	}
+}
+
+func TestDuplicateHandler_ListDuplicates_IncludesThumbnailURL(t *testing.T) {
+	r, handler, db := setupDuplicateHandlerTest(t)
+	insertTestImagesForHandler(t, db)
+
+	duplicateRepo := repository.NewDuplicateRepository(db)
+	imageRepo := repository.NewImageRepository(db)
+	hashService := service.NewHashService()
+	duplicateService := service.NewDuplicateService(imageRepo, duplicateRepo, hashService)
+	_, err := duplicateService.DetectDuplicates(nil, service.DetectOptions{Threshold: 10})
+	if err != nil {
+		t.Fatalf("DetectDuplicates failed: %v", err)
+	}
+
+	r.GET("/api/v1/duplicates", handler.ListDuplicates)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/duplicates?limit=10&offset=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	groups, ok := resp["groups"].([]any)
+	if !ok || len(groups) == 0 {
+		t.Fatalf("Expected non-empty groups array, got %#v", resp["groups"])
+	}
+
+	firstGroup, ok := groups[0].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected first group object, got %#v", groups[0])
+	}
+
+	images, ok := firstGroup["images"].([]any)
+	if !ok || len(images) == 0 {
+		t.Fatalf("Expected non-empty images array, got %#v", firstGroup["images"])
+	}
+
+	firstImage, ok := images[0].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected first image object, got %#v", images[0])
+	}
+
+	thumbnailURL, ok := firstImage["thumbnail_small_url"].(string)
+	if !ok || thumbnailURL == "" {
+		t.Fatalf("Expected thumbnail_small_url in duplicate image payload, got %#v", firstImage["thumbnail_small_url"])
 	}
 }
 

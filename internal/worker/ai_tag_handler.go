@@ -24,12 +24,16 @@ type TagGovernanceMerger interface {
 	MergeTags(ctx context.Context, imageID int64, tags []string, observationID int64, confidence float64) error
 }
 
+type AITagPresenceChecker interface {
+	HasAITags(ctx context.Context, imageID int64) (bool, error)
+}
+
 // AITagConcurrencyLimiter AI 标签生成的并发控制器
 // 全局变量，在服务启动时初始化
 var AITagConcurrencyLimiter *ai.ConcurrencyLimiter
 
 // DefaultTagPrompt 默认标签生成提示词
-const DefaultTagPrompt = `请分析这张动漫风格的图片，提取6-8个中文标签。
+const DefaultTagPrompt = `请分析这张动漫风格的图片，提取6-8个中文标签,绝对不能超过8个！
 【标签选择流程】
 第一步：识别游戏IP
 - 检查是否属于：碧蓝航线、碧蓝档案、明日方舟、鸣潮、星穹铁道等热门游戏IP
@@ -40,7 +44,7 @@ const DefaultTagPrompt = `请分析这张动漫风格的图片，提取6-8个中
 第三步：分析服饰标签
 衣服着装， 泳装 ，女仆装 ， 内衣 ， 黑丝，白丝 等丝袜， 以及特殊配件如狐耳、兽耳、双马尾等
 第四步：外貌特征（1-2个）
-发色、发型、瞳色、兽耳等
+发色、发型、瞳色、兽耳、罩杯等
 第五步：主题标签（如有）
 - 百合
 - 校园
@@ -53,7 +57,7 @@ const DefaultTagPrompt = `请分析这张动漫风格的图片，提取6-8个中
 【示例】
 碧蓝航线,爱宕,泳装,黑丝,狐耳,金发
 原创角色,女仆,白丝,粉发,双马尾
-百合,碧蓝档案,美少女,校园,互动
+百合,碧蓝档案,美少女,校园
 ---`
 
 // GetDefaultTagPrompt 返回默认的 AI 标签生成提示词
@@ -68,18 +72,18 @@ func InitAITagConcurrencyLimiter(maxConcurrency int) {
 }
 
 // RegisterAITagHandler 注册 AI 标签生成任务处理器
-func RegisterAITagHandler(manager *Manager, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger) {
-	manager.RegisterHandler("ai_tag_generation", NewAITagJobHandler(client, obsRepo, governance))
+func RegisterAITagHandler(manager *Manager, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, aiTagChecker AITagPresenceChecker) {
+	manager.RegisterHandler("ai_tag_generation", NewAITagJobHandler(client, obsRepo, governance, aiTagChecker))
 }
 
-func NewAITagJobHandler(client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger) JobFunc {
+func NewAITagJobHandler(client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, aiTagChecker AITagPresenceChecker) JobFunc {
 	return func(ctx context.Context, id int64, payload string) error {
-		return handleAITagGeneration(ctx, id, payload, client, obsRepo, governance)
+		return handleAITagGeneration(ctx, id, payload, client, obsRepo, governance, aiTagChecker)
 	}
 }
 
 // handleAITagGeneration 处理 AI 标签生成任务
-func handleAITagGeneration(ctx context.Context, id int64, payload string, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger) error {
+func handleAITagGeneration(ctx context.Context, id int64, payload string, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, aiTagChecker AITagPresenceChecker) error {
 	// 如果设置了并发控制器，先获取槽位
 	if AITagConcurrencyLimiter != nil {
 		release, err := AITagConcurrencyLimiter.Acquire(ctx)
@@ -93,6 +97,17 @@ func handleAITagGeneration(ctx context.Context, id int64, payload string, client
 	var p AITagPayload
 	if err := json.Unmarshal([]byte(payload), &p); err != nil {
 		return fmt.Errorf("parse payload: %w", err)
+	}
+
+	if aiTagChecker != nil {
+		hasAITags, err := aiTagChecker.HasAITags(ctx, p.ImageID)
+		if err != nil {
+			return fmt.Errorf("check existing ai tags: %w", err)
+		}
+		if hasAITags {
+			log.Printf("AI 标签任务跳过: image_id=%d 已存在 AI 标签", p.ImageID)
+			return nil
+		}
 	}
 
 	// 调用 AI 服务生成标签

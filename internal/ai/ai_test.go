@@ -2,11 +2,15 @@ package ai
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 )
@@ -123,6 +127,43 @@ func TestNewProvider_DefaultModel(t *testing.T) {
 			// 由于我们只验证接口，这里检查 provider 不为 nil 即可
 			if provider == nil {
 				t.Error("expected provider to be non-nil")
+			}
+		})
+	}
+}
+
+func TestNewProvider_UsesExtendedHTTPTimeout(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+	}{
+		{name: "qwen", provider: "qwen"},
+		{name: "doubao", provider: "doubao"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewProvider(&config.AIConfig{
+				Provider: tt.provider,
+				APIKey:   "test-api-key",
+			})
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			expectedTimeout := 120 * time.Second
+
+			switch actual := provider.(type) {
+			case *QwenProvider:
+				if actual.httpClient.Timeout != expectedTimeout {
+					t.Fatalf("expected timeout %v, got %v", expectedTimeout, actual.httpClient.Timeout)
+				}
+			case *DoubaoProvider:
+				if actual.httpClient.Timeout != expectedTimeout {
+					t.Fatalf("expected timeout %v, got %v", expectedTimeout, actual.httpClient.Timeout)
+				}
+			default:
+				t.Fatalf("unexpected provider type %T", provider)
 			}
 		})
 	}
@@ -491,5 +532,61 @@ func TestDoubaoProvider_HandleErrors(t *testing.T) {
 				t.Error("expected error, got nil")
 			}
 		})
+	}
+}
+
+func TestDoubaoProvider_ProcessImageURL_RespectsPayloadBudget(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "ai_payload_budget_*.jpg")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	img := createTestImage(5000, 5000)
+	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 100}); err != nil {
+		t.Fatalf("failed to encode test image: %v", err)
+	}
+
+	provider := &DoubaoProvider{}
+	processedURL, err := provider.processImageURL(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("processImageURL failed: %v", err)
+	}
+
+	if !strings.HasPrefix(processedURL, "data:image/") {
+		prefix := processedURL
+		if len(prefix) > 32 {
+			prefix = prefix[:32]
+		}
+		t.Fatalf("expected data url, got %q", prefix)
+	}
+
+	commaIndex := strings.Index(processedURL, ",")
+	if commaIndex < 0 {
+		t.Fatalf("expected data url to contain comma separator")
+	}
+
+	encodedPayload := processedURL[commaIndex+1:]
+	decodedSize := base64.StdEncoding.DecodedLen(len(encodedPayload))
+	if decodedSize > maxAIImageSize {
+		t.Fatalf("expected decoded payload to stay within %d bytes, got %d bytes", maxAIImageSize, decodedSize)
+	}
+
+	if len(processedURL) > maxAIImageSize {
+		t.Fatalf("expected data url payload to stay within %d bytes, got %d bytes", maxAIImageSize, len(processedURL))
+	}
+}
+
+func TestEnsureDataURLFitsBudget_RejectsOversizedPayload(t *testing.T) {
+	oversizedData := make([]byte, maxAIDataURLSize)
+
+	err := ensureDataURLFitsBudget("image/jpeg", oversizedData)
+	if err == nil {
+		t.Fatal("expected oversized payload to be rejected")
+	}
+
+	if !strings.Contains(err.Error(), "data url payload exceeds budget") {
+		t.Fatalf("expected budget error, got %v", err)
 	}
 }

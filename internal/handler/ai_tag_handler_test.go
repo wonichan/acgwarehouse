@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
+	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
@@ -62,6 +63,44 @@ func TestAITagTriggerCreatesManualSingleBatch(t *testing.T) {
 	}
 	if len(resp.JobIDs) != 1 || resp.JobIDs[0] == 0 {
 		t.Fatalf("job_ids = %+v, want one async job", resp.JobIDs)
+	}
+}
+
+func TestAITagTriggerUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newAITagHandlerTestRouter(t)
+	if _, err := repos.db.Exec(`UPDATE images SET thumbnail_large_url = ? WHERE id = 1`, "https://cos.local/thumbnails/1-large.jpg"); err != nil {
+		t.Fatalf("seed large thumbnail url: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/1/ai-tags", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	var resp struct {
+		JobIDs []int64 `json:"job_ids"`
+	}
+	decodeAIJSONBody(t, w.Body.Bytes(), &resp)
+	if len(resp.JobIDs) != 1 {
+		t.Fatalf("job_ids = %+v, want one job id", resp.JobIDs)
+	}
+
+	job, err := repos.jobRepo.FindByID(resp.JobIDs[0])
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	var payload worker.AITagPayload
+	if err := json.Unmarshal([]byte(job.Payload), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	if payload.Path != "https://cos.local/thumbnails/1-large.jpg" {
+		t.Fatalf("payload.Path = %q, want large thumbnail url", payload.Path)
 	}
 }
 
@@ -176,6 +215,39 @@ func TestBatchAITagTriggerCreatesManualBatchAndSkipsDuplicateQueue(t *testing.T)
 	}
 }
 
+func TestAITagTriggerDoesNotLoadJobImmediatelyWhenAIQueueLimitReached(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newAITagHandlerTestRouterWithConfig(t, &config.Config{AI: config.AIConfig{AutoScanBatchSize: 1}})
+	_, err := repos.manager.AddJob(t.Context(), domain.PlatformTaskTypeAITagGeneration, `{"image_id":999,"path":"/images/existing.png"}`)
+	if err != nil {
+		t.Fatalf("AddJob() error = %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/1/ai-tags", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	var resp struct {
+		JobIDs []int64 `json:"job_ids"`
+	}
+	decodeAIJSONBody(t, w.Body.Bytes(), &resp)
+	if len(resp.JobIDs) != 1 {
+		t.Fatalf("job_ids = %+v, want one job id", resp.JobIDs)
+	}
+	if got := repos.manager.QueuedByType(domain.PlatformTaskTypeAITagGeneration); got != 1 {
+		t.Fatalf("QueuedByType(ai_tag_generation) = %d, want 1", got)
+	}
+	if repos.manager.QueueSize() != 1 {
+		t.Fatalf("QueueSize() = %d, want 1", repos.manager.QueueSize())
+	}
+}
+
 type aiTagHandlerTestRepos struct {
 	db              *sql.DB
 	jobRepo         repository.JobRepository
@@ -186,6 +258,11 @@ type aiTagHandlerTestRepos struct {
 }
 
 func newAITagHandlerTestRouter(t *testing.T) (*gin.Engine, *aiTagHandlerTestRepos) {
+	t.Helper()
+	return newAITagHandlerTestRouterWithConfig(t, &config.Config{AI: config.AIConfig{AutoScanBatchSize: 100}})
+}
+
+func newAITagHandlerTestRouterWithConfig(t *testing.T, cfg *config.Config) (*gin.Engine, *aiTagHandlerTestRepos) {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
@@ -217,7 +294,7 @@ func newAITagHandlerTestRouter(t *testing.T) (*gin.Engine, *aiTagHandlerTestRepo
 	taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, jobRepo)
 	manager := worker.NewManager(jobRepo)
 	imageRepo := repository.NewImageRepository(db)
-	h := NewAITagHandler(manager, imageRepo, jobRepo, taskRepo, taskPlatformSvc)
+	h := NewAITagHandler(manager, imageRepo, jobRepo, taskRepo, taskPlatformSvc, func() *config.Config { return cfg })
 
 	router := gin.New()
 	api := router.Group("/api/v1")

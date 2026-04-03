@@ -29,7 +29,7 @@ func TestRegisterAITagHandler_Registration(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{})
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil)
 
 	// 验证处理器已注册
 	if _, ok := manager.handlers["ai_tag_generation"]; !ok {
@@ -51,7 +51,7 @@ func TestAITagHandler_ParsesPayload(t *testing.T) {
 
 	manager := NewManager(mockJobRepo)
 	governance := &mockTagGovernanceService{}
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, governance)
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, governance, nil)
 
 	// 创建测试 payload
 	payload := AITagPayload{
@@ -107,7 +107,7 @@ func TestAITagHandler_SavesObservation(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{})
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil)
 
 	payload := AITagPayload{
 		ImageID: 456,
@@ -160,7 +160,7 @@ func TestAITagHandler_PersistsPendingImageTagsForReview(t *testing.T) {
 	}
 
 	manager := NewManager(&mockJobRepoForAI{})
-	RegisterAITagHandler(manager, mockClient, obsRepo, governance)
+	RegisterAITagHandler(manager, mockClient, obsRepo, governance, imageTagRepo)
 
 	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 456, Path: "/test/image.png"})
 	handler := manager.handlers["ai_tag_generation"]
@@ -196,6 +196,39 @@ func TestAITagHandler_PersistsPendingImageTagsForReview(t *testing.T) {
 	}
 }
 
+func TestAITagHandler_SkipsWhenImageAlreadyHasAITags(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{
+		result: &ai.TagResult{
+			Tags:       []string{"blue hair", "girl", "outdoors"},
+			Confidence: 0.95,
+			ModelName:  "doubao-vision-pro",
+		},
+	}
+
+	manager := NewManager(mockJobRepo)
+	governance := &mockTagGovernanceService{}
+	aiTagChecker := &mockAITagPresenceChecker{hasAITags: true}
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, governance, aiTagChecker)
+
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 789, Path: "/test/image.png"})
+	handler := manager.handlers["ai_tag_generation"]
+	if err := handler(context.Background(), 3, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+
+	if mockClient.lastImageURL != "" {
+		t.Fatalf("expected AI client not to be called, got %q", mockClient.lastImageURL)
+	}
+	if mockObsRepo.savedObservation != nil {
+		t.Fatal("expected observation not to be saved when AI tags already exist")
+	}
+	if governance.called {
+		t.Fatal("expected governance merge not to be called when AI tags already exist")
+	}
+}
+
 func TestAITagHandler_InvalidPayload(t *testing.T) {
 	// Test: 处理无效 payload
 	mockJobRepo := &mockJobRepoForAI{}
@@ -203,7 +236,7 @@ func TestAITagHandler_InvalidPayload(t *testing.T) {
 	mockClient := &mockAIClient{}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{})
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil)
 
 	handler := manager.handlers["ai_tag_generation"]
 	err := handler(context.Background(), 1, "invalid json")
@@ -221,7 +254,7 @@ func TestAITagHandler_AIServiceError(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{})
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil)
 
 	payload := AITagPayload{
 		ImageID: 1,
@@ -321,6 +354,15 @@ type mockAIClient struct {
 	result       *ai.TagResult
 	err          error
 	lastImageURL string
+}
+
+type mockAITagPresenceChecker struct {
+	hasAITags bool
+	err       error
+}
+
+func (m *mockAITagPresenceChecker) HasAITags(ctx context.Context, imageID int64) (bool, error) {
+	return m.hasAITags, m.err
 }
 
 func (m *mockAIClient) Name() string {

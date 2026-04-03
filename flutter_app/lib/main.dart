@@ -9,6 +9,7 @@ import 'providers/tag_provider.dart';
 import 'providers/duplicate_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/navigation_provider.dart';
+import 'providers/config_provider.dart';
 import 'services/api_service.dart';
 import 'services/tag_service.dart';
 import 'services/duplicate_service.dart';
@@ -38,21 +39,27 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // ConfigProvider must be first - other providers depend on it
+        ChangeNotifierProvider(create: (_) => ConfigProvider()),
         Provider(create: (_) => ApiService()),
         Provider(create: (_) => TagService()),
         Provider(create: (_) => DuplicateService()),
         Provider(create: (_) => SearchService()),
         ChangeNotifierProvider(
-            create: (context) =>
-                ImageListProvider(context.read<ApiService>())..loadImages()),
+          create: (context) =>
+              ImageListProvider(context.read<ApiService>())..loadImages(),
+        ),
         ChangeNotifierProvider(
-            create: (context) => TagProvider(context.read<TagService>())),
+          create: (context) => TagProvider(context.read<TagService>()),
+        ),
         ChangeNotifierProvider(
-            create: (context) =>
-                DuplicateProvider(service: context.read<DuplicateService>())),
+          create: (context) =>
+              DuplicateProvider(service: context.read<DuplicateService>()),
+        ),
         ChangeNotifierProvider(
-            create: (context) =>
-                SearchProvider(service: context.read<SearchService>())),
+          create: (context) =>
+              SearchProvider(service: context.read<SearchService>()),
+        ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
@@ -108,9 +115,7 @@ Widget _buildFluentApp() {
         home: const FluentAppShell(),
         // ScaffoldMessenger is needed for dialogs to show SnackBar feedback
         builder: (context, child) {
-          return ScaffoldMessenger(
-            child: child ?? const SizedBox.shrink(),
-          );
+          return ScaffoldMessenger(child: child ?? const SizedBox.shrink());
         },
       );
     },

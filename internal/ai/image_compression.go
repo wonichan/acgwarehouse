@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"image"
 	"math"
@@ -17,6 +18,7 @@ const (
 	maxAIImageSize      = 10 * 1024 * 1024 // 10MB - target max size for AI
 	maxAIPixelCount     = 36000000         // 36M pixels - API pixel limit
 	targetPixelCount    = 30000000         // 30M pixels - target to stay safely under limit
+	maxAIDataURLSize    = 10 * 1024 * 1024 // 10MB - target max size for data URL payload
 	smallFileThreshold  = 5 * 1024 * 1024  // 5MB - use Lanczos
 	mediumFileThreshold = 10 * 1024 * 1024 // 10MB - use Linear
 	// > 10MB: use Box with pre-scale
@@ -114,6 +116,34 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 	return compressedData, contentType, nil
 }
 
+// PrepareImageForDataURL ensures the final data URL payload stays within the AI request budget.
+func PrepareImageForDataURL(filePath string) ([]byte, string, error) {
+	data, contentType, err := CompressImageIfNeeded(filePath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if err := ensureDataURLFitsBudget(contentType, data); err == nil {
+		return data, contentType, nil
+	}
+
+	img, err := imaging.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, "", fmt.Errorf("decode processed image: %w", err)
+	}
+
+	filter := selectResizeFilterForAI(int64(len(data)))
+	adjustedData, err := compressImageWithFilterAndLimit(img, filter, maxDecodedDataURLSize(contentType))
+	if err != nil {
+		return nil, "", fmt.Errorf("compress image for data url: %w", err)
+	}
+	if err := ensureDataURLFitsBudget("image/jpeg", adjustedData); err != nil {
+		return nil, "", err
+	}
+
+	return adjustedData, "image/jpeg", nil
+}
+
 // detectContentType returns the content type based on file extension
 func detectContentType(filePath string) string {
 	ext := strings.ToLower(filepath.Ext(filePath))
@@ -146,6 +176,10 @@ func selectResizeFilterForAI(fileSize int64) imaging.ResampleFilter {
 
 // compressImageWithFilter compresses an image to be under 10MB using the specified filter
 func compressImageWithFilter(img image.Image, filter imaging.ResampleFilter) ([]byte, error) {
+	return compressImageWithFilterAndLimit(img, filter, maxAIImageSize)
+}
+
+func compressImageWithFilterAndLimit(img image.Image, filter imaging.ResampleFilter, maxSize int) ([]byte, error) {
 	// Start with quality 85 (reduced from 90 for faster convergence)
 	// Reduce by 10 each iteration for faster convergence
 	// Minimum quality: 50
@@ -172,7 +206,7 @@ func compressImageWithFilter(img image.Image, filter imaging.ResampleFilter) ([]
 		}
 
 		// Check size
-		if buf.Len() <= maxAIImageSize {
+		if buf.Len() <= maxSize {
 			return buf.Bytes(), nil
 		}
 
@@ -200,4 +234,24 @@ func compressImageWithFilter(img image.Image, filter imaging.ResampleFilter) ([]
 		return nil, fmt.Errorf("encode image: %w", err)
 	}
 	return buf.Bytes(), nil
+}
+
+func dataURLSize(contentType string, dataSize int) int {
+	return len("data:") + len(contentType) + len(";base64,") + base64.StdEncoding.EncodedLen(dataSize)
+}
+
+func maxDecodedDataURLSize(contentType string) int {
+	encodedBudget := maxAIDataURLSize - len("data:") - len(contentType) - len(";base64,")
+	if encodedBudget <= 0 {
+		return 0
+	}
+	return (encodedBudget / 4) * 3
+}
+
+func ensureDataURLFitsBudget(contentType string, data []byte) error {
+	size := dataURLSize(contentType, len(data))
+	if size > maxAIDataURLSize {
+		return fmt.Errorf("data url payload exceeds budget: got %d bytes, limit %d", size, maxAIDataURLSize)
+	}
+	return nil
 }

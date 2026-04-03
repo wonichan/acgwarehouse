@@ -2,15 +2,22 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"path/filepath"
 	"testing"
+	"time"
 
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
+	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
 // TestPreviewBackfillRejectsUnfiltered verifies D-02: preview rejects unfiltered requests.
 func TestPreviewBackfillRejectsUnfiltered(t *testing.T) {
-	svc := NewAIBackfillService(nil, nil)
+	svc := NewAIBackfillService(nil, nil, nil, nil)
 
 	// No filters at all — must be rejected per D-02
 	filter := repository.BackfillCandidateFilter{}
@@ -73,7 +80,7 @@ func TestPreviewBackfillClassifiesSkipReasons(t *testing.T) {
 		skippedWithAITag:      3,
 		skippedWithActiveTask: 3,
 	}
-	svc := NewAIBackfillService(mockRepo, nil)
+	svc := NewAIBackfillService(mockRepo, nil, nil, nil)
 
 	filter := repository.BackfillCandidateFilter{HasTags: boolPtr(false)}
 	result, err := svc.PreviewBackfill(context.Background(), filter)
@@ -106,7 +113,7 @@ func TestExecuteBackfillReturnsNoOpForZeroEligible(t *testing.T) {
 		skippedWithAITag:      3,
 		skippedWithActiveTask: 2,
 	}
-	svc := NewAIBackfillService(mockRepo, nil)
+	svc := NewAIBackfillService(mockRepo, nil, nil, nil)
 
 	filter := repository.BackfillCandidateFilter{TagIDs: []int64{1}}
 	result, err := svc.ExecuteBackfill(context.Background(), filter, "")
@@ -124,13 +131,193 @@ func TestExecuteBackfillReturnsNoOpForZeroEligible(t *testing.T) {
 	}
 }
 
+func TestExecuteBackfillUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "ai-backfill.db"))
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	imageRepo := repository.NewImageRepository(db)
+	jobRepo := repository.NewJobRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	batchRepo := repository.NewTaskBatchRepository(db)
+	taskPlatformSvc := NewTaskPlatformService(batchRepo, taskRepo, jobRepo)
+	svc := NewAIBackfillService(imageRepo, taskPlatformSvc, nil, nil)
+
+	image := &domain.Image{
+		Path:              "/images/original.png",
+		Filename:          "original.png",
+		SourceRoot:        "/images",
+		FileSize:          1024,
+		Width:             100,
+		Height:            100,
+		Format:            "png",
+		PHash:             1,
+		ThumbnailLargeUrl: "https://cos.local/thumbnails/original-large.jpg",
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
+	if _, err := imageRepo.SaveImage(image); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
+	}
+
+	result, err := svc.ExecuteBackfill(context.Background(), repository.BackfillCandidateFilter{HasTags: boolPtr(false)}, "")
+	if err != nil {
+		t.Fatalf("ExecuteBackfill() error = %v", err)
+	}
+	if !result.Success || result.CreatedTasks != 1 {
+		t.Fatalf("result = %+v, want one successful queued task", result)
+	}
+	if len(result.CreatedTaskList) != 1 {
+		t.Fatalf("created task list = %d, want 1", len(result.CreatedTaskList))
+	}
+
+	jobs, err := jobRepo.FindByPlatformTaskID(result.CreatedTaskList[0].ID)
+	if err != nil {
+		t.Fatalf("FindByPlatformTaskID() error = %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("len(jobs) = %d, want 1", len(jobs))
+	}
+
+	var payload struct {
+		ImageID int64  `json:"image_id"`
+		Path    string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(jobs[0].Payload), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	if payload.Path != "https://cos.local/thumbnails/original-large.jpg" {
+		t.Fatalf("payload.Path = %q, want large thumbnail url", payload.Path)
+	}
+}
+
+func TestExecuteBackfill_LoadsQueuedJobsIntoManagerImmediately(t *testing.T) {
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "ai-backfill-queue.db"))
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	imageRepo := repository.NewImageRepository(db)
+	jobRepo := repository.NewJobRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	batchRepo := repository.NewTaskBatchRepository(db)
+	taskPlatformSvc := NewTaskPlatformService(batchRepo, taskRepo, jobRepo)
+	jobLoader := &stubBackfillJobLoader{}
+	svc := NewAIBackfillService(imageRepo, taskPlatformSvc, jobLoader, nil)
+
+	image := &domain.Image{
+		Path:       "/images/backfill-now.png",
+		Filename:   "backfill-now.png",
+		SourceRoot: "/images",
+		FileSize:   2048,
+		Width:      100,
+		Height:     100,
+		Format:     "png",
+		PHash:      2,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	if _, err := imageRepo.SaveImage(image); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
+	}
+
+	result, err := svc.ExecuteBackfill(context.Background(), repository.BackfillCandidateFilter{HasTags: boolPtr(false)}, "")
+	if err != nil {
+		t.Fatalf("ExecuteBackfill() error = %v", err)
+	}
+	if !result.Success || result.CreatedTasks != 1 {
+		t.Fatalf("result = %+v, want one successful queued task", result)
+	}
+	if jobLoader.loadedJobs != 1 {
+		t.Fatalf("jobLoader.loadedJobs = %d, want 1 immediate queued job", jobLoader.loadedJobs)
+	}
+}
+
+func TestExecuteBackfillDoesNotLoadJobImmediatelyWhenAIQueueLimitReached(t *testing.T) {
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "ai-backfill-queue-limit.db"))
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	imageRepo := repository.NewImageRepository(db)
+	jobRepo := repository.NewJobRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	batchRepo := repository.NewTaskBatchRepository(db)
+	taskPlatformSvc := NewTaskPlatformService(batchRepo, taskRepo, jobRepo)
+	jobLoader := &stubBackfillJobLoader{queuedByType: map[string]int{domain.PlatformTaskTypeAITagGeneration: 1}}
+	svc := NewAIBackfillService(imageRepo, taskPlatformSvc, jobLoader, func() *config.Config {
+		return &config.Config{AI: config.AIConfig{AutoScanBatchSize: 1}}
+	})
+
+	image := &domain.Image{
+		Path:       "/images/backfill-later.png",
+		Filename:   "backfill-later.png",
+		SourceRoot: "/images",
+		FileSize:   2048,
+		Width:      100,
+		Height:     100,
+		Format:     "png",
+		PHash:      2,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	if _, err := imageRepo.SaveImage(image); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
+	}
+
+	result, err := svc.ExecuteBackfill(context.Background(), repository.BackfillCandidateFilter{HasTags: boolPtr(false)}, "")
+	if err != nil {
+		t.Fatalf("ExecuteBackfill() error = %v", err)
+	}
+	if !result.Success || result.CreatedTasks != 1 {
+		t.Fatalf("result = %+v, want one successful queued task", result)
+	}
+	if jobLoader.loadedJobs != 0 {
+		t.Fatalf("jobLoader.loadedJobs = %d, want 0 when AI queue limit reached", jobLoader.loadedJobs)
+	}
+}
+
 // --- mock implementations ---
+
+type stubBackfillJobLoader struct {
+	loadedJobs   int
+	queuedByType map[string]int
+}
+
+func (s *stubBackfillJobLoader) LoadExistingJob(_ *domain.AsyncJob) bool {
+	s.loadedJobs++
+	return true
+}
+
+func (s *stubBackfillJobLoader) QueuedByType(jobType string) int {
+	if s.queuedByType == nil {
+		return 0
+	}
+	return s.queuedByType[jobType]
+}
 
 type mockBackfillImageRepo struct {
 	hitCount              int64
 	enqueueableCount      int64
 	skippedWithAITag      int64
 	skippedWithActiveTask int64
+	candidates            []domain.Image
 	err                   error
 }
 
@@ -154,7 +341,10 @@ func (m *mockBackfillImageRepo) FindImagesWithoutAITags(_ context.Context, _ int
 	return nil, nil
 }
 func (m *mockBackfillImageRepo) FindBackfillCandidates(_ context.Context, _ repository.BackfillCandidateFilter) ([]domain.Image, error) {
-	return nil, m.err
+	if m.err != nil {
+		return nil, m.err
+	}
+	return append([]domain.Image(nil), m.candidates...), nil
 }
 func (m *mockBackfillImageRepo) CountBackfillCandidates(_ context.Context, _ repository.BackfillCandidateFilter) (int64, error) {
 	return m.enqueueableCount, m.err

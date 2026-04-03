@@ -22,16 +22,18 @@ type Stats struct {
 }
 
 type Manager struct {
-	jobRepo   repository.JobRepository
-	handlers  map[string]JobFunc
-	queue     chan *domain.AsyncJob
-	queueSize int
-	stopOnce  sync.Once
-	stopCh    chan struct{}
-	runningMu sync.Mutex
-	running   bool
-	pausedMu  sync.Mutex
-	paused    bool
+	jobRepo     repository.JobRepository
+	handlers    map[string]JobFunc
+	queue       chan *domain.AsyncJob
+	queueSize   int
+	queueTypeMu sync.Mutex
+	queueTypes  map[string]int
+	stopOnce    sync.Once
+	stopCh      chan struct{}
+	runningMu   sync.Mutex
+	running     bool
+	pausedMu    sync.Mutex
+	paused      bool
 
 	// Worker pool management
 	workerCountMu sync.Mutex
@@ -68,6 +70,7 @@ func NewManagerWithConfig(jobRepo repository.JobRepository, workerCount, queueSi
 		handlers:    make(map[string]JobFunc),
 		queue:       make(chan *domain.AsyncJob, queueSize),
 		queueSize:   queueSize,
+		queueTypes:  make(map[string]int),
 		workerCount: workerCount,
 		stopCh:      make(chan struct{}),
 	}
@@ -166,6 +169,7 @@ func (m *Manager) workerWithCountCheck(ctx context.Context, id int) {
 			if job == nil {
 				continue
 			}
+			m.dequeueType(job.Type)
 
 			// Check if paused
 			m.pausedMu.Lock()
@@ -178,6 +182,7 @@ func (m *Manager) workerWithCountCheck(ctx context.Context, id int) {
 					time.Sleep(100 * time.Millisecond)
 					select {
 					case m.queue <- j:
+						m.enqueueType(j.Type)
 					default:
 						// Queue full, drop job (it's persisted in DB)
 					}
@@ -211,6 +216,7 @@ func (m *Manager) AddJob(ctx context.Context, jobType, payload string) (int64, e
 	// 非阻塞方式入队列，避免在 worker 执行时死锁
 	select {
 	case m.queue <- job:
+		m.enqueueType(job.Type)
 		return job.ID, nil
 	default:
 		// 队列已满，任务已存入数据库，等待后续加载
@@ -224,9 +230,36 @@ func (m *Manager) AddJob(ctx context.Context, jobType, payload string) (int64, e
 func (m *Manager) LoadExistingJob(job *domain.AsyncJob) bool {
 	select {
 	case m.queue <- job:
+		m.enqueueType(job.Type)
 		return true
 	default:
 		return false
+	}
+}
+
+func (m *Manager) QueuedByType(jobType string) int {
+	m.queueTypeMu.Lock()
+	defer m.queueTypeMu.Unlock()
+	return m.queueTypes[jobType]
+}
+
+func (m *Manager) enqueueType(jobType string) {
+	if jobType == "" {
+		return
+	}
+	m.queueTypeMu.Lock()
+	m.queueTypes[jobType]++
+	m.queueTypeMu.Unlock()
+}
+
+func (m *Manager) dequeueType(jobType string) {
+	if jobType == "" {
+		return
+	}
+	m.queueTypeMu.Lock()
+	defer m.queueTypeMu.Unlock()
+	if m.queueTypes[jobType] > 0 {
+		m.queueTypes[jobType]--
 	}
 }
 

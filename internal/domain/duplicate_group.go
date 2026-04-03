@@ -27,13 +27,20 @@ type DuplicateGroupWithImages struct {
 
 // DuplicateImage 重复组中的图片信息
 type DuplicateImage struct {
-	ID            int64  `json:"id"`
-	Path          string `json:"path"`
-	Filename      string `json:"filename"`
-	Width         int    `json:"width"`
-	Height        int    `json:"height"`
-	FileSize      int64  `json:"file_size"`
-	IsRecommended bool   `json:"is_recommended"`
-	FileHash      string `json:"file_hash"`
-	PHashDistance int    `json:"phash_distance"`
+	ID                int64     `json:"id"`
+	Path              string    `json:"path"`
+	Filename          string    `json:"filename"`
+	SourceRoot        string    `json:"source_root"`
+	Width             int       `json:"width"`
+	Height            int       `json:"height"`
+	FileSize          int64     `json:"file_size"`
+	Format            string    `json:"format"`
+	PHash             int64     `json:"phash"`
+	ThumbnailSmallUrl string    `json:"thumbnail_small_url"`
+	ThumbnailLargeUrl string    `json:"thumbnail_large_url"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	IsRecommended     bool      `json:"is_recommended"`
+	FileHash          string    `json:"file_hash"`
+	PHashDistance     int       `json:"phash_distance"`
 }

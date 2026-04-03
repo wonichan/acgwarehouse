@@ -6,11 +6,7 @@ class DuplicateGroupCard extends StatelessWidget {
   final DuplicateGroup group;
   final VoidCallback? onDelete;
 
-  const DuplicateGroupCard({
-    super.key,
-    required this.group,
-    this.onDelete,
-  });
+  const DuplicateGroupCard({super.key, required this.group, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +20,9 @@ class DuplicateGroupCard extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
             ),
             child: Row(
               children: [
@@ -74,9 +72,7 @@ class DuplicateGroupCard extends StatelessWidget {
                     onPressed: onDelete,
                     icon: const Icon(Icons.delete_outline, size: 18),
                     label: const Text('删除组'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.red,
-                    ),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
                   ),
               ],
             ),
@@ -86,8 +82,12 @@ class DuplicateGroupCard extends StatelessWidget {
     );
   }
 
-  Widget _buildImageThumbnail(BuildContext context, DuplicateRelation relation) {
+  Widget _buildImageThumbnail(
+    BuildContext context,
+    DuplicateRelation relation,
+  ) {
     final isRecommended = relation.isRecommended;
+    final thumbnailUrl = relation.image?.thumbnailSmallUrl;
 
     return Container(
       width: 80,
@@ -101,15 +101,40 @@ class DuplicateGroupCard extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Image placeholder
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(7),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(7),
+            child: SizedBox(
+              width: 80,
+              height: 80,
+              child: thumbnailUrl == null || thumbnailUrl.isEmpty
+                  ? Container(
+                      color: Colors.grey.shade200,
+                      child: const Icon(Icons.image, color: Colors.grey),
+                    )
+                  : Image.network(
+                      thumbnailUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          color: Colors.grey.shade200,
+                          child: const Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey.shade200,
+                          child: const Icon(Icons.error, color: Colors.red),
+                        );
+                      },
+                    ),
             ),
-            child: const Icon(Icons.image, color: Colors.grey),
           ),
           // Recommended badge
           if (isRecommended)

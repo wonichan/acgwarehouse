@@ -44,6 +44,15 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	if len(depsOpt) > 0 {
 		deps = depsOpt[0]
 	}
+	configProvider := func() *config.Config {
+		if deps == nil {
+			return nil
+		}
+		if deps.ConfigReloader != nil {
+			return deps.ConfigReloader.Get()
+		}
+		return deps.AdminCfg
+	}
 
 	api := r.Group("/api/v1")
 
@@ -55,7 +64,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 			taskRepo := repository.NewPlatformTaskRepository(deps.DB)
 			batchRepo := repository.NewTaskBatchRepository(deps.DB)
 			taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, deps.JobRepo)
-			backfillSvc := service.NewAIBackfillService(deps.ImageRepo, taskPlatformSvc)
+			backfillSvc := service.NewAIBackfillService(deps.ImageRepo, taskPlatformSvc, deps.JobManager, configProvider)
 			adminHandler = NewAdminHandlerWithBackfill(deps.AdminCfg, deps.AdminSvc, backfillSvc)
 		} else {
 			adminHandler = NewAdminHandler(deps.AdminCfg, deps.AdminSvc)
@@ -184,7 +193,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		taskRepo := repository.NewPlatformTaskRepository(deps.DB)
 		batchRepo := repository.NewTaskBatchRepository(deps.DB)
 		taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, deps.JobRepo)
-		aiTagHandler := NewAITagHandler(deps.JobManager, deps.ImageRepo, deps.JobRepo, taskRepo, taskPlatformSvc)
+		aiTagHandler := NewAITagHandler(deps.JobManager, deps.ImageRepo, deps.JobRepo, taskRepo, taskPlatformSvc, configProvider)
 		aiTrigger = aiTagHandler.TriggerAITags
 		aiStatus = aiTagHandler.GetAITagStatus
 		aiBatch = aiTagHandler.BatchTriggerAITags

@@ -237,6 +237,42 @@ func TestAITagAutoSchedulerScanAndEnqueueCreatesPlatformTasks(t *testing.T) {
 	}
 }
 
+func TestAITagAutoSchedulerScanAndEnqueueUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	images := []domain.Image{{
+		ID:                1,
+		Path:              "/images/1.png",
+		ThumbnailLargeUrl: "https://cos.local/thumbnails/1-large.jpg",
+		SourceRoot:        "/images",
+		FileSize:          10,
+	}}
+	finder := &fakeAITagImageFinder{images: images}
+	platform := &fakeAITagTaskPlatform{
+		planResult: &TaskPlatformPlanResult{CreatedTasks: []domain.PlatformTask{{ID: 11, ImageID: 1}}},
+	}
+	scheduler := NewAITagAutoScheduler(finder, platform, schedulerTestConfig())
+
+	queued, err := scheduler.ScanAndEnqueue(context.Background())
+	if err != nil {
+		t.Fatalf("ScanAndEnqueue() error = %v", err)
+	}
+	if queued != 1 {
+		t.Fatalf("queued = %d, want 1", queued)
+	}
+
+	var payload struct {
+		ImageID int64  `json:"image_id"`
+		Path    string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(platform.queuedPayloads[0]), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	if payload.Path != "https://cos.local/thumbnails/1-large.jpg" {
+		t.Fatalf("payload.Path = %q, want large thumbnail url", payload.Path)
+	}
+}
+
 func TestAITagAutoSchedulerScanAndEnqueueUsesConfiguredBatchSize(t *testing.T) {
 	t.Parallel()
 

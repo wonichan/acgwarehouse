@@ -20,15 +20,18 @@ class DuplicateGroup {
   });
 
   factory DuplicateGroup.fromJson(Map<String, dynamic> json) {
+    final groupJson = (json['group'] as Map<String, dynamic>?) ?? json;
+    final relationItems =
+        (json['relations'] as List?) ?? (json['images'] as List?) ?? const [];
+
     return DuplicateGroup(
-      id: json['id'] as int,
-      recommendedImageId: json['recommended_image_id'] as int,
-      similarityThreshold: json['similarity_threshold'] as int? ?? 10,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      relations: (json['relations'] as List?)
-              ?.map((r) => DuplicateRelation.fromJson(r as Map<String, dynamic>))
-              .toList() ??
-          [],
+      id: groupJson['id'] as int,
+      recommendedImageId: groupJson['recommended_image_id'] as int,
+      similarityThreshold: groupJson['similarity_threshold'] as int? ?? 10,
+      createdAt: DateTime.parse(groupJson['created_at'] as String),
+      relations: relationItems
+          .map((r) => DuplicateRelation.fromJson(r as Map<String, dynamic>))
+          .toList(),
     );
   }
 }
@@ -50,15 +53,32 @@ class DuplicateRelation {
   });
 
   factory DuplicateRelation.fromJson(Map<String, dynamic> json) {
+    final candidateImageJson = (json['image'] as Map<String, dynamic>?) ?? json;
+    final resolvedImageId = json['image_id'] ?? json['id'];
+
     return DuplicateRelation(
-      imageId: json['image_id'] as int,
+      imageId: resolvedImageId as int,
       isRecommended: json['is_recommended'] as bool? ?? false,
       fileHash: json['file_hash'] as String?,
       pHashDistance: json['phash_distance'] as int?,
-      image: json['image'] != null
-          ? ImageModel.fromJson(json['image'] as Map<String, dynamic>)
+      image: _hasCompleteImageModel(candidateImageJson)
+          ? ImageModel.fromJson(candidateImageJson)
           : null,
     );
+  }
+
+  static bool _hasCompleteImageModel(Map<String, dynamic> json) {
+    return json['id'] != null &&
+        json['path'] != null &&
+        json['filename'] != null &&
+        json['source_root'] != null &&
+        json['file_size'] != null &&
+        json['width'] != null &&
+        json['height'] != null &&
+        json['format'] != null &&
+        json['phash'] != null &&
+        json['created_at'] != null &&
+        json['updated_at'] != null;
   }
 }
 
@@ -67,10 +87,7 @@ class DetectionResult {
   final String message;
   final int groupsFound;
 
-  const DetectionResult({
-    required this.message,
-    required this.groupsFound,
-  });
+  const DetectionResult({required this.message, required this.groupsFound});
 
   factory DetectionResult.fromJson(Map<String, dynamic> json) {
     return DetectionResult(
@@ -102,7 +119,8 @@ class DuplicateService {
     }
 
     return DetectionResult.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
   }
 
   /// Get list of duplicate groups
@@ -111,10 +129,7 @@ class DuplicateService {
     int offset = 0,
   }) async {
     final uri = Uri.parse(ApiConfig.duplicates).replace(
-      queryParameters: {
-        'limit': limit.toString(),
-        'offset': offset.toString(),
-      },
+      queryParameters: {'limit': limit.toString(), 'offset': offset.toString()},
     );
 
     final response = await _client.get(
@@ -152,7 +167,7 @@ class DuplicateService {
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return DuplicateGroup.fromJson(json['group'] as Map<String, dynamic>);
+    return DuplicateGroup.fromJson(json);
   }
 
   /// Delete duplicate group record (not the images)

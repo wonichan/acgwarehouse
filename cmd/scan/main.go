@@ -13,6 +13,7 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
+	"github.com/wonichan/acgwarehouse-backend/internal/sqliteutil"
 )
 
 func main() {
@@ -70,8 +71,5 @@ func main() {
 }
 
 func openDatabase(cfg *config.Config) (*sql.DB, error) {
-	if cfg.Database.Type == "postgres" {
-		return nil, fmt.Errorf("postgres scanning bootstrap is not implemented yet")
-	}
-	return sql.Open("sqlite3", cfg.Database.Path)
+	return sqliteutil.Open(cfg)
 }

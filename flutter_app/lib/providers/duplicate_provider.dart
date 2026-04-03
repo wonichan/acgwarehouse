@@ -13,8 +13,7 @@ class DuplicateProvider with ChangeNotifier {
   int _currentOffset = 0;
   static const int _pageSize = 20;
 
-  DuplicateProvider({DuplicateService? service})
-      : _service = service ?? DuplicateService();
+  DuplicateProvider({required DuplicateService service}) : _service = service;
 
   List<DuplicateGroup> get groups => _groups;
   bool get isLoading => _isLoading;
@@ -31,10 +30,10 @@ class DuplicateProvider with ChangeNotifier {
 
     try {
       final result = await _service.detectDuplicates(threshold: threshold);
-      
+
       // Refresh groups after detection
       await loadGroups(refresh: true);
-      
+
       return result;
     } catch (e) {
       _error = e.toString();
@@ -71,7 +70,8 @@ class DuplicateProvider with ChangeNotifier {
       }
 
       _currentOffset += groups.length;
-      _totalGroups = _groups.length + (groups.length < _pageSize ? 0 : _pageSize);
+      _totalGroups =
+          _groups.length + (groups.length < _pageSize ? 0 : _pageSize);
     } catch (e) {
       _error = e.toString();
     } finally {

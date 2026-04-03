@@ -13,9 +13,11 @@ import (
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/handler"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
+	"github.com/wonichan/acgwarehouse-backend/internal/sqliteutil"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
@@ -212,24 +214,50 @@ func (a *App) runRefillLoop() {
 			return
 		case <-time.After(refillInterval):
 			if a.jobManager.QueueSize() < refillThreshold {
-				jobs, err := a.jobRepo.FindByStatus("ready")
-				if err != nil {
-					continue
-				}
-				loaded := 0
-				for i := range jobs {
-					if a.jobManager.LoadExistingJob(&jobs[i]) {
-						loaded++
-					} else {
-						break
-					}
-				}
-				if loaded > 0 {
-					log.Printf("后台补充加载了 %d 个任务", loaded)
-				}
+				a.refillReadyJobs()
 			}
 		}
 	}
+}
+
+func (a *App) refillReadyJobs() int {
+	if a == nil || a.jobRepo == nil || a.jobManager == nil || a.cfgReloader == nil {
+		return 0
+	}
+
+	jobs, err := a.jobRepo.FindByStatus("ready")
+	if err != nil {
+		return 0
+	}
+
+	cfg := a.cfgReloader.Get()
+	maxToLoad := 0
+	if cfg != nil {
+		maxToLoad = cfg.WorkerPool.RefillBatchSize
+		if maxToLoad <= 0 {
+			maxToLoad = cfg.WorkerPool.QueueSize
+		}
+	}
+	aiQueueLimit := service.ResolveAITagQueueLimit(cfg)
+
+	loaded := 0
+	for i := range jobs {
+		if maxToLoad > 0 && loaded >= maxToLoad {
+			break
+		}
+		if jobs[i].Type == domain.PlatformTaskTypeAITagGeneration && a.jobManager.QueuedByType(domain.PlatformTaskTypeAITagGeneration) >= aiQueueLimit {
+			continue
+		}
+		if a.jobManager.LoadExistingJob(&jobs[i]) {
+			loaded++
+		} else {
+			break
+		}
+	}
+	if loaded > 0 {
+		log.Printf("后台补充加载了 %d 个任务", loaded)
+	}
+	return loaded
 }
 
 // recoverJobs recovers jobs from database on startup.
@@ -263,6 +291,5 @@ func (a *App) recoverJobs() {
 }
 
 func openDatabase(cfg *config.Config) (*sql.DB, error) {
-	// For now, only SQLite is supported
-	return sql.Open("sqlite3", cfg.Database.Path)
+	return sqliteutil.Open(cfg)
 }

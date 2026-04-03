@@ -19,8 +19,7 @@ class SearchProvider with ChangeNotifier {
   String _sortBy = 'relevance';
   String _sortOrder = 'desc';
 
-  SearchProvider({SearchService? service})
-      : _service = service ?? SearchService();
+  SearchProvider({required SearchService service}) : _service = service;
 
   List<ImageModel> get results => _results;
   List<String> get searchHistory => _searchHistory;

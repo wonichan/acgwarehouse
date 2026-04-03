@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../providers/image_provider.dart';
 import '../providers/selection_provider.dart';
 import '../providers/tag_provider.dart';
-import '../services/api_service.dart';
 import '../services/tag_service.dart';
 import '../widgets/batch_operation_sheet.dart';
 import '../widgets/batch_tag_dialog.dart';
@@ -13,60 +12,12 @@ import 'image_detail_screen.dart';
 import 'tag_management_screen.dart';
 
 class GalleryScreen extends StatelessWidget {
-  final ImageListProvider? imageListProvider;
-  final TagProvider? tagProvider;
-  final SelectionProvider? selectionProvider;
-  final TagService? tagService;
-
-  const GalleryScreen({
-    super.key,
-    this.imageListProvider,
-    this.tagProvider,
-    this.selectionProvider,
-    this.tagService,
-  });
+  const GalleryScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final resolvedTagService = tagService ?? TagService();
-    final resolvedImageListProvider = imageListProvider ?? _tryRead<ImageListProvider>(context);
-    final resolvedTagProvider = tagProvider ?? _tryRead<TagProvider>(context);
-    final resolvedSelectionProvider = selectionProvider ?? _tryRead<SelectionProvider>(context);
-
-    if (resolvedImageListProvider != null &&
-        resolvedTagProvider != null &&
-        resolvedSelectionProvider != null &&
-        imageListProvider == null &&
-        tagProvider == null &&
-        selectionProvider == null) {
-      return const _GalleryContent();
-    }
-
-    return MultiProvider(
-      providers: [
-        if (resolvedImageListProvider != null && imageListProvider != null)
-          ChangeNotifierProvider<ImageListProvider>.value(value: resolvedImageListProvider),
-        if (resolvedImageListProvider == null)
-          ChangeNotifierProvider(create: (_) => ImageListProvider(ApiService())..loadImages()),
-        if (resolvedTagProvider != null && tagProvider != null)
-          ChangeNotifierProvider<TagProvider>.value(value: resolvedTagProvider),
-        if (resolvedTagProvider == null)
-          ChangeNotifierProvider(create: (_) => TagProvider(resolvedTagService)),
-        if (resolvedSelectionProvider != null && selectionProvider != null)
-          ChangeNotifierProvider<SelectionProvider>.value(value: resolvedSelectionProvider),
-        if (resolvedSelectionProvider == null)
-          ChangeNotifierProvider(create: (_) => SelectionProvider()),
-      ],
-      child: const _GalleryContent(),
-    );
-  }
-
-  T? _tryRead<T>(BuildContext context) {
-    try {
-      return context.read<T>();
-    } catch (_) {
-      return null;
-    }
+    // All providers should be injected from main.dart
+    return const _GalleryContent();
   }
 }
 
@@ -94,7 +45,8 @@ class _GalleryContentState extends State<_GalleryContent> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       context.read<ImageListProvider>().loadImages();
     }
   }
@@ -106,7 +58,11 @@ class _GalleryContentState extends State<_GalleryContent> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(inSelectionMode ? '已选 ${selectionProvider.selectedCount} 张' : 'ACGWarehouse'),
+        title: Text(
+          inSelectionMode
+              ? '已选 ${selectionProvider.selectedCount} 张'
+              : 'ACGWarehouse',
+        ),
         actions: inSelectionMode
             ? [
                 TextButton(
@@ -151,16 +107,18 @@ class _GalleryContentState extends State<_GalleryContent> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    hasFilters ? Icons.filter_alt_off : Icons.photo_library_outlined,
+                    hasFilters
+                        ? Icons.filter_alt_off
+                        : Icons.photo_library_outlined,
                     size: 64,
                     color: Colors.grey[400],
                   ),
                   const SizedBox(height: 16),
                   Text(
                     hasFilters ? '筛选出 0 张图片' : '暂无图片',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleLarge?.copyWith(color: Colors.grey[600]),
                   ),
                   if (hasFilters) ...[
                     const SizedBox(height: 8),
@@ -243,10 +201,16 @@ class _GalleryContentState extends State<_GalleryContent> {
     return Consumer<ImageListProvider>(
       builder: (context, provider, _) {
         return IconButton(
-          icon: Icon(provider.viewMode == ViewMode.grid ? Icons.view_agenda : Icons.grid_view),
+          icon: Icon(
+            provider.viewMode == ViewMode.grid
+                ? Icons.view_agenda
+                : Icons.grid_view,
+          ),
           onPressed: () {
             provider.setViewMode(
-              provider.viewMode == ViewMode.grid ? ViewMode.masonry : ViewMode.grid,
+              provider.viewMode == ViewMode.grid
+                  ? ViewMode.masonry
+                  : ViewMode.grid,
             );
           },
           tooltip: provider.viewMode == ViewMode.grid ? '切换到瀑布流' : '切换到网格',
@@ -328,14 +292,16 @@ class _GalleryContentState extends State<_GalleryContent> {
       final failCount = result['failCount'] as int? ?? 0;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('已为 $successCount 张图片添加标签${failCount > 0 ? '，$failCount 张失败' : ''}'),
+          content: Text(
+            '已为 $successCount 张图片添加标签${failCount > 0 ? '，$failCount 张失败' : ''}',
+          ),
         ),
       );
       selectionProvider.exitSelectionMode();
     } else if (result is Map && result['success'] == false && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('添加失败: ${result['error']}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('添加失败: ${result['error']}')));
     }
   }
 
@@ -357,7 +323,9 @@ class _GalleryContentState extends State<_GalleryContent> {
       final failCount = result['failCount'] as int? ?? 0;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('已从 $successCount 张图片移除标签${failCount > 0 ? '，$failCount 张失败' : ''}'),
+          content: Text(
+            '已从 $successCount 张图片移除标签${failCount > 0 ? '，$failCount 张失败' : ''}',
+          ),
         ),
       );
       selectionProvider.exitSelectionMode();
@@ -372,14 +340,14 @@ class _GalleryContentState extends State<_GalleryContent> {
 
     // Close bottom sheet immediately
     Navigator.pop(context);
-    
+
     // Show immediate feedback
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('AI标签生成任务已在后台启动 ($count张图片)')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('AI标签生成任务已在后台启动 ($count张图片)')));
     }
-    
+
     // Exit selection mode
     selectionProvider.exitSelectionMode();
 
@@ -400,18 +368,14 @@ class _GalleryContentState extends State<_GalleryContent> {
   void _navigateToDetail(BuildContext context, image) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ImageDetailScreen(image: image),
-      ),
+      MaterialPageRoute(builder: (_) => ImageDetailScreen(image: image)),
     );
   }
 
   void _navigateToTagManagement(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const TagManagementScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const TagManagementScreen()),
     );
   }
 }

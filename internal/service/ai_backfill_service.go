@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
@@ -31,17 +32,26 @@ type BackfillExecuteResult struct {
 	CreatedTaskList   []domain.PlatformTask `json:"created_task_list,omitempty"`
 }
 
+type ExistingJobLoader interface {
+	LoadExistingJob(job *domain.AsyncJob) bool
+	QueuedByType(jobType string) int
+}
+
 // AIBackfillService orchestrates filtered backfill preview and execution.
 type AIBackfillService struct {
 	imageRepo       repository.ImageRepository
 	taskPlatformSvc *TaskPlatformService
+	jobLoader       ExistingJobLoader
+	configProvider  func() *config.Config
 }
 
 // NewAIBackfillService creates a new backfill service.
-func NewAIBackfillService(imageRepo repository.ImageRepository, taskPlatformSvc *TaskPlatformService) *AIBackfillService {
+func NewAIBackfillService(imageRepo repository.ImageRepository, taskPlatformSvc *TaskPlatformService, jobLoader ExistingJobLoader, configProvider func() *config.Config) *AIBackfillService {
 	return &AIBackfillService{
 		imageRepo:       imageRepo,
 		taskPlatformSvc: taskPlatformSvc,
+		jobLoader:       jobLoader,
+		configProvider:  configProvider,
 	}
 }
 
@@ -136,13 +146,13 @@ func (s *AIBackfillService) ExecuteBackfill(ctx context.Context, filter reposito
 
 	items := make([]TaskPlatformPlanItem, 0, len(images))
 	roots := make([]string, 0, len(images))
-	for i, img := range images {
-		items[i] = TaskPlatformPlanItem{
+	for _, img := range images {
+		items = append(items, TaskPlatformPlanItem{
 			ImageID:          img.ID,
 			ImageVersionKey:  BuildImageVersionKey(img),
 			SourceDescriptor: img.Path,
-		}
-		roots[i] = img.SourceRoot
+		})
+		roots = append(roots, img.SourceRoot)
 	}
 
 	plan, err := s.taskPlatformSvc.PlanBatch(ctx, TaskPlatformPlanRequest{
@@ -173,15 +183,18 @@ func (s *AIBackfillService) ExecuteBackfill(ctx context.Context, filter reposito
 		}
 		payload, err := json.Marshal(map[string]interface{}{
 			"image_id": task.ImageID,
-			"path":     matchImg.Path,
+			"path":     ResolveAITagImagePath(matchImg),
 			"prompt":   prompt,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("marshalling task payload: %w", err)
 		}
-		_, err = s.taskPlatformSvc.QueueTask(ctx, &task, domain.PlatformTaskTypeAITagGeneration, string(payload))
+		job, err := s.taskPlatformSvc.QueueTask(ctx, &task, domain.PlatformTaskTypeAITagGeneration, string(payload))
 		if err != nil {
 			return nil, fmt.Errorf("queueing task %d: %w", task.ID, err)
+		}
+		if s.jobLoader != nil && s.jobLoader.QueuedByType(domain.PlatformTaskTypeAITagGeneration) < ResolveAITagQueueLimit(s.currentConfig()) {
+			s.jobLoader.LoadExistingJob(job)
 		}
 		queuedTasks = append(queuedTasks, task)
 	}
@@ -208,4 +221,11 @@ func IsFilterNarrowed(filter repository.BackfillCandidateFilter) bool {
 		return true
 	}
 	return false
+}
+
+func (s *AIBackfillService) currentConfig() *config.Config {
+	if s == nil || s.configProvider == nil {
+		return nil
+	}
+	return s.configProvider()
 }

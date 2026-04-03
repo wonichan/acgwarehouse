@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../models/image.dart';
 
 /// Pagination response wrapper for list endpoints
@@ -21,15 +22,17 @@ class PaginationResponse<T> {
 /// API service for communicating with the ACGWarehouse backend
 class ApiService {
   final http.Client _client;
-  final String baseUrl;
+  final String? _baseUrlOverride;
 
-  ApiService({
-    http.Client? client,
-    this.baseUrl = 'http://localhost:8080',
-  }) : _client = client ?? http.Client();
+  /// Dynamic base URL - reads from ApiConfig unless override is set
+  String get baseUrl => _baseUrlOverride ?? ApiConfig.hostUrl;
+
+  ApiService({http.Client? client, String? baseUrl})
+    : _client = client ?? http.Client(),
+      _baseUrlOverride = baseUrl;
 
   /// Fetches a paginated list of images with optional filtering
-  /// 
+  ///
   /// [offset] - Pagination offset for fetching next page (matches backend's next_cursor)
   /// [limit] - Maximum number of items to return
   /// [sortBy] - Field to sort by (created_at, filename, file_size)
@@ -59,9 +62,9 @@ class ApiService {
       queryParams['has_tags'] = hasTags.toString();
     }
 
-    final uri = Uri.parse('$baseUrl/api/v1/images').replace(
-      queryParameters: queryParams,
-    );
+    final uri = Uri.parse(
+      '$baseUrl/api/v1/images',
+    ).replace(queryParameters: queryParams);
 
     debugPrint('API 请求: $uri');
     debugPrint('查询参数: $queryParams');
@@ -82,7 +85,7 @@ class ApiService {
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    
+
     // Backend returns 'images' array, not 'items'
     final images = (json['images'] as List)
         .map((item) => ImageModel.fromJson(item as Map<String, dynamic>))

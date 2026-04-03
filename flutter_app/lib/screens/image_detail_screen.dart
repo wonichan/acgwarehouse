@@ -13,9 +13,9 @@ import '../widgets/image_lightbox.dart';
 
 class ImageDetailScreen extends StatefulWidget {
   final ImageModel image;
-  
+
   const ImageDetailScreen({super.key, required this.image});
-  
+
   @override
   State<ImageDetailScreen> createState() => _ImageDetailScreenState();
 }
@@ -25,7 +25,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   Timer? _pollTimer;
   String? _aiStatus;
   bool _isAITriggered = false;
-  
+
   // 自定义提示词相关
   final TextEditingController _promptController = TextEditingController();
   String _defaultPrompt = '';
@@ -47,7 +47,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
     _tagProvider.dispose();
     super.dispose();
   }
-  
+
   Future<void> _loadDefaultPrompt() async {
     setState(() => _isLoadingPrompt = true);
     try {
@@ -79,9 +79,9 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       _startPolling();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('触发 AI 标签失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('触发 AI 标签失败: $e')));
       }
     }
   }
@@ -91,7 +91,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       try {
         final status = await _tagProvider.getAITagStatus(widget.image.id);
         final statusStr = status['status'] as String? ?? 'unknown';
-        
+
         if (mounted) {
           setState(() {
             _aiStatus = _translateStatus(statusStr);
@@ -131,7 +131,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   /// 加载图片标签，如果pending为空则重试一次
   Future<void> _loadImageTagsWithRetry() async {
     await _loadImageTags();
-    
+
     // 检查pending标签是否为空，如果是则等待后重试一次
     final pending = _tagProvider.imageTags['pending'] ?? [];
     if (pending.isEmpty) {
@@ -146,9 +146,9 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       await _tagProvider.confirmImageTag(widget.image.id, tagId);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('确认标签失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('确认标签失败: $e')));
       }
     }
   }
@@ -158,9 +158,9 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       await _tagProvider.rejectImageTag(widget.image.id, tagId);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('拒绝标签失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('拒绝标签失败: $e')));
       }
     }
   }
@@ -168,10 +168,8 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   Future<void> _showMergeDialog(Tag pendingTag) async {
     final targetTag = await showDialog<Tag>(
       context: context,
-      builder: (context) => _MergeTagDialog(
-        tagProvider: _tagProvider,
-        sourceTag: pendingTag,
-      ),
+      builder: (context) =>
+          _MergeTagDialog(tagProvider: _tagProvider, sourceTag: pendingTag),
     );
 
     if (targetTag != null && mounted) {
@@ -182,9 +180,9 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
           SnackBar(content: Text('已合并到 ${targetTag.preferredLabel}')),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('合并失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('合并失败: $e')));
       }
     }
   }
@@ -218,15 +216,15 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
         }
         await _loadImageTags();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('标签已更新为: ${result['label']}')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('标签已更新为: ${result['label']}')));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('更新标签失败: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('更新标签失败: $e')));
         }
       }
     }
@@ -237,14 +235,14 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       context: context,
       builder: (context) => AddTagDialog(imageId: widget.image.id),
     );
-    
+
     // Handle error result from dialog
     if (result is Map && result['success'] == false && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('操作失败: ${result['error']}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失败: ${result['error']}')));
     }
-    
+
     // Reload tags after dialog closes
     await _loadImageTags();
   }
@@ -254,19 +252,32 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       await _tagProvider.removeImageTag(widget.image.id, tagId);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('移除标签失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('移除标签失败: $e')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDesktopLayout = MediaQuery.of(context).size.width >= 900;
+    final pageSurface = _opaqueColor(
+      Color.alphaBlend(
+        colorScheme.outlineVariant.withOpacity(0.08),
+        colorScheme.surface,
+      ),
+    );
+    final panelSurface = _opaqueColor(colorScheme.surfaceContainerHighest);
+
     return ChangeNotifierProvider.value(
       value: _tagProvider,
       child: Scaffold(
+        backgroundColor: pageSurface,
         appBar: AppBar(
+          backgroundColor: pageSurface,
+          surfaceTintColor: Colors.transparent,
           title: const Text('图片详情'),
           actions: [
             IconButton(
@@ -276,32 +287,120 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
             ),
           ],
         ),
-        body: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildImageViewer(),
-              _buildMetadataSection(context),
-              _buildAITagSection(context),
-              _buildTagsSection(context),
-            ],
+        body: isDesktopLayout
+            ? _buildDesktopLayout(context, pageSurface, panelSurface)
+            : _buildCompactLayout(context, pageSurface, panelSurface),
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(
+    BuildContext context,
+    Color pageSurface,
+    Color panelSurface,
+  ) {
+    return Container(
+      color: pageSurface,
+      padding: const EdgeInsets.all(24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 320),
+            child: Container(
+              decoration: BoxDecoration(
+                color: panelSurface,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildMetadataSection(context, panelSurface),
+                    _buildAITagSection(context, panelSurface),
+                    _buildTagsSection(context, panelSurface),
+                  ],
+                ),
+              ),
+            ),
           ),
+          const SizedBox(width: 24),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: panelSurface,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Center(child: _buildImageViewer(context, panelSurface)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactLayout(
+    BuildContext context,
+    Color pageSurface,
+    Color panelSurface,
+  ) {
+    return Container(
+      color: pageSurface,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: panelSurface,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: _buildImageViewer(context, panelSurface),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: panelSurface,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildMetadataSection(context, panelSurface),
+                  _buildAITagSection(context, panelSurface),
+                  _buildTagsSection(context, panelSurface),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
-  
-  Widget _buildImageViewer() {
+
+  Widget _buildImageViewer([BuildContext? buildContext, Color? panelSurface]) {
+    final resolvedContext = buildContext ?? context;
+    final resolvedPanelSurface =
+        panelSurface ??
+        _opaqueColor(
+          Theme.of(resolvedContext).colorScheme.surfaceContainerHighest,
+        );
     final largeUrl = widget.image.thumbnailLargeUrl;
-    
+
     if (largeUrl == null || largeUrl.isEmpty) {
       return Container(
         height: 300,
-        color: Colors.grey[200],
-        child: const Center(child: Icon(Icons.image, size: 64, color: Colors.grey)),
+        color: resolvedPanelSurface,
+        child: const Center(
+          child: Icon(Icons.image, size: 64, color: Colors.grey),
+        ),
       );
     }
-    
+
     return GestureDetector(
       onTap: () {
         ImageLightbox.show(
@@ -312,11 +411,11 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       },
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.75,
+          maxHeight: MediaQuery.of(resolvedContext).size.height * 0.75,
         ),
         decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(4),
+          color: resolvedPanelSurface,
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -355,7 +454,9 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (state.extendedImageLoadState == LoadState.failed) {
-                    return const Center(child: Icon(Icons.error, color: Colors.red));
+                    return const Center(
+                      child: Icon(Icons.error, color: Colors.red),
+                    );
                   }
                   return null;
                 },
@@ -389,27 +490,78 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       ),
     );
   }
-  
-  Widget _buildMetadataSection(BuildContext context) {
+
+  Widget _buildMetadataSection(BuildContext context, Color panelSurface) {
+    final foreground = _foregroundForSurface(panelSurface);
+    final mutedForeground = _mutedForegroundForSurface(panelSurface);
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('元数据', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 6),
-          _buildMetadataRow('文件名', widget.image.filename),
-          _buildMetadataRow('尺寸', widget.image.displaySize),
-          _buildMetadataRow('格式', widget.image.format.toUpperCase()),
-          _buildMetadataRow('大小', widget.image.displayFileSize),
-          _buildMetadataRow('路径', widget.image.path),
-          _buildMetadataRow('导入时间', widget.image.createdAt.toString()),
-        ],
+      child: SelectionArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '元数据',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: foreground),
+            ),
+            const SizedBox(height: 6),
+            _buildMetadataRow(
+              context,
+              '文件名',
+              widget.image.filename,
+              foreground,
+              mutedForeground,
+            ),
+            _buildMetadataRow(
+              context,
+              '尺寸',
+              widget.image.displaySize,
+              foreground,
+              mutedForeground,
+            ),
+            _buildMetadataRow(
+              context,
+              '格式',
+              widget.image.format.toUpperCase(),
+              foreground,
+              mutedForeground,
+            ),
+            _buildMetadataRow(
+              context,
+              '大小',
+              widget.image.displayFileSize,
+              foreground,
+              mutedForeground,
+            ),
+            _buildMetadataRow(
+              context,
+              '路径',
+              widget.image.path,
+              foreground,
+              mutedForeground,
+            ),
+            _buildMetadataRow(
+              context,
+              '导入时间',
+              widget.image.createdAt.toString(),
+              foreground,
+              mutedForeground,
+            ),
+          ],
+        ),
       ),
     );
   }
-  
-  Widget _buildMetadataRow(String label, String value) {
+
+  Widget _buildMetadataRow(
+    BuildContext context,
+    String label,
+    String value,
+    Color foreground,
+    Color mutedForeground,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -417,32 +569,49 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
         children: [
           SizedBox(
             width: 70,
-            child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            child: Text(
+              label,
+              style: TextStyle(color: mutedForeground, fontSize: 13),
+            ),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+            child: Text(
+              value,
+              style: TextStyle(
+                color: foreground,
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAITagSection(BuildContext context) {
+  Widget _buildAITagSection(BuildContext context, Color panelSurface) {
+    final foreground = _foregroundForSurface(panelSurface);
+    final mutedForeground = _mutedForegroundForSurface(panelSurface);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
+        color: panelSurface,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome, color: Colors.blue),
+              Icon(Icons.auto_awesome, color: mutedForeground),
               const SizedBox(width: 8),
-              Text('AI 标签', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'AI 标签',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(color: foreground),
+              ),
               const Spacer(),
               if (!_isAITriggered)
                 FilledButton.icon(
@@ -460,7 +629,10 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
           // 提示词开关
           Row(
             children: [
-              Text('自定义提示词', style: TextStyle(fontSize: 13, color: Colors.grey[700])),
+              Text(
+                '自定义提示词',
+                style: TextStyle(fontSize: 13, color: mutedForeground),
+              ),
               const SizedBox(width: 8),
               Switch(
                 value: _useCustomPrompt,
@@ -469,7 +641,11 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                 },
               ),
               if (_isLoadingPrompt)
-                const SizedBox(width: 8, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                const SizedBox(
+                  width: 8,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
             ],
           ),
           // 提示词输入框
@@ -495,19 +671,21 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
             const SizedBox(height: 4),
             Text(
               '提示：可编辑提示词以自定义 AI 生成的标签类型和风格',
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              style: TextStyle(fontSize: 11, color: mutedForeground),
             ),
           ] else
             Text(
               '点击"生成"触发 AI 分析，标签将自动添加到待确认列表。',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 12, color: mutedForeground),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildTagsSection(BuildContext context) {
+  Widget _buildTagsSection(BuildContext context, Color panelSurface) {
+    final foreground = _foregroundForSurface(panelSurface);
+    final mutedForeground = _mutedForegroundForSurface(panelSurface);
     return Consumer<TagProvider>(
       builder: (context, provider, child) {
         final confirmed = provider.imageTags['confirmed'] ?? [];
@@ -521,50 +699,71 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
             children: [
               // Confirmed tags
               if (confirmed.isNotEmpty) ...[
-                Text('已确认', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  '已确认',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(color: foreground),
+                ),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
                   runSpacing: 4,
-                  children: confirmed.map((tag) => TagChip(
-                    tag: tag,
-                    style: TagChipStyle.confirmed,
-                    onDelete: () => _removeTag(tag.id),
-                  )).toList(),
+                  children: confirmed
+                      .map(
+                        (tag) => TagChip(
+                          tag: tag,
+                          style: TagChipStyle.confirmed,
+                          onDelete: () => _removeTag(tag.id),
+                        ),
+                      )
+                      .toList(),
                 ),
                 const SizedBox(height: 12),
               ],
 
               // Pending tags
               if (pending.isNotEmpty) ...[
-                Text('待确认', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  '待确认',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(color: foreground),
+                ),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
                   runSpacing: 4,
-                  children: pending.map((tag) => _buildPendingTagChip(tag)).toList(),
+                  children: pending
+                      .map((tag) => _buildPendingTagChip(tag))
+                      .toList(),
                 ),
                 const SizedBox(height: 12),
               ],
 
               // Rejected tags
               if (rejected.isNotEmpty) ...[
-                Text('已拒绝', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.grey,
-                )),
+                Text(
+                  '已拒绝',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(color: mutedForeground),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 4,
-                  children: rejected.map((tag) => TagChip(
-                    tag: tag,
-                    style: TagChipStyle.rejected,
-                  )).toList(),
+                  children: rejected
+                      .map(
+                        (tag) =>
+                            TagChip(tag: tag, style: TagChipStyle.rejected),
+                      )
+                      .toList(),
                 ),
               ],
 
               if (confirmed.isEmpty && pending.isEmpty && rejected.isEmpty)
-                const Text('暂无标签'),
+                Text('暂无标签', style: TextStyle(color: foreground)),
             ],
           ),
         );
@@ -580,7 +779,10 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(tag.preferredLabel),
+            Text(
+              tag.preferredLabel,
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            ),
             const SizedBox(width: 8),
             InkWell(
               onTap: () => _confirmTag(tag.id),
@@ -606,6 +808,22 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       ),
     );
   }
+
+  Color _opaqueColor(Color color) {
+    return Color.fromARGB(255, color.red, color.green, color.blue);
+  }
+
+  Color _foregroundForSurface(Color surface) {
+    return ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
+        ? Colors.white
+        : Colors.black87;
+  }
+
+  Color _mutedForegroundForSurface(Color surface) {
+    return ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
+        ? Colors.white70
+        : Colors.black54;
+  }
 }
 
 /// Dialog for selecting a target tag to merge into
@@ -613,10 +831,7 @@ class _MergeTagDialog extends StatefulWidget {
   final TagProvider tagProvider;
   final Tag sourceTag;
 
-  const _MergeTagDialog({
-    required this.tagProvider,
-    required this.sourceTag,
-  });
+  const _MergeTagDialog({required this.tagProvider, required this.sourceTag});
 
   @override
   State<_MergeTagDialog> createState() => _MergeTagDialogState();

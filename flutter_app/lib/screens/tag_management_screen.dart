@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tag.dart';
 import '../providers/tag_provider.dart';
-import '../services/tag_service.dart';
 
 /// Screen for tag governance and statistics
 class TagManagementScreen extends StatelessWidget {
@@ -10,10 +9,15 @@ class TagManagementScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => TagProvider(TagService())..loadStatistics(),
-      child: const _TagManagementContent(),
-    );
+    // Load statistics on first build if not already loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = context.read<TagProvider>();
+      if (provider.statistics.isEmpty && !provider.isLoadingStatistics) {
+        provider.loadStatistics();
+      }
+    });
+
+    return const _TagManagementContent();
   }
 }
 
@@ -66,10 +70,10 @@ class _TagManagementContent extends StatelessWidget {
             children: [
               // Summary cards
               _buildSummaryCards(context, provider),
-              
+
               // Action buttons
               _buildActionButtons(context, provider),
-              
+
               // Statistics list
               Expanded(
                 child: ListView.builder(
@@ -89,7 +93,7 @@ class _TagManagementContent extends StatelessWidget {
 
   Widget _buildSummaryCards(BuildContext context, TagProvider provider) {
     final totals = provider.totals;
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -144,9 +148,9 @@ class _TagManagementContent extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '$value',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             Text(
               title,
@@ -166,9 +170,9 @@ class _TagManagementContent extends StatelessWidget {
         children: [
           Expanded(
             child: FilledButton.icon(
-              onPressed: provider.isLoadingStatistics 
-                ? null 
-                : () => _showCleanUnusedTagsDialog(context, provider),
+              onPressed: provider.isLoadingStatistics
+                  ? null
+                  : () => _showCleanUnusedTagsDialog(context, provider),
               icon: const Icon(Icons.cleaning_services),
               label: const Text('清理无用标签'),
             ),
@@ -178,14 +182,19 @@ class _TagManagementContent extends StatelessWidget {
     );
   }
 
-  Future<void> _showCleanUnusedTagsDialog(BuildContext context, TagProvider provider) async {
+  Future<void> _showCleanUnusedTagsDialog(
+    BuildContext context,
+    TagProvider provider,
+  ) async {
     // 计算无用标签数量
-    final unusedCount = provider.statistics.where((s) => s.usageCount == 0).length;
-    
+    final unusedCount = provider.statistics
+        .where((s) => s.usageCount == 0)
+        .length;
+
     if (unusedCount == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有无用标签需要清理')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有无用标签需要清理')));
       return;
     }
 
@@ -211,23 +220,27 @@ class _TagManagementContent extends StatelessWidget {
       try {
         final result = await provider.cleanUnusedTags();
         final deletedCount = result['deleted_count'] as int? ?? 0;
-        
+
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('成功清理 $deletedCount 个无用标签')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('成功清理 $deletedCount 个无用标签')));
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('清理失败: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('清理失败: $e')));
         }
       }
     }
   }
 
-  Widget _buildStatTile(BuildContext context, TagProvider provider, TagStatistics stat) {
+  Widget _buildStatTile(
+    BuildContext context,
+    TagProvider provider,
+    TagStatistics stat,
+  ) {
     return ListTile(
       leading: CircleAvatar(
         child: Text(stat.label.isNotEmpty ? stat.label[0].toUpperCase() : '?'),
@@ -242,7 +255,9 @@ class _TagManagementContent extends StatelessWidget {
         children: [
           Chip(
             label: Text('${stat.usageCount}'),
-            backgroundColor: stat.usageCount == 0 ? Colors.red[100] : Colors.grey[200],
+            backgroundColor: stat.usageCount == 0
+                ? Colors.red[100]
+                : Colors.grey[200],
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -280,9 +295,13 @@ class _TagManagementContent extends StatelessWidget {
     );
   }
 
-  Future<void> _showEditTagDialog(BuildContext context, TagProvider provider, TagStatistics stat) async {
+  Future<void> _showEditTagDialog(
+    BuildContext context,
+    TagProvider provider,
+    TagStatistics stat,
+  ) async {
     final controller = TextEditingController(text: stat.label);
-    
+
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -319,33 +338,37 @@ class _TagManagementContent extends StatelessWidget {
       try {
         await provider.updateTag(stat.tagId, preferredLabel: result);
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('标签更新成功')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('标签更新成功')));
         }
       } catch (e) {
         // 检查是否是重名错误 (409 Conflict)
         final errorMsg = e.toString();
         if (errorMsg.contains('409') || errorMsg.contains('标签名已存在')) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('标签名已存在，请使用其他名称')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('标签名已存在，请使用其他名称')));
             // 重新打开编辑对话框让用户修改
             _showEditTagDialog(context, provider, stat);
           }
         } else {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('更新失败: $e')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('更新失败: $e')));
           }
         }
       }
     }
   }
 
-  Future<void> _showDeleteTagDialog(BuildContext context, TagProvider provider, TagStatistics stat) async {
+  Future<void> _showDeleteTagDialog(
+    BuildContext context,
+    TagProvider provider,
+    TagStatistics stat,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -357,9 +380,7 @@ class _TagManagementContent extends StatelessWidget {
             child: const Text('取消'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('删除'),
           ),
@@ -371,15 +392,15 @@ class _TagManagementContent extends StatelessWidget {
       try {
         await provider.deleteTag(stat.tagId);
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('标签 "${stat.label}" 已删除')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('标签 "${stat.label}" 已删除')));
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('删除失败: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
         }
       }
     }

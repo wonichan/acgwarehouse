@@ -157,7 +157,7 @@ func (p *QwenProvider) processImageURL(imageURL string) (string, error) {
 	}
 
 	// 本地文件：使用压缩工具处理
-	data, contentType, err := CompressImageIfNeeded(imageURL)
+	data, contentType, err := PrepareImageForDataURL(imageURL)
 	if err != nil {
 		return "", fmt.Errorf("process image: %w", err)
 	}
