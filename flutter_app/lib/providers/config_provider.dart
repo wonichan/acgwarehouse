@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../config/api_config.dart';
+
 /// Configuration provider for runtime-configurable settings
 ///
 /// Supports modifying backend API URL at runtime, useful for:
@@ -7,9 +9,12 @@ import 'package:flutter/foundation.dart';
 /// - Production: allowing users to configure custom backend
 class ConfigProvider extends ChangeNotifier {
   // Default values
-  static const String _defaultBaseUrl = 'http://localhost:8080';
+  static const String _defaultBaseUrl = ApiConfig.developmentFallbackHostUrl;
 
-  String _baseUrl = _defaultBaseUrl;
+  ConfigProvider({String? initialBaseUrl})
+    : _baseUrl = initialBaseUrl ?? ApiConfig.hostUrl;
+
+  String _baseUrl;
 
   /// Current backend API base URL (without /api/v1 suffix)
   String get baseUrl => _baseUrl;
@@ -29,6 +34,7 @@ class ConfigProvider extends ChangeNotifier {
 
     if (_baseUrl != normalized) {
       _baseUrl = normalized;
+      ApiConfig.updateBaseUrl(normalized);
       notifyListeners();
       debugPrint('ConfigProvider: baseUrl changed to $normalized');
     }
@@ -38,6 +44,7 @@ class ConfigProvider extends ChangeNotifier {
   void resetToDefault() {
     if (_baseUrl != _defaultBaseUrl) {
       _baseUrl = _defaultBaseUrl;
+      ApiConfig.resetToDefault();
       notifyListeners();
       debugPrint('ConfigProvider: baseUrl reset to default');
     }

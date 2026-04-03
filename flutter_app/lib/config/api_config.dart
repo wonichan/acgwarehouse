@@ -4,7 +4,8 @@
 /// Default: 'http://localhost:8080/api/v1'
 class ApiConfig {
   // Default base URL without /api/v1 suffix
-  static const String _defaultHostUrl = 'http://localhost:8080';
+  static const String developmentFallbackHostUrl = 'http://localhost:8080';
+  static const String _defaultHostUrl = developmentFallbackHostUrl;
   static String _hostUrl = _defaultHostUrl;
 
   /// Current host URL (without /api/v1 suffix)
@@ -30,6 +31,11 @@ class ApiConfig {
   /// Resets to default configuration
   static void resetToDefault() {
     _hostUrl = _defaultHostUrl;
+  }
+
+  /// Applies the explicit development fallback host.
+  static void applyDevelopmentFallback() {
+    _hostUrl = developmentFallbackHostUrl;
   }
 
   /// Checks if current configuration matches default

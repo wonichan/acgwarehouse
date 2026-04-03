@@ -10,6 +10,7 @@ import 'providers/duplicate_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/config_provider.dart';
+import 'bootstrap/runtime_manifest_loader.dart';
 import 'services/api_service.dart';
 import 'services/tag_service.dart';
 import 'services/duplicate_service.dart';
@@ -23,6 +24,11 @@ import 'utils/window_manager.dart';
 void main() async {
   // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
+
+  await RuntimeManifestLoader().load(
+    isDevelopmentMode: !kReleaseMode,
+    isDesktopTarget: !kIsWeb && defaultTargetPlatform == TargetPlatform.windows,
+  );
 
   // Initialize window manager for Windows desktop
   if (defaultTargetPlatform == TargetPlatform.windows) {
