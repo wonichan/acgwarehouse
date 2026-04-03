@@ -30,6 +30,19 @@ type JobManagerStats struct {
 	IsPaused  bool
 }
 
+// SidecarStatusSnapshot represents a bounded diagnostics snapshot for admin observability.
+type SidecarStatusSnapshot struct {
+	State            string
+	LastProbeAt      time.Time
+	LastProbeResult  string
+	LastErrorSummary string
+}
+
+// SidecarStatusProvider exposes current sidecar diagnostics without leaking runtime internals.
+type SidecarStatusProvider interface {
+	SidecarStatus(ctx context.Context) SidecarStatusSnapshot
+}
+
 // AdminService provides aggregated status and safe operations for the admin dashboard.
 // It orchestrates health checks, task management, and library statistics.
 type AdminService struct {
@@ -39,6 +52,7 @@ type AdminService struct {
 	tagRepo        repository.TagRepository
 	collectionRepo repository.CollectionRepository
 	jobManager     JobManagerControl
+	sidecarStatus  SidecarStatusProvider
 	taskReadSvc    *TaskReadService
 	taskBatchRepo  repository.TaskBatchRepository
 	taskRepo       repository.PlatformTaskRepository
@@ -96,12 +110,21 @@ type QueueOverview struct {
 
 // TaskPlatformOverview is the Phase 13 monitoring contract.
 type TaskPlatformOverview struct {
-	Health  HealthStatus     `json:"health"`
-	Config  ConfigSummary    `json:"config"`
-	Library LibraryStats     `json:"library"`
-	Queue   QueueOverview    `json:"queue"`
-	Batches map[string]int64 `json:"batches"`
-	Tasks   map[string]int64 `json:"tasks"`
+	Health  HealthStatus               `json:"health"`
+	Config  ConfigSummary              `json:"config"`
+	Library LibraryStats               `json:"library"`
+	Queue   QueueOverview              `json:"queue"`
+	Sidecar SidecarDiagnosticsOverview `json:"sidecar"`
+	Batches map[string]int64           `json:"batches"`
+	Tasks   map[string]int64           `json:"tasks"`
+}
+
+// SidecarDiagnosticsOverview is the admin overview contract for sidecar observability.
+type SidecarDiagnosticsOverview struct {
+	State            string `json:"state"`
+	LastProbeAt      string `json:"last_probe_at"`
+	LastProbeResult  string `json:"last_probe_result"`
+	LastErrorSummary string `json:"last_error_summary"`
 }
 
 type RetryBatchResult struct {
@@ -125,6 +148,7 @@ func NewAdminService(
 	var taskReadSvc *TaskReadService
 	var taskBatchRepo repository.TaskBatchRepository
 	var taskRepo repository.PlatformTaskRepository
+	var sidecarStatus SidecarStatusProvider
 	for _, extra := range extras {
 		switch v := extra.(type) {
 		case *TaskReadService:
@@ -133,6 +157,8 @@ func NewAdminService(
 			taskBatchRepo = v
 		case repository.PlatformTaskRepository:
 			taskRepo = v
+		case SidecarStatusProvider:
+			sidecarStatus = v
 		}
 	}
 	return &AdminService{
@@ -142,6 +168,7 @@ func NewAdminService(
 		tagRepo:        tagRepo,
 		collectionRepo: collectionRepo,
 		jobManager:     jobManager,
+		sidecarStatus:  sidecarStatus,
 		taskReadSvc:    taskReadSvc,
 		taskBatchRepo:  taskBatchRepo,
 		taskRepo:       taskRepo,
@@ -214,6 +241,7 @@ func (s *AdminService) GetTaskPlatformOverview(ctx context.Context) (*TaskPlatfo
 			QueueSize:   s.jobManager.QueueSize(),
 			WorkerCount: s.jobManager.GetWorkerCount(),
 		},
+		Sidecar: s.buildSidecarDiagnostics(ctx),
 		Batches: map[string]int64{},
 		Tasks:   map[string]int64{},
 	}
@@ -247,6 +275,37 @@ func (s *AdminService) GetTaskPlatformOverview(ctx context.Context) (*TaskPlatfo
 	}
 
 	return overview, nil
+}
+
+func (s *AdminService) buildSidecarDiagnostics(ctx context.Context) SidecarDiagnosticsOverview {
+	snapshot := SidecarStatusSnapshot{
+		State:            "not_configured",
+		LastProbeAt:      time.Now().UTC(),
+		LastProbeResult:  "unknown",
+		LastErrorSummary: "not configured",
+	}
+	if s.sidecarStatus != nil {
+		snapshot = s.sidecarStatus.SidecarStatus(ctx)
+	}
+
+	if snapshot.State == "" {
+		snapshot.State = "not_configured"
+	}
+	if snapshot.LastProbeResult == "" {
+		snapshot.LastProbeResult = "unknown"
+	}
+
+	lastProbeAt := ""
+	if !snapshot.LastProbeAt.IsZero() {
+		lastProbeAt = snapshot.LastProbeAt.UTC().Format(time.RFC3339)
+	}
+
+	return SidecarDiagnosticsOverview{
+		State:            snapshot.State,
+		LastProbeAt:      lastProbeAt,
+		LastProbeResult:  snapshot.LastProbeResult,
+		LastErrorSummary: snapshot.LastErrorSummary,
+	}
 }
 
 func (s *AdminService) ClearTaskQueue(ctx context.Context) (int, error) {
