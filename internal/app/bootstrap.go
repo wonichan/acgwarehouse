@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/ai"
@@ -13,6 +15,7 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
+	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
@@ -40,6 +43,25 @@ func (a *App) initServices() {
 	a.hashSvc = service.NewHashService()
 	a.duplicateSvc = service.NewDuplicateService(a.imageRepo, a.duplicateRepo, a.hashSvc)
 	a.searchSvc = service.NewSearchService(a.imageRepo, a.tagRepo, a.searchRepo)
+}
+
+func (a *App) initSidecarRuntime() {
+	if a.sidecarRuntime != nil {
+		return
+	}
+	a.sidecarRuntime = sidecar.NewRuntime(sidecar.RuntimeConfig{
+		StartupTimeout: 2 * time.Second,
+		ProbeInterval:  100 * time.Millisecond,
+		CommandFactory: func(context.Context) (sidecar.Process, error) {
+			return nil, errors.New("python sidecar launcher not configured")
+		},
+		Probe: func(context.Context) error {
+			return errors.New("python sidecar probe not configured")
+		},
+		ShutdownProbe: func(context.Context) error {
+			return nil
+		},
+	})
 }
 
 func (a *App) initAutoScheduler(cfg *config.Config) {

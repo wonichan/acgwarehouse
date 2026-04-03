@@ -18,8 +18,24 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/handler"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
+	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 	"github.com/wonichan/acgwarehouse-backend/internal/sqliteutil"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
+)
+
+type sidecarRuntimeLifecycle interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+	State() sidecar.State
+	Status() sidecar.Status
+}
+
+type appSidecarMode string
+
+const (
+	sidecarModeNotConfigured appSidecarMode = "not_configured"
+	sidecarModeReady         appSidecarMode = "ready"
+	sidecarModeDegraded      appSidecarMode = "degraded"
 )
 
 // App represents the application with all its dependencies and lifecycle management.
@@ -58,6 +74,9 @@ type App struct {
 	newAutoScheduler     func(*config.Config) autoSchedulerLifecycle
 	autoSchedulerStarted bool
 	runtimeManifestPath  string
+	sidecarRuntime       sidecarRuntimeLifecycle
+	sidecarMode          appSidecarMode
+	fullyReady           bool
 }
 
 // New creates a new App instance with all dependencies initialized.
@@ -65,6 +84,7 @@ func New(cfgPath string) (*App, error) {
 	app := &App{
 		refillStopCh:     make(chan struct{}),
 		newAutoScheduler: nil,
+		sidecarMode:      sidecarModeNotConfigured,
 	}
 
 	// Load configuration
@@ -93,6 +113,7 @@ func New(cfgPath string) (*App, error) {
 
 	// Initialize services
 	app.initServices()
+	app.initSidecarRuntime()
 	app.initAutoScheduler(app.config)
 
 	// Initialize worker manager
@@ -131,6 +152,9 @@ func (a *App) Run() error {
 	// Start refill loop in background
 	go a.runRefillLoop()
 	a.startAutoScheduler()
+	if err := a.prepareSidecarStartup(context.Background()); err != nil {
+		return err
+	}
 	// Setup HTTP routes
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -211,6 +235,13 @@ func (a *App) Shutdown(ctx context.Context) error {
 			a.jobManager.Stop()
 		}
 
+		if a.sidecarRuntime != nil {
+			if err := a.sidecarRuntime.Stop(ctx); err != nil {
+				shutdownErr = err
+				return
+			}
+		}
+
 		if err := RemoveRuntimeManifest(a.runtimeManifestPath); err != nil {
 			log.Printf("runtime manifest cleanup failed: %v", err)
 		}
@@ -229,6 +260,31 @@ func (a *App) Shutdown(ctx context.Context) error {
 		}
 	})
 	return shutdownErr
+}
+
+func (a *App) prepareSidecarStartup(ctx context.Context) error {
+	if a.sidecarRuntime == nil {
+		a.sidecarMode = sidecarModeNotConfigured
+		a.fullyReady = true
+		return nil
+	}
+
+	if err := a.sidecarRuntime.Start(ctx); err != nil {
+		a.sidecarMode = sidecarModeDegraded
+		a.fullyReady = false
+		log.Printf("sidecar startup degraded: %v", err)
+		return nil
+	}
+
+	if a.sidecarRuntime.State() == sidecar.StateReady {
+		a.sidecarMode = sidecarModeReady
+		a.fullyReady = true
+		return nil
+	}
+
+	a.sidecarMode = sidecarModeDegraded
+	a.fullyReady = false
+	return nil
 }
 
 // runRefillLoop periodically checks for ready jobs and loads them into the queue.
