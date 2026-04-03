@@ -71,31 +71,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DSK-01 | Phase [TBD] | Pending |
-| DSK-02 | Phase [TBD] | Pending |
-| DSK-03 | Phase [TBD] | Pending |
-| DSK-04 | Phase [TBD] | Pending |
-| VIEW-01 | Phase [TBD] | Pending |
-| VIEW-02 | Phase [TBD] | Pending |
-| VIEW-03 | Phase [TBD] | Pending |
-| VIEW-04 | Phase [TBD] | Pending |
-| COMP-01 | Phase [TBD] | Pending |
-| COMP-02 | Phase [TBD] | Pending |
-| COMP-03 | Phase [TBD] | Pending |
-| COMP-04 | Phase [TBD] | Pending |
-| COMP-05 | Phase [TBD] | Pending |
-| COMP-06 | Phase [TBD] | Pending |
-| OPS-01 | Phase [TBD] | Pending |
-| OPS-02 | Phase [TBD] | Pending |
-| OPS-03 | Phase [TBD] | Pending |
-| PERF-01 | Phase [TBD] | Pending |
-| PERF-02 | Phase [TBD] | Pending |
-| PERF-03 | Phase [TBD] | Pending |
+| DSK-01 | Phase 17 | Pending |
+| DSK-02 | Phase 17 | Pending |
+| DSK-03 | Phase 17 | Pending |
+| DSK-04 | Phase 19 | Pending |
+| VIEW-01 | Phase 18 | Pending |
+| VIEW-02 | Phase 18 | Pending |
+| VIEW-03 | Phase 18 | Pending |
+| VIEW-04 | Phase 18 | Pending |
+| COMP-01 | Phase 15 | Pending |
+| COMP-02 | Phase 15 | Pending |
+| COMP-03 | Phase 16 | Pending |
+| COMP-04 | Phase 16 | Pending |
+| COMP-05 | Phase 22 | Pending |
+| COMP-06 | Phase 15 | Pending |
+| OPS-01 | Phase 20 | Pending |
+| OPS-02 | Phase 20 | Pending |
+| OPS-03 | Phase 21 | Pending |
+| PERF-01 | Phase 22 | Pending |
+| PERF-02 | Phase 22 | Pending |
+| PERF-03 | Phase 22 | Pending |
 
 **Coverage:**
 - v4.0 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20 ⚠️
+- Mapped to phases: 20 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-03*
