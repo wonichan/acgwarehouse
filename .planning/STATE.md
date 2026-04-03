@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: 导入后任务平台化
-status: completed
-stopped_at: Milestone v3.0 archived; ready for next milestone planning
-last_updated: "2026-04-03T20:30:00.000Z"
+milestone: v4.0
+milestone_name: Windows Photos 风格重构与计算层拆分
+status: defining_requirements
+stopped_at: Requirements and roadmap definition in progress
+last_updated: "2026-04-03T20:39:59.1166289+08:00"
 last_activity: 2026-04-03
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 15
-  completed_plans: 15
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,15 +21,17 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-04-03)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。  
-**Current focus:** Planning next milestone
+**Current focus:** Defining milestone v4.0 requirements
 
 ## Current Position
 
-Milestone: `v3.0` archived ✅  
-Status: Roadmap / requirements / audit snapshots created; active planning reset for the next milestone  
-Last activity: 2026-04-03 — Archived v3.0 milestone docs and prepared next-milestone handoff
+Milestone: `v4.0` started ◆  
+Phase: Not started (defining requirements)  
+Plan: —  
+Status: Defining requirements  
+Last activity: 2026-04-03 — Started milestone v4.0 planning
 
-Progress: [██████████] 100% (15/15 plans complete) — v3.0 SHIPPED
+Progress: [░░░░░░░░░░] 0% — requirements / roadmap pending
 
 ## Performance Metrics
 
@@ -61,7 +63,8 @@ Most recent milestone-level decisions:
 
 ### Pending Todos
 
-- 定义下一里程碑目标、requirements 与 roadmap（`/gsd-new-milestone`）
+- 定义 v4.0 requirements 与 roadmap（`/gsd-new-milestone`）
+- 确认是否把本轮研究正式写入 `.planning/research/`
 
 ### Blockers / Concerns
 
