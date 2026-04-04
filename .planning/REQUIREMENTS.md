@@ -14,10 +14,10 @@
 
 ### Viewer（查看器体验）
 
-- [ ] **VIEW-01**: 用户可以双击图片在独立查看器窗口中打开图片，而不阻塞主图库
-- [ ] **VIEW-02**: 用户可以在查看器底部通过胶片条快速切换同一组图片
-- [ ] **VIEW-03**: 用户可以在查看器中进行缩放、拖拽和双击放大等基础查看操作
-- [ ] **VIEW-04**: 用户可以在查看器中看到图片元信息（如文件名、分辨率、大小及相关标签）
+- [x] **VIEW-01**: 用户可以双击图片在独立查看器窗口中打开图片，而不阻塞主图库
+- [x] **VIEW-02**: 用户可以在查看器底部通过胶片条快速切换同一组图片
+- [x] **VIEW-03**: 用户可以在查看器中进行缩放、拖拽和双击放大等基础查看操作
+- [x] **VIEW-04**: 用户可以在查看器中看到图片元信息（如文件名、分辨率、大小及相关标签）
 
 ### Compute Sidecar（Python 计算侧车）
 
@@ -75,10 +75,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DSK-02 | Phase 17 | Complete |
 | DSK-03 | Phase 17 | Complete |
 | DSK-04 | Phase 19 | Pending |
-| VIEW-01 | Phase 18 | Pending |
-| VIEW-02 | Phase 18 | Pending |
-| VIEW-03 | Phase 18 | Pending |
-| VIEW-04 | Phase 18 | Pending |
+| VIEW-01 | Phase 18 | Complete |
+| VIEW-02 | Phase 18 | Complete |
+| VIEW-03 | Phase 18 | Complete |
+| VIEW-04 | Phase 18 | Complete |
 | COMP-01 | Phase 15 | Complete |
 | COMP-02 | Phase 15 | Complete |
 | COMP-03 | Phase 16 | Complete |
@@ -99,4 +99,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-05 after Phase 17 completion*
+*Last updated: 2026-04-05 after Phase 18 completion*

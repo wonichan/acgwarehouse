@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 15: Compute Sidecar Infrastructure** - Establish Go ↔ Python process lifecycle and communication foundation (completed 2026-04-03)
 - [x] **Phase 16: Duplicate Detection Migration** - Migrate duplicate detection computation to Python sidecar (completed 2026-04-04)
 - [x] **Phase 17: Desktop Shell Foundation** - Deliver Windows Photos-style toolbar and grid browsing (completed 2026-04-05)
-- [ ] **Phase 18: Independent Viewer & Filmstrip** - Implement non-blocking viewer with filmstrip navigation
+- [x] **Phase 18: Independent Viewer & Filmstrip** - Implement non-blocking viewer with filmstrip navigation (completed 2026-04-05)
 - [ ] **Phase 19: Tag Management** - Enable in-app tag management without legacy entry switching
 - [ ] **Phase 20: Operations Monitoring** - Integrate task monitoring and sidecar diagnostics into desktop UI
 - [ ] **Phase 21: Windows Packaging** - Package Flutter + Go + Python as single distributable bundle
@@ -86,9 +86,9 @@ Plans:
   4. User can view image metadata (filename, resolution, size, tags) in viewer sidebar
 **Plans**: 3 plans
 Plans:
-- [ ] `18-01-PLAN.md` — Establish Windows secondary-window bootstrap, viewer session payloads, and launch coordinator boundaries
-- [ ] `18-02-PLAN.md` — Build the reusable viewer workspace with stage, metadata sidebar, filmstrip, and keyboard contract
-- [ ] `18-03-PLAN.md` — Wire gallery/search double-click launches into real viewer windows and close Phase 18 verification
+- [x] `18-01-PLAN.md` — Establish Windows secondary-window bootstrap, viewer session payloads, and launch coordinator boundaries
+- [x] `18-02-PLAN.md` — Build the reusable viewer workspace with stage, metadata sidebar, filmstrip, and keyboard contract
+- [x] `18-03-PLAN.md` — Wire gallery/search double-click launches into real viewer windows and close Phase 18 verification
 **UI hint**: yes
 
 ### Phase 19: Tag Management
@@ -146,7 +146,7 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 | 15. Compute Sidecar Infrastructure | v4.0 | 3/3 | Complete    | 2026-04-03 |
 | 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete    | 2026-04-04 |
 | 17. Desktop Shell Foundation | v4.0 | 3/3 | Complete    | 2026-04-05 |
- | 18. Independent Viewer & Filmstrip | v4.0 | 1/3 | In progress | - |
+| 18. Independent Viewer & Filmstrip | v4.0 | 3/3 | Complete    | 2026-04-05 |
 | 19. Tag Management | v4.0 | 0/TBD | Not started | - |
 | 20. Operations Monitoring | v4.0 | 0/TBD | Not started | - |
 | 21. Windows Packaging | v4.0 | 0/TBD | Not started | - |
