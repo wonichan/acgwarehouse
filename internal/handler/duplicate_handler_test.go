@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -11,351 +12,250 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
+	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 )
 
-func setupDuplicateHandlerTest(t *testing.T) (*gin.Engine, *DuplicateHandler, *sql.DB) {
+type fakeProcess struct{}
+
+func (fakeProcess) Kill() error { return nil }
+func (fakeProcess) Wait() error { return nil }
+
+func createReadyRuntime(t *testing.T) *sidecar.Runtime {
+	t.Helper()
+	runtime := sidecar.NewRuntime(sidecar.RuntimeConfig{
+		StartupTimeout: 200 * time.Millisecond,
+		ProbeInterval:  10 * time.Millisecond,
+		CommandFactory: func(context.Context) (sidecar.Process, error) {
+			return fakeProcess{}, nil
+		},
+		Probe: func(context.Context) error { return nil },
+		ShutdownProbe: func(context.Context) error {
+			return nil
+		},
+	})
+	if err := runtime.Start(context.Background()); err != nil {
+		t.Fatalf("runtime.Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = runtime.Stop(context.Background()) })
+	return runtime
+}
+
+func setupDuplicateHandlerTest(t *testing.T, runtime *sidecar.Runtime, sidecarServerURL string) (*gin.Engine, *sql.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	// 创建临时数据库
 	tmpFile, err := os.CreateTemp("", "duplicate_handler_test_*.db")
 	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
+		t.Fatalf("create temp db: %v", err)
 	}
 	tmpPath := tmpFile.Name()
-	tmpFile.Close()
-	t.Cleanup(func() { os.Remove(tmpPath) })
+	_ = tmpFile.Close()
+	t.Cleanup(func() { _ = os.Remove(tmpPath) })
 
 	db, err := sql.Open("sqlite3", tmpPath)
 	if err != nil {
-		t.Fatalf("Failed to open database: %v", err)
+		t.Fatalf("open db: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 
 	if err := repository.EnsureScanSchema(db); err != nil {
-		t.Fatalf("Failed to ensure schema: %v", err)
+		t.Fatalf("ensure schema: %v", err)
 	}
 
-	// 创建服务
-	imageRepo := repository.NewImageRepository(db)
-	duplicateRepo := repository.NewDuplicateRepository(db)
-	hashService := service.NewHashService()
-	duplicateService := service.NewDuplicateService(imageRepo, duplicateRepo, hashService)
-
-	// 创建 handler
-	handler := NewDuplicateHandler(duplicateService)
-
-	// 创建路由
-	r := gin.New()
-	return r, handler, db
-}
-
-func insertTestImagesForHandler(t *testing.T, db *sql.DB) {
-	t.Helper()
 	now := time.Now()
-
-	images := []struct {
-		path  string
-		pHash int64
-	}{
-		{"/test/a.jpg", 0x1234567890ABCDEF},
-		{"/test/b.jpg", 0x1234567890ABCDEF},
-		{"/test/c.jpg", 0x1234567890ABCDEF + 1},
-	}
-
-	for _, img := range images {
+	for i := 0; i < 3; i++ {
 		_, err := db.Exec(`
-			INSERT INTO images (path, filename, source_root, file_size, width, height, format, phash, thumbnail_small_url, thumbnail_large_url, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO images (path, filename, source_root, file_size, width, height, format, phash, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
-			img.path,
-			img.path[len(img.path)-5:],
+			"/test/img"+string(rune('0'+i))+".jpg",
+			"img.jpg",
 			"/test",
-			1024,
-			100,
-			100,
+			1024+int64(i),
+			100+i,
+			120+i,
 			"jpg",
-			img.pHash,
-			"https://example.com/thumb-small.jpg",
-			"https://example.com/thumb-large.jpg",
+			int64(0),
 			now,
 			now,
 		)
 		if err != nil {
-			t.Fatalf("Failed to insert test image: %v", err)
+			t.Fatalf("insert image: %v", err)
 		}
 	}
-}
 
-func TestDuplicateHandler_ListDuplicates_IncludesThumbnailURL(t *testing.T) {
-	r, handler, db := setupDuplicateHandlerTest(t)
-	insertTestImagesForHandler(t, db)
-
-	duplicateRepo := repository.NewDuplicateRepository(db)
 	imageRepo := repository.NewImageRepository(db)
-	hashService := service.NewHashService()
-	duplicateService := service.NewDuplicateService(imageRepo, duplicateRepo, hashService)
-	_, err := duplicateService.DetectDuplicates(nil, service.DetectOptions{Threshold: 10})
-	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
-	}
+	duplicateRepo := repository.NewDuplicateRepository(db)
+	duplicateSvc := service.NewDuplicateService(imageRepo, duplicateRepo, sidecar.NewSidecarClient(sidecarServerURL), runtime)
+	h := NewDuplicateHandler(duplicateSvc, runtime)
 
-	r.GET("/api/v1/duplicates", handler.ListDuplicates)
+	r := gin.New()
+	r.POST("/api/v1/duplicates/detect", h.DetectDuplicates)
+	r.GET("/api/v1/duplicates", h.ListDuplicates)
+	r.GET("/api/v1/duplicates/:id", h.GetDuplicate)
+	r.DELETE("/api/v1/duplicates/:id", h.DeleteDuplicate)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/duplicates?limit=10&offset=0", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
-	}
-
-	var resp map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("Failed to parse response: %v", err)
-	}
-
-	groups, ok := resp["groups"].([]any)
-	if !ok || len(groups) == 0 {
-		t.Fatalf("Expected non-empty groups array, got %#v", resp["groups"])
-	}
-
-	firstGroup, ok := groups[0].(map[string]any)
-	if !ok {
-		t.Fatalf("Expected first group object, got %#v", groups[0])
-	}
-
-	images, ok := firstGroup["images"].([]any)
-	if !ok || len(images) == 0 {
-		t.Fatalf("Expected non-empty images array, got %#v", firstGroup["images"])
-	}
-
-	firstImage, ok := images[0].(map[string]any)
-	if !ok {
-		t.Fatalf("Expected first image object, got %#v", images[0])
-	}
-
-	thumbnailURL, ok := firstImage["thumbnail_small_url"].(string)
-	if !ok || thumbnailURL == "" {
-		t.Fatalf("Expected thumbnail_small_url in duplicate image payload, got %#v", firstImage["thumbnail_small_url"])
-	}
+	return r, db
 }
 
-func TestDuplicateHandler_DetectDuplicates(t *testing.T) {
-	r, handler, db := setupDuplicateHandlerTest(t)
-	insertTestImagesForHandler(t, db)
+func TestDuplicateHandler_DetectDuplicates_SidecarUnavailable(t *testing.T) {
+	mockSidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "never-used", "status": "pending"})
+	}))
+	defer mockSidecar.Close()
 
-	// 注册路由
-	r.POST("/api/v1/duplicates/detect", handler.DetectDuplicates)
+	notReadyRuntime := sidecar.NewRuntime(sidecar.RuntimeConfig{})
+	r, _ := setupDuplicateHandlerTest(t, notReadyRuntime, mockSidecar.URL)
 
-	// Test 1: POST /api/v1/duplicates/detect 触发检测并返回检测状态
-	body := bytes.NewBufferString(`{"threshold": 10}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/duplicates/detect", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/duplicates/detect", bytes.NewBufferString(`{"threshold":40}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503, body=%s", w.Code, w.Body.String())
 	}
-
-	var resp DetectResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("Failed to parse response: %v", err)
-	}
-
-	if resp.Message != "Detection completed" {
-		t.Errorf("Expected message 'Detection completed', got '%s'", resp.Message)
-	}
-
-	t.Logf("Detection response: %+v", resp)
-}
-
-func TestDuplicateHandler_DetectDuplicates_DefaultThreshold(t *testing.T) {
-	r, handler, db := setupDuplicateHandlerTest(t)
-	insertTestImagesForHandler(t, db)
-
-	r.POST("/api/v1/duplicates/detect", handler.DetectDuplicates)
-
-	// 不发送请求体，应该使用默认阈值
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/duplicates/detect", nil)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("计算服务不可用")) {
+		t.Fatalf("body = %s, want contains 计算服务不可用", w.Body.String())
 	}
 }
 
-func TestDuplicateHandler_ListDuplicates(t *testing.T) {
-	r, handler, db := setupDuplicateHandlerTest(t)
-	insertTestImagesForHandler(t, db)
-
-	// 先执行检测
-	duplicateRepo := repository.NewDuplicateRepository(db)
-	imageRepo := repository.NewImageRepository(db)
-	hashService := service.NewHashService()
-	duplicateService := service.NewDuplicateService(imageRepo, duplicateRepo, hashService)
-	_, err := duplicateService.DetectDuplicates(nil, service.DetectOptions{Threshold: 10})
-	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
-	}
-
-	// 注册路由
-	r.GET("/api/v1/duplicates", handler.ListDuplicates)
-
-	// Test 2: GET /api/v1/duplicates 返回重复组列表
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/duplicates?limit=10&offset=0", nil)
-	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
-	}
-
-	var resp ListResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("Failed to parse response: %v", err)
-	}
-
-	t.Logf("List response: total=%d, groups=%d", resp.Total, len(resp.Groups))
-}
-
-func TestDuplicateHandler_GetDuplicate(t *testing.T) {
-	r, handler, db := setupDuplicateHandlerTest(t)
-	insertTestImagesForHandler(t, db)
-
-	// 先执行检测
-	duplicateRepo := repository.NewDuplicateRepository(db)
-	imageRepo := repository.NewImageRepository(db)
-	hashService := service.NewHashService()
-	duplicateService := service.NewDuplicateService(imageRepo, duplicateRepo, hashService)
-	_, err := duplicateService.DetectDuplicates(nil, service.DetectOptions{Threshold: 10})
-	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
-	}
-
-	// 获取组 ID
-	groups, _, err := duplicateService.GetDuplicateGroups(10, 0)
-	if err != nil || len(groups) == 0 {
-		t.Fatalf("No groups found: %v", err)
-	}
-	groupID := groups[0].Group.ID
-
-	// 注册路由
-	r.GET("/api/v1/duplicates/:id", handler.GetDuplicate)
-
-	// Test 3: GET /api/v1/duplicates/:id 返回单个重复组详情
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/duplicates/1", nil)
-	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
-	}
-
-	var resp domain.DuplicateGroupWithImages
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("Failed to parse response: %v", err)
-	}
-
-	t.Logf("Get response: group_id=%d, images=%d", resp.Group.ID, len(resp.Images))
-
-	_ = groupID
-}
-
-func TestDuplicateHandler_GetDuplicate_NotFound(t *testing.T) {
-	r, handler, _ := setupDuplicateHandlerTest(t)
-
-	r.GET("/api/v1/duplicates/:id", handler.GetDuplicate)
-
-	// 请求不存在的组
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/duplicates/99999", nil)
-	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusNotFound {
-		t.Errorf("Expected status 404, got %d", w.Code)
-	}
-}
-
-func TestDuplicateHandler_DeleteDuplicate(t *testing.T) {
-	r, handler, db := setupDuplicateHandlerTest(t)
-	insertTestImagesForHandler(t, db)
-
-	// 先执行检测
-	duplicateRepo := repository.NewDuplicateRepository(db)
-	imageRepo := repository.NewImageRepository(db)
-	hashService := service.NewHashService()
-	duplicateService := service.NewDuplicateService(imageRepo, duplicateRepo, hashService)
-	_, err := duplicateService.DetectDuplicates(nil, service.DetectOptions{Threshold: 10})
-	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
-	}
-
-	// 获取组 ID
-	groups, _, err := duplicateService.GetDuplicateGroups(10, 0)
-	if err != nil || len(groups) == 0 {
-		t.Fatalf("No groups found: %v", err)
-	}
-	groupID := groups[0].Group.ID
-
-	// 注册路由
-	r.DELETE("/api/v1/duplicates/:id", handler.DeleteDuplicate)
-
-	// Test 4: DELETE /api/v1/duplicates/:id 删除重复组记录
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/duplicates/1", nil)
-	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
-	}
-
-	// 验证已删除
-	_, err = duplicateService.GetDuplicateGroup(groupID)
-	if err == nil {
-		t.Error("Expected error when getting deleted group")
-	}
-}
-
-func TestDuplicateHandler_ThresholdValidation(t *testing.T) {
-	r, handler, db := setupDuplicateHandlerTest(t)
-	insertTestImagesForHandler(t, db)
-
-	r.POST("/api/v1/duplicates/detect", handler.DetectDuplicates)
-
-	// Test 5: 查询参数 threshold 可设置检测阈值
-	tests := []struct {
-		threshold int
-		expected  int
-	}{
-		{0, http.StatusOK},   // 使用默认值
-		{10, http.StatusOK},  // 正常值
-		{64, http.StatusOK},  // 最大值
-		{100, http.StatusOK}, // 超过最大值会被截断到 64
-	}
-
-	for _, tt := range tests {
-		body := bytes.NewBufferString(`{"threshold": ` + string(rune('0'+tt.threshold)) + `}`)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/duplicates/detect", body)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-
-		r.ServeHTTP(w, req)
-
-		if w.Code != tt.expected {
-			t.Errorf("Threshold %d: expected status %d, got %d", tt.threshold, tt.expected, w.Code)
+func TestDuplicateHandler_DetectDuplicates_ReadyWithThresholdRules(t *testing.T) {
+	var capturedThreshold int
+	mockSidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/duplicates/detect":
+			var req struct {
+				Threshold int `json:"threshold"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			capturedThreshold = req.Threshold
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-handler", "status": "pending", "progress": 0})
+		case "/compute/duplicates/tasks/task-handler":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-handler", "status": "completed", "progress": 100})
+		case "/compute/duplicates/tasks/task-handler/result":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"groups": []map[string]any{{
+					"group_id":       0,
+					"recommended_id": 1,
+					"members": []map[string]any{{
+						"image_id":               1,
+						"sha256":                 "sha",
+						"phash":                  "phashhex",
+						"distance":               0,
+						"is_recommended":         true,
+						"recommendation_score":   88.8,
+						"recommendation_reasons": []map[string]any{{"factor": "resolution", "value": "100x120", "score": 10.0, "weight": 0.5}},
+					}},
+				}},
+				"total_images":        3,
+				"total_groups":        1,
+				"skipped_images":      []any{},
+				"computation_time_ms": 10,
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
 		}
+	}))
+	defer mockSidecar.Close()
+
+	readyRuntime := createReadyRuntime(t)
+	r, _ := setupDuplicateHandlerTest(t, readyRuntime, mockSidecar.URL)
+
+	// default threshold -> 40
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/duplicates/detect", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	if capturedThreshold != 40 {
+		t.Fatalf("default threshold = %d, want 40", capturedThreshold)
+	}
+
+	// max threshold -> 256
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/duplicates/detect", bytes.NewBufferString(`{"threshold":999}`))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w2.Code, w2.Body.String())
+	}
+	if capturedThreshold != 256 {
+		t.Fatalf("max threshold = %d, want 256", capturedThreshold)
+	}
+}
+
+func TestDuplicateHandler_ListGetDeleteAndStructuredRationale(t *testing.T) {
+	mockSidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/duplicates/detect":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-list", "status": "pending", "progress": 0})
+		case "/compute/duplicates/tasks/task-list":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-list", "status": "completed", "progress": 100})
+		case "/compute/duplicates/tasks/task-list/result":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"groups": []map[string]any{{
+					"group_id":       0,
+					"recommended_id": 1,
+					"members": []map[string]any{
+						{"image_id": 1, "sha256": "sha1", "phash": "phash1", "distance": 0, "is_recommended": true, "recommendation_score": 90.0, "recommendation_reasons": []map[string]any{{"factor": "resolution", "value": "100x120", "score": 10.0, "weight": 0.5}}},
+						{"image_id": 2, "sha256": "sha2", "phash": "phash2", "distance": 3, "is_recommended": false, "recommendation_score": 70.0, "recommendation_reasons": []map[string]any{{"factor": "size", "value": "1025", "score": 8.0, "weight": 0.3}}},
+					},
+				}},
+				"total_images":        3,
+				"total_groups":        1,
+				"skipped_images":      []any{},
+				"computation_time_ms": 10,
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer mockSidecar.Close()
+
+	readyRuntime := createReadyRuntime(t)
+	r, _ := setupDuplicateHandlerTest(t, readyRuntime, mockSidecar.URL)
+
+	wDetect := httptest.NewRecorder()
+	reqDetect := httptest.NewRequest(http.MethodPost, "/api/v1/duplicates/detect", bytes.NewBufferString(`{"threshold":40}`))
+	reqDetect.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(wDetect, reqDetect)
+	if wDetect.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, body=%s", wDetect.Code, wDetect.Body.String())
+	}
+
+	wList := httptest.NewRecorder()
+	r.ServeHTTP(wList, httptest.NewRequest(http.MethodGet, "/api/v1/duplicates", nil))
+	if wList.Code != http.StatusOK {
+		t.Fatalf("list status = %d, body=%s", wList.Code, wList.Body.String())
+	}
+	var listResp map[string]any
+	if err := json.Unmarshal(wList.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal list: %v", err)
+	}
+	groups := listResp["groups"].([]any)
+	firstGroup := groups[0].(map[string]any)
+	firstImage := firstGroup["images"].([]any)[0].(map[string]any)
+	if _, ok := firstImage["recommendation_rationale"].([]any); !ok {
+		t.Fatalf("recommendation_rationale should be JSON array, got %#v", firstImage["recommendation_rationale"])
+	}
+
+	wGet := httptest.NewRecorder()
+	r.ServeHTTP(wGet, httptest.NewRequest(http.MethodGet, "/api/v1/duplicates/1", nil))
+	if wGet.Code != http.StatusOK {
+		t.Fatalf("get status = %d, body=%s", wGet.Code, wGet.Body.String())
+	}
+
+	wDelete := httptest.NewRecorder()
+	r.ServeHTTP(wDelete, httptest.NewRequest(http.MethodDelete, "/api/v1/duplicates/1", nil))
+	if wDelete.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, body=%s", wDelete.Code, wDelete.Body.String())
 	}
 }
