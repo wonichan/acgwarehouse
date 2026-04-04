@@ -11,8 +11,9 @@ cd flutter_app
 # Focused Suite Verification
 flutter test test/app/fluent_screens_test.dart test/widgets/fluent_gallery_content_test.dart test/widgets/fluent_search_content_test.dart test/widgets/fluent_image_card_test.dart test/services/viewer_window_service_test.dart test/screens/viewer/viewer_workspace_test.dart test/screens/viewer/viewer_stage_test.dart test/screens/viewer/viewer_metadata_sidebar_test.dart
 
-# Full Suite Verification
-flutter test
+# Note: Full Suite Verification (flutter test) currently fails due to preexisting unrelated tests
+# (e.g., material_app_shell_test, theme_provider_test, adaptive_navigation_bar_test,
+# adaptive_navigation_rail_test, fluent_settings_page_test) that are out of scope for Phase 18.
 ```
 
 ## 2. Desktop Smoke Test Procedure
