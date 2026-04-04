@@ -118,6 +118,7 @@ class _DesktopShellTopBarState extends State<_DesktopShellTopBar> {
     if (query.isEmpty) return;
 
     await context.read<SearchProvider>().search(query: query);
+    if (!mounted) return;
     context.read<NavigationProvider>().setSelectedIndex(
       NavigationProvider.searchIndex,
     );

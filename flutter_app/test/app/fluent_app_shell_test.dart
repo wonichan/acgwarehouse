@@ -78,6 +78,7 @@ void main() {
 
       expect(find.byType(FluentGalleryPage), findsOneWidget);
       expect(find.text('Search images and tags'), findsOneWidget);
+      expect(find.byIcon(fluent.FluentIcons.filter), findsNothing);
 
       navProvider.setSelectedIndex(1);
       await tester.pumpAndSettle();
