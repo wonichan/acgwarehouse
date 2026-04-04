@@ -18,12 +18,15 @@ import 'services/search_service.dart';
 import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
 import 'app/material_app_shell.dart';
+import 'app/viewer_window_app.dart';
+import 'services/viewer_window_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/window_manager.dart';
 
-void main() async {
+void main(List<String> args) async {
   // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
+  final viewerBootstrap = ViewerWindowBootstrapData.fromCommandLine(args);
 
   await RuntimeManifestLoader().load(
     isDevelopmentMode: !kReleaseMode,
@@ -32,7 +35,12 @@ void main() async {
 
   // Initialize window manager for Windows desktop
   if (defaultTargetPlatform == TargetPlatform.windows) {
-    await AppWindowManager.ensureInitialized();
+    await AppWindowManager.ensureInitialized(policy: viewerBootstrap?.policy);
+  }
+
+  if (viewerBootstrap != null) {
+    runApp(ViewerWindowApp(bootstrapData: viewerBootstrap));
+    return;
   }
 
   runApp(const MyApp());

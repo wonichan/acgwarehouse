@@ -5,6 +5,22 @@
 #include "flutter_window.h"
 #include "utils.h"
 
+namespace {
+
+bool IsViewerWindowLaunch(const std::vector<std::string>& arguments) {
+  return !arguments.empty() && arguments.front() == "multi_window";
+}
+
+std::wstring WindowTitleForArguments(
+    const std::vector<std::string>& arguments) {
+  if (IsViewerWindowLaunch(arguments)) {
+    return L"ACGWarehouse Viewer";
+  }
+  return L"ACGWarehouse";
+}
+
+}  // namespace
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   // Attach to console when present (e.g., 'flutter run') or create a
@@ -22,12 +38,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
 
+  const std::wstring window_title =
+      WindowTitleForArguments(command_line_arguments);
+
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"gallery", origin, size)) {
+  if (!window.Create(window_title, origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
