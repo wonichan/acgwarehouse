@@ -6,6 +6,7 @@ import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/widgets/fluent_gallery_content.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 class _TrackingImageListProvider extends ImageListProvider {
   _TrackingImageListProvider({
@@ -17,6 +18,7 @@ class _TrackingImageListProvider extends ImageListProvider {
   final List<ImageModel> _initialImages;
   final bool initialHasMore;
   int loadImagesCallCount = 0;
+  ViewMode forcedViewMode = ViewMode.grid;
 
   @override
   List<ImageModel> get images => _initialImages;
@@ -26,6 +28,9 @@ class _TrackingImageListProvider extends ImageListProvider {
 
   @override
   bool get hasMore => initialHasMore;
+
+  @override
+  ViewMode get viewMode => forcedViewMode;
 
   @override
   Future<void> loadImages({bool refresh = false}) async {
@@ -76,4 +81,31 @@ void main() {
       expect(provider.loadImagesCallCount, 1);
     },
   );
+
+  testWidgets('uses grid as default rendering path', (tester) async {
+    final provider = _TrackingImageListProvider(
+      initialImages: List.generate(8, (index) => buildImage(index + 1)),
+      initialHasMore: false,
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ImageListProvider>.value(
+        value: provider,
+        child: const fluent.FluentApp(
+          home: SizedBox.expand(child: FluentGalleryContent()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(provider.viewMode, ViewMode.grid);
+    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byType(MasonryGridView), findsNothing);
+
+    final gridView = tester.widget<GridView>(find.byType(GridView));
+    final gridDelegate =
+        gridView.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
+    expect(gridDelegate.maxCrossAxisExtent, 220);
+    expect(gridDelegate.childAspectRatio, 1);
+  });
 }
