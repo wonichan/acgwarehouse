@@ -358,6 +358,7 @@ func (m *mockBackfillImageRepo) CountBackfillSkippedWithActiveTask(_ context.Con
 func (m *mockBackfillImageRepo) CountBackfillHitCount(_ context.Context, _ repository.BackfillCandidateFilter) (int64, error) {
 	return m.hitCount, m.err
 }
+func (m *mockBackfillImageRepo) UpdateImagePHashHex(_ int64, _ string) error { return nil }
 func (m *mockBackfillImageRepo) UpdateThumbnails(_ int64, _, _ string) error { return nil }
 func (m *mockBackfillImageRepo) Count() (int64, error)                       { return 0, nil }
 func (m *mockBackfillImageRepo) Delete(_ int64) error                        { return nil }
