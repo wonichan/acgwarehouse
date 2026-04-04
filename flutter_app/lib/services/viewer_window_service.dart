@@ -14,6 +14,46 @@ abstract class ViewerWindowAdapter {
   Future<void> saveWindowState(String windowId);
 }
 
+class ViewerWindowLaunchPayload {
+  final String logicalWindowId;
+  final String title;
+  final ViewerSession session;
+
+  const ViewerWindowLaunchPayload({
+    required this.logicalWindowId,
+    required this.title,
+    required this.session,
+  });
+
+  factory ViewerWindowLaunchPayload.fromJson(Map<String, dynamic> json) {
+    return ViewerWindowLaunchPayload(
+      logicalWindowId: json['logical_window_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      session: ViewerSession.fromJson(json['session'] as Map<String, dynamic>),
+    );
+  }
+
+  static ViewerWindowLaunchPayload? fromEncodedJson(String raw) {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) {
+      return null;
+    }
+    if (decoded['kind'] != 'viewer-window') {
+      return null;
+    }
+    return ViewerWindowLaunchPayload.fromJson(decoded);
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'kind': 'viewer-window',
+      'logical_window_id': logicalWindowId,
+      'title': title,
+      'session': session.toJson(),
+    };
+  }
+}
+
 class ViewerWindowLaunchRequest {
   final String windowId;
   final String title;
@@ -28,12 +68,11 @@ class ViewerWindowLaunchRequest {
   });
 
   Map<String, dynamic> get arguments {
-    return {
-      'kind': 'viewer-window',
-      'logical_window_id': windowId,
-      'title': title,
-      'session': session.toJson(),
-    };
+    return ViewerWindowLaunchPayload(
+      logicalWindowId: windowId,
+      title: title,
+      session: session,
+    ).toJson();
   }
 }
 
@@ -58,20 +97,15 @@ class ViewerWindowBootstrapData {
       return null;
     }
 
-    final decoded = jsonDecode(arguments[2]);
-    if (decoded is! Map<String, dynamic>) {
-      return null;
-    }
-    if (decoded['kind'] != 'viewer-window') {
+    final payload = ViewerWindowLaunchPayload.fromEncodedJson(arguments[2]);
+    if (payload == null) {
       return null;
     }
 
-    final session = ViewerSession.fromJson(
-      decoded['session'] as Map<String, dynamic>,
-    );
-    final title =
-        decoded['title'] as String? ??
-        buildViewerWindowTitle(session.selectedItem.filename);
+    final session = payload.session;
+    final title = payload.title.isEmpty
+        ? buildViewerWindowTitle(session.selectedItem.filename)
+        : payload.title;
 
     return ViewerWindowBootstrapData(
       windowId: windowId,
