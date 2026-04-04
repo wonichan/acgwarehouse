@@ -115,14 +115,15 @@ Each task was committed atomically:
 
 ## Issues Encountered
 - The refactor extraction briefly assumed all bootstrap payloads contained `logical_window_id` and `title`; restored fallback parsing so RED fixture payloads and future payload evolution remain compatible.
+- Full `flutter test` is still blocked by unrelated pre-existing failures in `flutter_app/test/app/material_app_shell_test.dart`, `flutter_app/test/widgets/adaptive_navigation_bar_test.dart`, `flutter_app/test/widgets/adaptive_navigation_rail_test.dart`, `flutter_app/test/widgets/fluent_settings_page_test.dart`, and `flutter_app/test/providers/theme_provider_test.dart`.
 
 ## User Setup Required
 
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- 18-01 infrastructure is in place and verified.
-- Ready for 18-02 reusable viewer workspace work on top of real spawned-window bootstrap.
+- 18-01 infrastructure is in place and targeted viewer-host verification passed.
+- 18-02 can build on the spawned-window bootstrap once the unrelated full-suite Flutter test failures are handled or explicitly waived.
 
 ---
 *Phase: 18-independent-viewer-filmstrip*

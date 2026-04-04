@@ -91,7 +91,7 @@ Most recent milestone-level decisions:
 
 ### Blockers / Concerns
 
-- None currently.
+- `flutter_app/flutter test` still fails in unrelated pre-existing suites (`material_app_shell_test.dart`, `adaptive_navigation_bar_test.dart`, `adaptive_navigation_rail_test.dart`, `fluent_settings_page_test.dart`, `theme_provider_test.dart`). Phase 18-01 targeted viewer tests pass, but full-suite verification remains blocked outside current plan scope.
 
 ### Research Summary
 
