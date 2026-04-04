@@ -115,6 +115,65 @@ void main() {
         expect(adapter.launches.last.title, 'ACGWarehouse Viewer — beta.png');
       },
     );
+
+    test(
+      'encodes viewer-window bootstrap payload for spawned windows',
+      () async {
+        final adapter = FakeViewerWindowAdapter();
+        final service = ViewerWindowService(adapter: adapter);
+        final session = ViewerSession(
+          source: ViewerSessionSource.search,
+          items: const [
+            ViewerSessionItem(
+              imageId: 9,
+              path: 'C:/images/launch-target.png',
+              filename: 'launch-target.png',
+              sourceRoot: 'C:/images',
+              fileSize: 2048,
+              width: 800,
+              height: 600,
+              format: 'png',
+              thumbnailSmallUrl: '/thumbs/launch-target-small.jpg',
+              thumbnailLargeUrl: '/thumbs/launch-target.jpg',
+              createdAtIso8601: '2026-04-05T00:00:00.000Z',
+              updatedAtIso8601: '2026-04-05T00:00:00.000Z',
+            ),
+          ],
+          initialSelectedIndex: 0,
+        );
+
+        await service.openSession(session);
+
+        final payload = adapter.launches.single.arguments;
+        expect(payload['kind'], 'viewer-window');
+        expect(payload['session']['source'], 'search');
+        expect(payload['session']['items'][0]['filename'], 'launch-target.png');
+      },
+    );
+
+    test('parses viewer-window bootstrap arguments for secondary startup', () {
+      final data = ViewerWindowBootstrapData.fromCommandLine([
+        'multi_window',
+        '7',
+        '{"kind":"viewer-window","session":{"source":"gallery","items":[{"image_id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","thumbnail_small_url":"/thumbs/alpha-small.jpg","thumbnail_large_url":"/thumbs/alpha.jpg","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"initial_selected_index":0}}',
+      ]);
+
+      expect(data, isNotNull);
+      expect(data!.windowId, 7);
+      expect(data.session.selectedItem.filename, 'alpha.png');
+      expect(data.policy.title, 'ACGWarehouse Viewer — alpha.png');
+    });
+
+    test(
+      'keeps main-shell startup path when viewer bootstrap args are absent',
+      () {
+        expect(ViewerWindowBootstrapData.fromCommandLine(const []), isNull);
+        expect(
+          ViewerWindowBootstrapData.fromCommandLine(const ['main']),
+          isNull,
+        );
+      },
+    );
   });
 }
 
