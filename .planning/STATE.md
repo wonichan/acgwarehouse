@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
-status: verifying
-stopped_at: Completed 17-03-PLAN.md
-last_updated: "2026-04-05T06:35:00.000Z"
-last_activity: 2026-04-05 -- Phase 17 Plan 03 completed
+status: ready
+stopped_at: Phase 17 completed and verified
+last_updated: "2026-04-05T07:30:00.000Z"
+last_activity: 2026-04-05 -- Phase 17 verified and closed
 progress:
   total_phases: 8
   completed_phases: 3
@@ -18,18 +18,18 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-04-04)
+See: `.planning/PROJECT.md` (updated 2026-04-05)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。  
-**Current focus:** Phase 17 — desktop-shell-foundation
+**Current focus:** Phase 18 — independent-viewer-&-filmstrip
 
 ## Current Position
 
 Milestone: `v4.0` in progress ◆  
-Phase: 17 (desktop-shell-foundation) — EXECUTING
-Plan: 3 of 3
-Status: Phase 17 complete — ready for verification
-Last activity: 2026-04-05 -- Phase 17 Plan 03 completed
+Phase: 18 (independent-viewer-&-filmstrip) — NOT STARTED
+Plan: Not started
+Status: Phase 17 complete — ready for transition
+Last activity: 2026-04-05 -- Phase 17 verified and closed
 
 Progress: [██████████] 9/9 plans (100%)
 
@@ -80,6 +80,7 @@ Most recent milestone-level decisions:
 - [Phase 17-02]: Gallery page now uses a persistent workspace layout (content + right filter panel) instead of dialog-primary filtering.
 - [Phase 17-02]: Right panel filtering is immediate and provider-driven, including untagged-only toggle semantics.
 - [Phase 17-02]: Grid path now enforces explicit square-tile intent via constrained delegate settings.
+- [Phase 17-03]: Desktop import action now targets a real product-facing `/api/v1/images/scan` path with lightweight queued/failure feedback.
 
 ### Pending Todos
 
@@ -100,8 +101,8 @@ Research completed: `.planning/research/SUMMARY.md` (HIGH confidence)
 ## Session Continuity
 
 Last session: 2026-04-04T17:16:52.494Z
-Stopped at: Completed 17-03-PLAN.md
-Resume file: None
+Stopped at: Phase 17 completed and verified
+Resume file: .planning/phases/17-desktop-shell-foundation/17-VERIFICATION.md
 
 ---
-*State updated: 2026-04-05 after Phase 17 Plan 03 completion*
+*State updated: 2026-04-05 after Phase 17 verification and completion*
