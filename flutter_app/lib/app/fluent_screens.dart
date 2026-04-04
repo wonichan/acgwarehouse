@@ -9,6 +9,7 @@ import '../providers/image_provider.dart';
 import '../providers/search_provider.dart';
 import '../providers/tag_provider.dart';
 import '../widgets/fluent_gallery_content.dart';
+import '../widgets/gallery_filter_panel.dart';
 import '../widgets/fluent_search_content.dart';
 import '../models/image.dart';
 
@@ -57,11 +58,23 @@ class FluentGalleryPage extends StatelessWidget {
               ],
             ),
           ),
-          content: FluentGalleryContent(
-            onImageTap: (image) => _showImageDetail(context, image),
-          ),
+          content: _buildGalleryWorkspace(context),
         );
       },
+    );
+  }
+
+  Widget _buildGalleryWorkspace(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: FluentGalleryContent(
+            onImageTap: (image) => _showImageDetail(context, image),
+          ),
+        ),
+        const SizedBox(width: 1, child: ColoredBox(color: Color(0x22000000))),
+        const GalleryFilterPanel(),
+      ],
     );
   }
 
