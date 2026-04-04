@@ -13,6 +13,7 @@ import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/providers/theme_provider.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/services/duplicate_service.dart';
+import 'package:gallery/services/import_service.dart';
 import 'package:gallery/services/search_service.dart';
 import 'package:gallery/services/tag_service.dart';
 import 'package:http/http.dart' as http;
@@ -36,12 +37,23 @@ class _RecordingSearchProvider extends SearchProvider {
   }
 }
 
+class _FakeImportService extends ImportService {
+  final Future<ImportTriggerResult> Function() trigger;
+
+  _FakeImportService({required this.trigger});
+
+  @override
+  Future<ImportTriggerResult> triggerImport() {
+    return trigger();
+  }
+}
+
 void main() {
   group('Desktop shell top bar contract', () {
     late NavigationProvider navProvider;
     late _RecordingSearchProvider searchProvider;
 
-    Widget createShell() {
+    Widget createShell({ImportService? importService}) {
       final mockClient = MockClient((request) async {
         final path = request.url.path;
         if (path.endsWith('/api/v1/images')) {
@@ -93,7 +105,9 @@ void main() {
             create: (_) => ConfigProvider(),
           ),
         ],
-        child: const fluent.FluentApp(home: FluentAppShell()),
+        child: fluent.FluentApp(
+          home: FluentAppShell(importService: importService),
+        ),
       );
     }
 
@@ -141,6 +155,41 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(navProvider.selectedIndex, NavigationProvider.settingsIndex);
+    });
+
+    testWidgets('import action shows queued feedback on success', (
+      tester,
+    ) async {
+      final importService = _FakeImportService(
+        trigger: () async =>
+            const ImportTriggerResult(status: 'queued', jobId: 101),
+      );
+
+      await tester.pumpWidget(createShell(importService: importService));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Import Library'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Library import queued'), findsOneWidget);
+    });
+
+    testWidgets('import action shows failure feedback on error', (
+      tester,
+    ) async {
+      final importService = _FakeImportService(
+        trigger: () async {
+          throw ImportTriggerException('failed to queue import', 500);
+        },
+      );
+
+      await tester.pumpWidget(createShell(importService: importService));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Import Library'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Library import could not start'), findsOneWidget);
     });
   });
 }

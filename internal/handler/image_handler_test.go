@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
+	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
@@ -611,4 +613,93 @@ func TestImageHandlerListImagesHasTagsFalseSupportsPagination(t *testing.T) {
 	if !resp1.HasMore {
 		t.Fatal("page 1: has_more = false, want true")
 	}
+}
+
+func TestImageHandler_TriggerImportReturnsAcceptedWithQueuedJob(t *testing.T) {
+	t.Parallel()
+
+	router := newImageHandlerTriggerImportRouter(t, &mockAdminService{scanJobID: 42}, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/scan", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	var resp struct {
+		Status string `json:"status"`
+		JobID  int64  `json:"job_id"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if resp.Status != "queued" {
+		t.Fatalf("status = %q, want %q", resp.Status, "queued")
+	}
+	if resp.JobID != 42 {
+		t.Fatalf("job_id = %d, want 42", resp.JobID)
+	}
+}
+
+func TestImageHandler_TriggerImportFailureReturnsStructuredError(t *testing.T) {
+	t.Parallel()
+
+	router := newImageHandlerTriggerImportRouter(t, &mockAdminService{err: errors.New("queue unavailable")}, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/scan", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
+	}
+
+	var resp struct {
+		Status string `json:"status"`
+		Error  string `json:"error"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if resp.Status != "failed" {
+		t.Fatalf("status = %q, want %q", resp.Status, "failed")
+	}
+	if resp.Error == "" {
+		t.Fatal("error is empty, want non-empty error")
+	}
+}
+
+func TestImageHandler_TriggerImportRouteIsProductHandlerNotPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	router := newImageHandlerTriggerImportRouter(t, &mockAdminService{scanJobID: 7}, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/scan", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code == http.StatusNotImplemented {
+		t.Fatalf("status = %d, route still behaves like placeholder", w.Code)
+	}
+}
+
+func newImageHandlerTriggerImportRouter(t *testing.T, adminSvc AdminServiceInterface, adminCfg *config.Config) *gin.Engine {
+	t.Helper()
+
+	_, repos := newImageHandlerTestRouter(t)
+
+	router := gin.New()
+	deps := &Dependencies{
+		ImageRepo:    repos.imageRepo,
+		TagRepo:      repos.tagRepo,
+		ImageTagRepo: repos.imageTagRepo,
+		AdminSvc:     adminSvc,
+		AdminCfg:     adminCfg,
+	}
+	if deps.AdminCfg == nil {
+		deps.AdminCfg = &config.Config{}
+	}
+	SetupRoutes(router, deps)
+
+	return router
 }
