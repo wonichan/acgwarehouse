@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
-status: completed
-stopped_at: Completed 16-03-PLAN.md
-last_updated: "2026-04-04T06:51:45.869Z"
-last_activity: 2026-04-04
+status: executing
+stopped_at: Phase 17 Plan 01 completed
+last_updated: "2026-04-05T02:35:00.000Z"
+last_activity: 2026-04-05 -- Phase 17 Plan 01 completed
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 9
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -26,12 +26,12 @@ See: `.planning/PROJECT.md` (updated 2026-04-04)
 ## Current Position
 
 Milestone: `v4.0` in progress ◆  
-Phase: 17
-Plan: Not started
-Status: Phase 16 completed, ready for Phase 17
-Last activity: 2026-04-04
+Phase: 17 (desktop-shell-foundation) — EXECUTING
+Plan: 2 of 3
+Status: Executing Phase 17 (17-01 complete)
+Last activity: 2026-04-05 -- Phase 17 Plan 01 completed
 
-Progress: [██████████] 6/6 plans (100%)
+Progress: [████████░░] 7/9 plans (78%)
 
 ## Performance Metrics
 
@@ -73,6 +73,9 @@ Most recent milestone-level decisions:
 - [Phase 15]: Treat degraded/stopped sidecar states as failed probe diagnostics for deterministic operator visibility.
 - [Phase 16]: Duplicate detection computation is fully migrated to Python sidecar; Go remains orchestrator/persistence.
 - [Phase 16]: Handler now hard-fails duplicate detect with diagnostic 503 when sidecar is not ready.
+- [Phase 17-01]: Desktop shell now centralizes search/import/settings affordances in a persistent shell-level top bar.
+- [Phase 17-01]: Shell search submission trims query, triggers SearchProvider search, then navigates to search view.
+- [Phase 17-01]: Gallery page headers no longer own duplicated shell actions (filter/tag-management command buttons removed from page command bar).
 
 ### Pending Todos
 
@@ -92,9 +95,9 @@ Research completed: `.planning/research/SUMMARY.md` (HIGH confidence)
 
 ## Session Continuity
 
-Last session: 2026-04-04T06:38:34.403Z
-Stopped at: Completed 16-03-PLAN.md
-Resume file: None
+Last session: 2026-04-04T07:37:26.473Z
+Stopped at: Phase 17 Plan 01 completed
+Resume file: .planning/phases/17-desktop-shell-foundation/17-01-SUMMARY.md
 
 ---
-*State updated: 2026-04-04 after Phase 16 Plan 03 completion*
+*State updated: 2026-04-05 after Phase 17 Plan 01 completion*

@@ -68,7 +68,11 @@ Plans:
   1. User can access search, import, and settings from top toolbar without navigating away from gallery
   2. User can browse images in square grid layout with consistent tile sizes
   3. User can filter gallery content by selecting tags from accessible filter panel
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] `17-01-PLAN.md` — Build the custom desktop top bar, search handoff, and shell action contract
+- [ ] `17-02-PLAN.md` — Convert the gallery into a grid-first workspace with a persistent right filter panel
+- [ ] `17-03-PLAN.md` — Wire the top-bar import action to a real backend endpoint with lightweight feedback
 **UI hint**: yes
 
 ### Phase 18: Independent Viewer & Filmstrip
@@ -137,7 +141,7 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 |-------|-----------|----------------|--------|-----------|
 | 15. Compute Sidecar Infrastructure | v4.0 | 3/3 | Complete    | 2026-04-03 |
 | 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete    | 2026-04-04 |
-| 17. Desktop Shell Foundation | v4.0 | 0/TBD | Not started | - |
+| 17. Desktop Shell Foundation | v4.0 | 1/3 | In progress | - |
 | 18. Independent Viewer & Filmstrip | v4.0 | 0/TBD | Not started | - |
 | 19. Tag Management | v4.0 | 0/TBD | Not started | - |
 | 20. Operations Monitoring | v4.0 | 0/TBD | Not started | - |
