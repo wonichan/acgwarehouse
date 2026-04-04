@@ -53,7 +53,11 @@ Plans:
   1. User can trigger duplicate detection and receive results computed by Python sidecar
   2. User can see recommended keep items for each duplicate group with clear rationale
   3. System provides diagnosable failure status when Python sidecar is unavailable
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] `16-01-PLAN.md` — Build Python sidecar duplicate detection compute pipeline (hashing, grouping, scoring, async task endpoints)
+- [ ] `16-02-PLAN.md` — Extend Go domain models and SQLite schema for 256-bit pHash and recommendation rationale
+- [ ] `16-03-PLAN.md` — Wire Go to Python sidecar: HTTP client, service refactor, handler pre-check, old code deletion
 **UI hint**: no
 
 ### Phase 17: Desktop Shell Foundation
@@ -132,7 +136,7 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 15. Compute Sidecar Infrastructure | v4.0 | 3/3 | Complete    | 2026-04-03 |
-| 16. Duplicate Detection Migration | v4.0 | 0/TBD | Not started | - |
+| 16. Duplicate Detection Migration | v4.0 | 0/3 | Planning complete | - |
 | 17. Desktop Shell Foundation | v4.0 | 0/TBD | Not started | - |
 | 18. Independent Viewer & Filmstrip | v4.0 | 0/TBD | Not started | - |
 | 19. Tag Management | v4.0 | 0/TBD | Not started | - |
