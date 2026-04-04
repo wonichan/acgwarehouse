@@ -53,6 +53,15 @@ def update_progress(task_id: str, progress: float, message: str = "") -> None:
         state.message = message
 
 
+def start_task(task_id: str, message: str = "") -> None:
+    with _task_lock:
+        state = _tasks.get(task_id)
+        if state is None:
+            return
+        state.status = TaskStatus.RUNNING
+        state.message = message
+
+
 def get_task_state(task_id: str) -> TaskState | None:
     with _task_lock:
         return _tasks.get(task_id)
