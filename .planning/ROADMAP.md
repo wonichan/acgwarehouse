@@ -81,10 +81,14 @@ Plans:
 **Requirements**: VIEW-01, VIEW-02, VIEW-03, VIEW-04
 **Success Criteria** (what must be TRUE):
   1. User can double-click image to open in separate viewer window without blocking main gallery
-  2. User can switch between images in same folder using bottom filmstrip strip
+  2. User can switch between images in the current result set using bottom filmstrip strip
   3. User can zoom, drag, and double-click-to-zoom within viewer window
   4. User can view image metadata (filename, resolution, size, tags) in viewer sidebar
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] `18-01-PLAN.md` — Establish Windows secondary-window bootstrap, viewer session payloads, and launch coordinator boundaries
+- [ ] `18-02-PLAN.md` — Build the reusable viewer workspace with stage, metadata sidebar, filmstrip, and keyboard contract
+- [ ] `18-03-PLAN.md` — Wire gallery/search double-click launches into real viewer windows and close Phase 18 verification
 **UI hint**: yes
 
 ### Phase 19: Tag Management
@@ -142,7 +146,7 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 | 15. Compute Sidecar Infrastructure | v4.0 | 3/3 | Complete    | 2026-04-03 |
 | 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete    | 2026-04-04 |
 | 17. Desktop Shell Foundation | v4.0 | 3/3 | Complete    | 2026-04-05 |
-| 18. Independent Viewer & Filmstrip | v4.0 | 0/TBD | Not started | - |
+ | 18. Independent Viewer & Filmstrip | v4.0 | 1/3 | In progress | - |
 | 19. Tag Management | v4.0 | 0/TBD | Not started | - |
 | 20. Operations Monitoring | v4.0 | 0/TBD | Not started | - |
 | 21. Windows Packaging | v4.0 | 0/TBD | Not started | - |

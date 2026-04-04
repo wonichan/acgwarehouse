@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
-status: completed
-stopped_at: Phase 18 context gathered
-last_updated: "2026-04-04T17:51:15.315Z"
-last_activity: 2026-04-05 -- Phase 17 verified and closed
+status: executing
+stopped_at: Phase 18 plan 01 complete
+last_updated: "2026-04-04T18:45:00.000Z"
+last_activity: 2026-04-05 -- Phase 18 plan 01 completed
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_plans: 12
+  completed_plans: 10
+  percent: 83
 ---
 
 # Project State
@@ -21,17 +21,17 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-04-05)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。  
-**Current focus:** Phase 18 — independent-viewer-&-filmstrip
+**Current focus:** Phase 18 — independent-viewer-filmstrip
 
 ## Current Position
 
 Milestone: `v4.0` in progress ◆  
-Phase: 18 (independent-viewer-&-filmstrip) — NOT STARTED
-Plan: Not started
-Status: Phase 17 complete — ready for transition
-Last activity: 2026-04-05 -- Phase 17 verified and closed
+Phase: 18 (independent-viewer-filmstrip) — EXECUTING
+Plan: 2 of 3
+Status: Executing Phase 18
+Last activity: 2026-04-05 -- Phase 18 plan 01 completed
 
-Progress: [██████████] 9/9 plans (100%)
+Progress: [████████░░] 10/12 plans (83%)
 
 ## Performance Metrics
 
@@ -81,6 +81,9 @@ Most recent milestone-level decisions:
 - [Phase 17-02]: Right panel filtering is immediate and provider-driven, including untagged-only toggle semantics.
 - [Phase 17-02]: Grid path now enforces explicit square-tile intent via constrained delegate settings.
 - [Phase 17-03]: Desktop import action now targets a real product-facing `/api/v1/images/scan` path with lightweight queued/failure feedback.
+- [Phase 18-01]: Viewer launches now serialize result-set-scoped session payloads instead of depending on live provider state across windows.
+- [Phase 18-01]: Windows secondary viewer hosting now uses a dedicated multi-window bootstrap path via `desktop_multi_window`.
+- [Phase 18-01]: Viewer windows always open with centered default sizing and do not restore persisted window memory.
 
 ### Pending Todos
 
@@ -100,9 +103,9 @@ Research completed: `.planning/research/SUMMARY.md` (HIGH confidence)
 
 ## Session Continuity
 
-Last session: 2026-04-04T17:51:15.311Z
-Stopped at: Phase 18 context gathered
-Resume file: .planning/phases/18-independent-viewer-filmstrip/18-CONTEXT.md
+Last session: 2026-04-05T02:30:53+08:00
+Stopped at: Phase 18 plan 01 complete
+Resume file: .planning/phases/18-independent-viewer-filmstrip/18-01-SUMMARY.md
 
 ---
-*State updated: 2026-04-05 after Phase 17 verification and completion*
+*State updated: 2026-04-05 after Phase 18 plan 01 completion*
