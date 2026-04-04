@@ -12,6 +12,8 @@ import '../widgets/fluent_gallery_content.dart';
 import '../widgets/gallery_filter_panel.dart';
 import '../widgets/fluent_search_content.dart';
 import '../models/image.dart';
+import '../models/viewer_session.dart';
+import '../services/viewer_window_service.dart';
 
 /// Fluent 风格图库页面
 /// 包含 CommandBar 工具栏和图库内容
@@ -69,7 +71,13 @@ class FluentGalleryPage extends StatelessWidget {
       children: [
         Expanded(
           child: FluentGalleryContent(
-            onImageTap: (image) => _showImageDetail(context, image),
+            onImageTap: null, // Removed single click routing
+            onImageDoubleTap: (image) => _showImageDetail(
+              context,
+              image,
+              context.read<ImageListProvider>().images,
+              ViewerSessionSource.gallery,
+            ),
           ),
         ),
         const SizedBox(width: 1, child: ColoredBox(color: Color(0x22000000))),
@@ -125,10 +133,20 @@ class FluentGalleryPage extends StatelessWidget {
     );
   }
 
-  void _showImageDetail(BuildContext context, ImageModel image) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => ImageDetailScreen(image: image)),
+  void _showImageDetail(
+    BuildContext context,
+    ImageModel image,
+    List<ImageModel> results,
+    ViewerSessionSource source,
+  ) {
+    ViewerWindowService(
+      adapter: DesktopMultiWindowViewerWindowAdapter(),
+    ).openSession(
+      ViewerSession.fromResultSet(
+        source: source,
+        images: results,
+        selectedImageId: image.id,
+      ),
     );
   }
 }
@@ -189,7 +207,13 @@ class _FluentSearchPageState extends State<FluentSearchPage> {
               // Content
               Expanded(
                 child: FluentSearchContent(
-                  onImageTap: (image) => _showImageDetail(context, image),
+                  onImageTap: null, // Removed single click routing
+                  onImageDoubleTap: (image) => _showImageDetail(
+                    context,
+                    image,
+                    provider.results,
+                    ViewerSessionSource.search,
+                  ),
                 ),
               ),
             ],
@@ -291,10 +315,20 @@ class _FluentSearchPageState extends State<FluentSearchPage> {
     );
   }
 
-  void _showImageDetail(BuildContext context, ImageModel image) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => ImageDetailScreen(image: image)),
+  void _showImageDetail(
+    BuildContext context,
+    ImageModel image,
+    List<ImageModel> results,
+    ViewerSessionSource source,
+  ) {
+    ViewerWindowService(
+      adapter: DesktopMultiWindowViewerWindowAdapter(),
+    ).openSession(
+      ViewerSession.fromResultSet(
+        source: source,
+        images: results,
+        selectedImageId: image.id,
+      ),
     );
   }
 }
