@@ -70,7 +70,7 @@ type App struct {
 
 	// Services
 	governanceSvc *service.TagGovernanceService
-	hashSvc       *service.HashService
+	sidecarClient *sidecar.SidecarClient
 	duplicateSvc  *service.DuplicateService
 	searchSvc     *service.SearchService
 	adminSvc      *service.AdminService
@@ -86,6 +86,7 @@ type App struct {
 	autoSchedulerStarted bool
 	runtimeManifestPath  string
 	sidecarRuntime       sidecarRuntimeLifecycle
+	sidecarBaseURL       string
 	sidecarMode          appSidecarMode
 	fullyReady           bool
 }
@@ -122,9 +123,9 @@ func New(cfgPath string) (*App, error) {
 	// Initialize repositories
 	app.initRepositories()
 
+	app.initSidecarRuntime()
 	// Initialize services
 	app.initServices()
-	app.initSidecarRuntime()
 	app.initAutoScheduler(app.config)
 
 	// Initialize worker manager
@@ -184,7 +185,7 @@ func (a *App) Run() error {
 		GovernanceSvc:  a.governanceSvc,
 		DuplicateSvc:   a.duplicateSvc,
 		SearchSvc:      a.searchSvc,
-		HashSvc:        a.hashSvc,
+		SidecarRuntime: unwrapRuntime(a.sidecarRuntime),
 		JobManager:     a.jobManager,
 		AdminSvc:       a.adminSvc,
 		AdminCfg:       a.cfgReloader.Get(),
@@ -431,4 +432,14 @@ func (a *App) recoverJobs() {
 
 func openDatabase(cfg *config.Config) (*sql.DB, error) {
 	return sqliteutil.Open(cfg)
+}
+
+func unwrapRuntime(runtime sidecarRuntimeLifecycle) *sidecar.Runtime {
+	if runtime == nil {
+		return nil
+	}
+	if r, ok := runtime.(*sidecar.Runtime); ok {
+		return r
+	}
+	return nil
 }

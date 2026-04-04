@@ -3,9 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -40,8 +41,8 @@ func (a *App) initRepositories() {
 // initServices initializes all services.
 func (a *App) initServices() {
 	a.governanceSvc = service.NewTagGovernanceService(a.tagRepo, a.aliasRepo, a.obsRepo, a.imageTagRepo)
-	a.hashSvc = service.NewHashService()
-	a.duplicateSvc = service.NewDuplicateService(a.imageRepo, a.duplicateRepo, a.hashSvc)
+	a.sidecarClient = sidecar.NewSidecarClient(a.sidecarBaseURL)
+	a.duplicateSvc = service.NewDuplicateService(a.imageRepo, a.duplicateRepo, a.sidecarClient, unwrapRuntime(a.sidecarRuntime))
 	a.searchSvc = service.NewSearchService(a.imageRepo, a.tagRepo, a.searchRepo)
 }
 
@@ -49,19 +50,54 @@ func (a *App) initSidecarRuntime() {
 	if a.sidecarRuntime != nil {
 		return
 	}
+	a.sidecarBaseURL = "http://127.0.0.1:8000"
 	a.sidecarRuntime = sidecar.NewRuntime(sidecar.RuntimeConfig{
 		StartupTimeout: 2 * time.Second,
 		ProbeInterval:  100 * time.Millisecond,
-		CommandFactory: func(context.Context) (sidecar.Process, error) {
-			return nil, errors.New("python sidecar launcher not configured")
+		CommandFactory: func(ctx context.Context) (sidecar.Process, error) {
+			cmd := exec.CommandContext(ctx, "python", "services/python-sidecar/main.py")
+			if err := cmd.Start(); err != nil {
+				return nil, err
+			}
+			return &sidecarCmdProcess{cmd: cmd}, nil
 		},
-		Probe: func(context.Context) error {
-			return errors.New("python sidecar probe not configured")
+		Probe: func(ctx context.Context) error {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.sidecarBaseURL+"/health", nil)
+			if err != nil {
+				return err
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("sidecar probe status: %d", resp.StatusCode)
+			}
+			return nil
 		},
 		ShutdownProbe: func(context.Context) error {
 			return nil
 		},
 	})
+}
+
+type sidecarCmdProcess struct {
+	cmd *exec.Cmd
+}
+
+func (p *sidecarCmdProcess) Kill() error {
+	if p == nil || p.cmd == nil || p.cmd.Process == nil {
+		return nil
+	}
+	return p.cmd.Process.Kill()
+}
+
+func (p *sidecarCmdProcess) Wait() error {
+	if p == nil || p.cmd == nil {
+		return nil
+	}
+	return p.cmd.Wait()
 }
 
 func (a *App) initAutoScheduler(cfg *config.Config) {

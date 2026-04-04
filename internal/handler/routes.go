@@ -8,6 +8,7 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
+	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
@@ -24,7 +25,7 @@ type Dependencies struct {
 	GovernanceSvc  *service.TagGovernanceService
 	DuplicateSvc   *service.DuplicateService
 	SearchSvc      *service.SearchService
-	HashSvc        *service.HashService
+	SidecarRuntime *sidecar.Runtime
 	CollectionSvc  *service.CollectionService
 	BatchSvc       *service.BatchService
 	AdminSvc       *service.AdminService
@@ -210,7 +211,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	duplicateGet := gin.HandlerFunc(placeholderHandler)
 	duplicateDelete := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.DuplicateSvc != nil {
-		duplicateHandler := NewDuplicateHandler(deps.DuplicateSvc)
+		duplicateHandler := NewDuplicateHandler(deps.DuplicateSvc, deps.SidecarRuntime)
 		duplicateDetect = duplicateHandler.DetectDuplicates
 		duplicateList = duplicateHandler.ListDuplicates
 		duplicateGet = duplicateHandler.GetDuplicate

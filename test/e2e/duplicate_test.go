@@ -14,6 +14,7 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/handler"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
+	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 )
 
 func setupDuplicateTestServer(t *testing.T) (*gin.Engine, *sql.DB) {
@@ -30,13 +31,25 @@ func setupDuplicateTestServer(t *testing.T) (*gin.Engine, *sql.DB) {
 
 	imageRepo := repository.NewImageRepository(db)
 	duplicateRepo := repository.NewDuplicateRepository(db)
-	hashSvc := service.NewHashService()
-	duplicateSvc := service.NewDuplicateService(imageRepo, duplicateRepo, hashSvc)
+	mockSidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/duplicates/detect":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-e2e", "status": "pending", "progress": 0})
+		case "/compute/duplicates/tasks/task-e2e":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-e2e", "status": "completed", "progress": 100})
+		case "/compute/duplicates/tasks/task-e2e/result":
+			_ = json.NewEncoder(w).Encode(map[string]any{"groups": []any{}, "total_images": 3, "total_groups": 0, "skipped_images": []any{}, "computation_time_ms": 1})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(mockSidecar.Close)
+	duplicateSvc := service.NewDuplicateService(imageRepo, duplicateRepo, sidecar.NewSidecarClient(mockSidecar.URL), nil)
 
 	r := gin.New()
 	api := r.Group("/api/v1")
 
-	duplicateHandler := handler.NewDuplicateHandler(duplicateSvc)
+	duplicateHandler := handler.NewDuplicateHandler(duplicateSvc, nil)
 	api.POST("/duplicates/detect", duplicateHandler.DetectDuplicates)
 	api.GET("/duplicates", duplicateHandler.ListDuplicates)
 	api.GET("/duplicates/:id", duplicateHandler.GetDuplicate)

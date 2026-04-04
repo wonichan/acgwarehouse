@@ -3,13 +3,17 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
-	"sort"
 	"testing"
 	"time"
 
-	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 )
 
 func setupDuplicateTestDB(t *testing.T) *sql.DB {
@@ -17,381 +21,219 @@ func setupDuplicateTestDB(t *testing.T) *sql.DB {
 
 	tmpFile, err := os.CreateTemp("", "duplicate_service_test_*.db")
 	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
+		t.Fatalf("create temp db: %v", err)
 	}
 	tmpPath := tmpFile.Name()
-	tmpFile.Close()
-	t.Cleanup(func() { os.Remove(tmpPath) })
+	_ = tmpFile.Close()
+	t.Cleanup(func() { _ = os.Remove(tmpPath) })
 
 	db, err := sql.Open("sqlite3", tmpPath)
 	if err != nil {
-		t.Fatalf("Failed to open database: %v", err)
+		t.Fatalf("open db: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 
 	if err := repository.EnsureScanSchema(db); err != nil {
-		t.Fatalf("Failed to ensure schema: %v", err)
+		t.Fatalf("ensure schema: %v", err)
 	}
 
 	return db
 }
 
-func insertTestImagesForDuplicate(t *testing.T, db *sql.DB) []int64 {
+func insertTestImages(t *testing.T, db *sql.DB) []int64 {
 	t.Helper()
 
 	now := time.Now()
-	ids := make([]int64, 5)
+	ids := make([]int64, 3)
+	paths := []string{"/test/a.jpg", "/test/b.jpg", "/test/c.jpg"}
 
-	// 创建测试图片：图片 A 和 B 完全相同（相同路径模拟），C、D、E 相似
-	images := []struct {
-		path   string
-		pHash  int64
-		width  int
-		height int
-	}{
-		{"/test/a.jpg", 0x1234567890ABCDEF, 100, 100},
-		{"/test/b.jpg", 0x1234567890ABCDEF, 200, 200},        // 相同 pHash，更高分辨率
-		{"/test/c.jpg", 0x1234567890ABCDEF + 1, 150, 150},    // 相似 pHash（汉明距离 1）
-		{"/test/d.jpg", 0x1234567890ABCDEF + 3, 120, 120},    // 相似 pHash（汉明距离 2）
-		{"/test/e.jpg", int64(0x7FFFFFFFFFFFFFFF), 100, 100}, // 完全不同的 pHash（使用 int64 最大值）
-	}
-
-	for i, img := range images {
+	for i := range paths {
 		result, err := db.Exec(`
 			INSERT INTO images (path, filename, source_root, file_size, width, height, format, phash, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`,
-			img.path,
-			img.path[len(img.path)-5:],
-			"/test",
-			1024,
-			img.width,
-			img.height,
-			"jpg",
-			img.pHash,
-			now,
-			now,
-		)
+		`, paths[i], "img.jpg", "/test", 1024+int64(i), 100+i, 120+i, "jpg", int64(0), now, now)
 		if err != nil {
-			t.Fatalf("Failed to insert test image: %v", err)
+			t.Fatalf("insert image: %v", err)
 		}
-		id, _ := result.LastInsertId()
-		ids[i] = id
+		ids[i], _ = result.LastInsertId()
 	}
 
 	return ids
 }
 
-func TestDuplicateService_DetectDuplicates_IdenticalImages(t *testing.T) {
-	db := setupDuplicateTestDB(t)
-	imageRepo := repository.NewImageRepository(db)
-	duplicateRepo := repository.NewDuplicateRepository(db)
-	hashService := NewHashService()
-	service := NewDuplicateService(imageRepo, duplicateRepo, hashService)
+func insertOldDuplicateGroup(t *testing.T, db *sql.DB, imageID int64) {
+	t.Helper()
 
-	// 插入测试图片
-	insertTestImagesForDuplicate(t, db)
-
-	// Test 1: DetectDuplicates 检测完全相同的图片（SHA256 匹配）
-	// 注意：由于我们没有真实文件，这里测试 pHash 相同的情况
-	count, err := service.DetectDuplicates(context.Background(), DetectOptions{Threshold: 10})
+	now := time.Now()
+	res, err := db.Exec(`INSERT INTO duplicate_groups (recommended_image_id, similarity_threshold, created_at) VALUES (?, ?, ?)`, imageID, 10, now)
 	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
+		t.Fatalf("insert duplicate_group: %v", err)
 	}
-
-	if count == 0 {
-		t.Error("Expected to find duplicate groups")
+	groupID, _ := res.LastInsertId()
+	_, err = db.Exec(`INSERT INTO duplicate_relations (group_id, image_id, is_recommended, file_hash, phash_distance, recommendation_score, recommendation_rationale) VALUES (?, ?, 1, ?, 0, 0, ?)`, groupID, imageID, "legacy", "[]")
+	if err != nil {
+		t.Fatalf("insert duplicate_relation: %v", err)
 	}
-
-	t.Logf("Found %d duplicate groups", count)
 }
 
-func TestDuplicateService_DetectDuplicates_SimilarImages(t *testing.T) {
+func TestDuplicateService_DetectDuplicates_SidecarFlowSuccess(t *testing.T) {
 	db := setupDuplicateTestDB(t)
+	ids := insertTestImages(t, db)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/duplicates/detect":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-1", "status": "pending", "progress": 0})
+		case "/compute/duplicates/tasks/task-1":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-1", "status": "completed", "progress": 100})
+		case "/compute/duplicates/tasks/task-1/result":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"groups": []map[string]any{{
+					"group_id":       0,
+					"recommended_id": ids[1],
+					"members": []map[string]any{
+						{"image_id": ids[0], "sha256": "sha-a", "phash": "phash-a", "distance": 3, "is_recommended": false, "recommendation_score": 70.5, "recommendation_reasons": []map[string]any{{"factor": "resolution", "value": "100x120", "score": 10.0, "weight": 0.5}}},
+						{"image_id": ids[1], "sha256": "sha-b", "phash": "phash-b", "distance": 0, "is_recommended": true, "recommendation_score": 90.0, "recommendation_reasons": []map[string]any{{"factor": "resolution", "value": "101x121", "score": 20.0, "weight": 0.5}}},
+					},
+				}},
+				"total_images":        3,
+				"total_groups":        1,
+				"skipped_images":      []map[string]any{},
+				"computation_time_ms": 123,
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
 	imageRepo := repository.NewImageRepository(db)
 	duplicateRepo := repository.NewDuplicateRepository(db)
-	hashService := NewHashService()
-	service := NewDuplicateService(imageRepo, duplicateRepo, hashService)
+	svc := NewDuplicateService(imageRepo, duplicateRepo, sidecar.NewSidecarClient(server.URL), nil)
 
-	// 插入测试图片
-	ids := insertTestImagesForDuplicate(t, db)
-
-	// Test 2: DetectDuplicates 检测相似图片（pHash 汉明距离 ≤ 阈值）
-	count, err := service.DetectDuplicates(context.Background(), DetectOptions{Threshold: 5})
+	count, err := svc.DetectDuplicates(context.Background(), DetectOptions{})
 	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
+		t.Fatalf("DetectDuplicates() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("groups count = %d, want 1", count)
 	}
 
-	if count == 0 {
-		t.Error("Expected to find similar images")
-	}
-
-	// 验证结果
-	groups, total, err := service.GetDuplicateGroups(10, 0)
+	img, err := imageRepo.FindByID(ids[0])
 	if err != nil {
-		t.Fatalf("GetDuplicateGroups failed: %v", err)
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if img.PHashHex != "phash-a" {
+		t.Fatalf("PHashHex = %q, want phash-a", img.PHashHex)
 	}
 
-	t.Logf("Found %d groups, total: %d", len(groups), total)
-
-	// 验证图片 A、B、C、D 应该在同一组（pHash 相似）
-	for _, group := range groups {
-		t.Logf("Group %d: recommended=%d, images=%d", group.Group.ID, group.Group.RecommendedImageID, len(group.Images))
-		for _, img := range group.Images {
-			t.Logf("  - Image %d: %s, recommended=%v, distance=%d", img.ID, img.Filename, img.IsRecommended, img.PHashDistance)
-		}
+	groups, total, err := svc.GetDuplicateGroups(10, 0)
+	if err != nil {
+		t.Fatalf("GetDuplicateGroups() error = %v", err)
 	}
-
-	// 验证至少有一组包含多个图片
-	hasMultipleImages := false
-	for _, group := range groups {
-		if len(group.Images) > 1 {
-			hasMultipleImages = true
-			break
-		}
+	if total != 1 || len(groups) != 1 {
+		t.Fatalf("groups total/list = %d/%d, want 1/1", total, len(groups))
 	}
-	if !hasMultipleImages {
-		t.Error("Expected at least one group with multiple images")
+	if len(groups[0].Images) != 2 {
+		t.Fatalf("images in group = %d, want 2", len(groups[0].Images))
 	}
-
-	_ = ids // 使用变量避免编译警告
+	if string(groups[0].Images[0].RecommendationRationale) == "" {
+		t.Fatal("recommendation_rationale should be structured json")
+	}
 }
 
-func TestDuplicateService_DetectDuplicates_Transitivity(t *testing.T) {
-	db := setupDuplicateTestDB(t)
-	imageRepo := repository.NewImageRepository(db)
-	duplicateRepo := repository.NewDuplicateRepository(db)
-	hashService := NewHashService()
-	service := NewDuplicateService(imageRepo, duplicateRepo, hashService)
-
-	// Test 3: DetectDuplicates 使用传递性分组（A~B, B~C → {A,B,C}）
-	// 使用预设的测试数据，其中 A、B、C、D 的 pHash 相似
-
-	_, err := service.DetectDuplicates(context.Background(), DetectOptions{Threshold: 5})
-	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
+func TestDuplicateService_DetectDuplicates_DoesNotDeleteOldRowsOnSidecarFailures(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusPath string
+		statusCode int
+	}{
+		{name: "submit-failed", statusPath: "/compute/duplicates/detect", statusCode: http.StatusInternalServerError},
+		{name: "poll-failed", statusPath: "/compute/duplicates/tasks/task-1", statusCode: http.StatusNotFound},
+		{name: "fetch-failed", statusPath: "/compute/duplicates/tasks/task-1/result", statusCode: http.StatusBadRequest},
 	}
 
-	// 验证传递性分组
-	groups, _, err := service.GetDuplicateGroups(10, 0)
-	if err != nil {
-		t.Fatalf("GetDuplicateGroups failed: %v", err)
-	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupDuplicateTestDB(t)
+			ids := insertTestImages(t, db)
+			insertOldDuplicateGroup(t, db, ids[0])
 
-	// 找到最大的组
-	maxGroupSize := 0
-	for _, group := range groups {
-		if len(group.Images) > maxGroupSize {
-			maxGroupSize = len(group.Images)
-		}
-	}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == tc.statusPath {
+					w.WriteHeader(tc.statusCode)
+					_, _ = w.Write([]byte(`{"detail":"boom"}`))
+					return
+				}
+				switch r.URL.Path {
+				case "/compute/duplicates/detect":
+					_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-1", "status": "pending", "progress": 0})
+				case "/compute/duplicates/tasks/task-1":
+					_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-1", "status": "completed", "progress": 100})
+				case "/compute/duplicates/tasks/task-1/result":
+					_ = json.NewEncoder(w).Encode(map[string]any{"groups": []any{}, "total_images": 3, "total_groups": 0, "skipped_images": []any{}, "computation_time_ms": 10})
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
 
-	// 由于测试数据的 pHash 设置，应该有传递性分组
-	t.Logf("Max group size: %d", maxGroupSize)
-}
-
-func TestDuplicateService_DetectDuplicates_RecommendHighestResolution(t *testing.T) {
-	db := setupDuplicateTestDB(t)
-	imageRepo := repository.NewImageRepository(db)
-	duplicateRepo := repository.NewDuplicateRepository(db)
-	hashService := NewHashService()
-	service := NewDuplicateService(imageRepo, duplicateRepo, hashService)
-
-	// 插入测试图片
-	ids := insertTestImagesForDuplicate(t, db)
-
-	// Test 4: DetectDuplicates 推荐分辨率最高的图片
-	_, err := service.DetectDuplicates(context.Background(), DetectOptions{Threshold: 10})
-	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
-	}
-
-	groups, _, err := service.GetDuplicateGroups(10, 0)
-	if err != nil {
-		t.Fatalf("GetDuplicateGroups failed: %v", err)
-	}
-
-	// 验证推荐的图片是分辨率最高的
-	for _, group := range groups {
-		if len(group.Images) < 2 {
-			continue
-		}
-
-		// 找到推荐的图片
-		var recommended *domain.DuplicateImage
-		maxResolution := 0
-		for i := range group.Images {
-			if group.Images[i].IsRecommended {
-				recommended = &group.Images[i]
+			svc := NewDuplicateService(repository.NewImageRepository(db), repository.NewDuplicateRepository(db), sidecar.NewSidecarClient(server.URL), nil)
+			if _, err := svc.DetectDuplicates(context.Background(), DetectOptions{Threshold: 40}); err == nil {
+				t.Fatal("DetectDuplicates() error = nil, want error")
 			}
-			resolution := group.Images[i].Width * group.Images[i].Height
-			if resolution > maxResolution {
-				maxResolution = resolution
+
+			var groupCount int64
+			if err := db.QueryRow(`SELECT COUNT(*) FROM duplicate_groups`).Scan(&groupCount); err != nil {
+				t.Fatalf("count duplicate_groups: %v", err)
 			}
-		}
-
-		if recommended != nil {
-			recommendedResolution := recommended.Width * recommended.Height
-			t.Logf("Recommended image %d has resolution %d (max in group: %d)",
-				recommended.ID, recommendedResolution, maxResolution)
-		}
+			if groupCount == 0 {
+				t.Fatal("expected old duplicate rows to remain when sidecar flow fails")
+			}
+		})
 	}
-
-	_ = ids
 }
 
-func TestDuplicateService_GetDuplicateGroups(t *testing.T) {
+func TestDuplicateService_DetectDuplicates_SidecarTaskFailed(t *testing.T) {
 	db := setupDuplicateTestDB(t)
-	imageRepo := repository.NewImageRepository(db)
-	duplicateRepo := repository.NewDuplicateRepository(db)
-	hashService := NewHashService()
-	service := NewDuplicateService(imageRepo, duplicateRepo, hashService)
+	_ = insertTestImages(t, db)
 
-	insertTestImagesForDuplicate(t, db)
-
-	// 执行检测
-	_, err := service.DetectDuplicates(context.Background(), DetectOptions{Threshold: 10})
-	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
-	}
-
-	// Test 5: GetDuplicateGroups 返回分页的重复组列表
-	groups, total, err := service.GetDuplicateGroups(10, 0)
-	if err != nil {
-		t.Fatalf("GetDuplicateGroups failed: %v", err)
-	}
-
-	if total == 0 {
-		t.Error("Expected total > 0")
-	}
-
-	if len(groups) == 0 {
-		t.Error("Expected at least one group")
-	}
-
-	// 验证图片按推荐排序
-	for _, group := range groups {
-		if len(group.Images) < 2 {
-			continue
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/duplicates/detect":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-1", "status": "pending", "progress": 0})
+		case "/compute/duplicates/tasks/task-1":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-1", "status": "failed", "progress": 100, "message": "python error"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
 		}
-		// 推荐的图片应该排在第一位
-		if !group.Images[0].IsRecommended {
-			t.Error("Expected recommended image to be first")
-		}
-	}
+	}))
+	defer server.Close()
 
-	t.Logf("Groups: %d, Total: %d", len(groups), total)
+	svc := NewDuplicateService(repository.NewImageRepository(db), repository.NewDuplicateRepository(db), sidecar.NewSidecarClient(server.URL), nil)
+	if _, err := svc.DetectDuplicates(context.Background(), DetectOptions{Threshold: 40}); err == nil {
+		t.Fatal("DetectDuplicates() error = nil, want error")
+	}
 }
 
 func TestDuplicateService_DeleteDuplicateGroup(t *testing.T) {
 	db := setupDuplicateTestDB(t)
-	imageRepo := repository.NewImageRepository(db)
+	ids := insertTestImages(t, db)
+	insertOldDuplicateGroup(t, db, ids[0])
+
 	duplicateRepo := repository.NewDuplicateRepository(db)
-	hashService := NewHashService()
-	service := NewDuplicateService(imageRepo, duplicateRepo, hashService)
+	svc := NewDuplicateService(repository.NewImageRepository(db), duplicateRepo, nil, nil)
 
-	insertTestImagesForDuplicate(t, db)
-
-	// 执行检测
-	_, err := service.DetectDuplicates(context.Background(), DetectOptions{Threshold: 10})
+	groups, err := duplicateRepo.FindDuplicateGroups(10, 0)
 	if err != nil {
-		t.Fatalf("DetectDuplicates failed: %v", err)
+		t.Fatalf("FindDuplicateGroups() error = %v", err)
 	}
-
-	// 获取组
-	groups, _, err := service.GetDuplicateGroups(10, 0)
-	if err != nil {
-		t.Fatalf("GetDuplicateGroups failed: %v", err)
-	}
-
 	if len(groups) == 0 {
-		t.Fatal("Expected at least one group to delete")
+		t.Fatal("expected one group")
 	}
 
-	// 删除组
-	err = service.DeleteDuplicateGroup(groups[0].Group.ID)
-	if err != nil {
-		t.Fatalf("DeleteDuplicateGroup failed: %v", err)
-	}
-
-	// 验证已删除
-	_, err = service.GetDuplicateGroup(groups[0].Group.ID)
-	if err == nil {
-		t.Error("Expected error when getting deleted group")
-	}
-}
-
-func TestUnionFind(t *testing.T) {
-	uf := NewUnionFind(5)
-
-	// 初始状态：每个元素都是独立的
-	for i := 0; i < 5; i++ {
-		if uf.Find(i) != i {
-			t.Errorf("Expected Find(%d) = %d", i, i)
-		}
-	}
-
-	// 合并 0 和 1
-	uf.Union(0, 1)
-	if uf.Find(0) != uf.Find(1) {
-		t.Error("Expected 0 and 1 to be in the same set")
-	}
-
-	// 合并 1 和 2
-	uf.Union(1, 2)
-	if uf.Find(0) != uf.Find(2) {
-		t.Error("Expected 0, 1, 2 to be in the same set (transitivity)")
-	}
-
-	// 3 和 4 应该还是独立的
-	if uf.Find(3) == uf.Find(0) {
-		t.Error("Expected 3 to be in a different set")
-	}
-}
-
-func TestHammingDistance(t *testing.T) {
-	hashService := NewHashService()
-
-	tests := []struct {
-		h1, h2   int64
-		expected int
-	}{
-		{0, 0, 0},
-		{0, 1, 1},
-		{0x1234567890ABCDEF, 0x1234567890ABCDEF, 0},
-		{0x1234567890ABCDEF, 0x1234567890ABCDEF ^ 1, 1},    // Flip one bit
-		{0x1234567890ABCDEF, 0x1234567890ABCDEF ^ 0xFF, 8}, // Flip 8 bits
-	}
-
-	for _, tt := range tests {
-		result := hashService.HammingDistance(tt.h1, tt.h2)
-		if result != tt.expected {
-			t.Errorf("HammingDistance(%x, %x) = %d, expected %d", tt.h1, tt.h2, result, tt.expected)
-		}
-	}
-}
-
-func TestSelectRecommended(t *testing.T) {
-	service := &DuplicateService{}
-
-	imgs := []imageHash{
-		{image: domain.Image{ID: 1, Width: 100, Height: 100}},
-		{image: domain.Image{ID: 2, Width: 200, Height: 200}}, // 最高分辨率
-		{image: domain.Image{ID: 3, Width: 150, Height: 150}},
-	}
-
-	recommended := service.selectRecommended(imgs)
-	if recommended.image.ID != 2 {
-		t.Errorf("Expected recommended image ID 2, got %d", recommended.image.ID)
-	}
-
-	// 测试排序是否正确
-	sort.Slice(imgs, func(i, j int) bool {
-		return imgs[i].image.Width*imgs[i].image.Height > imgs[j].image.Width*imgs[j].image.Height
-	})
-
-	// 最高分辨率的应该在第一位
-	if imgs[0].image.ID != 2 {
-		t.Error("Expected highest resolution image to be first after sorting")
+	if err := svc.DeleteDuplicateGroup(groups[0].ID); err != nil {
+		t.Fatalf("DeleteDuplicateGroup() error = %v", err)
 	}
 }

@@ -2,325 +2,168 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sort"
-	"sync"
+	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 )
+
+const duplicatePollInterval = 2 * time.Second
 
 // DuplicateService 重复检测服务
 type DuplicateService struct {
-	imageRepo     repository.ImageRepository
-	duplicateRepo repository.DuplicateRepository
-	hashService   *HashService
+	imageRepo      repository.ImageRepository
+	duplicateRepo  repository.DuplicateRepository
+	sidecarClient  *sidecar.SidecarClient
+	sidecarRuntime *sidecar.Runtime
 }
 
 // DetectOptions 检测选项
 type DetectOptions struct {
-	Threshold int // 汉明距离阈值，默认 10
+	Threshold int // 汉明距离阈值，默认 40（256-bit pHash）
 }
 
 // NewDuplicateService 创建重复检测服务实例
 func NewDuplicateService(
 	imageRepo repository.ImageRepository,
 	duplicateRepo repository.DuplicateRepository,
-	hashService *HashService,
+	sidecarClient *sidecar.SidecarClient,
+	sidecarRuntime *sidecar.Runtime,
 ) *DuplicateService {
 	return &DuplicateService{
-		imageRepo:     imageRepo,
-		duplicateRepo: duplicateRepo,
-		hashService:   hashService,
+		imageRepo:      imageRepo,
+		duplicateRepo:  duplicateRepo,
+		sidecarClient:  sidecarClient,
+		sidecarRuntime: sidecarRuntime,
 	}
 }
 
 // DetectDuplicates 执行重复检测
 // 返回检测到的重复组数量
 func (s *DuplicateService) DetectDuplicates(ctx context.Context, opts DetectOptions) (int, error) {
-	// 设置默认阈值
 	threshold := opts.Threshold
 	if threshold <= 0 {
-		threshold = 10
+		threshold = 40
 	}
 
-	// 清除旧的检测结果
-	if err := s.duplicateRepo.DeleteAllDuplicateGroups(); err != nil {
-		return 0, err
+	if s.sidecarClient == nil {
+		return 0, fmt.Errorf("sidecar client is not configured")
 	}
 
-	// 获取所有图片
 	images, err := s.imageRepo.FindAll(1000000, 0, "id", "asc")
 	if err != nil {
 		return 0, err
 	}
-
 	if len(images) == 0 {
 		return 0, nil
 	}
 
-	// 为每张图片计算哈希
-	imageHashes := s.computeHashes(images)
-
-	// 按文件哈希分组（完全相同的图片）
-	fileHashGroups := s.groupByFileHash(imageHashes)
-
-	// 使用 Union-Find 进行传递性分组（相似图片）
-	similarGroups := s.findSimilarImages(imageHashes, threshold)
-
-	// 合并分组并保存到数据库
-	groupCount := s.saveGroups(imageHashes, fileHashGroups, similarGroups, threshold)
-
-	return groupCount, nil
-}
-
-// imageHash 图片哈希信息
-type imageHash struct {
-	image    domain.Image
-	fileHash string
-	pHash    int64
-}
-
-// computeHashes 为图片计算哈希
-func (s *DuplicateService) computeHashes(images []domain.Image) []imageHash {
-	hashes := make([]imageHash, len(images))
-	var wg sync.WaitGroup
-
+	inputs := make([]sidecar.DetectionImageInput, len(images))
 	for i, img := range images {
-		wg.Add(1)
-		go func(idx int, image domain.Image) {
-			defer wg.Done()
-
-			hash := imageHash{image: image}
-
-			// 计算文件哈希
-			fileHash, err := s.hashService.CalculateFileHash(image.Path)
-			if err == nil {
-				hash.fileHash = fileHash
-			}
-
-			// 计算 pHash（如果尚未计算）
-			if image.PHash != 0 {
-				hash.pHash = image.PHash
-			} else {
-				pHash, err := s.hashService.CalculatePHash(image.Path)
-				if err == nil {
-					hash.pHash = pHash
-				}
-			}
-
-			hashes[idx] = hash
-		}(i, img)
-	}
-
-	wg.Wait()
-	return hashes
-}
-
-// groupByFileHash 按文件哈希分组
-func (s *DuplicateService) groupByFileHash(hashes []imageHash) map[string][]imageHash {
-	groups := make(map[string][]imageHash)
-	for _, h := range hashes {
-		if h.fileHash != "" {
-			groups[h.fileHash] = append(groups[h.fileHash], h)
+		inputs[i] = sidecar.DetectionImageInput{
+			ID:       img.ID,
+			Path:     img.Path,
+			Width:    img.Width,
+			Height:   img.Height,
+			FileSize: img.FileSize,
+			Format:   img.Format,
 		}
 	}
 
-	// 只保留有多个图片的组
-	result := make(map[string][]imageHash)
-	for hash, imgs := range groups {
-		if len(imgs) > 1 {
-			result[hash] = imgs
+	taskID, err := s.sidecarClient.SubmitDetection(ctx, sidecar.DetectionRequest{
+		Threshold: threshold,
+		Images:    inputs,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("submit sidecar detection: %w", err)
+	}
+
+	for {
+		status, pollErr := s.sidecarClient.PollProgress(ctx, taskID)
+		if pollErr != nil {
+			return 0, fmt.Errorf("poll sidecar detection task %s: %w", taskID, pollErr)
+		}
+
+		switch status.Status {
+		case "completed":
+			goto fetchResults
+		case "failed":
+			if status.Message == "" {
+				return 0, fmt.Errorf("sidecar detection task %s failed", taskID)
+			}
+			return 0, fmt.Errorf("sidecar detection task %s failed: %s", taskID, status.Message)
+		}
+
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-time.After(duplicatePollInterval):
 		}
 	}
-	return result
+
+fetchResults:
+	result, err := s.sidecarClient.FetchResults(ctx, taskID)
+	if err != nil {
+		return 0, fmt.Errorf("fetch sidecar detection result %s: %w", taskID, err)
+	}
+
+	if err := s.persistDetectionResults(threshold, result); err != nil {
+		return 0, err
+	}
+
+	return result.TotalGroups, nil
 }
 
-// UnionFind 并查集结构
-type UnionFind struct {
-	parent []int
-	rank   []int
-}
-
-// NewUnionFind 创建并查集
-func NewUnionFind(n int) *UnionFind {
-	uf := &UnionFind{
-		parent: make([]int, n),
-		rank:   make([]int, n),
-	}
-	for i := 0; i < n; i++ {
-		uf.parent[i] = i
-		uf.rank[i] = 0
-	}
-	return uf
-}
-
-// Find 查找根节点（带路径压缩）
-func (uf *UnionFind) Find(x int) int {
-	if uf.parent[x] != x {
-		uf.parent[x] = uf.Find(uf.parent[x])
-	}
-	return uf.parent[x]
-}
-
-// Union 合并两个集合
-func (uf *UnionFind) Union(x, y int) {
-	px, py := uf.Find(x), uf.Find(y)
-	if px == py {
-		return
-	}
-
-	// 按秩合并
-	if uf.rank[px] < uf.rank[py] {
-		px, py = py, px
-	}
-	uf.parent[py] = px
-	if uf.rank[px] == uf.rank[py] {
-		uf.rank[px]++
-	}
-}
-
-// findSimilarImages 使用 Union-Find 找到相似图片组
-func (s *DuplicateService) findSimilarImages(hashes []imageHash, threshold int) [][]int {
-	n := len(hashes)
-	uf := NewUnionFind(n)
-
-	// 对每对图片比较 pHash
-	for i := 0; i < n; i++ {
-		for j := i + 1; j < n; j++ {
-			if hashes[i].pHash == 0 || hashes[j].pHash == 0 {
+func (s *DuplicateService) persistDetectionResults(threshold int, result *sidecar.DetectionResult) error {
+	for _, group := range result.Groups {
+		for _, member := range group.Members {
+			if member.PHash == "" {
 				continue
 			}
-
-			distance := s.hashService.HammingDistance(hashes[i].pHash, hashes[j].pHash)
-			if distance <= threshold {
-				uf.Union(i, j)
+			if err := s.imageRepo.UpdateImagePHashHex(member.ImageID, member.PHash); err != nil {
+				return fmt.Errorf("persist image phash_hex for image %d: %w", member.ImageID, err)
 			}
 		}
 	}
 
-	// 收集分组
-	groupMap := make(map[int][]int)
-	for i := 0; i < n; i++ {
-		root := uf.Find(i)
-		groupMap[root] = append(groupMap[root], i)
+	if err := s.duplicateRepo.DeleteAllDuplicateGroups(); err != nil {
+		return err
 	}
 
-	// 只返回有多个图片的组
-	result := make([][]int, 0)
-	for _, indices := range groupMap {
-		if len(indices) > 1 {
-			result = append(result, indices)
-		}
-	}
-
-	return result
-}
-
-// saveGroups 保存分组到数据库
-func (s *DuplicateService) saveGroups(hashes []imageHash, fileHashGroups map[string][]imageHash, similarGroups [][]int, threshold int) int {
-	savedGroups := make(map[int64]bool) // 避免重复保存
-	count := 0
-
-	// 保存文件哈希组
-	for _, imgs := range fileHashGroups {
-		if len(imgs) < 2 {
-			continue
-		}
-
-		// 选择分辨率最高的作为推荐
-		recommended := s.selectRecommended(imgs)
-
-		group := &domain.DuplicateGroup{
-			RecommendedImageID:  recommended.image.ID,
-			SimilarityThreshold: 0, // 文件哈希匹配，阈值为 0
-		}
-
-		relations := make([]domain.DuplicateRelation, len(imgs))
-		for i, img := range imgs {
-			relations[i] = domain.DuplicateRelation{
-				ImageID:       img.image.ID,
-				IsRecommended: img.image.ID == recommended.image.ID,
-				FileHash:      img.fileHash,
-				PHashDistance: 0,
-			}
-		}
-
-		if err := s.duplicateRepo.SaveDuplicateGroup(group, relations); err == nil {
-			count++
-			for _, img := range imgs {
-				savedGroups[img.image.ID] = true
-			}
-		}
-	}
-
-	// 保存相似图片组
-	for _, indices := range similarGroups {
-		imgs := make([]imageHash, len(indices))
-		for i, idx := range indices {
-			imgs[i] = hashes[idx]
-		}
-
-		if len(imgs) < 2 {
-			continue
-		}
-
-		// 检查是否已经保存过
-		hasNew := false
-		for _, img := range imgs {
-			if !savedGroups[img.image.ID] {
-				hasNew = true
-				break
-			}
-		}
-		if !hasNew {
-			continue
-		}
-
-		// 选择分辨率最高的作为推荐
-		recommended := s.selectRecommended(imgs)
-
-		group := &domain.DuplicateGroup{
-			RecommendedImageID:  recommended.image.ID,
+	for _, group := range result.Groups {
+		dbGroup := &domain.DuplicateGroup{
+			RecommendedImageID:  group.RecommendedID,
 			SimilarityThreshold: threshold,
+			CreatedAt:           time.Now(),
 		}
 
-		relations := make([]domain.DuplicateRelation, len(imgs))
-		for i, img := range imgs {
-			distance := s.hashService.HammingDistance(img.pHash, recommended.pHash)
+		relations := make([]domain.DuplicateRelation, len(group.Members))
+		for i, member := range group.Members {
+			rationale, err := json.Marshal(member.RecommendationReasons)
+			if err != nil {
+				return fmt.Errorf("marshal recommendation rationale for image %d: %w", member.ImageID, err)
+			}
+
 			relations[i] = domain.DuplicateRelation{
-				ImageID:       img.image.ID,
-				IsRecommended: img.image.ID == recommended.image.ID,
-				FileHash:      img.fileHash,
-				PHashDistance: distance,
+				ImageID:                 member.ImageID,
+				IsRecommended:           member.IsRecommended,
+				FileHash:                member.SHA256,
+				PHashDistance:           member.Distance,
+				RecommendationScore:     member.RecommendationScore,
+				RecommendationRationale: json.RawMessage(rationale),
 			}
 		}
 
-		if err := s.duplicateRepo.SaveDuplicateGroup(group, relations); err == nil {
-			count++
+		if err := s.duplicateRepo.SaveDuplicateGroup(dbGroup, relations); err != nil {
+			return err
 		}
 	}
 
-	return count
-}
-
-// selectRecommended 选择分辨率最高的图片作为推荐
-func (s *DuplicateService) selectRecommended(imgs []imageHash) imageHash {
-	if len(imgs) == 0 {
-		return imageHash{}
-	}
-
-	recommended := imgs[0]
-	maxResolution := recommended.image.Width * recommended.image.Height
-
-	for _, img := range imgs[1:] {
-		resolution := img.image.Width * img.image.Height
-		if resolution > maxResolution {
-			maxResolution = resolution
-			recommended = img
-		}
-	}
-
-	return recommended
+	return nil
 }
 
 // GetDuplicateGroups 获取重复组列表
@@ -344,31 +187,33 @@ func (s *DuplicateService) GetDuplicateGroups(limit, offset int) ([]domain.Dupli
 
 		images := make([]domain.DuplicateImage, len(relations))
 		for j, rel := range relations {
-			img, err := s.imageRepo.FindByID(rel.ImageID)
-			if err != nil {
+			img, findErr := s.imageRepo.FindByID(rel.ImageID)
+			if findErr != nil {
 				continue
 			}
 			images[j] = domain.DuplicateImage{
-				ID:                img.ID,
-				Path:              img.Path,
-				Filename:          img.Filename,
-				SourceRoot:        img.SourceRoot,
-				Width:             img.Width,
-				Height:            img.Height,
-				FileSize:          img.FileSize,
-				Format:            img.Format,
-				PHash:             img.PHash,
-				ThumbnailSmallUrl: img.ThumbnailSmallUrl,
-				ThumbnailLargeUrl: img.ThumbnailLargeUrl,
-				CreatedAt:         img.CreatedAt,
-				UpdatedAt:         img.UpdatedAt,
-				IsRecommended:     rel.IsRecommended,
-				FileHash:          rel.FileHash,
-				PHashDistance:     rel.PHashDistance,
+				ID:                      img.ID,
+				Path:                    img.Path,
+				Filename:                img.Filename,
+				SourceRoot:              img.SourceRoot,
+				Width:                   img.Width,
+				Height:                  img.Height,
+				FileSize:                img.FileSize,
+				Format:                  img.Format,
+				PHash:                   img.PHash,
+				PHashHex:                img.PHashHex,
+				ThumbnailSmallUrl:       img.ThumbnailSmallUrl,
+				ThumbnailLargeUrl:       img.ThumbnailLargeUrl,
+				CreatedAt:               img.CreatedAt,
+				UpdatedAt:               img.UpdatedAt,
+				IsRecommended:           rel.IsRecommended,
+				FileHash:                rel.FileHash,
+				PHashDistance:           rel.PHashDistance,
+				RecommendationScore:     rel.RecommendationScore,
+				RecommendationRationale: rel.RecommendationRationale,
 			}
 		}
 
-		// 按推荐排序，然后按汉明距离排序
 		sort.Slice(images, func(i, j int) bool {
 			if images[i].IsRecommended != images[j].IsRecommended {
 				return images[i].IsRecommended
@@ -376,10 +221,7 @@ func (s *DuplicateService) GetDuplicateGroups(limit, offset int) ([]domain.Dupli
 			return images[i].PHashDistance < images[j].PHashDistance
 		})
 
-		result[i] = domain.DuplicateGroupWithImages{
-			Group:  group,
-			Images: images,
-		}
+		result[i] = domain.DuplicateGroupWithImages{Group: group, Images: images}
 	}
 
 	return result, total, nil
@@ -394,31 +236,33 @@ func (s *DuplicateService) GetDuplicateGroup(id int64) (*domain.DuplicateGroupWi
 
 	images := make([]domain.DuplicateImage, len(relations))
 	for i, rel := range relations {
-		img, err := s.imageRepo.FindByID(rel.ImageID)
-		if err != nil {
+		img, findErr := s.imageRepo.FindByID(rel.ImageID)
+		if findErr != nil {
 			continue
 		}
 		images[i] = domain.DuplicateImage{
-			ID:                img.ID,
-			Path:              img.Path,
-			Filename:          img.Filename,
-			SourceRoot:        img.SourceRoot,
-			Width:             img.Width,
-			Height:            img.Height,
-			FileSize:          img.FileSize,
-			Format:            img.Format,
-			PHash:             img.PHash,
-			ThumbnailSmallUrl: img.ThumbnailSmallUrl,
-			ThumbnailLargeUrl: img.ThumbnailLargeUrl,
-			CreatedAt:         img.CreatedAt,
-			UpdatedAt:         img.UpdatedAt,
-			IsRecommended:     rel.IsRecommended,
-			FileHash:          rel.FileHash,
-			PHashDistance:     rel.PHashDistance,
+			ID:                      img.ID,
+			Path:                    img.Path,
+			Filename:                img.Filename,
+			SourceRoot:              img.SourceRoot,
+			Width:                   img.Width,
+			Height:                  img.Height,
+			FileSize:                img.FileSize,
+			Format:                  img.Format,
+			PHash:                   img.PHash,
+			PHashHex:                img.PHashHex,
+			ThumbnailSmallUrl:       img.ThumbnailSmallUrl,
+			ThumbnailLargeUrl:       img.ThumbnailLargeUrl,
+			CreatedAt:               img.CreatedAt,
+			UpdatedAt:               img.UpdatedAt,
+			IsRecommended:           rel.IsRecommended,
+			FileHash:                rel.FileHash,
+			PHashDistance:           rel.PHashDistance,
+			RecommendationScore:     rel.RecommendationScore,
+			RecommendationRationale: rel.RecommendationRationale,
 		}
 	}
 
-	// 按推荐排序，然后按汉明距离排序
 	sort.Slice(images, func(i, j int) bool {
 		if images[i].IsRecommended != images[j].IsRecommended {
 			return images[i].IsRecommended
@@ -426,10 +270,7 @@ func (s *DuplicateService) GetDuplicateGroup(id int64) (*domain.DuplicateGroupWi
 		return images[i].PHashDistance < images[j].PHashDistance
 	})
 
-	return &domain.DuplicateGroupWithImages{
-		Group:  *group,
-		Images: images,
-	}, nil
+	return &domain.DuplicateGroupWithImages{Group: *group, Images: images}, nil
 }
 
 // DeleteDuplicateGroup 删除重复组记录
