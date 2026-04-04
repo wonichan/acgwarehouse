@@ -1,7 +1,9 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart' show Material;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/image.dart';
+import 'package:gallery/widgets/fluent_image_card.dart';
 import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/widgets/fluent_gallery_content.dart';
@@ -107,5 +109,39 @@ void main() {
         gridView.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
     expect(gridDelegate.maxCrossAxisExtent, 220);
     expect(gridDelegate.childAspectRatio, 1);
+  });
+
+  testWidgets('triggers onImageDoubleTap on double click', (tester) async {
+    final provider = _TrackingImageListProvider(
+      initialImages: [buildImage(1)],
+      initialHasMore: false,
+    );
+
+    bool doubleTapped = false;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ImageListProvider>.value(
+        value: provider,
+        child: fluent.FluentApp(
+          home: fluent.ScaffoldPage(
+            content: Material(
+              child: FluentGalleryContent(
+                onImageDoubleTap: (image) => doubleTapped = true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final card = find.byType(FluentImageCard).first;
+    // double tap
+    await tester.tap(card);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(card);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(doubleTapped, isTrue);
   });
 }
