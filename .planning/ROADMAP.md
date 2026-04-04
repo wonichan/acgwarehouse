@@ -136,7 +136,7 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 15. Compute Sidecar Infrastructure | v4.0 | 3/3 | Complete    | 2026-04-03 |
-| 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete   | 2026-04-04 |
+| 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete    | 2026-04-04 |
 | 17. Desktop Shell Foundation | v4.0 | 0/TBD | Not started | - |
 | 18. Independent Viewer & Filmstrip | v4.0 | 0/TBD | Not started | - |
 | 19. Tag Management | v4.0 | 0/TBD | Not started | - |
