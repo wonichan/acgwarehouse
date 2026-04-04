@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // DuplicateGroup 表示一组重复/相似的图片
 type DuplicateGroup struct {
@@ -12,11 +15,13 @@ type DuplicateGroup struct {
 
 // DuplicateRelation 表示图片与重复组的关系
 type DuplicateRelation struct {
-	GroupID       int64  `json:"group_id"`
-	ImageID       int64  `json:"image_id"`
-	IsRecommended bool   `json:"is_recommended"`
-	FileHash      string `json:"file_hash"`      // SHA256 文件哈希
-	PHashDistance int    `json:"phash_distance"` // 与推荐图片的汉明距离
+	GroupID                 int64           `json:"group_id"`
+	ImageID                 int64           `json:"image_id"`
+	IsRecommended           bool            `json:"is_recommended"`
+	FileHash                string          `json:"file_hash"` // SHA256 文件哈希
+	PHashDistance           int             `json:"phash_distance"`
+	RecommendationScore     float64         `json:"recommendation_score"`
+	RecommendationRationale json.RawMessage `json:"recommendation_rationale"`
 }
 
 // DuplicateGroupWithImages 包含重复组及其关联图片的完整信息
@@ -27,20 +32,23 @@ type DuplicateGroupWithImages struct {
 
 // DuplicateImage 重复组中的图片信息
 type DuplicateImage struct {
-	ID                int64     `json:"id"`
-	Path              string    `json:"path"`
-	Filename          string    `json:"filename"`
-	SourceRoot        string    `json:"source_root"`
-	Width             int       `json:"width"`
-	Height            int       `json:"height"`
-	FileSize          int64     `json:"file_size"`
-	Format            string    `json:"format"`
-	PHash             int64     `json:"phash"`
-	ThumbnailSmallUrl string    `json:"thumbnail_small_url"`
-	ThumbnailLargeUrl string    `json:"thumbnail_large_url"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
-	IsRecommended     bool      `json:"is_recommended"`
-	FileHash          string    `json:"file_hash"`
-	PHashDistance     int       `json:"phash_distance"`
+	ID                      int64           `json:"id"`
+	Path                    string          `json:"path"`
+	Filename                string          `json:"filename"`
+	SourceRoot              string          `json:"source_root"`
+	Width                   int             `json:"width"`
+	Height                  int             `json:"height"`
+	FileSize                int64           `json:"file_size"`
+	Format                  string          `json:"format"`
+	PHash                   int64           `json:"phash"`
+	PHashHex                string          `json:"phash_hex"`
+	ThumbnailSmallUrl       string          `json:"thumbnail_small_url"`
+	ThumbnailLargeUrl       string          `json:"thumbnail_large_url"`
+	CreatedAt               time.Time       `json:"created_at"`
+	UpdatedAt               time.Time       `json:"updated_at"`
+	IsRecommended           bool            `json:"is_recommended"`
+	FileHash                string          `json:"file_hash"`
+	PHashDistance           int             `json:"phash_distance"`
+	RecommendationScore     float64         `json:"recommendation_score"`
+	RecommendationRationale json.RawMessage `json:"recommendation_rationale"`
 }

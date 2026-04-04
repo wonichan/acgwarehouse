@@ -50,6 +50,7 @@ type ImageRepository interface {
 	CountBackfillSkippedWithActiveTask(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
 	// CountBackfillHitCount returns the total count of images matching the filter (before any skip classification).
 	CountBackfillHitCount(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
+	UpdateImagePHashHex(imageID int64, phashHex string) error
 	UpdateThumbnails(id int64, smallURL, largeURL string) error
 	Count() (int64, error)
 	Delete(id int64) error
@@ -69,9 +70,9 @@ func NewImageRepository(db *sql.DB) ImageRepository {
 func (r *sqliteImageRepository) SaveImage(image *domain.Image) (bool, error) {
 	result, err := r.db.Exec(`
 		INSERT OR IGNORE INTO images
-		(path, filename, source_root, file_size, width, height, format, phash, thumbnail_small_url, thumbnail_large_url, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, image.Path, image.Filename, image.SourceRoot, image.FileSize, image.Width, image.Height, image.Format, image.PHash, image.ThumbnailSmallUrl, image.ThumbnailLargeUrl, image.CreatedAt, image.UpdatedAt)
+		(path, filename, source_root, file_size, width, height, format, phash, phash_hex, thumbnail_small_url, thumbnail_large_url, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, image.Path, image.Filename, image.SourceRoot, image.FileSize, image.Width, image.Height, image.Format, image.PHash, image.PHashHex, image.ThumbnailSmallUrl, image.ThumbnailLargeUrl, image.CreatedAt, image.UpdatedAt)
 	if err != nil {
 		return false, err
 	}
@@ -96,14 +97,14 @@ func (r *sqliteImageRepository) SaveImage(image *domain.Image) (bool, error) {
 
 func (r *sqliteImageRepository) FindByPath(path string) (*domain.Image, error) {
 	return r.queryOne(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(phash_hex, ''), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
 		FROM images WHERE path = ?
 	`, path)
 }
 
 func (r *sqliteImageRepository) FindByID(id int64) (*domain.Image, error) {
 	return r.queryOne(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(phash_hex, ''), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
 		FROM images WHERE id = ?
 	`, id)
 }
@@ -121,6 +122,7 @@ func (r *sqliteImageRepository) queryOne(query string, args ...any) (*domain.Ima
 		&image.Height,
 		&image.Format,
 		&image.PHash,
+		&image.PHashHex,
 		&thumbnailSmallUrl,
 		&thumbnailLargeUrl,
 		&image.CreatedAt,
@@ -164,7 +166,7 @@ func (r *sqliteImageRepository) FindAll(limit, offset int, sortBy, sortDir strin
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
+		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(phash_hex, ''), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
 		FROM images ORDER BY %s %s LIMIT ? OFFSET ?
 	`, sortColumn, sortDir)
 
@@ -188,6 +190,7 @@ func (r *sqliteImageRepository) FindAll(limit, offset int, sortBy, sortDir strin
 			&image.Height,
 			&image.Format,
 			&image.PHash,
+			&image.PHashHex,
 			&thumbnailSmallUrl,
 			&thumbnailLargeUrl,
 			&image.CreatedAt,
@@ -259,7 +262,7 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 
 	// Query images where matched tag count equals the number of requested tags (AND semantics)
 	query := fmt.Sprintf(`
-		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), COALESCE(i.phash_hex, ''), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
 		INNER JOIN image_tags it ON it.image_id = i.id
 		WHERE it.tag_id IN (%s) AND it.review_state != 'rejected'
@@ -291,6 +294,7 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 			&image.Height,
 			&image.Format,
 			&image.PHash,
+			&image.PHashHex,
 			&thumbnailSmallUrl,
 			&thumbnailLargeUrl,
 			&image.CreatedAt,
@@ -364,7 +368,7 @@ func (r *sqliteImageRepository) FindUntagged(ctx context.Context, limit, offset 
 	}
 
 	query := fmt.Sprintf(`
-		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), COALESCE(i.phash_hex, ''), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
 		LEFT JOIN image_tags it ON it.image_id = i.id
 		WHERE it.image_id IS NULL
@@ -392,6 +396,7 @@ func (r *sqliteImageRepository) FindUntagged(ctx context.Context, limit, offset 
 			&image.Height,
 			&image.Format,
 			&image.PHash,
+			&image.PHashHex,
 			&thumbnailSmallUrl,
 			&thumbnailLargeUrl,
 			&image.CreatedAt,
@@ -430,7 +435,7 @@ func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, lim
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), COALESCE(i.phash_hex, ''), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
 		WHERE i.thumbnail_small_url IS NOT NULL
 		  AND i.thumbnail_small_url != ''
@@ -470,6 +475,7 @@ func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, lim
 			&image.Height,
 			&image.Format,
 			&image.PHash,
+			&image.PHashHex,
 			&thumbnailSmallURL,
 			&thumbnailLargeURL,
 			&image.CreatedAt,
@@ -495,6 +501,11 @@ func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, lim
 // this will also remove related records in image_tags and collection_images.
 func (r *sqliteImageRepository) Delete(id int64) error {
 	_, err := r.db.Exec(`DELETE FROM images WHERE id = ?`, id)
+	return err
+}
+
+func (r *sqliteImageRepository) UpdateImagePHashHex(imageID int64, phashHex string) error {
+	_, err := r.db.Exec(`UPDATE images SET phash_hex = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, phashHex, imageID)
 	return err
 }
 
@@ -541,7 +552,7 @@ func (r *sqliteImageRepository) FindBackfillCandidates(ctx context.Context, filt
 
 	query := fmt.Sprintf(`
 		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format,
-		       COALESCE(i.phash, 0), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
+		       COALESCE(i.phash, 0), COALESCE(i.phash_hex, ''), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
 		WHERE 1=1
 		%s
@@ -569,7 +580,7 @@ func (r *sqliteImageRepository) FindBackfillCandidates(ctx context.Context, filt
 		if err := rows.Scan(
 			&image.ID, &image.Path, &image.Filename, &image.SourceRoot,
 			&image.FileSize, &image.Width, &image.Height, &image.Format,
-			&image.PHash, &thumbnailSmallURL, &thumbnailLargeURL,
+			&image.PHash, &image.PHashHex, &thumbnailSmallURL, &thumbnailLargeURL,
 			&image.CreatedAt, &image.UpdatedAt,
 		); err != nil {
 			return nil, err

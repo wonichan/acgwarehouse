@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -313,5 +314,51 @@ func TestDuplicateRelation_RecommendationColumns(t *testing.T) {
 	}
 	if rawRationale != rationale {
 		t.Fatalf("recommendation_rationale = %q, want %q", rawRationale, rationale)
+	}
+}
+
+func TestDuplicateRepository_SaveAndFindRecommendationRationale(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewDuplicateRepository(db)
+	imageIDs := insertTestImages(t, db)
+
+	rationale := json.RawMessage(`{"reasons":[{"factor":"resolution","score":100,"weight":0.5}],"score":91.3}`)
+	group := &domain.DuplicateGroup{
+		RecommendedImageID:  imageIDs[0],
+		SimilarityThreshold: 10,
+		CreatedAt:           time.Now(),
+	}
+	relations := []domain.DuplicateRelation{
+		{
+			ImageID:                 imageIDs[0],
+			IsRecommended:           true,
+			FileHash:                "hash-rec",
+			PHashDistance:           0,
+			RecommendationScore:     91.3,
+			RecommendationRationale: rationale,
+		},
+	}
+
+	if err := repo.SaveDuplicateGroup(group, relations); err != nil {
+		t.Fatalf("SaveDuplicateGroup failed: %v", err)
+	}
+
+	_, foundRelations, err := repo.FindDuplicateGroupByID(group.ID)
+	if err != nil {
+		t.Fatalf("FindDuplicateGroupByID failed: %v", err)
+	}
+	if len(foundRelations) != 1 {
+		t.Fatalf("len(foundRelations) = %d, want 1", len(foundRelations))
+	}
+
+	got := foundRelations[0]
+	if got.RecommendationScore != 91.3 {
+		t.Fatalf("RecommendationScore = %v, want 91.3", got.RecommendationScore)
+	}
+	if !json.Valid(got.RecommendationRationale) {
+		t.Fatalf("RecommendationRationale is not valid JSON: %s", string(got.RecommendationRationale))
+	}
+	if string(got.RecommendationRationale) != string(rationale) {
+		t.Fatalf("RecommendationRationale = %s, want %s", string(got.RecommendationRationale), string(rationale))
 	}
 }

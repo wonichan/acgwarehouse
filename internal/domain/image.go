@@ -20,6 +20,7 @@ type Image struct {
 	Height            int       `json:"height"`
 	Format            string    `json:"format"`
 	PHash             int64     `json:"phash"`
+	PHashHex          string    `json:"phash_hex"`
 	ThumbnailSmallUrl string    `json:"thumbnail_small_url"`
 	ThumbnailLargeUrl string    `json:"thumbnail_large_url"`
 	CreatedAt         time.Time `json:"created_at"`

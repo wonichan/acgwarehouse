@@ -292,6 +292,49 @@ func TestImage_PHashHexColumn(t *testing.T) {
 	}
 }
 
+func TestUpdateImagePHashHex(t *testing.T) {
+	t.Parallel()
+
+	_, repo := newImageRepositoryTestDB(t)
+
+	image := &domain.Image{
+		Path:       "/tmp/update-phash-hex.png",
+		Filename:   "update-phash-hex.png",
+		SourceRoot: "/tmp",
+		Format:     "png",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	if _, err := repo.SaveImage(image); err != nil {
+		t.Fatalf("save image: %v", err)
+	}
+
+	phashHex := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+	if err := repo.UpdateImagePHashHex(image.ID, phashHex); err != nil {
+		t.Fatalf("UpdateImagePHashHex failed: %v", err)
+	}
+
+	found, err := repo.FindByID(image.ID)
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+
+	if found.PHashHex != phashHex {
+		t.Fatalf("PHashHex = %q, want %q", found.PHashHex, phashHex)
+	}
+
+	all, err := repo.FindAll(10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+	if len(all) == 0 {
+		t.Fatal("FindAll returned no images")
+	}
+	if all[0].PHashHex != phashHex {
+		t.Fatalf("FindAll[0].PHashHex = %q, want %q", all[0].PHashHex, phashHex)
+	}
+}
+
 func TestFindUntaggedSupportsPagination(t *testing.T) {
 	t.Parallel()
 

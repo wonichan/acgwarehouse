@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -65,8 +66,10 @@ func (r *sqliteDuplicateRepository) SaveDuplicateGroup(group *domain.DuplicateGr
 
 	// 插入关联关系
 	stmt, err := tx.Prepare(`
-		INSERT INTO duplicate_relations (group_id, image_id, is_recommended, file_hash, phash_distance)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO duplicate_relations (
+			group_id, image_id, is_recommended, file_hash, phash_distance, recommendation_score, recommendation_rationale
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -78,7 +81,15 @@ func (r *sqliteDuplicateRepository) SaveDuplicateGroup(group *domain.DuplicateGr
 		if rel.IsRecommended {
 			isRecommended = 1
 		}
-		_, err := stmt.Exec(groupID, rel.ImageID, isRecommended, rel.FileHash, rel.PHashDistance)
+		_, err := stmt.Exec(
+			groupID,
+			rel.ImageID,
+			isRecommended,
+			rel.FileHash,
+			rel.PHashDistance,
+			rel.RecommendationScore,
+			string(rel.RecommendationRationale),
+		)
 		if err != nil {
 			return err
 		}
@@ -175,7 +186,8 @@ func (r *sqliteDuplicateRepository) FindDuplicateGroupByImageID(imageID int64) (
 
 func (r *sqliteDuplicateRepository) findRelationsByGroupID(groupID int64) ([]domain.DuplicateRelation, error) {
 	rows, err := r.db.Query(`
-		SELECT group_id, image_id, is_recommended, file_hash, phash_distance
+		SELECT group_id, image_id, is_recommended, file_hash, phash_distance,
+		       COALESCE(recommendation_score, 0), COALESCE(recommendation_rationale, '')
 		FROM duplicate_relations
 		WHERE group_id = ?
 		ORDER BY is_recommended DESC, phash_distance ASC
@@ -189,18 +201,24 @@ func (r *sqliteDuplicateRepository) findRelationsByGroupID(groupID int64) ([]dom
 	for rows.Next() {
 		var rel domain.DuplicateRelation
 		var isRecommended int
+		var recommendationRationale string
 		err := rows.Scan(
 			&rel.GroupID,
 			&rel.ImageID,
 			&isRecommended,
 			&rel.FileHash,
 			&rel.PHashDistance,
+			&rel.RecommendationScore,
+			&recommendationRationale,
 		)
 		if err != nil {
 			return nil, err
 		}
 		rel.IsRecommended = isRecommended == 1
 		rel.GroupID = groupID
+		if recommendationRationale != "" {
+			rel.RecommendationRationale = json.RawMessage(recommendationRationale)
+		}
 		relations = append(relations, rel)
 	}
 
