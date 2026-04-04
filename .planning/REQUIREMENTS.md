@@ -7,7 +7,7 @@
 
 ### Desktop Shell（桌面主壳层）
 
-- [ ] **DSK-01**: 用户可以通过桌面顶部工具栏访问搜索、导入和设置等核心操作
+- [x] **DSK-01**: 用户可以通过桌面顶部工具栏访问搜索、导入和设置等核心操作
 - [ ] **DSK-02**: 用户可以在桌面端使用方块网格模式浏览图库
 - [ ] **DSK-03**: 用户可以在桌面端按标签筛选图库内容
 - [ ] **DSK-04**: 管理员可以在桌面端管理标签（查看、编辑、整理）而不必切换到旧入口
@@ -71,7 +71,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DSK-01 | Phase 17 | Pending |
+| DSK-01 | Phase 17 | Complete |
 | DSK-02 | Phase 17 | Pending |
 | DSK-03 | Phase 17 | Pending |
 | DSK-04 | Phase 19 | Pending |

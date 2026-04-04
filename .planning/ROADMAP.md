@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 15: Compute Sidecar Infrastructure** - Establish Go ↔ Python process lifecycle and communication foundation (completed 2026-04-03)
 - [x] **Phase 16: Duplicate Detection Migration** - Migrate duplicate detection computation to Python sidecar (completed 2026-04-04)
-- [ ] **Phase 17: Desktop Shell Foundation** - Deliver Windows Photos-style toolbar and grid browsing
+- [x] **Phase 17: Desktop Shell Foundation** - Deliver Windows Photos-style toolbar and grid browsing (completed 2026-04-05)
 - [ ] **Phase 18: Independent Viewer & Filmstrip** - Implement non-blocking viewer with filmstrip navigation
 - [ ] **Phase 19: Tag Management** - Enable in-app tag management without legacy entry switching
 - [ ] **Phase 20: Operations Monitoring** - Integrate task monitoring and sidecar diagnostics into desktop UI
@@ -71,8 +71,8 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] `17-01-PLAN.md` — Build the custom desktop top bar, search handoff, and shell action contract
-- [ ] `17-02-PLAN.md` — Convert the gallery into a grid-first workspace with a persistent right filter panel
-- [ ] `17-03-PLAN.md` — Wire the top-bar import action to a real backend endpoint with lightweight feedback
+- [x] `17-02-PLAN.md` — Convert the gallery into a grid-first workspace with a persistent right filter panel
+- [x] `17-03-PLAN.md` — Wire the top-bar import action to a real backend endpoint with lightweight feedback
 **UI hint**: yes
 
 ### Phase 18: Independent Viewer & Filmstrip
@@ -141,7 +141,7 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 |-------|-----------|----------------|--------|-----------|
 | 15. Compute Sidecar Infrastructure | v4.0 | 3/3 | Complete    | 2026-04-03 |
 | 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete    | 2026-04-04 |
-| 17. Desktop Shell Foundation | v4.0 | 2/3 | In progress | - |
+| 17. Desktop Shell Foundation | v4.0 | 3/3 | Complete    | 2026-04-05 |
 | 18. Independent Viewer & Filmstrip | v4.0 | 0/TBD | Not started | - |
 | 19. Tag Management | v4.0 | 0/TBD | Not started | - |
 | 20. Operations Monitoring | v4.0 | 0/TBD | Not started | - |
