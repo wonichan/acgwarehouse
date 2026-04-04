@@ -9,12 +9,14 @@ typedef FluentImageTapCallback = void Function(ImageModel image);
 class FluentImageCard extends StatefulWidget {
   final ImageModel image;
   final FluentImageTapCallback? onTap;
+  final FluentImageTapCallback? onDoubleClick;
   final double borderRadius;
 
   const FluentImageCard({
     super.key,
     required this.image,
     this.onTap,
+    this.onDoubleClick,
     this.borderRadius = 8.0,
   });
 
@@ -35,6 +37,9 @@ class _FluentImageCardState extends State<FluentImageCard> {
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
         onTap: widget.onTap != null ? () => widget.onTap!(widget.image) : null,
+        onDoubleTap: widget.onDoubleClick != null
+            ? () => widget.onDoubleClick!(widget.image)
+            : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
@@ -78,10 +83,7 @@ class _FluentImageCardState extends State<FluentImageCard> {
       placeholder: (context, url) => Container(
         color: theme.resources.cardBackgroundFillColorSecondary,
         child: Center(
-          child: ProgressRing(
-            strokeWidth: 2,
-            activeColor: theme.accentColor,
-          ),
+          child: ProgressRing(strokeWidth: 2, activeColor: theme.accentColor),
         ),
       ),
       errorWidget: (context, url, error) => Container(

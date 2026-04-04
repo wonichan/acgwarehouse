@@ -12,11 +12,13 @@ import 'fluent_image_card.dart';
 /// 支持滚动分页加载和下拉刷新
 class FluentGalleryContent extends StatefulWidget {
   final void Function(ImageModel)? onImageTap;
+  final void Function(ImageModel)? onImageDoubleTap;
   final ScrollController? scrollController;
 
   const FluentGalleryContent({
     super.key,
     this.onImageTap,
+    this.onImageDoubleTap,
     this.scrollController,
   });
 
@@ -169,7 +171,11 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
       ),
       itemCount: images.length,
       itemBuilder: (context, index) {
-        return FluentImageCard(image: images[index], onTap: widget.onImageTap);
+        return FluentImageCard(
+          image: images[index],
+          onTap: widget.onImageTap,
+          onDoubleClick: widget.onImageDoubleTap,
+        );
       },
     );
   }
@@ -183,7 +189,11 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
       crossAxisSpacing: 8,
       itemCount: images.length,
       itemBuilder: (context, index) {
-        return FluentImageCard(image: images[index], onTap: widget.onImageTap);
+        return FluentImageCard(
+          image: images[index],
+          onTap: widget.onImageTap,
+          onDoubleClick: widget.onImageDoubleTap,
+        );
       },
     );
   }
