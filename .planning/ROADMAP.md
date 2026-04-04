@@ -19,7 +19,7 @@
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 15: Compute Sidecar Infrastructure** - Establish Go ↔ Python process lifecycle and communication foundation (completed 2026-04-03)
-- [ ] **Phase 16: Duplicate Detection Migration** - Migrate duplicate detection computation to Python sidecar
+- [x] **Phase 16: Duplicate Detection Migration** - Migrate duplicate detection computation to Python sidecar (completed 2026-04-04)
 - [ ] **Phase 17: Desktop Shell Foundation** - Deliver Windows Photos-style toolbar and grid browsing
 - [ ] **Phase 18: Independent Viewer & Filmstrip** - Implement non-blocking viewer with filmstrip navigation
 - [ ] **Phase 19: Tag Management** - Enable in-app tag management without legacy entry switching
@@ -57,7 +57,7 @@ Plans:
 Plans:
 - [x] `16-01-PLAN.md` — Build Python sidecar duplicate detection compute pipeline (hashing, grouping, scoring, async task endpoints)
 - [x] `16-02-PLAN.md` — Extend Go domain models and SQLite schema for 256-bit pHash and recommendation rationale
-- [ ] `16-03-PLAN.md` — Wire Go to Python sidecar: HTTP client, service refactor, handler pre-check, old code deletion
+- [x] `16-03-PLAN.md` — Wire Go to Python sidecar: HTTP client, service refactor, handler pre-check, old code deletion
 **UI hint**: no
 
 ### Phase 17: Desktop Shell Foundation
@@ -136,7 +136,7 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 15. Compute Sidecar Infrastructure | v4.0 | 3/3 | Complete    | 2026-04-03 |
-| 16. Duplicate Detection Migration | v4.0 | 2/3 | In Progress | - |
+| 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete   | 2026-04-04 |
 | 17. Desktop Shell Foundation | v4.0 | 0/TBD | Not started | - |
 | 18. Independent Viewer & Filmstrip | v4.0 | 0/TBD | Not started | - |
 | 19. Tag Management | v4.0 | 0/TBD | Not started | - |

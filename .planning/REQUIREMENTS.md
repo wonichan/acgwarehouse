@@ -23,8 +23,8 @@
 
 - [x] **COMP-01**: 用户启动桌面应用时，系统会按 `Flutter → Go → Python` 的顺序完成本地服务拉起，并在 Go 与 Python 都就绪后才进入可用状态
 - [x] **COMP-02**: 管理员启动桌面应用时，系统会自动拉起并监控 Python 计算侧车进程
-- [ ] **COMP-03**: 系统会把重复检测、图像哈希和相似度计算从现有 Go 直接计算迁移到 Python 侧车执行
-- [ ] **COMP-04**: 用户在重复检测结果中可以看到每组图片的推荐保留项与推荐依据
+- [x] **COMP-03**: 系统会把重复检测、图像哈希和相似度计算从现有 Go 直接计算迁移到 Python 侧车执行
+- [x] **COMP-04**: 用户在重复检测结果中可以看到每组图片的推荐保留项与推荐依据
 - [ ] **COMP-05**: 当 Python 侧车不可用时，系统仍能给出可诊断的失败状态与恢复提示，而不是静默失效
 - [x] **COMP-06**: Flutter 端可以获取当前 Go 本地服务地址并在应用启动过程中完成连接，而不依赖写死的固定端口
 
@@ -81,8 +81,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIEW-04 | Phase 18 | Pending |
 | COMP-01 | Phase 15 | Complete |
 | COMP-02 | Phase 15 | Complete |
-| COMP-03 | Phase 16 | Pending |
-| COMP-04 | Phase 16 | Pending |
+| COMP-03 | Phase 16 | Complete |
+| COMP-04 | Phase 16 | Complete |
 | COMP-05 | Phase 22 | Pending |
 | COMP-06 | Phase 15 | Complete |
 | OPS-01 | Phase 20 | Pending |

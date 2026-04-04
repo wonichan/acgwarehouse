@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
 status: executing
-stopped_at: Completed 16-01-PLAN.md
-last_updated: "2026-04-04T06:06:27.853Z"
-last_activity: 2026-04-04 -- Phase 16 plan 16-01 completed (16-02 already completed)
+stopped_at: Completed 16-03-PLAN.md
+last_updated: "2026-04-04T06:38:34.406Z"
+last_activity: 2026-04-04
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
-  percent: 97
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-04-04)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。  
-**Current focus:** Phase 16 — duplicate-detection-migration
+**Current focus:** Phase 17 — desktop-shell-foundation
 
 ## Current Position
 
 Milestone: `v4.0` in progress ◆  
-Phase: 16 (duplicate-detection-migration) — EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 16 (16-01 & 16-02 completed)
-Last activity: 2026-04-04 -- Phase 16 plan 16-01 completed (16-02 already completed)
+Phase: 16 (duplicate-detection-migration) — COMPLETE
+Plan: 3 of 3
+Status: Phase 16 completed, ready for Phase 17
+Last activity: 2026-04-04
 
-Progress: [███████████████████░] 64/66 plans (97%)
+Progress: [██████████] 6/6 plans (100%)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 65 (v1.0 + v2.0 + v3.0 + v4.0 in progress)
+- Total plans completed: 66 (v1.0 + v2.0 + v3.0 + v4.0 in progress)
 - Average duration: ~30 min
 - Delivery trend: Stable across the last 3 milestones
 
@@ -52,6 +52,7 @@ Progress: [███████████████████░] 64/66 p
 | Phase 15 P02 | 8 min | 2 tasks | 12 files |
 | Phase 15 P01 | 8 h 11 m | 3 tasks | 8 files |
 | Phase 15 P03 | 6 min | 3 tasks | 6 files |
+| Phase 16 P03 | 14 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -70,11 +71,11 @@ Most recent milestone-level decisions:
 - [Phase 15]: Base /health and /ready responses remain explicitly Go-scoped and do not expose sidecar diagnostics.
 - [Phase 15]: Expose sidecar observability via admin overview while keeping /health and /ready Go-scoped.
 - [Phase 15]: Treat degraded/stopped sidecar states as failed probe diagnostics for deterministic operator visibility.
+- [Phase 16]: Duplicate detection computation is fully migrated to Python sidecar; Go remains orchestrator/persistence.
+- [Phase 16]: Handler now hard-fails duplicate detect with diagnostic 503 when sidecar is not ready.
 
 ### Pending Todos
 
-- Execute Wave 2 integration plan for Go↔Python compute wiring (`16-03-PLAN.md`)
-- Run 16-01/16-02 orchestrator spot-check before 16-03 execution
 - Validate desktop startup readiness timing in real packaging environment (`15-HUMAN-UAT.md`)
 
 ### Blockers / Concerns
@@ -91,9 +92,9 @@ Research completed: `.planning/research/SUMMARY.md` (HIGH confidence)
 
 ## Session Continuity
 
-Last session: 2026-04-04T06:06:27.853Z
-Stopped at: Completed 16-01-PLAN.md
-Resume file: .planning/phases/16-duplicate-detection-migration/16-03-PLAN.md
+Last session: 2026-04-04T06:38:34.403Z
+Stopped at: Completed 16-03-PLAN.md
+Resume file: None
 
 ---
-*State updated: 2026-04-04 after Phase 16 Plan 01 completion*
+*State updated: 2026-04-04 after Phase 16 Plan 03 completion*
