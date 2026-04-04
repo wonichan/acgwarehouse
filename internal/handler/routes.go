@@ -28,7 +28,7 @@ type Dependencies struct {
 	SidecarRuntime *sidecar.Runtime
 	CollectionSvc  *service.CollectionService
 	BatchSvc       *service.BatchService
-	AdminSvc       *service.AdminService
+	AdminSvc       AdminServiceInterface
 	JobManager     *worker.Manager
 	AdminCfg       *config.Config
 	ConfigReloader *config.Reloader // For hot-reloadable config access
@@ -124,14 +124,16 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	images := api.Group("/images")
 	imageList := gin.HandlerFunc(placeholderHandler)
 	imageGet := gin.HandlerFunc(placeholderHandler)
+	imageScan := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.ImageRepo != nil && deps.TagRepo != nil && deps.ImageTagRepo != nil {
-		imageHandler := NewImageHandler(deps.ImageRepo, deps.TagRepo, deps.ImageTagRepo)
+		imageHandler := NewImageHandler(deps.ImageRepo, deps.TagRepo, deps.ImageTagRepo, deps.AdminSvc)
 		imageList = imageHandler.ListImages
 		imageGet = imageHandler.GetImage
+		imageScan = imageHandler.TriggerImport
 	}
 	images.GET("", imageList)
 	images.GET("/:id", imageGet)
-	images.POST("/scan", placeholderHandler)
+	images.POST("/scan", imageScan)
 
 	tagGet := gin.HandlerFunc(placeholderHandler)
 	tagCreate := gin.HandlerFunc(placeholderHandler)

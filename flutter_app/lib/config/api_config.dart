@@ -44,6 +44,7 @@ class ApiConfig {
   // Image endpoints
   static String get images => '$baseUrl/images';
   static String imageDetail(int id) => '$baseUrl/images/$id';
+  static String get imageScan => '$baseUrl/images/scan';
   static String get importStatus => '$baseUrl/images/import-status';
 
   // Tag endpoints

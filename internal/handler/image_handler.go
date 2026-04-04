@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -15,13 +16,24 @@ type ImageHandler struct {
 	imageRepo    repository.ImageRepository
 	tagRepo      repository.TagRepository
 	imageTagRepo repository.ImageTagRepository
+	adminSvc     imageScanTrigger
 }
 
-func NewImageHandler(imageRepo repository.ImageRepository, tagRepo repository.TagRepository, imageTagRepo repository.ImageTagRepository) *ImageHandler {
+type imageScanTrigger interface {
+	TriggerScan(ctx context.Context) (int64, error)
+}
+
+func NewImageHandler(imageRepo repository.ImageRepository, tagRepo repository.TagRepository, imageTagRepo repository.ImageTagRepository, adminSvcOpt ...imageScanTrigger) *ImageHandler {
+	var adminSvc imageScanTrigger
+	if len(adminSvcOpt) > 0 {
+		adminSvc = adminSvcOpt[0]
+	}
+
 	return &ImageHandler{
 		imageRepo:    imageRepo,
 		tagRepo:      tagRepo,
 		imageTagRepo: imageTagRepo,
+		adminSvc:     adminSvc,
 	}
 }
 
@@ -161,6 +173,31 @@ func (h *ImageHandler) GetImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, image)
+}
+
+// TriggerImport handles POST /api/v1/images/scan and queues a manual scan job.
+func (h *ImageHandler) TriggerImport(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "failed",
+			"error":  "import service not configured",
+		})
+		return
+	}
+
+	jobID, err := h.adminSvc.TriggerScan(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "failed",
+			"error":  "failed to queue import: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"status": "queued",
+		"job_id": jobID,
+	})
 }
 
 func parseTagIDs(s string) ([]int64, error) {
