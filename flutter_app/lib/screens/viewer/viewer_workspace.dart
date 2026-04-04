@@ -7,8 +7,15 @@ import 'package:gallery/screens/viewer/viewer_keyboard_scope.dart';
 
 class ViewerWorkspace extends StatefulWidget {
   final ViewerSession session;
+  final ValueChanged<ViewerSessionItem>? onItemChanged;
+  final VoidCallback? onEscape;
 
-  const ViewerWorkspace({super.key, required this.session});
+  const ViewerWorkspace({
+    super.key,
+    required this.session,
+    this.onItemChanged,
+    this.onEscape,
+  });
 
   @override
   State<ViewerWorkspace> createState() => _ViewerWorkspaceState();
@@ -23,21 +30,31 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
     _selectedIndex = widget.session.initialSelectedIndex;
   }
 
+  void _updateSelection(int newIndex) {
+    if (_selectedIndex != newIndex) {
+      setState(() => _selectedIndex = newIndex);
+      if (widget.onItemChanged != null) {
+        widget.onItemChanged!(widget.session.items[_selectedIndex]);
+      }
+    }
+  }
+
   void _handleNext() {
     if (_selectedIndex < widget.session.items.length - 1) {
-      setState(() => _selectedIndex++);
+      _updateSelection(_selectedIndex + 1);
     }
   }
 
   void _handlePrevious() {
     if (_selectedIndex > 0) {
-      setState(() => _selectedIndex--);
+      _updateSelection(_selectedIndex - 1);
     }
   }
 
   void _handleEscape() {
-    // In a real app, this would close the window or modal.
-    // For now, let's assume parent handles it if needed or it's a no-op.
+    if (widget.onEscape != null) {
+      widget.onEscape!();
+    }
   }
 
   @override
@@ -79,7 +96,7 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
             session: widget.session,
             selectedIndex: _selectedIndex,
             onIndexChanged: (idx) {
-              setState(() => _selectedIndex = idx);
+              _updateSelection(idx);
             },
           ),
         ],
