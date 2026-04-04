@@ -99,7 +99,11 @@ Plans:
   1. Admin can view all tags with usage statistics in dedicated tag management view
   2. Admin can edit tag names and merge duplicate tags in-place
   3. Admin can delete unused tags with confirmation showing affected image count
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] `19-01-PLAN.md` — Build backend governance contracts for enriched list rows, explicit merge, and safe delete/cleanup semantics
+- [ ] `19-02-PLAN.md` — Build Flutter governance models, service methods, provider selection state, and batch orchestration
+- [ ] `19-03-PLAN.md` — Build the Fluent desktop governance workspace, merge panel, batch action bar, and gallery drilldown
 **UI hint**: yes
 
 ### Phase 20: Operations Monitoring
@@ -147,7 +151,7 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 | 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete    | 2026-04-04 |
 | 17. Desktop Shell Foundation | v4.0 | 3/3 | Complete    | 2026-04-05 |
 | 18. Independent Viewer & Filmstrip | v4.0 | 3/3 | Complete    | 2026-04-05 |
-| 19. Tag Management | v4.0 | 0/TBD | Not started | - |
+| 19. Tag Management | v4.0 | 0/3 | Planned | - |
 | 20. Operations Monitoring | v4.0 | 0/TBD | Not started | - |
 | 21. Windows Packaging | v4.0 | 0/TBD | Not started | - |
 | 22. Large Gallery Performance | v4.0 | 0/TBD | Not started | - |

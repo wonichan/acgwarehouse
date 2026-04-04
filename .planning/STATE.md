@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
 status: executing
-stopped_at: Phase 18 verification passed
-last_updated: "2026-04-05T03:00:00.000Z"
-last_activity: 2026-04-05
+stopped_at: Phase 19 planned
+last_updated: "2026-04-05T10:05:00.000Z"
+last_activity: 2026-04-05 -- Phase 19 planning completed
 progress:
   total_phases: 8
   completed_phases: 4
@@ -21,15 +21,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-04-05)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。  
-**Current focus:** Phase 19 — tag-management
+**Current focus:** Phase 19 — tag-management planning complete
 
 ## Current Position
 
 Milestone: `v4.0` in progress ◆  
-Phase: 19
-Plan: Not started
-Status: Phase 18 complete — ready to plan Phase 19
-Last activity: 2026-04-05
+Phase: 19 (tag-management) — PLANNED
+Plan: 3 of 3
+Status: Planning complete, ready for execution
+Last activity: 2026-04-05 -- Phase 19 planning completed
 
 Progress: [████████░░] 10/12 plans (83%)
 
@@ -84,6 +84,10 @@ Most recent milestone-level decisions:
 - [Phase 18-01]: Viewer launches now serialize result-set-scoped session payloads instead of depending on live provider state across windows.
 - [Phase 18-01]: Windows secondary viewer hosting now uses a dedicated multi-window bootstrap path via `desktop_multi_window`.
 - [Phase 18-01]: Viewer windows always open with centered default sizing and do not restore persisted window memory.
+- [Phase 19]: Tag management remains a dedicated desktop navigation page with list-first governance workflow.
+- [Phase 19]: Duplicate-tag handling will use a list-driven merge panel rather than a separate heavy governance console.
+- [Phase 19]: Delete flow is restricted to unused tags and must explicitly show affected image count in confirmation.
+- [Phase 19]: Phase scope expands beyond core CRUD to include `primaryCategory`, alias governance, full batch operations, and jump-to-affected-images linkage.
 
 ### Pending Todos
 
@@ -103,9 +107,16 @@ Research completed: `.planning/research/SUMMARY.md` (HIGH confidence)
 
 ## Session Continuity
 
-Last session: 2026-04-05T03:00:00+08:00
-Stopped at: Phase 18 verification passed
-Resume file: .planning/phases/18-independent-viewer-filmstrip/18-VERIFICATION.md
+Last session: 2026-04-05T10:05:00+08:00
+Stopped at: Phase 19 planned
+Resume file: .planning/phases/19-tag-management/19-01-PLAN.md
+
+Planning artifacts:
+- `.planning/phases/19-tag-management/19-RESEARCH.md`
+- `.planning/phases/19-tag-management/19-01-PLAN.md`
+- `.planning/phases/19-tag-management/19-02-PLAN.md`
+- `.planning/phases/19-tag-management/19-03-PLAN.md`
+- `.planning/phases/19-tag-management/19-VALIDATION.md`
 
 ---
-*State updated: 2026-04-05 after Phase 18 verification passed*
+*State updated: 2026-04-05 after Phase 19 planning completion*
