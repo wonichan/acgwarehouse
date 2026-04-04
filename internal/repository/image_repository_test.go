@@ -261,6 +261,37 @@ func TestFindUntaggedReturnsOnlyImagesWithoutTags(t *testing.T) {
 	}
 }
 
+func TestImage_PHashHexColumn(t *testing.T) {
+	t.Parallel()
+
+	db, _ := newImageRepositoryTestDB(t)
+	now := time.Now()
+	phashHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+	result, err := db.Exec(`
+		INSERT INTO images (
+			path, filename, source_root, file_size, width, height, format, phash, phash_hex, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "/tmp/phash-hex-test.png", "phash-hex-test.png", "/tmp", 2048, 1920, 1080, "png", 12345, phashHex, now, now)
+	if err != nil {
+		t.Fatalf("insert image with phash_hex: %v", err)
+	}
+
+	imageID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("last insert id: %v", err)
+	}
+
+	var got string
+	if err := db.QueryRow(`SELECT phash_hex FROM images WHERE id = ?`, imageID).Scan(&got); err != nil {
+		t.Fatalf("select phash_hex: %v", err)
+	}
+
+	if got != phashHex {
+		t.Fatalf("phash_hex = %q, want %q", got, phashHex)
+	}
+}
+
 func TestFindUntaggedSupportsPagination(t *testing.T) {
 	t.Parallel()
 

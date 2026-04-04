@@ -248,6 +248,15 @@ func EnsureScanSchema(db *sql.DB) error {
 	if err := ensureColumnExists(db, "image_tags", "source", "TEXT NOT NULL DEFAULT 'manual'"); err != nil {
 		return err
 	}
+	if err := ensureColumnExists(db, "images", "phash_hex", "TEXT"); err != nil {
+		return err
+	}
+	if err := ensureColumnExists(db, "duplicate_relations", "recommendation_score", "REAL"); err != nil {
+		return err
+	}
+	if err := ensureColumnExists(db, "duplicate_relations", "recommendation_rationale", "TEXT"); err != nil {
+		return err
+	}
 	_, err := db.Exec(`
 		UPDATE image_tags
 		SET source = 'ai'

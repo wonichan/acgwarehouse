@@ -272,3 +272,46 @@ func TestDuplicateRepository_CountDuplicateGroups(t *testing.T) {
 		t.Errorf("Expected 1 group, got %d", count)
 	}
 }
+
+func TestDuplicateRelation_RecommendationColumns(t *testing.T) {
+	db := setupTestDB(t)
+	imageIDs := insertTestImages(t, db)
+
+	if _, err := db.Exec(`
+		INSERT INTO duplicate_groups (recommended_image_id, similarity_threshold, created_at)
+		VALUES (?, ?, ?)
+	`, imageIDs[0], 10, time.Now()); err != nil {
+		t.Fatalf("insert duplicate group: %v", err)
+	}
+
+	var groupID int64
+	if err := db.QueryRow(`SELECT id FROM duplicate_groups ORDER BY id DESC LIMIT 1`).Scan(&groupID); err != nil {
+		t.Fatalf("query duplicate group id: %v", err)
+	}
+
+	rationale := `{"reasons":[{"factor":"resolution","weight":0.5}],"score":85.5}`
+	if _, err := db.Exec(`
+		INSERT INTO duplicate_relations (
+			group_id, image_id, is_recommended, file_hash, phash_distance, recommendation_score, recommendation_rationale
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, groupID, imageIDs[0], 1, "hash-roundtrip", 0, 85.5, rationale); err != nil {
+		t.Fatalf("insert relation with recommendation columns: %v", err)
+	}
+
+	var score float64
+	var rawRationale string
+	if err := db.QueryRow(`
+		SELECT recommendation_score, recommendation_rationale
+		FROM duplicate_relations
+		WHERE group_id = ? AND image_id = ?
+	`, groupID, imageIDs[0]).Scan(&score, &rawRationale); err != nil {
+		t.Fatalf("select relation with recommendation columns: %v", err)
+	}
+
+	if score != 85.5 {
+		t.Fatalf("recommendation_score = %v, want 85.5", score)
+	}
+	if rawRationale != rationale {
+		t.Fatalf("recommendation_rationale = %q, want %q", rawRationale, rationale)
+	}
+}
