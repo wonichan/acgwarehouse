@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
 status: executing
-stopped_at: Phase 17 Plan 01 completed
-last_updated: "2026-04-05T02:35:00.000Z"
-last_activity: 2026-04-05 -- Phase 17 Plan 01 completed
+stopped_at: Phase 17 Plan 02 completed
+last_updated: "2026-04-05T04:35:00.000Z"
+last_activity: 2026-04-05 -- Phase 17 Plan 02 completed
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
-  percent: 78
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -27,11 +27,11 @@ See: `.planning/PROJECT.md` (updated 2026-04-04)
 
 Milestone: `v4.0` in progress ◆  
 Phase: 17 (desktop-shell-foundation) — EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 17 (17-01 complete)
-Last activity: 2026-04-05 -- Phase 17 Plan 01 completed
+Plan: 3 of 3
+Status: Executing Phase 17 (17-01/17-02 complete)
+Last activity: 2026-04-05 -- Phase 17 Plan 02 completed
 
-Progress: [████████░░] 7/9 plans (78%)
+Progress: [█████████░] 8/9 plans (89%)
 
 ## Performance Metrics
 
@@ -76,6 +76,9 @@ Most recent milestone-level decisions:
 - [Phase 17-01]: Desktop shell now centralizes search/import/settings affordances in a persistent shell-level top bar.
 - [Phase 17-01]: Shell search submission trims query, triggers SearchProvider search, then navigates to search view.
 - [Phase 17-01]: Gallery page headers no longer own duplicated shell actions (filter/tag-management command buttons removed from page command bar).
+- [Phase 17-02]: Gallery page now uses a persistent workspace layout (content + right filter panel) instead of dialog-primary filtering.
+- [Phase 17-02]: Right panel filtering is immediate and provider-driven, including untagged-only toggle semantics.
+- [Phase 17-02]: Grid path now enforces explicit square-tile intent via constrained delegate settings.
 
 ### Pending Todos
 
@@ -96,8 +99,8 @@ Research completed: `.planning/research/SUMMARY.md` (HIGH confidence)
 ## Session Continuity
 
 Last session: 2026-04-04T07:37:26.473Z
-Stopped at: Phase 17 Plan 01 completed
-Resume file: .planning/phases/17-desktop-shell-foundation/17-01-SUMMARY.md
+Stopped at: Phase 17 Plan 02 completed
+Resume file: .planning/phases/17-desktop-shell-foundation/17-02-SUMMARY.md
 
 ---
-*State updated: 2026-04-05 after Phase 17 Plan 01 completion*
+*State updated: 2026-04-05 after Phase 17 Plan 02 completion*
