@@ -162,7 +162,8 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
       controller: _scrollController,
       padding: const EdgeInsets.all(8),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 200,
+        maxCrossAxisExtent: 220,
+        childAspectRatio: 1,
         mainAxisSpacing: 8,
         crossAxisSpacing: 8,
       ),
