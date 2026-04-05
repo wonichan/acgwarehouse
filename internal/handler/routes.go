@@ -147,7 +147,6 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	tagGetDeletePreview := gin.HandlerFunc(placeholderHandler)
 	tagMerge := gin.HandlerFunc(placeholderHandler)
 	tagBatchCleanup := gin.HandlerFunc(placeholderHandler)
-	tagCleanUnused := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.TagRepo != nil && deps.AliasRepo != nil && deps.ImageTagRepo != nil {
 		adminService := service.NewTagAdminService(deps.DB, deps.TagRepo, deps.AliasRepo, deps.ImageTagRepo)
 		tagHandler := NewTagHandler(deps.TagRepo, deps.AliasRepo, deps.ImageTagRepo, adminService)
@@ -163,7 +162,6 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		tagGetDeletePreview = tagHandler.GetDeletePreview
 		tagMerge = tagHandler.MergeTag
 		tagBatchCleanup = tagHandler.CleanUnusedTags
-		tagCleanUnused = tagHandler.CleanUnusedTags
 	}
 	api.GET("/tags", tagGet)
 	api.GET("/tags/governance", tagGetGovernance)
@@ -177,7 +175,6 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.DELETE("/tags/:id/aliases/:alias_id", tagDeleteAlias)
 	api.GET("/tags/stats", tagGetStats)
 	api.POST("/tags/batch/cleanup", tagBatchCleanup)
-	api.DELETE("/tags/cleanup", tagCleanUnused)
 
 	imageTagGet := gin.HandlerFunc(placeholderHandler)
 	imageTagAdd := gin.HandlerFunc(placeholderHandler)
