@@ -120,7 +120,7 @@ func TestMonitoringEventBusStartBroadcastsOverviewSnapshots(t *testing.T) {
 	ch, unsubscribe := bus.Subscribe()
 	defer unsubscribe()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	bus.Start(ctx, 10*time.Millisecond)
