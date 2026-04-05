@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/monitoring_provider.dart';
 import 'batch_list_section.dart';
+import 'sidecar_diagnostic_section.dart';
 
 class OperationsMonitoringWorkspace extends StatefulWidget {
   const OperationsMonitoringWorkspace({super.key});
@@ -66,7 +67,7 @@ class _OperationsMonitoringWorkspaceState
                         const SizedBox(height: 24),
                         const Divider(direction: Axis.horizontal),
                         const SizedBox(height: 24),
-                        const _DiagnosticPlaceholderSection(),
+                        const SidecarDiagnosticSection(),
                       ],
                     ),
                   ),
@@ -138,38 +139,6 @@ class _ServiceUnavailableState extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _DiagnosticPlaceholderSection extends StatelessWidget {
-  const _DiagnosticPlaceholderSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 320),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD9E2F2)),
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Sidecar 诊断',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          ),
-          SizedBox(height: 16),
-          Text(
-            '诊断面板将在下一步接入。',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
-          ),
-        ],
       ),
     );
   }
