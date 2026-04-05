@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/tag.dart';
+import 'package:gallery/models/tag_governance.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/services/tag_service.dart';
 import 'package:mocktail/mocktail.dart';
@@ -92,8 +93,9 @@ void main() {
       });
 
       test('loadTags sets error on failure', () async {
-        when(() => mockTagService.fetchTags())
-            .thenThrow(Exception('Network error'));
+        when(
+          () => mockTagService.fetchTags(),
+        ).thenThrow(Exception('Network error'));
 
         await tagProvider.loadTags();
 
@@ -115,13 +117,17 @@ void main() {
           ),
         ];
 
-        when(() => mockTagService.searchTags('anime'))
-            .thenAnswer((_) async => tags);
+        when(
+          () => mockTagService.searchTags('anime'),
+        ).thenAnswer((_) async => tags);
 
         await tagProvider.searchTags('anime');
 
         expect(tagProvider.filteredTags.length, 1);
-        expect(tagProvider.filteredTags.first.preferredLabel, 'Anime Character');
+        expect(
+          tagProvider.filteredTags.first.preferredLabel,
+          'Anime Character',
+        );
       });
 
       test('searchTags with empty query shows all tags', () async {
@@ -173,8 +179,9 @@ void main() {
           'rejected': [],
         };
 
-        when(() => mockTagService.getImageTags(123))
-            .thenAnswer((_) async => imageTags);
+        when(
+          () => mockTagService.getImageTags(123),
+        ).thenAnswer((_) async => imageTags);
 
         await tagProvider.loadImageTags(123);
 
@@ -195,8 +202,7 @@ void main() {
 
         // Set up initial state
         tagProvider = TagProvider(mockTagService);
-        when(() => mockTagService.confirmTag(123, 1))
-            .thenAnswer((_) async {});
+        when(() => mockTagService.confirmTag(123, 1)).thenAnswer((_) async {});
 
         // Manually set image tags
         tagProvider.imageTags['pending']!.add(pendingTag);
@@ -205,7 +211,10 @@ void main() {
 
         expect(tagProvider.imageTags['pending']!.isEmpty, true);
         expect(tagProvider.imageTags['confirmed']!.length, 1);
-        expect(tagProvider.imageTags['confirmed']!.first.reviewState, 'confirmed');
+        expect(
+          tagProvider.imageTags['confirmed']!.first.reviewState,
+          'confirmed',
+        );
       });
 
       test('rejectImageTag moves tag from pending to rejected', () async {
@@ -219,8 +228,7 @@ void main() {
           createdAt: DateTime.now(),
         );
 
-        when(() => mockTagService.rejectTag(123, 1))
-            .thenAnswer((_) async {});
+        when(() => mockTagService.rejectTag(123, 1)).thenAnswer((_) async {});
 
         tagProvider.imageTags['pending']!.add(pendingTag);
 
@@ -228,7 +236,10 @@ void main() {
 
         expect(tagProvider.imageTags['pending']!.isEmpty, true);
         expect(tagProvider.imageTags['rejected']!.length, 1);
-        expect(tagProvider.imageTags['rejected']!.first.reviewState, 'rejected');
+        expect(
+          tagProvider.imageTags['rejected']!.first.reviewState,
+          'rejected',
+        );
       });
 
       test('removeImageTag removes tag from all lists', () async {
@@ -242,8 +253,9 @@ void main() {
           createdAt: DateTime.now(),
         );
 
-        when(() => mockTagService.removeImageTag(123, 1))
-            .thenAnswer((_) async {});
+        when(
+          () => mockTagService.removeImageTag(123, 1),
+        ).thenAnswer((_) async {});
 
         tagProvider.imageTags['confirmed']!.add(tag);
 
@@ -263,18 +275,23 @@ void main() {
           createdAt: DateTime.now(),
         );
 
-        when(() => mockTagService.addImageTag(123, tagLabel: 'New Tag'))
-            .thenAnswer((_) async => newTag);
+        when(
+          () => mockTagService.addImageTag(123, tagLabel: 'New Tag'),
+        ).thenAnswer((_) async => newTag);
 
         await tagProvider.addImageTag(123, tagLabel: 'New Tag');
 
         expect(tagProvider.imageTags['confirmed']!.length, 1);
-        expect(tagProvider.imageTags['confirmed']!.first.preferredLabel, 'New Tag');
+        expect(
+          tagProvider.imageTags['confirmed']!.first.preferredLabel,
+          'New Tag',
+        );
       });
 
       test('triggerAITags returns job id', () async {
-        when(() => mockTagService.triggerAITags(123))
-            .thenAnswer((_) async => 999);
+        when(
+          () => mockTagService.triggerAITags(123),
+        ).thenAnswer((_) async => 999);
 
         final jobId = await tagProvider.triggerAITags(123);
 
@@ -284,8 +301,9 @@ void main() {
       test('getAITagStatus returns status', () async {
         final status = {'status': 'processing', 'progress': 0.5};
 
-        when(() => mockTagService.getAITagStatus(123))
-            .thenAnswer((_) async => status);
+        when(
+          () => mockTagService.getAITagStatus(123),
+        ).thenAnswer((_) async => status);
 
         final result = await tagProvider.getAITagStatus(123);
 
@@ -302,14 +320,205 @@ void main() {
       });
 
       test('confirmImageTag sets error on failure', () async {
-        when(() => mockTagService.confirmTag(123, 1))
-            .thenThrow(Exception('Failed'));
+        when(
+          () => mockTagService.confirmTag(123, 1),
+        ).thenThrow(Exception('Failed'));
 
-        expect(
-          () => tagProvider.confirmImageTag(123, 1),
-          throwsException,
-        );
+        expect(() => tagProvider.confirmImageTag(123, 1), throwsException);
       });
     });
+
+    group('Governance Workspace', () {
+      final governanceRow = TagGovernanceRow(
+        tagId: 101,
+        preferredLabel: 'anime-girl',
+        primaryCategory: 'character',
+        aliases: const ['waifu'],
+        usageCount: 42,
+        pendingCount: 3,
+        confirmedCount: 37,
+        rejectedCount: 2,
+        aiCount: 30,
+        manualCount: 12,
+        affectedImageCount: 42,
+        canDelete: false,
+      );
+
+      test('loadGovernanceTags fetches and stores governance rows', () async {
+        when(
+          () => mockTagService.fetchGovernanceTags(search: 'anime'),
+        ).thenAnswer((_) async => [governanceRow]);
+
+        await tagProvider.loadGovernanceTags(search: 'anime');
+
+        expect(tagProvider.governanceRows, hasLength(1));
+        expect(tagProvider.governanceRows.first.tagId, 101);
+      });
+
+      test(
+        'toggleGovernanceSelection and clearGovernanceSelection manage selected IDs',
+        () {
+          tagProvider.toggleGovernanceSelection(101);
+          tagProvider.toggleGovernanceSelection(102);
+          expect(tagProvider.selectedGovernanceIds, {101, 102});
+
+          tagProvider.toggleGovernanceSelection(101);
+          expect(tagProvider.selectedGovernanceIds, {102});
+
+          tagProvider.clearGovernanceSelection();
+          expect(tagProvider.selectedGovernanceIds, isEmpty);
+        },
+      );
+
+      test(
+        'setActiveMergeSource and clearActiveMergeSource track merge source',
+        () {
+          tagProvider.setActiveMergeSource(governanceRow);
+          expect(tagProvider.activeMergeSource?.tagId, 101);
+
+          tagProvider.clearActiveMergeSource();
+          expect(tagProvider.activeMergeSource, isNull);
+        },
+      );
+
+      test('loadDeletePreview stores preview state', () async {
+        when(() => mockTagService.fetchDeletePreview(101)).thenAnswer(
+          (_) async => const TagDeletePreview(
+            tagId: 101,
+            preferredLabel: 'anime-girl',
+            affectedImageCount: 42,
+            canDelete: false,
+            blockingReason: 'merge_or_reclassify_required',
+          ),
+        );
+
+        await tagProvider.loadDeletePreview(101);
+
+        expect(tagProvider.deletePreview?.tagId, 101);
+        expect(tagProvider.deletePreview?.canDelete, false);
+      });
+
+      test(
+        'applyPrimaryCategoryToSelection aggregates failures and refreshes rows',
+        () async {
+          when(
+            () => mockTagService.fetchGovernanceTags(
+              search: any(named: 'search'),
+            ),
+          ).thenAnswer((_) async => [governanceRow]);
+          when(
+            () => mockTagService.updateTag(101, primaryCategory: 'character'),
+          ).thenAnswer((_) async => _buildTag(101, 'anime-girl'));
+          when(
+            () => mockTagService.updateTag(102, primaryCategory: 'character'),
+          ).thenThrow(Exception('blocked'));
+
+          tagProvider.toggleGovernanceSelection(101);
+          tagProvider.toggleGovernanceSelection(102);
+
+          final result = await tagProvider.applyPrimaryCategoryToSelection(
+            'character',
+          );
+
+          expect(result.deletedTagIds, isEmpty);
+          expect(result.failures, hasLength(1));
+          expect(result.failures.first.tagId, 102);
+        },
+      );
+
+      test(
+        'addAliasToSelection aggregates failures and refreshes rows',
+        () async {
+          when(
+            () => mockTagService.fetchGovernanceTags(
+              search: any(named: 'search'),
+            ),
+          ).thenAnswer((_) async => [governanceRow]);
+          when(
+            () => mockTagService.addTagAlias(101, 'heroine', 'synonym'),
+          ).thenAnswer((_) async {});
+          when(
+            () => mockTagService.addTagAlias(102, 'heroine', 'synonym'),
+          ).thenThrow(Exception('invalid alias'));
+
+          tagProvider.toggleGovernanceSelection(101);
+          tagProvider.toggleGovernanceSelection(102);
+
+          final result = await tagProvider.addAliasToSelection('heroine');
+
+          expect(result.failures, hasLength(1));
+          expect(result.failures.first.tagId, 102);
+        },
+      );
+
+      test(
+        'cleanupSelectedUnusedTags keeps batch result and refreshes rows',
+        () async {
+          when(
+            () => mockTagService.fetchGovernanceTags(
+              search: any(named: 'search'),
+            ),
+          ).thenAnswer((_) async => [governanceRow]);
+          when(() => mockTagService.batchCleanupTags([101, 102])).thenAnswer(
+            (_) async => const TagGovernanceBatchResult(
+              deletedTagIds: [101],
+              failures: [
+                TagGovernanceFailure(
+                  tagId: 102,
+                  preferredLabel: 'used-tag',
+                  message: 'tag is still in use',
+                ),
+              ],
+            ),
+          );
+
+          tagProvider.toggleGovernanceSelection(101);
+          tagProvider.toggleGovernanceSelection(102);
+          final result = await tagProvider.cleanupSelectedUnusedTags();
+
+          expect(result.deletedTagIds, [101]);
+          expect(tagProvider.lastBatchResult?.failures, hasLength(1));
+        },
+      );
+
+      test(
+        'mergeSelectionInto uses active merge source and selected ids',
+        () async {
+          when(
+            () => mockTagService.fetchGovernanceTags(
+              search: any(named: 'search'),
+            ),
+          ).thenAnswer((_) async => [governanceRow]);
+          when(
+            () => mockTagService.mergeTagInto(101, 999),
+          ).thenAnswer((_) async {});
+          when(
+            () => mockTagService.mergeTagInto(102, 999),
+          ).thenThrow(Exception('cannot merge'));
+
+          tagProvider.setActiveMergeSource(governanceRow);
+          tagProvider.toggleGovernanceSelection(101);
+          tagProvider.toggleGovernanceSelection(102);
+
+          final result = await tagProvider.mergeSelectionInto(999);
+
+          expect(result.failures, hasLength(1));
+          expect(result.failures.first.tagId, 102);
+          expect(tagProvider.selectedGovernanceIds, {101, 102});
+        },
+      );
+    });
   });
+}
+
+Tag _buildTag(int id, String label) {
+  return Tag(
+    id: id,
+    preferredLabel: label,
+    slug: label,
+    reviewState: 'confirmed',
+    trustScore: 1,
+    usageCount: 1,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+  );
 }
