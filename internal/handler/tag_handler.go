@@ -18,6 +18,8 @@ import (
 type tagAdminService interface {
 	ListGovernanceTags(ctx context.Context, search string, limit, offset int) ([]service.TagGovernanceRow, int, error)
 	MergeTags(ctx context.Context, sourceTagID, targetTagID int64) (*service.TagMergeResult, error)
+	GetDeletePreview(ctx context.Context, tagID int64) (*service.TagDeletePreview, error)
+	CleanupUnusedTags(ctx context.Context, tagIDs []int64) (*service.TagCleanupResult, error)
 }
 
 type TagHandler struct {
@@ -224,21 +226,34 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 }
 
 func (h *TagHandler) DeleteTag(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "tag governance service unavailable"})
+		return
+	}
+
 	id, ok := parseIDParam(c, "id")
 	if !ok {
 		return
 	}
 
-	imageTags, err := h.imageTagRepo.FindByTagID(c.Request.Context(), id, 1000, 0)
+	preview, err := h.adminSvc.GetDeletePreview(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, service.ErrTagNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
-	for _, imageTag := range imageTags {
-		if _, err := h.imageTagRepo.Delete(c.Request.Context(), imageTag.ImageID, imageTag.TagID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+
+	if !preview.CanDelete {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":                "tag is still in use",
+			"affected_image_count": preview.AffectedImageCount,
+			"blocking_reason":      preview.BlockingReason,
+		})
+		return
 	}
 
 	aliases, err := h.aliasRepo.FindByTagID(c.Request.Context(), id)
@@ -258,7 +273,11 @@ func (h *TagHandler) DeleteTag(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	c.JSON(http.StatusOK, gin.H{
+		"success":              true,
+		"deleted_tag_id":       id,
+		"affected_image_count": int64(0),
+	})
 }
 
 func (h *TagHandler) GetAliases(c *gin.Context) {
@@ -429,82 +448,56 @@ func (h *TagHandler) MergeTag(c *gin.Context) {
 	})
 }
 
-// CleanUnusedTags handles DELETE /api/v1/tags/cleanup
-// It removes tags with usage_count = 0 and no associated images.
-func (h *TagHandler) CleanUnusedTags(c *gin.Context) {
-	ctx := c.Request.Context()
+func (h *TagHandler) GetDeletePreview(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "tag governance service unavailable"})
+		return
+	}
 
-	// Get all tags
-	tags, err := h.tagRepo.FindAll(ctx, 10000, 0)
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+
+	preview, err := h.adminSvc.GetDeletePreview(c.Request.Context(), id)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrTagNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, preview)
+}
+
+// CleanUnusedTags handles POST /api/v1/tags/batch/cleanup.
+func (h *TagHandler) CleanUnusedTags(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "tag governance service unavailable"})
+		return
+	}
+
+	var req struct {
+		TagIDs []int64 `json:"tag_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := h.adminSvc.CleanupUnusedTags(c.Request.Context(), req.TagIDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	var deletedTags []gin.H
-	var failedDeletions []gin.H
-
-	for _, tag := range tags {
-		// Check if tag has any image associations
-		imageTags, err := h.imageTagRepo.FindByTagID(ctx, tag.ID, 1, 0)
-		if err != nil {
-			failedDeletions = append(failedDeletions, gin.H{
-				"tag_id":          tag.ID,
-				"preferred_label": tag.PreferredLabel,
-				"error":           "failed to check image associations: " + err.Error(),
-			})
-			continue
-		}
-
-		// Skip if tag has image associations
-		if len(imageTags) > 0 {
-			continue
-		}
-
-		// Delete tag aliases first
-		aliases, err := h.aliasRepo.FindByTagID(ctx, tag.ID)
-		if err != nil {
-			failedDeletions = append(failedDeletions, gin.H{
-				"tag_id":          tag.ID,
-				"preferred_label": tag.PreferredLabel,
-				"error":           "failed to find aliases: " + err.Error(),
-			})
-			continue
-		}
-
-		for _, alias := range aliases {
-			if err := h.aliasRepo.Delete(ctx, alias.ID); err != nil {
-				failedDeletions = append(failedDeletions, gin.H{
-					"tag_id":          tag.ID,
-					"preferred_label": tag.PreferredLabel,
-					"error":           "failed to delete alias: " + err.Error(),
-				})
-				continue
-			}
-		}
-
-		// Delete the tag
-		if err := h.tagRepo.Delete(ctx, tag.ID); err != nil {
-			failedDeletions = append(failedDeletions, gin.H{
-				"tag_id":          tag.ID,
-				"preferred_label": tag.PreferredLabel,
-				"error":           err.Error(),
-			})
-			continue
-		}
-
-		deletedTags = append(deletedTags, gin.H{
-			"tag_id":          tag.ID,
-			"preferred_label": tag.PreferredLabel,
-		})
-	}
-
 	c.JSON(http.StatusOK, gin.H{
-		"success":          true,
-		"deleted_count":    len(deletedTags),
-		"failed_count":     len(failedDeletions),
-		"deleted_tags":     deletedTags,
-		"failed_deletions": failedDeletions,
+		"deleted": result.Deleted,
+		"blocked": result.Blocked,
+		"failed":  result.Failed,
 	})
 }
 

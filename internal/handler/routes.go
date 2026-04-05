@@ -144,7 +144,9 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	tagDeleteAlias := gin.HandlerFunc(placeholderHandler)
 	tagGetStats := gin.HandlerFunc(placeholderHandler)
 	tagGetGovernance := gin.HandlerFunc(placeholderHandler)
+	tagGetDeletePreview := gin.HandlerFunc(placeholderHandler)
 	tagMerge := gin.HandlerFunc(placeholderHandler)
+	tagBatchCleanup := gin.HandlerFunc(placeholderHandler)
 	tagCleanUnused := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.TagRepo != nil && deps.AliasRepo != nil && deps.ImageTagRepo != nil {
 		adminService := service.NewTagAdminService(deps.DB, deps.TagRepo, deps.AliasRepo, deps.ImageTagRepo)
@@ -158,7 +160,9 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		tagDeleteAlias = tagHandler.DeleteAlias
 		tagGetStats = tagHandler.GetTagStats
 		tagGetGovernance = tagHandler.GetGovernanceTags
+		tagGetDeletePreview = tagHandler.GetDeletePreview
 		tagMerge = tagHandler.MergeTag
+		tagBatchCleanup = tagHandler.CleanUnusedTags
 		tagCleanUnused = tagHandler.CleanUnusedTags
 	}
 	api.GET("/tags", tagGet)
@@ -167,10 +171,12 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.PUT("/tags/:id", tagUpdate)
 	api.DELETE("/tags/:id", tagDelete)
 	api.POST("/tags/:id/merge", tagMerge)
+	api.GET("/tags/:id/delete-preview", tagGetDeletePreview)
 	api.GET("/tags/:id/aliases", tagGetAliases)
 	api.POST("/tags/:id/aliases", tagAddAlias)
 	api.DELETE("/tags/:id/aliases/:alias_id", tagDeleteAlias)
 	api.GET("/tags/stats", tagGetStats)
+	api.POST("/tags/batch/cleanup", tagBatchCleanup)
 	api.DELETE("/tags/cleanup", tagCleanUnused)
 
 	imageTagGet := gin.HandlerFunc(placeholderHandler)

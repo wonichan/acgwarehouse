@@ -39,6 +39,28 @@ type TagMergeResult struct {
 	MigratedAliases           int   `json:"migrated_aliases"`
 }
 
+type TagDeletePreview struct {
+	TagID              int64  `json:"tag_id"`
+	PreferredLabel     string `json:"preferred_label"`
+	AffectedImageCount int64  `json:"affected_image_count"`
+	CanDelete          bool   `json:"can_delete"`
+	BlockingReason     string `json:"blocking_reason"`
+}
+
+type TagCleanupEntry struct {
+	TagID              int64  `json:"tag_id"`
+	PreferredLabel     string `json:"preferred_label"`
+	AffectedImageCount int64  `json:"affected_image_count,omitempty"`
+	BlockingReason     string `json:"blocking_reason,omitempty"`
+	Error              string `json:"error,omitempty"`
+}
+
+type TagCleanupResult struct {
+	Deleted []TagCleanupEntry `json:"deleted"`
+	Blocked []TagCleanupEntry `json:"blocked"`
+	Failed  []TagCleanupEntry `json:"failed"`
+}
+
 type TagAdminService struct {
 	db           *sql.DB
 	tagRepo      repository.TagRepository
@@ -180,6 +202,101 @@ func (s *TagAdminService) MergeTags(ctx context.Context, sourceTagID, targetTagI
 	}
 
 	return mergeResult, nil
+}
+
+func (s *TagAdminService) GetDeletePreview(ctx context.Context, tagID int64) (*TagDeletePreview, error) {
+	if tagID <= 0 {
+		return nil, ErrTagNotFound
+	}
+
+	tag, err := s.tagRepo.FindByID(ctx, tagID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrTagNotFound
+		}
+		return nil, err
+	}
+
+	stats, err := s.imageTagRepo.GetTagStats(ctx, tagID)
+	if err != nil {
+		return nil, err
+	}
+
+	preview := &TagDeletePreview{
+		TagID:              tag.ID,
+		PreferredLabel:     tag.PreferredLabel,
+		AffectedImageCount: stats.UsageCount,
+		CanDelete:          stats.UsageCount == 0,
+	}
+	if !preview.CanDelete {
+		preview.BlockingReason = "merge_or_reclassify_required"
+	}
+
+	return preview, nil
+}
+
+func (s *TagAdminService) CleanupUnusedTags(ctx context.Context, tagIDs []int64) (*TagCleanupResult, error) {
+	result := &TagCleanupResult{
+		Deleted: make([]TagCleanupEntry, 0),
+		Blocked: make([]TagCleanupEntry, 0),
+		Failed:  make([]TagCleanupEntry, 0),
+	}
+
+	for _, tagID := range tagIDs {
+		preview, err := s.GetDeletePreview(ctx, tagID)
+		if err != nil {
+			entry := TagCleanupEntry{TagID: tagID}
+			if errors.Is(err, ErrTagNotFound) {
+				entry.Error = "tag not found"
+			} else {
+				entry.Error = err.Error()
+			}
+			result.Failed = append(result.Failed, entry)
+			continue
+		}
+
+		if !preview.CanDelete {
+			result.Blocked = append(result.Blocked, TagCleanupEntry{
+				TagID:              preview.TagID,
+				PreferredLabel:     preview.PreferredLabel,
+				AffectedImageCount: preview.AffectedImageCount,
+				BlockingReason:     preview.BlockingReason,
+			})
+			continue
+		}
+
+		if err := s.deleteUnusedTag(ctx, preview.TagID); err != nil {
+			result.Failed = append(result.Failed, TagCleanupEntry{
+				TagID:          preview.TagID,
+				PreferredLabel: preview.PreferredLabel,
+				Error:          err.Error(),
+			})
+			continue
+		}
+
+		result.Deleted = append(result.Deleted, TagCleanupEntry{
+			TagID:          preview.TagID,
+			PreferredLabel: preview.PreferredLabel,
+		})
+	}
+
+	return result, nil
+}
+
+func (s *TagAdminService) deleteUnusedTag(ctx context.Context, tagID int64) error {
+	aliases, err := s.aliasRepo.FindByTagID(ctx, tagID)
+	if err != nil {
+		return err
+	}
+	for _, alias := range aliases {
+		if err := s.aliasRepo.Delete(ctx, alias.ID); err != nil {
+			return err
+		}
+	}
+	if err := s.tagRepo.Delete(ctx, tagID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *TagAdminService) resolveTagSlice(ctx context.Context, search string, limit, offset int) ([]*domain.Tag, int, error) {

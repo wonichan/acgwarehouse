@@ -136,7 +136,7 @@ func TestTagUpdateTagUpdatesPreferredLabel(t *testing.T) {
 	}
 }
 
-func TestTagDeleteTagRemovesTagAndAssociations(t *testing.T) {
+func TestTagDeleteTagBlocksAndKeepsAssociationsWhenUsed(t *testing.T) {
 	t.Parallel()
 
 	router, repos := newTagHandlerTestRouter(t)
@@ -145,28 +145,33 @@ func TestTagDeleteTagRemovesTagAndAssociations(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tags/1", nil)
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusConflict)
 	}
 
-	if _, err := repos.tagRepo.FindByID(context.Background(), 1); err == nil {
-		t.Fatal("expected tag to be deleted")
+	if _, err := repos.tagRepo.FindByID(context.Background(), 1); err != nil {
+		t.Fatalf("expected tag to remain when blocked: %v", err)
 	}
 	aliases, err := repos.aliasRepo.FindByTagID(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("FindByTagID() error = %v", err)
 	}
-	if len(aliases) != 0 {
-		t.Fatalf("len(aliases) = %d, want 0", len(aliases))
+	if len(aliases) == 0 {
+		t.Fatal("expected aliases to remain when deletion is blocked")
 	}
 	items, err := repos.imageTagRepo.FindByImageID(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("FindByImageID() error = %v", err)
 	}
+	found := false
 	for _, item := range items {
 		if item.TagID == 1 {
-			t.Fatal("expected image tag association to be deleted")
+			found = true
+			break
 		}
+	}
+	if !found {
+		t.Fatal("expected image tag association to remain when deletion is blocked")
 	}
 }
 
