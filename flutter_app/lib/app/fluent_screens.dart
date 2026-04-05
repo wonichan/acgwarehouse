@@ -10,6 +10,7 @@ import '../providers/tag_provider.dart';
 import '../widgets/fluent_gallery_content.dart';
 import '../widgets/gallery_filter_panel.dart';
 import '../widgets/fluent_search_content.dart';
+import '../widgets/monitoring/monitoring_workspace.dart';
 import '../widgets/tag_management/tag_management_workspace.dart';
 import '../models/image.dart';
 import '../models/viewer_session.dart';
@@ -358,6 +359,6 @@ class FluentOperationsMonitoringPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ScaffoldPage(content: Center(child: Text('运营监控')));
+    return const OperationsMonitoringWorkspace();
   }
 }

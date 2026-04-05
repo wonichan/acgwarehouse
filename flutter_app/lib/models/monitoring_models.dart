@@ -167,6 +167,8 @@ class BatchRow {
   final String status;
   final int totalImages;
   final int newImages;
+  final DateTime? createdAt;
+  final DateTime? finishedAt;
   final Map<String, int> statusCounts;
   final Map<String, int> taskTypeCounts;
   final List<FailureGroup> failureGroups;
@@ -178,6 +180,8 @@ class BatchRow {
     required this.status,
     required this.totalImages,
     required this.newImages,
+    this.createdAt,
+    this.finishedAt,
     required this.statusCounts,
     required this.taskTypeCounts,
     required this.failureGroups,
@@ -191,6 +195,8 @@ class BatchRow {
       status: json['status'] as String? ?? 'unknown',
       totalImages: (json['total_images'] as num?)?.toInt() ?? 0,
       newImages: (json['new_images'] as num?)?.toInt() ?? 0,
+      createdAt: _parseDateTime(json['created_at']),
+      finishedAt: _parseDateTime(json['finished_at']),
       statusCounts: _parseCountMap(json['status_counts']),
       taskTypeCounts: _parseCountMap(json['task_type_counts']),
       failureGroups: ((json['failure_groups'] as List?) ?? const [])
@@ -207,6 +213,8 @@ class BatchRow {
       'status': status,
       'total_images': totalImages,
       'new_images': newImages,
+      'created_at': createdAt?.toIso8601String(),
+      'finished_at': finishedAt?.toIso8601String(),
       'status_counts': statusCounts,
       'task_type_counts': taskTypeCounts,
       'failure_groups': failureGroups.map((group) => group.toJson()).toList(),
