@@ -4,14 +4,14 @@ milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
 status: executing
 stopped_at: Phase 20 UI-SPEC approved
-last_updated: "2026-04-05T05:21:41.014Z"
+last_updated: "2026-04-05T12:10:14.977Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 18
-  completed_plans: 15
-  percent: 83
+  completed_plans: 18
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-04-05)
 
 **Core value:** 让用户能够高效地管理和检索二次元图片库，通过 AI 自动化减少手动整理的工作量，实现"存入即整理"的体验。  
-**Current focus:** Phase 19 — tag-management
+**Current focus:** Phase 20 — operations-monitoring
 
 ## Current Position
 
 Milestone: `v4.0` in progress ◆  
-Phase: 20
+Phase: 21
 Plan: Not started
-Status: Executing Phase 19
+Status: Executing Phase 20
 Last activity: 2026-04-05
 
 Progress: [████████░░] 10/12 plans (83%)
@@ -37,7 +37,7 @@ Progress: [████████░░] 10/12 plans (83%)
 
 **Velocity:**
 
-- Total plans completed: 72 (v1.0 + v2.0 + v3.0 + v4.0 in progress)
+- Total plans completed: 75 (v1.0 + v2.0 + v3.0 + v4.0 in progress)
 - Average duration: ~30 min
 - Delivery trend: Stable across the last 3 milestones
 

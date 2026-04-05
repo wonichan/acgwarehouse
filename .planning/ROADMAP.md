@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 17: Desktop Shell Foundation** - Deliver Windows Photos-style toolbar and grid browsing (completed 2026-04-05)
 - [x] **Phase 18: Independent Viewer & Filmstrip** - Implement non-blocking viewer with filmstrip navigation (completed 2026-04-05)
 - [x] **Phase 19: Tag Management** - Enable in-app tag management without legacy entry switching (completed 2026-04-05)
-- [ ] **Phase 20: Operations Monitoring** - Integrate task monitoring and sidecar diagnostics into desktop UI (planned 2026-04-05)
+- [x] **Phase 20: Operations Monitoring** - Integrate task monitoring and sidecar diagnostics into desktop UI (planned 2026-04-05) (completed 2026-04-05)
 - [ ] **Phase 21: Windows Packaging** - Package Flutter + Go + Python as single distributable bundle
 - [ ] **Phase 22: Large Gallery Performance** - Optimize browsing responsiveness for 10k+ image galleries
 
@@ -141,29 +141,10 @@ Plans:
   2. User sees filter results within acceptable response time when applying tag filters on large gallery
   3. User can continue browsing gallery while duplicate detection runs in background without UI freezing
   4. System shows clear failure message with recovery hint when sidecar becomes unavailable
-**Plans: 3 plans
-
-
-## Progress
-
-**Execution Order:**
-Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 → 22
-
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 15. Compute Sidecar Infrastructure | v4.0 | 3/3 | Complete    | 2026-04-03 |
-| 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete    | 2026-04-04 |
-| 17. Desktop Shell Foundation | v4.0 | 3/3 | Complete    | 2026-04-05 |
-| 18. Independent Viewer & Filmstrip | v4.0 | 3/3 | Complete    | 2026-04-05 |
-| 19. Tag Management | v4.0 | 3/3 | Complete    | 2026-04-05 |
-| 20. Operations Monitoring | v4.0 | 0/TBD | Not started |
-| 22. Large Gallery Performance | v4.0 | 0/TBD | Not started |
+**Plans**: TBD
+**UI hint**: yes
 
 ---
 
-*Roadmap created: 2026-04-03*
-*Current milestone: v4.0 Windows Photos 风格重构构与计算层拆分*
-
----
 *Roadmap created: 2026-04-03*
 *Current milestone: v4.0 Windows Photos 风格重构与计算层拆分*
