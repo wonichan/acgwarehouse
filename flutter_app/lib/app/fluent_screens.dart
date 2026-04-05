@@ -3,7 +3,6 @@ import 'package:flutter/material.dart' show MaterialPageRoute;
 import 'package:provider/provider.dart';
 
 import '../screens/duplicate_screen.dart';
-import '../screens/tag_management_screen.dart';
 import '../screens/image_detail_screen.dart';
 import '../providers/image_provider.dart';
 import '../providers/search_provider.dart';
@@ -11,6 +10,7 @@ import '../providers/tag_provider.dart';
 import '../widgets/fluent_gallery_content.dart';
 import '../widgets/gallery_filter_panel.dart';
 import '../widgets/fluent_search_content.dart';
+import '../widgets/tag_management/tag_management_workspace.dart';
 import '../models/image.dart';
 import '../models/viewer_session.dart';
 import '../services/viewer_window_service.dart';
@@ -342,16 +342,13 @@ class FluentDuplicatePage extends StatelessWidget {
   }
 }
 
-/// Fluent 风格标签管理页面容器
-/// 包装共享的 TagManagementScreen Widget
+/// Fluent desktop tag-governance destination.
+/// Hosts TagManagementWorkspace directly (retires legacy TagManagementScreen wrapper).
 class FluentTagManagementPage extends StatelessWidget {
   const FluentTagManagementPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ScaffoldPage(
-      header: const PageHeader(title: Text('标签管理')),
-      content: const TagManagementScreen(),
-    );
+    return const TagManagementWorkspace();
   }
 }

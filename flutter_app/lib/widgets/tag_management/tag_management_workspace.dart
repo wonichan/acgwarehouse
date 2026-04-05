@@ -218,7 +218,7 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
             Text('$affectedCount affected image(s)'),
             if (blockingReason.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text(blockingReason, style: const TextStyle(color: Colors.red)),
+              Text(blockingReason, style: TextStyle(color: Colors.red)),
             ],
           ],
         ),

@@ -76,9 +76,13 @@ class _MergePanelTagProvider extends TagProvider {
   int? lastMergeTargetTagId;
 
   @override
-  Future<void> mergeSelectionInto(int targetTagId) async {
+  Future<TagGovernanceBatchResult> mergeSelectionInto(int targetTagId) async {
     mergeSelectionIntoCalls++;
     lastMergeTargetTagId = targetTagId;
+    return const TagGovernanceBatchResult(
+      deletedTagIds: <int>[],
+      failures: <TagGovernanceFailure>[],
+    );
   }
 }
 

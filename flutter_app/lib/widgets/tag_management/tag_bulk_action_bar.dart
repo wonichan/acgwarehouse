@@ -36,34 +36,33 @@ class TagBulkActionBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     '$selectedCount selected',
                     style: FluentTheme.of(context).typography.bodyStrong,
                   ),
-                  const Spacer(),
                   if (provider.isRunningGovernanceAction)
                     const SizedBox(
                       width: 16,
                       height: 16,
                       child: ProgressRing(strokeWidth: 2),
                     ),
-                  const SizedBox(width: 8),
                   Button(
                     onPressed: provider.isRunningGovernanceAction
                         ? null
                         : () => _handleCleanup(context, provider),
                     child: const Text('Cleanup selected'),
                   ),
-                  const SizedBox(width: 8),
                   Button(
                     onPressed: provider.isRunningGovernanceAction
                         ? null
                         : () => _showMergeTargetDialog(context, provider),
                     child: const Text('Merge into...'),
                   ),
-                  const SizedBox(width: 8),
                   HyperlinkButton(
                     onPressed: () => provider.clearGovernanceSelection(),
                     child: const Text('Clear selection'),

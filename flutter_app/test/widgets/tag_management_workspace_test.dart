@@ -75,6 +75,7 @@ class _WorkspaceTagProvider extends TagProvider {
       super(TagService(client: client));
 
   final List<TagGovernanceRow> _rows;
+  TagDeletePreview? _preview;
 
   @override
   List<TagGovernanceRow> get governanceRows => _rows;
@@ -86,7 +87,22 @@ class _WorkspaceTagProvider extends TagProvider {
   String? get governanceError => null;
 
   @override
+  TagDeletePreview? get deletePreview => _preview;
+
+  @override
   Future<void> loadGovernanceTags({String? search}) async {}
+
+  @override
+  Future<void> loadDeletePreview(int tagId) async {
+    final row = _rows.firstWhere((item) => item.tagId == tagId);
+    _preview = TagDeletePreview(
+      tagId: row.tagId,
+      preferredLabel: row.preferredLabel,
+      affectedImageCount: row.affectedImageCount,
+      canDelete: row.canDelete,
+      blockingReason: row.canDelete ? null : 'merge_or_reclassify_required',
+    );
+  }
 
   @override
   Future<void> deleteTag(int tagId) async {}

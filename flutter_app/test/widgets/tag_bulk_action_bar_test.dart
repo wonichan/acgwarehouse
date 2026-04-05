@@ -63,13 +63,21 @@ class _BulkBarTagProvider extends TagProvider {
   int? mergeIntoTargetId;
 
   @override
-  void cleanupSelectedUnusedTags() async {
+  Future<TagGovernanceBatchResult> cleanupSelectedUnusedTags() async {
     cleanupCalls++;
+    return const TagGovernanceBatchResult(
+      deletedTagIds: <int>[],
+      failures: <TagGovernanceFailure>[],
+    );
   }
 
   @override
-  Future<void> mergeSelectionInto(int targetTagId) async {
+  Future<TagGovernanceBatchResult> mergeSelectionInto(int targetTagId) async {
     mergeIntoTargetId = targetTagId;
+    return const TagGovernanceBatchResult(
+      deletedTagIds: <int>[],
+      failures: <TagGovernanceFailure>[],
+    );
   }
 
   @override
@@ -125,11 +133,13 @@ void main() {
         providers: [
           ChangeNotifierProvider<TagProvider>.value(value: tagProvider),
         ],
-        child: TagBulkActionBar(
-          onCleanup: () async {
-            cleanupCalls++;
-          },
-          onMergeInto: (_) async {},
+        child: fluent.FluentApp(
+          home: TagBulkActionBar(
+            onCleanup: () async {
+              cleanupCalls++;
+            },
+            onMergeInto: (_) async {},
+          ),
         ),
       ),
     );

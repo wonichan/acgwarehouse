@@ -76,31 +76,37 @@ class _GovernanceRowTile extends StatelessWidget {
         onChanged: (_) => onToggleSelect(),
       ),
       title: Text(row.preferredLabel),
-      subtitle: Row(
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (row.primaryCategory != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Text(
-                row.primaryCategory!,
-                style: TextStyle(fontSize: 11, color: Colors.grey[100]),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              if (row.primaryCategory != null)
+                Text(
+                  row.primaryCategory!,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[100]),
+                ),
+              Text(
+                'Usage: ${row.usageCount} | AI: ${row.aiCount} | Manual: ${row.manualCount}',
+                style: const TextStyle(fontSize: 11),
               ),
-            ),
-          Text(
-            'Usage: ${row.usageCount} | AI: ${row.aiCount} | Manual: ${row.manualCount}',
-            style: const TextStyle(fontSize: 11),
+            ],
           ),
-        ],
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          HyperlinkButton(onPressed: onEdit, child: const Text('Edit')),
-          HyperlinkButton(onPressed: onMerge, child: const Text('Merge')),
-          HyperlinkButton(onPressed: onDelete, child: const Text('Delete')),
-          HyperlinkButton(
-            onPressed: onViewAffectedImages,
-            child: const Text('View affected images'),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              HyperlinkButton(onPressed: onEdit, child: const Text('Edit')),
+              HyperlinkButton(onPressed: onMerge, child: const Text('Merge')),
+              HyperlinkButton(onPressed: onDelete, child: const Text('Delete')),
+              HyperlinkButton(
+                onPressed: onViewAffectedImages,
+                child: const Text('View affected images'),
+              ),
+            ],
           ),
         ],
       ),
