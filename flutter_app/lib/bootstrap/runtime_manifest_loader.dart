@@ -39,8 +39,10 @@ class RuntimeManifestLoader {
 
     final text = await _readText(_manifestPath);
     final discoveredBaseUrl = _extractGoBaseUrl(text);
+    final discoveredAdminBasicAuth = _extractAdminBasicAuth(text);
     if (discoveredBaseUrl != null) {
       ApiConfig.updateBaseUrl(discoveredBaseUrl);
+      ApiConfig.updateAdminBasicAuthHeader(discoveredAdminBasicAuth);
       return RuntimeManifestLoadResult(
         source: RuntimeManifestSource.manifest,
         appliedBaseUrl: discoveredBaseUrl,
@@ -88,6 +90,33 @@ class RuntimeManifestLoader {
       }
 
       return normalized;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _extractAdminBasicAuth(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        return null;
+      }
+
+      final go = decoded['go'];
+      if (go is! Map<String, dynamic>) {
+        return null;
+      }
+
+      final adminBasicAuth = go['admin_basic_auth'];
+      if (adminBasicAuth is! String || adminBasicAuth.trim().isEmpty) {
+        return null;
+      }
+
+      return adminBasicAuth.trim();
     } catch (_) {
       return null;
     }

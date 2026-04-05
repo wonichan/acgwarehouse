@@ -62,7 +62,11 @@ class MyApp extends StatelessWidget {
         Provider(create: (_) => TagService()),
         Provider(create: (_) => DuplicateService()),
         Provider(create: (_) => SearchService()),
-        Provider(create: (_) => MonitoringService()),
+        Provider(
+          create: (_) => MonitoringService(
+            basicAuthHeader: ApiConfig.adminBasicAuthHeader,
+          ),
+        ),
         ChangeNotifierProvider(
           create: (context) =>
               ImageListProvider(context.read<ApiService>())..loadImages(),

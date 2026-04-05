@@ -11,7 +11,7 @@ void main() {
     test('applies go.base_url from valid manifest before API usage', () async {
       final loader = RuntimeManifestLoader(
         readText: (_) async =>
-            '{"version":1,"generated_at":"2026-04-04T10:00:00Z","go":{"base_url":"http://127.0.0.1:51423","ready":true}}',
+            '{"version":1,"generated_at":"2026-04-04T10:00:00Z","go":{"base_url":"http://127.0.0.1:51423","ready":true,"admin_basic_auth":"Basic ZGVtbzpkZW1v"}}',
       );
 
       final result = await loader.load(
@@ -22,6 +22,7 @@ void main() {
       expect(result.source, RuntimeManifestSource.manifest);
       expect(result.appliedBaseUrl, 'http://127.0.0.1:51423');
       expect(ApiConfig.hostUrl, 'http://127.0.0.1:51423');
+      expect(ApiConfig.adminBasicAuthHeader, 'Basic ZGVtbzpkZW1v');
     });
 
     test(
@@ -37,6 +38,7 @@ void main() {
         expect(result.source, RuntimeManifestSource.devFallback);
         expect(result.appliedBaseUrl, ApiConfig.developmentFallbackHostUrl);
         expect(ApiConfig.hostUrl, ApiConfig.developmentFallbackHostUrl);
+        expect(ApiConfig.adminBasicAuthHeader, isNull);
       },
     );
 

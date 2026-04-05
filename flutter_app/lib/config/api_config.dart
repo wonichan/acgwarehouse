@@ -7,6 +7,7 @@ class ApiConfig {
   static const String developmentFallbackHostUrl = 'http://localhost:8080';
   static const String _defaultHostUrl = developmentFallbackHostUrl;
   static String _hostUrl = _defaultHostUrl;
+  static String? _adminBasicAuthHeader;
 
   /// Current host URL (without /api/v1 suffix)
   /// Example: 'http://localhost:8080'
@@ -31,11 +32,22 @@ class ApiConfig {
   /// Resets to default configuration
   static void resetToDefault() {
     _hostUrl = _defaultHostUrl;
+    _adminBasicAuthHeader = null;
   }
 
   /// Applies the explicit development fallback host.
   static void applyDevelopmentFallback() {
     _hostUrl = developmentFallbackHostUrl;
+    _adminBasicAuthHeader = null;
+  }
+
+  static String? get adminBasicAuthHeader => _adminBasicAuthHeader;
+
+  static void updateAdminBasicAuthHeader(String? value) {
+    final normalized = value?.trim();
+    _adminBasicAuthHeader = normalized == null || normalized.isEmpty
+        ? null
+        : normalized;
   }
 
   /// Checks if current configuration matches default
