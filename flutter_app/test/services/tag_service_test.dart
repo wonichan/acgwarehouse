@@ -124,7 +124,7 @@ void main() {
       test('fetchGovernanceTags parses typed governance rows', () async {
         final responseBody = '''
         {
-          "tags": [
+          "rows": [
             {
               "tag_id": 101,
               "preferred_label": "anime-girl",

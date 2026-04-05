@@ -12,11 +12,11 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 import 'package:gallery/app/fluent_screens.dart';
-import 'package:gallery/screens/tag_management_screen.dart';
+import 'package:gallery/widgets/tag_management/tag_management_workspace.dart';
 
 void main() {
   testWidgets(
-    'FluentTagManagementPage wraps TagManagementScreen in ScaffoldPage',
+    'FluentTagManagementPage hosts TagManagementWorkspace in ScaffoldPage',
     (tester) async {
       final mockClient = MockClient((request) async {
         if (request.url.path.endsWith('/api/v1/tags')) {
@@ -38,8 +38,8 @@ void main() {
 
       expect(find.byType(fluent.ScaffoldPage), findsOneWidget);
       expect(find.byType(fluent.PageHeader), findsOneWidget);
-      expect(find.text('标签管理'), findsWidgets);
-      expect(find.byType(TagManagementScreen), findsOneWidget);
+      expect(find.text('Tag Governance'), findsOneWidget);
+      expect(find.byType(TagManagementWorkspace), findsOneWidget);
     },
   );
 

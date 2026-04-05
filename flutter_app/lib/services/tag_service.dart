@@ -232,7 +232,7 @@ class TagService {
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return (json['tags'] as List? ?? [])
+    return (json['rows'] as List? ?? [])
         .map(
           (entry) => TagGovernanceRow.fromJson(entry as Map<String, dynamic>),
         )
