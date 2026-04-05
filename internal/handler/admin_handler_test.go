@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
@@ -880,6 +881,7 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 
 func TestAdminHandler_GetTaskBatches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	createdAt := time.Date(2026, 4, 5, 10, 30, 0, 0, time.UTC)
 
 	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
 	mockSvc := &mockAdminService{
@@ -894,6 +896,7 @@ func TestAdminHandler_GetTaskBatches(t *testing.T) {
 			TaskTypeCounts: map[string]int64{"thumbnail_generate": 1,
 				"ai_tag_generation": 1},
 			FailureSummary: "ai tag timeout",
+			CreatedAt:      createdAt,
 		}},
 	}
 
@@ -911,11 +914,14 @@ func TestAdminHandler_GetTaskBatches(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("Expected 200, got %d", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "task_batches") {
-		t.Fatalf("Expected task_batches response body, got %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), "\"batches\"") {
+		t.Fatalf("Expected batches response body, got %s", w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), "root-a, root-b") {
 		t.Fatalf("Expected source summary in response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), createdAt.Format(time.RFC3339)) {
+		t.Fatalf("Expected created_at timestamp in response, got %s", w.Body.String())
 	}
 }
 
@@ -1172,9 +1178,9 @@ func TestGetTaskBatches_PayloadIncludesFailureGroups(t *testing.T) {
 		t.Fatalf("failed to parse response: %v", err)
 	}
 
-	batches, ok := resp["task_batches"].([]any)
+	batches, ok := resp["batches"].([]any)
 	if !ok {
-		t.Fatalf("expected task_batches array, got %T", resp["task_batches"])
+		t.Fatalf("expected batches array, got %T", resp["batches"])
 	}
 	if len(batches) == 0 {
 		t.Fatal("expected at least one batch")
@@ -1291,7 +1297,7 @@ func TestGetTaskBatches_FailedBatchShowsRetryableGuidance(t *testing.T) {
 		t.Fatalf("failed to parse response: %v", err)
 	}
 
-	batches := resp["task_batches"].([]any)
+	batches := resp["batches"].([]any)
 	batch := batches[0].(map[string]any)
 	groups := batch["failure_groups"].([]any)
 	g0 := groups[0].(map[string]any)

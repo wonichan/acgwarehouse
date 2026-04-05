@@ -332,7 +332,7 @@ func (h *AdminHandler) GetTaskBatches(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"task_batches": batches})
+	c.JSON(http.StatusOK, gin.H{"batches": batches, "task_batches": batches})
 }
 
 // GetTasks returns task details, optionally filtered by batch.

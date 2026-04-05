@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
@@ -33,6 +34,8 @@ type TaskBatchReadModel struct {
 	Status         string                  `json:"status"`
 	TotalImages    int64                   `json:"total_images"`
 	NewImages      int64                   `json:"new_images"`
+	CreatedAt      time.Time               `json:"created_at"`
+	FinishedAt     *time.Time              `json:"finished_at,omitempty"`
 	SourceSummary  string                  `json:"source_summary"`
 	SkipSummary    TaskBatchSkipSummary    `json:"skip_summary"`
 	FailureSummary string                  `json:"failure_summary,omitempty"`
@@ -76,6 +79,8 @@ func (s *TaskReadService) ListBatches(ctx context.Context, filter repository.Tas
 			Status:        record.Status,
 			TotalImages:   record.TotalImages,
 			NewImages:     record.NewImages,
+			CreatedAt:     record.CreatedAt,
+			FinishedAt:    record.FinishedAt,
 			SourceSummary: record.SourceSummary,
 			SkipSummary: TaskBatchSkipSummary{
 				Total:          record.SkippedImages,

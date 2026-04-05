@@ -77,6 +77,9 @@ func TestTaskReadServiceListBatchesAggregatesSourcesAndStatusStats(t *testing.T)
 	if got.FailureSummary != "ai tag timeout" {
 		t.Fatalf("FailureSummary = %q, want %q", got.FailureSummary, "ai tag timeout")
 	}
+	if !got.CreatedAt.Equal(batch.CreatedAt) {
+		t.Fatalf("CreatedAt = %s, want %s", got.CreatedAt, batch.CreatedAt)
+	}
 }
 
 func TestTaskReadServiceListTasksReturnsBatchTaskDetails(t *testing.T) {
