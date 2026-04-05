@@ -15,6 +15,8 @@ ACGWarehouse is a Go + Flutter application for managing and searching anime-styl
 
 ## Quick Start
 
+powershell -ExecutionPolicy Bypass -File "deploy/windows/package.ps1" -SkipTests
+
 ### Prerequisites
 
 - Docker Engine 20.10+

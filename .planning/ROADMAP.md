@@ -129,7 +129,12 @@ Plans:
   1. User can download single package containing Flutter + Go + Python and run without installing Python
   2. Application starts correctly after extraction with proper Flutter → Go → Python startup sequence
   3. User on machine without Python environment can use all features including duplicate detection
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] `21-01-PLAN.md` — Define the portable runtime contract, bundle-local diagnostics, and packaged Python bootstrap
+- [ ] `21-02-PLAN.md` — Build the single-entry-point launcher with manifest wait, startup dialog, and shutdown flow
+- [ ] `21-03-PLAN.md` — Build the Windows packaging pipeline, ZIP assembly, and overwrite-upgrade documentation
+- [ ] `21-04-PLAN.md` — Add packaged smoke verification and final clean-machine human UAT gate
 **UI hint**: no
 
 ### Phase 22: Large Gallery Performance

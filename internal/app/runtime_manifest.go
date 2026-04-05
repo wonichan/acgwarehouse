@@ -129,6 +129,9 @@ func ResolveRuntimeManifestPath() string {
 	if configured := strings.TrimSpace(os.Getenv(runtimeManifestEnvPath)); configured != "" {
 		return configured
 	}
+	if runtimeRoot := strings.TrimSpace(os.Getenv(portableRuntimeRootEnv)); runtimeRoot != "" {
+		return ResolveRuntimeManifestPathForLayout(resolvePortableRuntimeLayoutRoot(runtimeRoot))
+	}
 	return filepath.Join(os.TempDir(), "acgwarehouse", runtimeManifestFileName)
 }
 

@@ -1,7 +1,7 @@
 BIN_DIR := bin
 SERVER_BIN := $(BIN_DIR)/server
 
-.PHONY: build run test migrate-up migrate-down docker-build docker-compose-up docker-compose-down docker-compose-logs compose-smoke
+.PHONY: build run test migrate-up migrate-down docker-build docker-compose-up docker-compose-down docker-compose-logs compose-smoke package-windows-portable
 
 build:
 	go build -o $(SERVER_BIN) ./cmd/server
@@ -51,3 +51,6 @@ deploy-setup:
 		echo "deploy/config/config.yaml already exists"; \
 	fi
 	mkdir -p ./data ./library
+
+package-windows-portable:
+	powershell -ExecutionPolicy Bypass -File deploy/windows/package.ps1

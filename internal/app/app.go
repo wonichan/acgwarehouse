@@ -179,6 +179,16 @@ func (a *App) Run() error {
 	// Setup HTTP routes
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.POST("/shutdown", func(c *gin.Context) {
+		c.JSON(http.StatusAccepted, gin.H{"status": "shutting_down"})
+		go func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := a.Shutdown(shutdownCtx); err != nil {
+				log.Printf("shutdown endpoint error: %v", err)
+			}
+		}()
+	})
 
 	handler.SetupRoutes(r, &handler.Dependencies{
 		ImageRepo:      a.imageRepo,

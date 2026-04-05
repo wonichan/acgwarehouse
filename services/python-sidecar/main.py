@@ -1,6 +1,11 @@
 # pyright: reportMissingImports=false
 
+import argparse
+import os
+import sys
+
 from fastapi import FastAPI
+import uvicorn
 
 import routers.duplicates as duplicates
 
@@ -15,7 +20,25 @@ async def health() -> dict[str, str]:
 app.include_router(duplicates.router)
 
 
-if __name__ == "__main__":
-    import uvicorn
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    return parser.parse_args(argv)
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+
+def ensure_standard_streams() -> None:
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
+    ensure_standard_streams()
+    uvicorn.run(app, host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()
