@@ -22,6 +22,8 @@ type tagAdminService interface {
 	CleanupUnusedTags(ctx context.Context, tagIDs []int64) (*service.TagCleanupResult, error)
 }
 
+const mergeOrReclassifyRequired = "merge_or_reclassify_required"
+
 type TagHandler struct {
 	tagRepo      repository.TagRepository
 	aliasRepo    repository.TagAliasRepository
@@ -248,10 +250,14 @@ func (h *TagHandler) DeleteTag(c *gin.Context) {
 	}
 
 	if !preview.CanDelete {
+		blockingReason := preview.BlockingReason
+		if strings.TrimSpace(blockingReason) == "" {
+			blockingReason = mergeOrReclassifyRequired
+		}
 		c.JSON(http.StatusConflict, gin.H{
 			"error":                "tag is still in use",
 			"affected_image_count": preview.AffectedImageCount,
-			"blocking_reason":      preview.BlockingReason,
+			"blocking_reason":      blockingReason,
 		})
 		return
 	}
