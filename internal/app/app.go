@@ -74,6 +74,7 @@ type App struct {
 	duplicateSvc  *service.DuplicateService
 	searchSvc     *service.SearchService
 	adminSvc      *service.AdminService
+	monitoringBus *service.MonitoringEventBus
 	autoScheduler *service.AITagAutoScheduler
 
 	// Background task control
@@ -86,6 +87,7 @@ type App struct {
 	autoSchedulerStarted bool
 	runtimeManifestPath  string
 	sidecarRuntime       sidecarRuntimeLifecycle
+	monitoringBusCancel  context.CancelFunc
 	sidecarBaseURL       string
 	sidecarMode          appSidecarMode
 	fullyReady           bool
@@ -146,6 +148,7 @@ func New(cfgPath string) (*App, error) {
 		repository.NewPlatformTaskRepository(app.db),
 		appSidecarStatusProvider{app: app},
 	)
+	app.monitoringBus = service.NewMonitoringEventBus(app.adminSvc)
 
 	return app, nil
 }
@@ -168,6 +171,11 @@ func (a *App) Run() error {
 	if err := a.prepareSidecarStartup(context.Background()); err != nil {
 		return err
 	}
+	if a.monitoringBus != nil {
+		busCtx, cancel := context.WithCancel(context.Background())
+		a.monitoringBusCancel = cancel
+		a.monitoringBus.Start(busCtx, time.Second)
+	}
 	// Setup HTTP routes
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -186,6 +194,7 @@ func (a *App) Run() error {
 		DuplicateSvc:   a.duplicateSvc,
 		SearchSvc:      a.searchSvc,
 		SidecarRuntime: unwrapRuntime(a.sidecarRuntime),
+		MonitoringBus:  a.monitoringBus,
 		JobManager:     a.jobManager,
 		AdminSvc:       a.adminSvc,
 		AdminCfg:       a.cfgReloader.Get(),
@@ -253,6 +262,14 @@ func (a *App) Shutdown(ctx context.Context) error {
 				shutdownErr = err
 				return
 			}
+		}
+
+		if a.monitoringBusCancel != nil {
+			a.monitoringBusCancel()
+			a.monitoringBusCancel = nil
+		}
+		if a.monitoringBus != nil {
+			a.monitoringBus.Stop()
 		}
 
 		if err := RemoveRuntimeManifest(a.runtimeManifestPath); err != nil {

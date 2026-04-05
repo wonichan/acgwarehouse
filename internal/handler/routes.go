@@ -29,6 +29,7 @@ type Dependencies struct {
 	CollectionSvc  *service.CollectionService
 	BatchSvc       *service.BatchService
 	AdminSvc       AdminServiceInterface
+	MonitoringBus  *service.MonitoringEventBus
 	JobManager     *worker.Manager
 	AdminCfg       *config.Config
 	ConfigReloader *config.Reloader // For hot-reloadable config access
@@ -66,9 +67,9 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 			batchRepo := repository.NewTaskBatchRepository(deps.DB)
 			taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, deps.JobRepo)
 			backfillSvc := service.NewAIBackfillService(deps.ImageRepo, taskPlatformSvc, deps.JobManager, configProvider)
-			adminHandler = NewAdminHandlerWithBackfill(deps.AdminCfg, deps.AdminSvc, backfillSvc)
+			adminHandler = NewAdminHandlerWithBackfill(deps.AdminCfg, deps.AdminSvc, backfillSvc, deps.SidecarRuntime)
 		} else {
-			adminHandler = NewAdminHandler(deps.AdminCfg, deps.AdminSvc)
+			adminHandler = NewAdminHandler(deps.AdminCfg, deps.AdminSvc, deps.SidecarRuntime)
 		}
 	}
 
@@ -76,12 +77,18 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	if adminHandler != nil {
 		admin.Use(adminHandler.AuthMiddleware())
 		{
+			if deps != nil && deps.MonitoringBus != nil {
+				wsHandler := NewWSHandler(deps.MonitoringBus)
+				wsHandler.cfg = deps.AdminCfg
+				admin.GET("/monitoring/ws", gin.WrapH(wsHandler))
+			}
 			admin.GET("/summary", adminHandler.GetSummary)
 			admin.GET("/task-platform/overview", adminHandler.GetTaskPlatformOverview)
 			admin.GET("/jobs", adminHandler.GetJobs)
 			admin.GET("/task-batches", adminHandler.GetTaskBatches)
 			admin.GET("/tasks", adminHandler.GetTasks)
 			admin.POST("/actions/scan", adminHandler.TriggerScan)
+			admin.POST("/actions/sidecar/restart", adminHandler.HandleSidecarRestart)
 			admin.POST("/actions/jobs/pause", adminHandler.PauseBackgroundTasks)
 			admin.POST("/actions/jobs/resume", adminHandler.ResumeBackgroundTasks)
 			admin.POST("/actions/jobs/clear-queue", adminHandler.ClearTaskQueue)
