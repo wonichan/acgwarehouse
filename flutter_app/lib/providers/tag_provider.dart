@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/tag.dart';
+import '../models/tag_governance.dart';
 import '../services/tag_service.dart';
 
 class TagProvider extends ChangeNotifier {
@@ -23,6 +24,15 @@ class TagProvider extends ChangeNotifier {
   List<TagStatistics> _statistics = [];
   bool _isLoadingStatistics = false;
 
+  // Phase 19 governance workspace state
+  List<TagGovernanceRow> _governanceRows = [];
+  final Set<int> _selectedGovernanceIds = {};
+  TagGovernanceRow? _activeMergeSource;
+  TagDeletePreview? _deletePreview;
+  TagGovernanceBatchResult? _lastBatchResult;
+  bool _isRunningGovernanceAction = false;
+  String? _governanceError;
+
   TagProvider(this._tagService);
 
   // Getters
@@ -37,10 +47,19 @@ class TagProvider extends ChangeNotifier {
 
   Map<String, List<Tag>> get imageTags => _imageTags;
   bool get isLoadingImageTags => _isLoadingImageTags;
-  
+
   // Tag statistics getters
   List<TagStatistics> get statistics => _statistics;
   bool get isLoadingStatistics => _isLoadingStatistics;
+
+  // Governance workspace getters
+  List<TagGovernanceRow> get governanceRows => _governanceRows;
+  Set<int> get selectedGovernanceIds => _selectedGovernanceIds;
+  TagGovernanceRow? get activeMergeSource => _activeMergeSource;
+  TagDeletePreview? get deletePreview => _deletePreview;
+  TagGovernanceBatchResult? get lastBatchResult => _lastBatchResult;
+  bool get isRunningGovernanceAction => _isRunningGovernanceAction;
+  String? get governanceError => _governanceError;
 
   /// Calculates totals from current statistics
   Map<String, int> get totals {
@@ -217,7 +236,11 @@ class TagProvider extends ChangeNotifier {
   // 添加图片标签
   Future<void> addImageTag(int imageId, {int? tagId, String? tagLabel}) async {
     try {
-      final tag = await _tagService.addImageTag(imageId, tagId: tagId, tagLabel: tagLabel);
+      final tag = await _tagService.addImageTag(
+        imageId,
+        tagId: tagId,
+        tagLabel: tagLabel,
+      );
       // Add to confirmed list
       _imageTags['confirmed']?.add(tag);
       notifyListeners();
@@ -229,9 +252,19 @@ class TagProvider extends ChangeNotifier {
   }
 
   // 合并图片标签
-  Future<void> mergeImageTag(int imageId, int tagId, {int? targetTagId, String? targetLabel}) async {
+  Future<void> mergeImageTag(
+    int imageId,
+    int tagId, {
+    int? targetTagId,
+    String? targetLabel,
+  }) async {
     try {
-      await _tagService.mergeImageTag(imageId, tagId, targetTagId: targetTagId, targetLabel: targetLabel);
+      await _tagService.mergeImageTag(
+        imageId,
+        tagId,
+        targetTagId: targetTagId,
+        targetLabel: targetLabel,
+      );
       // Remove from pending list
       _imageTags['pending']?.removeWhere((t) => t.id == tagId);
       notifyListeners();
@@ -281,6 +314,212 @@ class TagProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 加载治理标签列表
+  Future<void> loadGovernanceTags({String? search}) async {
+    _isRunningGovernanceAction = true;
+    _governanceError = null;
+    notifyListeners();
+
+    try {
+      _governanceRows = await _tagService.fetchGovernanceTags(search: search);
+    } catch (e) {
+      _governanceError = e.toString();
+      debugPrint('Error loading governance tags: $e');
+    } finally {
+      _isRunningGovernanceAction = false;
+      notifyListeners();
+    }
+  }
+
+  /// 选择/取消选择治理标签
+  void toggleGovernanceSelection(int tagId) {
+    if (_selectedGovernanceIds.contains(tagId)) {
+      _selectedGovernanceIds.remove(tagId);
+    } else {
+      _selectedGovernanceIds.add(tagId);
+    }
+    notifyListeners();
+  }
+
+  /// 清空治理多选
+  void clearGovernanceSelection() {
+    _selectedGovernanceIds.clear();
+    notifyListeners();
+  }
+
+  /// 设置当前合并源标签
+  void setActiveMergeSource(TagGovernanceRow row) {
+    _activeMergeSource = row;
+    notifyListeners();
+  }
+
+  /// 清空当前合并源标签
+  void clearActiveMergeSource() {
+    _activeMergeSource = null;
+    notifyListeners();
+  }
+
+  /// 加载删除预览
+  Future<void> loadDeletePreview(int tagId) async {
+    _isRunningGovernanceAction = true;
+    _governanceError = null;
+    notifyListeners();
+
+    try {
+      _deletePreview = await _tagService.fetchDeletePreview(tagId);
+    } catch (e) {
+      _governanceError = e.toString();
+      debugPrint('Error loading delete preview: $e');
+    } finally {
+      _isRunningGovernanceAction = false;
+      notifyListeners();
+    }
+  }
+
+  /// 对已选标签应用主分类
+  Future<TagGovernanceBatchResult> applyPrimaryCategoryToSelection(
+    String primaryCategory,
+  ) async {
+    final failures = <TagGovernanceFailure>[];
+    final selectedIds = _selectedGovernanceIds.toList(growable: false);
+
+    await _runGovernanceAction(() async {
+      for (final tagId in selectedIds) {
+        try {
+          await _tagService.updateTag(tagId, primaryCategory: primaryCategory);
+        } catch (e) {
+          failures.add(_buildFailure(tagId, e));
+        }
+      }
+
+      await loadGovernanceTags();
+    });
+
+    final result = TagGovernanceBatchResult(
+      deletedTagIds: const [],
+      failures: failures,
+    );
+    _lastBatchResult = result;
+    notifyListeners();
+    return result;
+  }
+
+  /// 对已选标签添加别名
+  Future<TagGovernanceBatchResult> addAliasToSelection(
+    String aliasLabel, {
+    String aliasType = 'synonym',
+  }) async {
+    final failures = <TagGovernanceFailure>[];
+    final selectedIds = _selectedGovernanceIds.toList(growable: false);
+
+    await _runGovernanceAction(() async {
+      for (final tagId in selectedIds) {
+        try {
+          await _tagService.addTagAlias(tagId, aliasLabel, aliasType);
+        } catch (e) {
+          failures.add(_buildFailure(tagId, e));
+        }
+      }
+
+      await loadGovernanceTags();
+    });
+
+    final result = TagGovernanceBatchResult(
+      deletedTagIds: const [],
+      failures: failures,
+    );
+    _lastBatchResult = result;
+    notifyListeners();
+    return result;
+  }
+
+  /// 清理已选未使用标签
+  Future<TagGovernanceBatchResult> cleanupSelectedUnusedTags() async {
+    final selectedIds = _selectedGovernanceIds.toList(growable: false);
+    late final TagGovernanceBatchResult result;
+
+    await _runGovernanceAction(() async {
+      result = await _tagService.batchCleanupTags(selectedIds);
+      _lastBatchResult = result;
+      await loadGovernanceTags();
+    });
+
+    notifyListeners();
+    return result;
+  }
+
+  /// 合并已选标签到目标标签
+  Future<TagGovernanceBatchResult> mergeSelectionInto(int targetTagId) async {
+    final failures = <TagGovernanceFailure>[];
+    final sourceIds = _selectedGovernanceIds.toSet();
+    if (_activeMergeSource != null) {
+      sourceIds.add(_activeMergeSource!.tagId);
+    }
+
+    await _runGovernanceAction(() async {
+      for (final sourceTagId in sourceIds) {
+        if (sourceTagId == targetTagId) {
+          failures.add(
+            _buildFailure(
+              sourceTagId,
+              Exception('source and target must differ'),
+            ),
+          );
+          continue;
+        }
+
+        try {
+          await _tagService.mergeTagInto(sourceTagId, targetTagId);
+        } catch (e) {
+          failures.add(_buildFailure(sourceTagId, e));
+        }
+      }
+
+      await loadGovernanceTags();
+    });
+
+    final result = TagGovernanceBatchResult(
+      deletedTagIds: const [],
+      failures: failures,
+    );
+    _lastBatchResult = result;
+    notifyListeners();
+    return result;
+  }
+
+  TagGovernanceFailure _buildFailure(int tagId, Object error) {
+    final row = _governanceRows
+        .where((item) => item.tagId == tagId)
+        .cast<TagGovernanceRow?>()
+        .firstWhere(
+          (item) => item != null,
+          orElse: () =>
+              _activeMergeSource?.tagId == tagId ? _activeMergeSource : null,
+        );
+
+    return TagGovernanceFailure(
+      tagId: tagId,
+      preferredLabel: row?.preferredLabel ?? '',
+      message: error.toString(),
+    );
+  }
+
+  Future<void> _runGovernanceAction(Future<void> Function() action) async {
+    _isRunningGovernanceAction = true;
+    _governanceError = null;
+    notifyListeners();
+
+    try {
+      await action();
+    } catch (e) {
+      _governanceError = e.toString();
+      debugPrint('Error running governance action: $e');
+    } finally {
+      _isRunningGovernanceAction = false;
+      notifyListeners();
+    }
+  }
+
   // 加载标签统计数据
   Future<void> loadStatistics() async {
     _isLoadingStatistics = true;
@@ -313,9 +552,19 @@ class TagProvider extends ChangeNotifier {
   }
 
   // 更新标签
-  Future<void> updateTag(int tagId, {String? preferredLabel, String? primaryCategory, String? reviewState}) async {
+  Future<void> updateTag(
+    int tagId, {
+    String? preferredLabel,
+    String? primaryCategory,
+    String? reviewState,
+  }) async {
     try {
-      await _tagService.updateTag(tagId, preferredLabel: preferredLabel, primaryCategory: primaryCategory, reviewState: reviewState);
+      await _tagService.updateTag(
+        tagId,
+        preferredLabel: preferredLabel,
+        primaryCategory: primaryCategory,
+        reviewState: reviewState,
+      );
       // 刷新统计数据
       await loadStatistics();
     } catch (e) {
