@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -24,8 +25,9 @@ type RuntimeManifestPayload struct {
 }
 
 type runtimeManifestGoEntry struct {
-	BaseURL string `json:"base_url"`
-	Ready   bool   `json:"ready"`
+	BaseURL        string `json:"base_url"`
+	Ready          bool   `json:"ready"`
+	AdminBasicAuth string `json:"admin_basic_auth,omitempty"`
 }
 
 var (
@@ -35,7 +37,7 @@ var (
 	runtimeManifestRemoveFile = os.Remove
 )
 
-func BuildRuntimeManifestPayload(baseURL string, generatedAt time.Time) (RuntimeManifestPayload, error) {
+func BuildRuntimeManifestPayload(baseURL, adminUsername, adminPassword string, generatedAt time.Time) (RuntimeManifestPayload, error) {
 	trimmed := strings.TrimSpace(baseURL)
 	if trimmed == "" {
 		return RuntimeManifestPayload{}, fmt.Errorf("runtime manifest base URL is required")
@@ -49,12 +51,18 @@ func BuildRuntimeManifestPayload(baseURL string, generatedAt time.Time) (Runtime
 		stamp = time.Now().UTC()
 	}
 
+	adminBasicAuth := ""
+	if adminUsername != "" || adminPassword != "" {
+		adminBasicAuth = "Basic " + base64.StdEncoding.EncodeToString([]byte(adminUsername+":"+adminPassword))
+	}
+
 	return RuntimeManifestPayload{
 		Version:     RuntimeManifestSchemaVersion,
 		GeneratedAt: stamp.Format(time.RFC3339),
 		Go: runtimeManifestGoEntry{
-			BaseURL: trimmed,
-			Ready:   true,
+			BaseURL:        trimmed,
+			Ready:          true,
+			AdminBasicAuth: adminBasicAuth,
 		},
 	}, nil
 }

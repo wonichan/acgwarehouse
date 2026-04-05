@@ -14,7 +14,7 @@ func TestBuildRuntimeManifestPayloadIncludesRequiredFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 4, 4, 9, 30, 15, 0, time.UTC)
-	payload, err := BuildRuntimeManifestPayload("http://127.0.0.1:51423", now)
+	payload, err := BuildRuntimeManifestPayload("http://127.0.0.1:51423", "admin", "secret", now)
 	if err != nil {
 		t.Fatalf("BuildRuntimeManifestPayload() error = %v", err)
 	}
@@ -31,6 +31,9 @@ func TestBuildRuntimeManifestPayloadIncludesRequiredFields(t *testing.T) {
 	if !payload.Go.Ready {
 		t.Fatal("Go.Ready = false, want true")
 	}
+	if payload.Go.AdminBasicAuth != "Basic YWRtaW46c2VjcmV0" {
+		t.Fatalf("Go.AdminBasicAuth = %q, want %q", payload.Go.AdminBasicAuth, "Basic YWRtaW46c2VjcmV0")
+	}
 
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -43,7 +46,7 @@ func TestBuildRuntimeManifestPayloadIncludesRequiredFields(t *testing.T) {
 
 func TestWriteRuntimeManifestAtomicUsesTempThenRename(t *testing.T) {
 	manifestPath := filepath.Join(t.TempDir(), "runtime-manifest.json")
-	payload, err := BuildRuntimeManifestPayload("http://127.0.0.1:51423", time.Now().UTC())
+	payload, err := BuildRuntimeManifestPayload("http://127.0.0.1:51423", "admin", "secret", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("BuildRuntimeManifestPayload() error = %v", err)
 	}
@@ -99,7 +102,7 @@ func TestWriteRuntimeManifestAtomicDoesNotLeavePartialJSONOnRenameFailure(t *tes
 		runtimeManifestRenameFile = originalRename
 	})
 
-	payload, err := BuildRuntimeManifestPayload("http://127.0.0.1:51423", time.Now().UTC())
+	payload, err := BuildRuntimeManifestPayload("http://127.0.0.1:51423", "admin", "secret", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("BuildRuntimeManifestPayload() error = %v", err)
 	}

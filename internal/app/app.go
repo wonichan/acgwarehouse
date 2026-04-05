@@ -219,7 +219,12 @@ func (a *App) Run() error {
 		_ = listener.Close()
 		return err
 	}
-	payload, err := BuildRuntimeManifestPayload(manifestBaseURL, time.Now().UTC())
+	payload, err := BuildRuntimeManifestPayload(
+		manifestBaseURL,
+		a.config.Admin.Username,
+		a.config.Admin.Password,
+		time.Now().UTC(),
+	)
 	if err != nil {
 		_ = listener.Close()
 		return err
