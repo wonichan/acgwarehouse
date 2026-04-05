@@ -13,6 +13,13 @@ class MonitoringService {
     : _client = client ?? http.Client(),
       _basicAuthHeader = basicAuthHeader;
 
+  Map<String, dynamic>? get webSocketHeaders {
+    if (_basicAuthHeader == null || _basicAuthHeader!.isEmpty) {
+      return null;
+    }
+    return {'Authorization': _basicAuthHeader!};
+  }
+
   Future<MonitoringOverview> fetchOverview() async {
     final response = await _client.get(
       Uri.parse('${ApiConfig.hostUrl}/admin/api/task-platform/overview'),
@@ -37,7 +44,9 @@ class MonitoringService {
     final payload = jsonDecode(response.body);
     final rows = payload is List
         ? payload
-        : (payload as Map<String, dynamic>)['batches'] as List? ?? const [];
+        : ((payload as Map<String, dynamic>)['batches'] as List? ??
+              payload['task_batches'] as List? ??
+              const []);
     return rows
         .map((entry) => BatchRow.fromJson(entry as Map<String, dynamic>))
         .toList();

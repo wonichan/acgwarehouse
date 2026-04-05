@@ -129,7 +129,7 @@ void main() {
           if (request.url.path == '/admin/api/task-batches') {
             return http.Response(
               jsonEncode({
-                'batches': [
+                'task_batches': [
                   {
                     'id': 12,
                     'source_type': 'import',
@@ -137,6 +137,7 @@ void main() {
                     'status': 'running',
                     'total_images': 20,
                     'new_images': 15,
+                    'created_at': '2026-04-05T10:30:00Z',
                     'status_counts': {'pending': 10, 'completed': 5},
                     'task_type_counts': {'tagging': 12},
                     'failure_groups': [],
@@ -169,7 +170,10 @@ void main() {
 
           if (request.url.path == '/admin/api/actions/sidecar/restart') {
             return http.Response(
-              jsonEncode({'interrupted_task_count': 3}),
+              jsonEncode({
+                'success': true,
+                'data': {'interrupted_task_count': 3},
+              }),
               200,
             );
           }
@@ -203,6 +207,7 @@ void main() {
 
         expect(batches, hasLength(1));
         expect(batches.first, isA<BatchRow>());
+        expect(batches.first.createdAt, DateTime.parse('2026-04-05T10:30:00Z'));
         expect(requests.single.url.path, '/admin/api/task-batches');
         expect(requests.single.url.queryParameters['limit'], '25');
       },
@@ -228,6 +233,15 @@ void main() {
         expect(requests.single.method, 'POST');
         expect(requests.single.url.path, '/admin/api/actions/sidecar/restart');
         expect(requests.single.headers['Authorization'], 'Basic ZGVtbzpkZW1v');
+      },
+    );
+
+    test(
+      'webSocketHeaders exposes admin auth for desktop websocket bootstrap',
+      () {
+        expect(service.webSocketHeaders, {
+          'Authorization': 'Basic ZGVtbzpkZW1v',
+        });
       },
     );
   });

@@ -383,9 +383,10 @@ class RestartImpact {
   const RestartImpact({required this.interruptedTaskCount});
 
   factory RestartImpact.fromJson(Map<String, dynamic> json) {
+    final payload = (json['data'] as Map<String, dynamic>?) ?? json;
     return RestartImpact(
       interruptedTaskCount:
-          (json['interrupted_task_count'] as num?)?.toInt() ?? 0,
+          (payload['interrupted_task_count'] as num?)?.toInt() ?? 0,
     );
   }
 
