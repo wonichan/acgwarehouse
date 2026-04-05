@@ -5,10 +5,12 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/monitoring_models.dart';
+import '../services/monitoring_channel_factory.dart';
 import '../services/monitoring_service.dart';
 
 typedef MonitoringWsUriFactory = Uri Function();
-typedef MonitoringChannelFactory = WebSocketChannel Function(Uri uri);
+typedef MonitoringChannelFactory =
+    WebSocketChannel Function(Uri uri, {Map<String, dynamic>? headers});
 typedef MonitoringSleep = Future<void> Function(Duration duration);
 
 class MonitoringProvider extends ChangeNotifier {
@@ -19,7 +21,7 @@ class MonitoringProvider extends ChangeNotifier {
     MonitoringSleep? sleep,
   }) : _service = service,
        _wsUriFactory = wsUriFactory,
-       _channelFactory = channelFactory ?? WebSocketChannel.connect,
+       _channelFactory = channelFactory ?? createMonitoringChannel,
        _sleep = sleep ?? Future<void>.delayed;
 
   final MonitoringService _service;
@@ -43,6 +45,8 @@ class MonitoringProvider extends ChangeNotifier {
   bool _isDisposed = false;
   bool _reconnectScheduled = false;
   int _reconnectAttempt = 0;
+  bool _detailRefreshInFlight = false;
+  bool _detailRefreshQueued = false;
 
   MonitoringOverview? get overview => _overview;
   List<BatchRow> get batches => _batches;
@@ -138,7 +142,10 @@ class MonitoringProvider extends ChangeNotifier {
 
   Future<void> _openWebSocket() async {
     await _wsSubscription?.cancel();
-    _channel = _channelFactory(_wsUriFactory());
+    _channel = _channelFactory(
+      _wsUriFactory(),
+      headers: _service.webSocketHeaders,
+    );
     _wsSubscription = _channel!.stream.listen(
       _handleSocketMessage,
       onError: (_) => _handleSocketInterrupted(),
@@ -167,6 +174,7 @@ class MonitoringProvider extends ChangeNotifier {
     switch (event.type) {
       case 'overview':
         _overview = MonitoringOverview.fromJson(payload);
+        _scheduleDetailRefresh();
         break;
       case 'batches':
         final rows =
@@ -174,6 +182,7 @@ class MonitoringProvider extends ChangeNotifier {
         _batches = rows
             .map((entry) => BatchRow.fromJson(entry as Map<String, dynamic>))
             .toList();
+        _scheduleDetailRefresh(refreshBatches: false);
         break;
       case 'sidecar':
         if (_overview != null) {
@@ -185,10 +194,40 @@ class MonitoringProvider extends ChangeNotifier {
             tasks: _overview!.tasks,
           );
         }
+        _scheduleDetailRefresh();
         break;
     }
 
     _notifySafely();
+  }
+
+  void _scheduleDetailRefresh({bool refreshBatches = true}) {
+    if (_detailRefreshInFlight) {
+      _detailRefreshQueued = true;
+      return;
+    }
+    _detailRefreshInFlight = true;
+    unawaited(_refreshDetailRows(refreshBatches: refreshBatches));
+  }
+
+  Future<void> _refreshDetailRows({required bool refreshBatches}) async {
+    try {
+      if (refreshBatches) {
+        _batches = await _service.fetchBatches();
+      }
+      if (_selectedBatchId != null) {
+        _tasks = await _service.fetchTasks(batchId: _selectedBatchId);
+      }
+      _notifySafely();
+    } catch (_) {
+      // Preserve the last successful snapshot until the next refresh succeeds.
+    } finally {
+      _detailRefreshInFlight = false;
+      if (_detailRefreshQueued && !_isDisposed) {
+        _detailRefreshQueued = false;
+        _scheduleDetailRefresh();
+      }
+    }
   }
 
   void _handleSocketInterrupted() {

@@ -167,12 +167,15 @@ void main() {
         when(
           () => mockService.fetchBatches(limit: any(named: 'limit')),
         ).thenAnswer((_) async => batches);
+        when(
+          () => mockService.fetchTasks(batchId: 12, limit: any(named: 'limit')),
+        ).thenAnswer((_) async => tasks);
 
         final provider = MonitoringProvider(
           service: mockService,
           wsUriFactory: () =>
               Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
-          channelFactory: (_) => channel,
+          channelFactory: (_, {headers}) => channel,
         );
 
         await provider.connect();
@@ -195,15 +198,21 @@ void main() {
         when(
           () => mockService.fetchBatches(limit: any(named: 'limit')),
         ).thenAnswer((_) async => batches);
+        when(
+          () => mockService.fetchTasks(batchId: 12, limit: any(named: 'limit')),
+        ).thenAnswer((_) async => tasks);
 
         final provider = MonitoringProvider(
           service: mockService,
           wsUriFactory: () =>
               Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
-          channelFactory: (_) => channel,
+          channelFactory: (_, {headers}) => channel,
         );
 
         await provider.connect();
+        await provider.selectBatch(12);
+
+        clearInteractions(mockService);
         channel.addJson({
           'type': 'overview',
           'payload': {
@@ -229,6 +238,12 @@ void main() {
 
         expect(provider.overview?.queue.queueSize, 9);
         expect(provider.overview?.tasks['queued'], 6);
+        verify(
+          () => mockService.fetchBatches(limit: any(named: 'limit')),
+        ).called(1);
+        verify(
+          () => mockService.fetchTasks(batchId: 12, limit: any(named: 'limit')),
+        ).called(1);
       },
     );
 
@@ -245,7 +260,7 @@ void main() {
         service: mockService,
         wsUriFactory: () =>
             Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
-        channelFactory: (_) => channel,
+        channelFactory: (_, {headers}) => channel,
       );
 
       await provider.connect();
@@ -277,7 +292,7 @@ void main() {
             wsConnections += 1;
             return Uri.parse('ws://localhost:8080/admin/api/monitoring/ws');
           },
-          channelFactory: (_) => channels.removeAt(0),
+          channelFactory: (_, {headers}) => channels.removeAt(0),
           sleep: (duration) async {
             delays.add(duration);
           },
@@ -312,7 +327,7 @@ void main() {
           service: mockService,
           wsUriFactory: () =>
               Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
-          channelFactory: (_) => channel,
+          channelFactory: (_, {headers}) => channel,
         );
 
         await provider.connect();
@@ -342,7 +357,7 @@ void main() {
           service: mockService,
           wsUriFactory: () =>
               Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
-          channelFactory: (_) => channel,
+          channelFactory: (_, {headers}) => channel,
         );
 
         await provider.connect();
@@ -376,7 +391,7 @@ void main() {
           service: mockService,
           wsUriFactory: () =>
               Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
-          channelFactory: (_) => channel,
+          channelFactory: (_, {headers}) => channel,
         );
 
         await provider.connect();
@@ -403,7 +418,7 @@ void main() {
         service: mockService,
         wsUriFactory: () =>
             Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
-        channelFactory: (_) => channel,
+        channelFactory: (_, {headers}) => channel,
       );
 
       await provider.connect();
@@ -412,5 +427,36 @@ void main() {
       expect(provider.batches, hasLength(1));
       expect(provider.serviceUnavailable, isFalse);
     });
+
+    test(
+      'connect passes admin auth headers into websocket bootstrap',
+      () async {
+        final channel = FakeWebSocketChannel();
+        Map<String, dynamic>? capturedHeaders;
+        when(
+          () => mockService.fetchOverview(),
+        ).thenAnswer((_) async => readyOverview);
+        when(
+          () => mockService.fetchBatches(limit: any(named: 'limit')),
+        ).thenAnswer((_) async => batches);
+        when(
+          () => mockService.webSocketHeaders,
+        ).thenReturn({'Authorization': 'Basic ZGVtbzpkZW1v'});
+
+        final provider = MonitoringProvider(
+          service: mockService,
+          wsUriFactory: () =>
+              Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
+          channelFactory: (_, {headers}) {
+            capturedHeaders = headers;
+            return channel;
+          },
+        );
+
+        await provider.connect();
+
+        expect(capturedHeaders, {'Authorization': 'Basic ZGVtbzpkZW1v'});
+      },
+    );
   });
 }
