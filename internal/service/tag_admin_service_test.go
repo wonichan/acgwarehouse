@@ -133,7 +133,7 @@ func newTagAdminServiceForTest(t *testing.T) (*TagAdminService, repository.TagRe
 	aliasRepo := repository.NewTagAliasRepository(db)
 	imageTagRepo := repository.NewImageTagRepository(db)
 
-	return NewTagAdminService(tagRepo, aliasRepo, imageTagRepo), tagRepo, aliasRepo, imageTagRepo
+	return NewTagAdminService(db, tagRepo, aliasRepo, imageTagRepo), tagRepo, aliasRepo, imageTagRepo
 }
 
 func seedTagAdminData(t *testing.T, db *sql.DB) {

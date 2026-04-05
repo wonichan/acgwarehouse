@@ -16,6 +16,7 @@ import (
 	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
 
 func TestTagGetTagsReturnsListSortedByUsageCount(t *testing.T) {
@@ -357,7 +358,8 @@ func newTagHandlerTestRouter(t *testing.T) (*gin.Engine, *tagHandlerTestRepos) {
 		imageTagRepo: repository.NewImageTagRepository(db),
 		db:           db,
 	}
-	h := NewTagHandler(repos.tagRepo, repos.aliasRepo, repos.imageTagRepo)
+	adminSvc := service.NewTagAdminService(repos.db, repos.tagRepo, repos.aliasRepo, repos.imageTagRepo)
+	h := NewTagHandler(repos.tagRepo, repos.aliasRepo, repos.imageTagRepo, adminSvc)
 
 	router := gin.New()
 	api := router.Group("/api/v1")
@@ -387,9 +389,9 @@ func seedTagHandlerData(t *testing.T, db *sql.DB) {
 
 	tagRepo := repository.NewTagRepository(db)
 	for _, tag := range []*domain.Tag{
-		{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", ReviewState: "confirmed", UsageCount: 10},
-		{ID: 2, PreferredLabel: "sunrise", Slug: "sunrise", ReviewState: "pending", UsageCount: 3},
-		{ID: 3, PreferredLabel: "cloud", Slug: "cloud", ReviewState: "confirmed", UsageCount: 1},
+		{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", PrimaryCategory: "scene", ReviewState: "confirmed", UsageCount: 10},
+		{ID: 2, PreferredLabel: "sunrise", Slug: "sunrise", PrimaryCategory: "scene", ReviewState: "pending", UsageCount: 3},
+		{ID: 3, PreferredLabel: "cloud", Slug: "cloud", PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 1},
 	} {
 		if err := tagRepo.Save(context.Background(), tag); err != nil {
 			t.Fatalf("seed tag %d: %v", tag.ID, err)

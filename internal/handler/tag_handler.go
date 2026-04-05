@@ -12,19 +12,32 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
+
+type tagAdminService interface {
+	ListGovernanceTags(ctx context.Context, search string, limit, offset int) ([]service.TagGovernanceRow, int, error)
+	MergeTags(ctx context.Context, sourceTagID, targetTagID int64) (*service.TagMergeResult, error)
+}
 
 type TagHandler struct {
 	tagRepo      repository.TagRepository
 	aliasRepo    repository.TagAliasRepository
 	imageTagRepo repository.ImageTagRepository
+	adminSvc     tagAdminService
 }
 
-func NewTagHandler(tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository) *TagHandler {
+func NewTagHandler(tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository, adminSvcOpt ...tagAdminService) *TagHandler {
+	var adminSvc tagAdminService
+	if len(adminSvcOpt) > 0 {
+		adminSvc = adminSvcOpt[0]
+	}
+
 	return &TagHandler{
 		tagRepo:      tagRepo,
 		aliasRepo:    aliasRepo,
 		imageTagRepo: imageTagRepo,
+		adminSvc:     adminSvc,
 	}
 }
 
@@ -350,6 +363,70 @@ func (h *TagHandler) GetTagStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"stats": stats})
+}
+
+func (h *TagHandler) GetGovernanceTags(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "tag governance service unavailable"})
+		return
+	}
+
+	limit := parsePositiveInt(c.DefaultQuery("limit", "20"), 20)
+	offset := parsePositiveInt(c.DefaultQuery("offset", "0"), 0)
+	search := strings.TrimSpace(c.Query("search"))
+
+	rows, total, err := h.adminSvc.ListGovernanceTags(c.Request.Context(), search, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"rows": rows, "total": total})
+}
+
+func (h *TagHandler) MergeTag(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "tag governance service unavailable"})
+		return
+	}
+
+	sourceTagID, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var req struct {
+		TargetTagID int64 `json:"target_tag_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	if req.TargetTagID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target_tag_id is required"})
+		return
+	}
+
+	result, err := h.adminSvc.MergeTags(c.Request.Context(), sourceTagID, req.TargetTagID)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrMergeSameSourceTarget):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "source and target tags must be different"})
+		case errors.Is(err, service.ErrTagNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":                     true,
+		"source_tag_id":               result.SourceTagID,
+		"target_tag_id":               result.TargetTagID,
+		"migrated_image_associations": result.MigratedImageAssociations,
+		"migrated_aliases":            result.MigratedAliases,
+	})
 }
 
 // CleanUnusedTags handles DELETE /api/v1/tags/cleanup
