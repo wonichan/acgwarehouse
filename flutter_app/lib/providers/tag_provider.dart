@@ -316,19 +316,7 @@ class TagProvider extends ChangeNotifier {
 
   /// 加载治理标签列表
   Future<void> loadGovernanceTags({String? search}) async {
-    _isRunningGovernanceAction = true;
-    _governanceError = null;
-    notifyListeners();
-
-    try {
-      _governanceRows = await _tagService.fetchGovernanceTags(search: search);
-    } catch (e) {
-      _governanceError = e.toString();
-      debugPrint('Error loading governance tags: $e');
-    } finally {
-      _isRunningGovernanceAction = false;
-      notifyListeners();
-    }
+    await _refreshGovernanceRows(search: search, asPrimaryAction: true);
   }
 
   /// 选择/取消选择治理标签
@@ -392,7 +380,7 @@ class TagProvider extends ChangeNotifier {
         }
       }
 
-      await loadGovernanceTags();
+      await _refreshGovernanceRows();
     });
 
     final result = TagGovernanceBatchResult(
@@ -421,7 +409,7 @@ class TagProvider extends ChangeNotifier {
         }
       }
 
-      await loadGovernanceTags();
+      await _refreshGovernanceRows();
     });
 
     final result = TagGovernanceBatchResult(
@@ -441,7 +429,7 @@ class TagProvider extends ChangeNotifier {
     await _runGovernanceAction(() async {
       result = await _tagService.batchCleanupTags(selectedIds);
       _lastBatchResult = result;
-      await loadGovernanceTags();
+      await _refreshGovernanceRows();
     });
 
     notifyListeners();
@@ -475,7 +463,7 @@ class TagProvider extends ChangeNotifier {
         }
       }
 
-      await loadGovernanceTags();
+      await _refreshGovernanceRows();
     });
 
     final result = TagGovernanceBatchResult(
@@ -520,6 +508,45 @@ class TagProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _refreshGovernanceRows({
+    String? search,
+    bool asPrimaryAction = false,
+  }) async {
+    if (asPrimaryAction) {
+      _isRunningGovernanceAction = true;
+      _governanceError = null;
+      notifyListeners();
+    }
+
+    try {
+      _governanceRows = await _tagService.fetchGovernanceTags(search: search);
+    } catch (e) {
+      _governanceError = e.toString();
+      debugPrint('Error loading governance tags: $e');
+    } finally {
+      if (asPrimaryAction) {
+        _isRunningGovernanceAction = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _refreshStatisticsState() async {
+    _isLoadingStatistics = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _statistics = await _tagService.getTagStatistics();
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error refreshing tag statistics: $e');
+    } finally {
+      _isLoadingStatistics = false;
+      notifyListeners();
+    }
+  }
+
   // 加载标签统计数据
   Future<void> loadStatistics() async {
     _isLoadingStatistics = true;
@@ -541,8 +568,7 @@ class TagProvider extends ChangeNotifier {
   Future<Map<String, dynamic>> cleanUnusedTags() async {
     try {
       final result = await _tagService.cleanUnusedTags();
-      // 刷新统计数据
-      await loadStatistics();
+      await _refreshStatisticsState();
       return result;
     } catch (e) {
       _error = e.toString();
@@ -565,8 +591,7 @@ class TagProvider extends ChangeNotifier {
         primaryCategory: primaryCategory,
         reviewState: reviewState,
       );
-      // 刷新统计数据
-      await loadStatistics();
+      await _refreshStatisticsState();
     } catch (e) {
       _error = e.toString();
       debugPrint('Error updating tag: $e');
@@ -578,8 +603,7 @@ class TagProvider extends ChangeNotifier {
   Future<void> deleteTag(int tagId) async {
     try {
       await _tagService.deleteTag(tagId);
-      // 刷新统计数据
-      await loadStatistics();
+      await _refreshStatisticsState();
     } catch (e) {
       _error = e.toString();
       debugPrint('Error deleting tag: $e');
