@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/tag.dart';
+import '../models/tag_governance.dart';
 
 class TagService {
   final http.Client _client;
@@ -9,7 +10,11 @@ class TagService {
   TagService({http.Client? client}) : _client = client ?? http.Client();
 
   /// 获取标签列表
-  Future<List<Tag>> fetchTags({String? search, int limit = 50, int offset = 0}) async {
+  Future<List<Tag>> fetchTags({
+    String? search,
+    int limit = 50,
+    int offset = 0,
+  }) async {
     final uri = Uri.parse(ApiConfig.tags).replace(
       queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
@@ -75,7 +80,9 @@ class TagService {
       throw Exception('Failed to add tag: ${response.statusCode}');
     }
 
-    return Tag.fromImageTagJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return Tag.fromImageTagJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
   }
 
   /// 移除图片标签
@@ -141,7 +148,7 @@ class TagService {
     final response = await _client.post(
       Uri.parse(ApiConfig.triggerAITags(imageId)),
       headers: {'Content-Type': 'application/json'},
-      body: prompt != null && prompt.isNotEmpty 
+      body: prompt != null && prompt.isNotEmpty
           ? jsonEncode({'prompt': prompt})
           : null,
     );
@@ -154,9 +161,7 @@ class TagService {
 
   /// 获取默认 AI 提示词
   Future<String> getDefaultAIPrompt() async {
-    final response = await _client.get(
-      Uri.parse(ApiConfig.defaultAIPrompt),
-    );
+    final response = await _client.get(Uri.parse(ApiConfig.defaultAIPrompt));
     if (response.statusCode != 200) {
       throw Exception('Failed to get default prompt: ${response.statusCode}');
     }
@@ -183,7 +188,9 @@ class TagService {
       body: jsonEncode({'image_ids': imageIds}),
     );
     if (response.statusCode != 200 && response.statusCode != 202) {
-      throw Exception('Failed to batch trigger AI tags: ${response.statusCode}');
+      throw Exception(
+        'Failed to batch trigger AI tags: ${response.statusCode}',
+      );
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
@@ -203,8 +210,131 @@ class TagService {
         .toList();
   }
 
+  /// 获取标签治理列表
+  Future<List<TagGovernanceRow>> fetchGovernanceTags({
+    String? search,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/tags/governance').replace(
+      queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      },
+    );
+
+    final response = await _client.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to fetch governance tags: ${response.statusCode}',
+      );
+    }
+
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return (json['tags'] as List? ?? [])
+        .map(
+          (entry) => TagGovernanceRow.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  /// 获取标签删除预览
+  Future<TagDeletePreview> fetchDeletePreview(int tagId) async {
+    final response = await _client.get(
+      Uri.parse('${ApiConfig.baseUrl}/tags/$tagId/delete-preview'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch delete preview: ${response.statusCode}');
+    }
+
+    return TagDeletePreview.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
+  /// 显式合并标签到目标标签
+  Future<void> mergeTagInto(int sourceTagId, int targetTagId) async {
+    final request = TagMergeRequest(targetTagId: targetTagId);
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrl}/tags/$sourceTagId/merge'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(request.toJson()),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to merge tag into target: ${response.statusCode}',
+      );
+    }
+  }
+
+  /// 获取标签别名列表
+  Future<List<String>> getTagAliases(int tagId) async {
+    final response = await _client.get(Uri.parse(ApiConfig.tagAliases(tagId)));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch tag aliases: ${response.statusCode}');
+    }
+
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final aliases = json['aliases'] as List? ?? [];
+    return aliases
+        .map((alias) {
+          if (alias is String) {
+            return alias;
+          }
+          return (alias as Map<String, dynamic>)['label'] as String? ?? '';
+        })
+        .where((alias) => alias.isNotEmpty)
+        .toList();
+  }
+
+  /// 添加标签别名
+  Future<void> addTagAlias(int tagId, String label, String aliasType) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.tagAliases(tagId)),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'label': label, 'alias_type': aliasType}),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Failed to add tag alias: ${response.statusCode}');
+    }
+  }
+
+  /// 删除标签别名
+  Future<void> deleteTagAlias(int tagId, int aliasId) async {
+    final response = await _client.delete(
+      Uri.parse(ApiConfig.tagAlias(tagId, aliasId)),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete tag alias: ${response.statusCode}');
+    }
+  }
+
+  /// 按选择批量清理标签
+  Future<TagGovernanceBatchResult> batchCleanupTags(List<int> tagIds) async {
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrl}/tags/batch/cleanup'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'tag_ids': tagIds}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to cleanup selected tags: ${response.statusCode}',
+      );
+    }
+
+    return TagGovernanceBatchResult.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
   /// 合并图片标签到目标标签
-  Future<void> mergeImageTag(int imageId, int tagId, {int? targetTagId, String? targetLabel}) async {
+  Future<void> mergeImageTag(
+    int imageId,
+    int tagId, {
+    int? targetTagId,
+    String? targetLabel,
+  }) async {
     if (targetTagId == null && targetLabel == null) {
       throw ArgumentError('Either targetTagId or targetLabel must be provided');
     }
@@ -234,7 +364,12 @@ class TagService {
   }
 
   /// 更新标签
-  Future<Tag> updateTag(int tagId, {String? preferredLabel, String? primaryCategory, String? reviewState}) async {
+  Future<Tag> updateTag(
+    int tagId, {
+    String? preferredLabel,
+    String? primaryCategory,
+    String? reviewState,
+  }) async {
     final body = <String, dynamic>{};
     if (preferredLabel != null) body['preferred_label'] = preferredLabel;
     if (primaryCategory != null) body['primary_category'] = primaryCategory;
