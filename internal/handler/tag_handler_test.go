@@ -219,6 +219,111 @@ func TestTagAddAliasCreatesAlias(t *testing.T) {
 	}
 }
 
+func TestTagGetGovernanceReturnsRowsOrderedByUsageCount(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/governance", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Rows []struct {
+			TagID              int64    `json:"tag_id"`
+			PreferredLabel     string   `json:"preferred_label"`
+			PrimaryCategory    string   `json:"primary_category"`
+			Aliases            []string `json:"aliases"`
+			UsageCount         int64    `json:"usage_count"`
+			PendingCount       int64    `json:"pending_count"`
+			ConfirmedCount     int64    `json:"confirmed_count"`
+			AICount            int64    `json:"ai_count"`
+			ManualCount        int64    `json:"manual_count"`
+			AffectedImageCount int64    `json:"affected_image_count"`
+			CanDelete          bool     `json:"can_delete"`
+		} `json:"rows"`
+		Total int `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if resp.Total == 0 || len(resp.Rows) == 0 {
+		t.Fatal("expected governance rows")
+	}
+	if resp.Rows[0].TagID == 0 {
+		t.Fatal("expected tag_id in governance row")
+	}
+	if resp.Rows[0].PreferredLabel == "" || resp.Rows[0].PrimaryCategory == "" {
+		t.Fatal("expected label/category in governance row")
+	}
+	if len(resp.Rows[0].Aliases) == 0 {
+		t.Fatal("expected aliases in governance row")
+	}
+	if resp.Rows[0].UsageCount < resp.Rows[len(resp.Rows)-1].UsageCount {
+		t.Fatal("expected governance rows sorted by usage_count desc")
+	}
+}
+
+func TestTagMergeRequiresExplicitTargetTagID(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags/1/merge", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestTagMergeRejectsSourceEqualsTarget(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags/1/merge", bytes.NewBufferString(`{"target_tag_id":1}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestTagMergeMovesSourceImageTagsToExplicitTarget(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags/1/merge", bytes.NewBufferString(`{"target_tag_id":2}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	if _, err := repos.tagRepo.FindByID(context.Background(), 1); err == nil {
+		t.Fatal("expected source tag to be deleted after merge")
+	}
+
+	targetRows, err := repos.imageTagRepo.FindByTagID(context.Background(), 2, 20, 0)
+	if err != nil {
+		t.Fatalf("FindByTagID(target) error = %v", err)
+	}
+	if len(targetRows) == 0 {
+		t.Fatal("expected merged image-tag associations on target")
+	}
+}
+
 type tagHandlerTestRepos struct {
 	tagRepo      repository.TagRepository
 	aliasRepo    repository.TagAliasRepository
@@ -257,9 +362,11 @@ func newTagHandlerTestRouter(t *testing.T) (*gin.Engine, *tagHandlerTestRepos) {
 	router := gin.New()
 	api := router.Group("/api/v1")
 	api.GET("/tags", h.GetTags)
+	api.GET("/tags/governance", h.GetGovernanceTags)
 	api.POST("/tags", h.CreateTag)
 	api.PUT("/tags/:id", h.UpdateTag)
 	api.DELETE("/tags/:id", h.DeleteTag)
+	api.POST("/tags/:id/merge", h.MergeTag)
 	api.GET("/tags/:id/aliases", h.GetAliases)
 	api.POST("/tags/:id/aliases", h.AddAlias)
 
