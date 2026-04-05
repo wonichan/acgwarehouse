@@ -8,16 +8,33 @@ import 'package:gallery/app/fluent_app_shell.dart';
 import 'package:gallery/providers/config_provider.dart';
 import 'package:gallery/providers/duplicate_provider.dart';
 import 'package:gallery/providers/image_provider.dart';
+import 'package:gallery/providers/monitoring_provider.dart';
 import 'package:gallery/providers/navigation_provider.dart';
 import 'package:gallery/providers/search_provider.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/providers/theme_provider.dart';
 import 'package:gallery/app/fluent_screens.dart';
+import 'package:gallery/services/monitoring_service.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/services/duplicate_service.dart';
 import 'package:gallery/services/search_service.dart';
 import 'package:gallery/services/tag_service.dart';
 import 'package:gallery/widgets/fluent_settings_page.dart';
+
+class _ShellMonitoringProvider extends MonitoringProvider {
+  _ShellMonitoringProvider(http.Client client)
+    : super(
+        service: MonitoringService(client: client),
+        wsUriFactory: () =>
+            Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
+      );
+
+  @override
+  Future<void> connect() async {}
+
+  @override
+  Future<void> disconnect() async {}
+}
 
 void main() {
   testWidgets(
@@ -64,6 +81,9 @@ void main() {
               create: (_) => DuplicateProvider(
                 service: DuplicateService(client: mockClient),
               ),
+            ),
+            ChangeNotifierProvider<MonitoringProvider>(
+              create: (_) => _ShellMonitoringProvider(mockClient),
             ),
             ChangeNotifierProvider<ThemeProvider>(
               create: (_) => ThemeProvider(),

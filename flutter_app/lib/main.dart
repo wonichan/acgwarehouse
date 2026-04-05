@@ -15,6 +15,7 @@ import 'services/api_service.dart';
 import 'services/tag_service.dart';
 import 'services/duplicate_service.dart';
 import 'services/search_service.dart';
+import 'services/monitoring_service.dart';
 import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
 import 'app/material_app_shell.dart';
@@ -22,6 +23,8 @@ import 'app/viewer_window_app.dart';
 import 'services/viewer_window_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/window_manager.dart';
+import 'config/api_config.dart';
+import 'providers/monitoring_provider.dart';
 
 void main(List<String> args) async {
   // Ensure Flutter binding is initialized
@@ -59,6 +62,7 @@ class MyApp extends StatelessWidget {
         Provider(create: (_) => TagService()),
         Provider(create: (_) => DuplicateService()),
         Provider(create: (_) => SearchService()),
+        Provider(create: (_) => MonitoringService()),
         ChangeNotifierProvider(
           create: (context) =>
               ImageListProvider(context.read<ApiService>())..loadImages(),
@@ -73,6 +77,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (context) =>
               SearchProvider(service: context.read<SearchService>()),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => MonitoringProvider(
+            service: context.read<MonitoringService>(),
+            wsUriFactory: () => Uri.parse(ApiConfig.monitoringWs),
+          ),
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
