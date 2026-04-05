@@ -114,6 +114,74 @@ func TestTagAdminServiceMergeTagsUsesExplicitTargetWithoutFuzzySelection(t *test
 	}
 }
 
+func TestTagAdminServiceGetDeletePreviewBlocksUsedTag(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	preview, err := service.GetDeletePreview(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetDeletePreview() error = %v", err)
+	}
+	if preview.TagID != 1 {
+		t.Fatalf("tag_id = %d, want 1", preview.TagID)
+	}
+	if preview.AffectedImageCount == 0 {
+		t.Fatal("expected affected_image_count > 0 for used tag")
+	}
+	if preview.CanDelete {
+		t.Fatal("expected used tag to be blocked from delete")
+	}
+	if preview.BlockingReason != "merge_or_reclassify_required" {
+		t.Fatalf("blocking_reason = %q, want %q", preview.BlockingReason, "merge_or_reclassify_required")
+	}
+}
+
+func TestTagAdminServiceGetDeletePreviewAllowsUnusedTag(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	preview, err := service.GetDeletePreview(context.Background(), 3)
+	if err != nil {
+		t.Fatalf("GetDeletePreview() error = %v", err)
+	}
+	if !preview.CanDelete {
+		t.Fatal("expected unused tag to be deletable")
+	}
+	if preview.AffectedImageCount != 0 {
+		t.Fatalf("affected_image_count = %d, want 0", preview.AffectedImageCount)
+	}
+}
+
+func TestTagAdminServiceCleanupUnusedTagsProcessesSelectedIDsOnly(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, _ := newTagAdminServiceForTest(t)
+
+	result, err := service.CleanupUnusedTags(context.Background(), []int64{1, 3, 999})
+	if err != nil {
+		t.Fatalf("CleanupUnusedTags() error = %v", err)
+	}
+
+	if len(result.Deleted) != 1 || result.Deleted[0].TagID != 3 {
+		t.Fatalf("deleted = %+v, want only tag_id=3", result.Deleted)
+	}
+	if len(result.Blocked) != 1 || result.Blocked[0].TagID != 1 {
+		t.Fatalf("blocked = %+v, want only tag_id=1", result.Blocked)
+	}
+	if len(result.Failed) != 1 || result.Failed[0].TagID != 999 {
+		t.Fatalf("failed = %+v, want only tag_id=999", result.Failed)
+	}
+
+	if _, err := tagRepo.FindByID(context.Background(), 3); err == nil {
+		t.Fatal("expected selected unused tag to be deleted")
+	}
+	if _, err := tagRepo.FindByID(context.Background(), 2); err != nil {
+		t.Fatalf("non-selected tag should not be deleted: %v", err)
+	}
+}
+
 func newTagAdminServiceForTest(t *testing.T) (*TagAdminService, repository.TagRepository, repository.TagAliasRepository, repository.ImageTagRepository) {
 	t.Helper()
 
