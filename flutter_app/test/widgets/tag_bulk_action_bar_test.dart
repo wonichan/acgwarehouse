@@ -1,0 +1,143 @@
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:flutter_test/flutter_test.dart';
+import 'package:gallery/models/tag_governance.dart';
+import 'package:gallery/providers/tag_provider.dart';
+import 'package:gallery/services/tag_service.dart';
+import 'package:gallery/widgets/tag_management/tag_bulk_action_bar.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:provider/provider.dart';
+
+class _BulkBarTagProvider extends TagProvider {
+  _BulkBarTagProvider({http.Client? client})
+    : _selectedIds = {10, 30},
+      super(TagService(client: client));
+
+  final Set<int> _selectedIds;
+
+  @override
+  List<TagGovernanceRow> get governanceRows => [
+    const TagGovernanceRow(
+      tagId: 10,
+      preferredLabel: 'long_hair',
+      primaryCategory: 'appearance',
+      aliases: ['longhair'],
+      usageCount: 42,
+      pendingCount: 5,
+      confirmedCount: 35,
+      rejectedCount: 2,
+      aiCount: 30,
+      manualCount: 12,
+      affectedImageCount: 42,
+      canDelete: false,
+    ),
+    const TagGovernanceRow(
+      tagId: 30,
+      preferredLabel: 'school_uniform',
+      primaryCategory: 'clothing',
+      aliases: ['seifuku'],
+      usageCount: 15,
+      pendingCount: 2,
+      confirmedCount: 13,
+      rejectedCount: 0,
+      aiCount: 10,
+      manualCount: 5,
+      affectedImageCount: 15,
+      canDelete: false,
+    ),
+  ];
+
+  @override
+  Set<int> get selectedGovernanceIds => _selectedIds;
+
+  @override
+  bool get isRunningGovernanceAction => false;
+
+  @override
+  String? get governanceError => null;
+
+  @override
+  Future<void> loadGovernanceTags({String? search}) async {}
+
+  int cleanupCalls = 0;
+  int? mergeIntoTargetId;
+
+  @override
+  void cleanupSelectedUnusedTags() async {
+    cleanupCalls++;
+  }
+
+  @override
+  Future<void> mergeSelectionInto(int targetTagId) async {
+    mergeIntoTargetId = targetTagId;
+  }
+
+  @override
+  void clearGovernanceSelection() {
+    _selectedIds.clear();
+    notifyListeners();
+  }
+}
+
+void main() {
+  testWidgets(
+    'bulk action bar shows selected count and cleanup/merge controls',
+    (tester) async {
+      final mockClient = MockClient((request) async {
+        return http.Response('{"tags":[]}', 200);
+      });
+      final tagProvider = _BulkBarTagProvider(client: mockClient);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<TagProvider>.value(value: tagProvider),
+          ],
+          child: fluent.FluentApp(
+            home: TagBulkActionBar(
+              onCleanup: () async {},
+              onMergeInto: (_) async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Shows selected count
+      expect(find.textContaining('2 selected'), findsOneWidget);
+
+      // Shows cleanup and merge controls
+      expect(find.text('Cleanup selected'), findsOneWidget);
+      expect(find.text('Merge into...'), findsOneWidget);
+      expect(find.text('Clear selection'), findsOneWidget);
+    },
+  );
+
+  testWidgets('cleanup calls onCleanup callback', (tester) async {
+    final mockClient = MockClient((request) async {
+      return http.Response('{"tags":[]}', 200);
+    });
+    final tagProvider = _BulkBarTagProvider(client: mockClient);
+    int cleanupCalls = 0;
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<TagProvider>.value(value: tagProvider),
+        ],
+        child: TagBulkActionBar(
+          onCleanup: () async {
+            cleanupCalls++;
+          },
+          onMergeInto: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cleanup selected'));
+    await tester.pumpAndSettle();
+
+    expect(cleanupCalls, 1);
+  });
+}
