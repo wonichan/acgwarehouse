@@ -79,4 +79,24 @@ class ApiConfig {
   // Search endpoints
   static String get search => '$baseUrl/search';
   static String get searchByFilename => '$baseUrl/search/filename';
+
+  // Admin monitoring endpoints (under /admin/api, not /api/v1)
+  static String get adminOverview =>
+      '$hostUrl/admin/api/task-platform/overview';
+  static String get adminBatches => '$hostUrl/admin/api/task-batches';
+  static String adminTasks({int? batchId}) {
+    var url = '$hostUrl/admin/api/tasks';
+    if (batchId != null) {
+      url += '?batch_id=$batchId';
+    }
+    return url;
+  }
+
+  static String get sidecarRestart =>
+      '$hostUrl/admin/api/actions/sidecar/restart';
+
+  static String get monitoringWs {
+    final wsHost = hostUrl.replaceFirst('http', 'ws');
+    return '$wsHost/admin/api/monitoring/ws';
+  }
 }

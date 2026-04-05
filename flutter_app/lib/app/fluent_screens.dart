@@ -352,3 +352,12 @@ class FluentTagManagementPage extends StatelessWidget {
     return const TagManagementWorkspace();
   }
 }
+
+class FluentOperationsMonitoringPage extends StatelessWidget {
+  const FluentOperationsMonitoringPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const ScaffoldPage(content: Center(child: Text('运营监控')));
+  }
+}

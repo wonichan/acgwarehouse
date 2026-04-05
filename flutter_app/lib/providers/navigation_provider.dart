@@ -9,9 +9,10 @@ class NavigationProvider extends ChangeNotifier {
   static const int searchIndex = 2;
   static const int tagManagementIndex = 3;
   static const int settingsIndex = 4;
+  static const int operationsMonitoringIndex = 5;
 
   // Total number of navigation items
-  static const int itemCount = 5;
+  static const int itemCount = 6;
 
   static const List<String> _pageTitles = [
     '图库',
@@ -19,6 +20,7 @@ class NavigationProvider extends ChangeNotifier {
     '搜索',
     '标签管理',
     '设置',
+    '运营监控',
   ];
 
   int _selectedIndex = 0;

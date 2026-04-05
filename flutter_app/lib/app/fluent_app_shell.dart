@@ -77,6 +77,15 @@ class FluentAppShell extends StatelessWidget {
                   child: const FluentSettingsPage(),
                 ),
               ),
+              PaneItem(
+                icon: const Icon(FluentIcons.diagnostic),
+                title: const Text('运营监控'),
+                body: _ShellPage(
+                  onImportLibrary: onImportLibrary,
+                  importService: importService,
+                  child: const FluentOperationsMonitoringPage(),
+                ),
+              ),
             ],
           ),
         );
