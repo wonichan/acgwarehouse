@@ -21,7 +21,7 @@ import 'package:gallery/widgets/fluent_settings_page.dart';
 
 void main() {
   testWidgets(
-    'FluentAppShell exposes five navigation items and matching pages',
+    'FluentAppShell exposes six navigation items and matching pages',
     (tester) async {
       final navProvider = NavigationProvider();
       final mockClient = MockClient((request) async {
@@ -98,6 +98,13 @@ void main() {
       navProvider.setSelectedIndex(4);
       await tester.pumpAndSettle();
       expect(find.byType(FluentSettingsPage), findsOneWidget);
+      expect(find.text('Search images and tags'), findsOneWidget);
+
+      expect(find.byIcon(fluent.FluentIcons.diagnostic), findsOneWidget);
+
+      navProvider.setSelectedIndex(5);
+      await tester.pumpAndSettle();
+      expect(find.byType(FluentOperationsMonitoringPage), findsOneWidget);
       expect(find.text('Search images and tags'), findsOneWidget);
     },
   );
