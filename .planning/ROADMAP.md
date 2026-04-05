@@ -22,8 +22,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 16: Duplicate Detection Migration** - Migrate duplicate detection computation to Python sidecar (completed 2026-04-04)
 - [x] **Phase 17: Desktop Shell Foundation** - Deliver Windows Photos-style toolbar and grid browsing (completed 2026-04-05)
 - [x] **Phase 18: Independent Viewer & Filmstrip** - Implement non-blocking viewer with filmstrip navigation (completed 2026-04-05)
-- [ ] **Phase 19: Tag Management** - Enable in-app tag management without legacy entry switching
-- [ ] **Phase 20: Operations Monitoring** - Integrate task monitoring and sidecar diagnostics into desktop UI
+- [x] **Phase 19: Tag Management** - Enable in-app tag management without legacy entry switching (completed 2026-04-05)
+- [ ] **Phase 20: Operations Monitoring** - Integrate task monitoring and sidecar diagnostics into desktop UI (planned 2026-04-05)
 - [ ] **Phase 21: Windows Packaging** - Package Flutter + Go + Python as single distributable bundle
 - [ ] **Phase 22: Large Gallery Performance** - Optimize browsing responsiveness for 10k+ image galleries
 
@@ -114,7 +114,11 @@ Plans:
   1. Admin can view batch and task status from import task monitoring entry in desktop navigation
   2. Admin can see Python sidecar running status, recent error summary, and manual restart option
   3. Admin can diagnose sidecar issues without checking external logs
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] `20-01-PLAN.md` — Build backend WebSocket event bus, sidecar restart endpoint, and route wiring
+- [ ] `20-02-PLAN.md` — Build Flutter monitoring models, service, and provider with WebSocket lifecycle
+- [ ] `20-03-PLAN.md` — Build monitoring workspace UI, navigation integration, batch list, and sidecar diagnostic section
 **UI hint**: yes
 
 ### Phase 21: Windows Packaging
@@ -137,8 +141,8 @@ Plans:
   2. User sees filter results within acceptable response time when applying tag filters on large gallery
   3. User can continue browsing gallery while duplicate detection runs in background without UI freezing
   4. System shows clear failure message with recovery hint when sidecar becomes unavailable
-**Plans**: TBD
-**UI hint**: yes
+**Plans: 3 plans
+
 
 ## Progress
 
@@ -151,10 +155,14 @@ Phases execute in numeric order: 15 → 16 → 17 → 18 → 19 → 20 → 21 �
 | 16. Duplicate Detection Migration | v4.0 | 3/3 | Complete    | 2026-04-04 |
 | 17. Desktop Shell Foundation | v4.0 | 3/3 | Complete    | 2026-04-05 |
 | 18. Independent Viewer & Filmstrip | v4.0 | 3/3 | Complete    | 2026-04-05 |
-| 19. Tag Management | v4.0 | 0/3 | Planned | - |
-| 20. Operations Monitoring | v4.0 | 0/TBD | Not started | - |
-| 21. Windows Packaging | v4.0 | 0/TBD | Not started | - |
-| 22. Large Gallery Performance | v4.0 | 0/TBD | Not started | - |
+| 19. Tag Management | v4.0 | 3/3 | Complete    | 2026-04-05 |
+| 20. Operations Monitoring | v4.0 | 0/TBD | Not started |
+| 22. Large Gallery Performance | v4.0 | 0/TBD | Not started |
+
+---
+
+*Roadmap created: 2026-04-03*
+*Current milestone: v4.0 Windows Photos 风格重构构与计算层拆分*
 
 ---
 *Roadmap created: 2026-04-03*
