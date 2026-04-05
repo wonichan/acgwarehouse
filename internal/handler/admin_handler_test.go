@@ -24,7 +24,7 @@ import (
 type mockAdminService struct {
 	summary      *service.Summary
 	overview     *service.TaskPlatformOverview
-	jobs         []interface{}
+	jobs         []any
 	taskBatches  []service.TaskBatchReadModel
 	tasks        []service.TaskReadModel
 	scanJobID    int64
@@ -48,7 +48,7 @@ func (m *mockAdminService) GetTaskPlatformOverview(ctx context.Context) (*servic
 	return m.overview, m.err
 }
 
-func (m *mockAdminService) GetJobs(ctx context.Context, limit int) ([]interface{}, error) {
+func (m *mockAdminService) GetJobs(ctx context.Context, limit int) ([]any, error) {
 	return m.jobs, m.err
 }
 
@@ -57,7 +57,28 @@ func (m *mockAdminService) GetTaskBatches(ctx context.Context, filter service.Ta
 }
 
 func (m *mockAdminService) GetTasks(ctx context.Context, filter service.TaskReadFilter) ([]service.TaskReadModel, error) {
-	return m.tasks, m.err
+	filtered := make([]service.TaskReadModel, 0, len(m.tasks))
+	for _, task := range m.tasks {
+		if filter.BatchID != nil && task.BatchID != *filter.BatchID {
+			continue
+		}
+		if filter.TaskType != "" && task.TaskType != filter.TaskType {
+			continue
+		}
+		if filter.Status != "" && task.Status != filter.Status {
+			continue
+		}
+		filtered = append(filtered, task)
+	}
+
+	start := filter.Offset
+	start = min(start, len(filtered))
+	end := len(filtered)
+	if filter.Limit > 0 {
+		end = min(end, start+filter.Limit)
+	}
+
+	return filtered[start:end], m.err
 }
 
 func (m *mockAdminService) TriggerScan(ctx context.Context) (int64, error) {
@@ -784,7 +805,7 @@ func TestAdminRoutes_ApiEndpointsWired(t *testing.T) {
 			Batches: map[string]int64{"running": 1},
 			Tasks:   map[string]int64{"pending": 1},
 		},
-		jobs:        []interface{}{},
+		jobs:        []any{},
 		taskBatches: []service.TaskBatchReadModel{},
 		tasks:       []service.TaskReadModel{},
 	}
@@ -979,7 +1000,7 @@ func setupBackfillRouter(backfillSvc BackfillServiceInterface) (*gin.Engine, *Ad
 		if c.Request.Method == http.MethodPost && c.Request.URL.Path == "/admin/api/actions/backfill/execute" {
 			bodyBytes, err := io.ReadAll(c.Request.Body)
 			if err == nil {
-				var payload map[string]interface{}
+				var payload map[string]any
 				if json.Unmarshal(bodyBytes, &payload) == nil {
 					if prompt, ok := payload["prompt"].(string); ok {
 						lastBackfillPrompt = prompt
@@ -1046,7 +1067,7 @@ func TestBackfillPreview_ReturnsStructuredCounts(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
@@ -1054,7 +1075,7 @@ func TestBackfillPreview_ReturnsStructuredCounts(t *testing.T) {
 		t.Errorf("expected success=true, got %v", resp["success"])
 	}
 
-	data, ok := resp["data"].(map[string]interface{})
+	data, ok := resp["data"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected data object in response, got %T", resp["data"])
 	}
@@ -1096,7 +1117,7 @@ func TestBackfillExecute_ReturnsNoOpForZeroEligible(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
@@ -1146,12 +1167,12 @@ func TestGetTaskBatches_PayloadIncludesFailureGroups(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
 
-	batches, ok := resp["task_batches"].([]interface{})
+	batches, ok := resp["task_batches"].([]any)
 	if !ok {
 		t.Fatalf("expected task_batches array, got %T", resp["task_batches"])
 	}
@@ -1159,14 +1180,14 @@ func TestGetTaskBatches_PayloadIncludesFailureGroups(t *testing.T) {
 		t.Fatal("expected at least one batch")
 	}
 
-	batch := batches[0].(map[string]interface{})
+	batch := batches[0].(map[string]any)
 
 	// Verify failure_groups is present in the payload
 	fg, ok := batch["failure_groups"]
 	if !ok {
 		t.Fatal("expected failure_groups field in batch payload")
 	}
-	groups, ok := fg.([]interface{})
+	groups, ok := fg.([]any)
 	if !ok {
 		t.Fatalf("expected failure_groups to be an array, got %T", fg)
 	}
@@ -1175,7 +1196,7 @@ func TestGetTaskBatches_PayloadIncludesFailureGroups(t *testing.T) {
 	}
 
 	// Verify first group has the required fields for admin UI rendering
-	g0 := groups[0].(map[string]interface{})
+	g0 := groups[0].(map[string]any)
 	requiredKeys := []string{"reason_key", "reason_label", "count", "retry_recommended", "retry_hint"}
 	for _, key := range requiredKeys {
 		if _, exists := g0[key]; !exists {
@@ -1218,7 +1239,7 @@ func TestBackfillExecute_ReadsPromptFromJSONBody(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
@@ -1265,15 +1286,15 @@ func TestGetTaskBatches_FailedBatchShowsRetryableGuidance(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
 
-	batches := resp["task_batches"].([]interface{})
-	batch := batches[0].(map[string]interface{})
-	groups := batch["failure_groups"].([]interface{})
-	g0 := groups[0].(map[string]interface{})
+	batches := resp["task_batches"].([]any)
+	batch := batches[0].(map[string]any)
+	groups := batch["failure_groups"].([]any)
+	g0 := groups[0].(map[string]any)
 
 	// Non-retryable: auth failure should have retry_recommended=false
 	if g0["retry_recommended"] != false {
@@ -1340,7 +1361,7 @@ func TestBackfillExecute_ReturnsBatchOnSuccess(t *testing.T) {
 	}
 	r, _ := setupBackfillRouter(mock)
 
-	bodyBytes, _ := json.Marshal(map[string]interface{}{
+	bodyBytes, _ := json.Marshal(map[string]any{
 		"has_tags": false,
 		"prompt":   "describe this image",
 	})
@@ -1354,7 +1375,7 @@ func TestBackfillExecute_ReturnsBatchOnSuccess(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
