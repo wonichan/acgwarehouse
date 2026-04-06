@@ -12,6 +12,7 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 import 'package:gallery/app/fluent_screens.dart';
+import 'package:gallery/widgets/fluent_image_card.dart';
 import 'package:gallery/widgets/tag_management/tag_management_workspace.dart';
 
 void main() {
@@ -121,4 +122,59 @@ void main() {
       expect(find.byType(fluent.TextBox), findsOneWidget);
     },
   );
+
+  testWidgets('FluentGalleryPage opens in-window detail on image double tap', (
+    tester,
+  ) async {
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        return http.Response(
+          '{"images":[{"id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","phash":123,"thumbnail_small_url":"http://example.com/thumb.png","thumbnail_large_url":"http://example.com/large.png","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"total":1,"has_more":false}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response('{"tags":[]}', 200);
+      }
+      if (request.url.path.endsWith('/api/v1/images/1/tags')) {
+        return http.Response(
+          '{"confirmed":[],"pending":[],"rejected":[]}',
+          200,
+        );
+      }
+      return http.Response('{}', 200);
+    });
+
+    final imageProvider = ImageListProvider(ApiService(client: mockClient));
+    await imageProvider.loadImages(refresh: true);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ImageListProvider>(
+            create: (_) => imageProvider,
+          ),
+          ChangeNotifierProvider<TagProvider>(
+            create: (_) => TagProvider(TagService(client: mockClient)),
+          ),
+          ChangeNotifierProvider<NavigationProvider>(
+            create: (_) => NavigationProvider(),
+          ),
+        ],
+        child: const fluent.FluentApp(home: FluentGalleryPage()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(FluentImageCard), findsOneWidget);
+
+    await tester.tap(find.byType(FluentImageCard));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byType(FluentImageCard));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('图片详情'), findsOneWidget);
+  });
 }

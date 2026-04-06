@@ -81,11 +81,8 @@ class FluentGalleryPage extends StatelessWidget {
         Expanded(
           child: FluentGalleryContent(
             onImageTap: null, // Removed single click routing
-            onImageDoubleTap: (image) => _showGalleryImageDetail(
-              context,
-              image,
-              context.read<ImageListProvider>(),
-            ),
+            onImageDoubleTap: (image) =>
+                _showGalleryImageDetail(context, image),
           ),
         ),
         const SizedBox(width: 1, child: ColoredBox(color: Color(0x22000000))),
@@ -206,26 +203,10 @@ class FluentGalleryPage extends StatelessWidget {
     );
   }
 
-  void _showGalleryImageDetail(
-    BuildContext context,
-    ImageModel image,
-    ImageListProvider imageProvider,
-  ) {
-    final selectedIndex = imageProvider.indexOfImage(image.id);
-    if (selectedIndex < 0) {
-      return;
-    }
-
-    ViewerWindowService(
-      adapter: DesktopMultiWindowViewerWindowAdapter(),
-    ).openWindow(
-      selectedFilename: image.filename,
-      context: ViewerWindowContext.gallery(
-        selectedIndex: selectedIndex,
-        selectedImageId: image.id,
-        snapshot: imageProvider.viewerWindowSnapshot,
-      ),
-    );
+  void _showGalleryImageDetail(BuildContext context, ImageModel image) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ImageDetailScreen(image: image)));
   }
 }
 
