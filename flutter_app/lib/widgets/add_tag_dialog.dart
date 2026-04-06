@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../models/tag.dart';
 import '../services/tag_service.dart';
 
 class AddTagDialog extends StatefulWidget {
   final int imageId;
+  final TagService tagService;
 
-  const AddTagDialog({super.key, required this.imageId});
+  const AddTagDialog({
+    super.key,
+    required this.imageId,
+    required this.tagService,
+  });
 
   @override
   State<AddTagDialog> createState() => _AddTagDialogState();
@@ -76,9 +80,8 @@ class _AddTagDialogState extends State<AddTagDialog> {
       return;
     }
     setState(() => _loading = true);
-    final tagService = context.read<TagService>();
     try {
-      final tags = await tagService.searchTags(query);
+      final tags = await widget.tagService.searchTags(query);
       setState(() {
         _suggestions = tags;
         _loading = false;
@@ -89,9 +92,8 @@ class _AddTagDialogState extends State<AddTagDialog> {
   }
 
   Future<void> _selectTag(int tagId) async {
-    final tagService = context.read<TagService>();
     try {
-      await tagService.addImageTag(widget.imageId, tagId: tagId);
+      await widget.tagService.addImageTag(widget.imageId, tagId: tagId);
       if (mounted) {
         Navigator.pop(context, true);
       }
@@ -111,9 +113,11 @@ class _AddTagDialogState extends State<AddTagDialog> {
       }
       return;
     }
-    final tagService = context.read<TagService>();
     try {
-      await tagService.addImageTag(widget.imageId, tagLabel: label.trim());
+      await widget.tagService.addImageTag(
+        widget.imageId,
+        tagLabel: label.trim(),
+      );
       if (mounted) {
         Navigator.pop(context, true);
       }

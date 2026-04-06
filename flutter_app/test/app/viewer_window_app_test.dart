@@ -96,6 +96,9 @@ class _FakeTagService extends TagService {
   Future<Map<String, List<Tag>>> getImageTags(int imageId) async {
     return {'confirmed': const [], 'pending': const [], 'rejected': const []};
   }
+
+  @override
+  Future<String> getDefaultAIPrompt() async => 'default prompt';
 }
 
 ImageModel _image({required int id, required String filename}) {

@@ -2,10 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/viewer_session.dart';
 import 'package:gallery/screens/viewer/viewer_metadata_sidebar.dart';
+import 'package:gallery/providers/tag_provider.dart';
+import 'package:gallery/services/tag_service.dart';
+import 'package:provider/provider.dart';
+
+class MockTagService implements TagService {
+  @override
+  Future<String> getDefaultAIPrompt() async => 'default prompt';
+
+  @override
+  Future<int> triggerAITags(int imageId, {String? prompt}) async => 0;
+
+  @override
+  Future<Map<String, dynamic>> getAITagStatus(int imageId) async => {
+    'status': 'completed',
+  };
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   group('ViewerMetadataSidebar', () {
     late ViewerSessionItem testItem;
+    late MockTagService mockTagService;
+    late TagProvider tagProvider;
 
     setUp(() {
       testItem = ViewerSessionItem(
@@ -22,6 +43,8 @@ void main() {
         createdAtIso8601: DateTime(2023, 1, 1).toUtc().toIso8601String(),
         updatedAtIso8601: DateTime(2023, 1, 1).toUtc().toIso8601String(),
       );
+      mockTagService = MockTagService();
+      tagProvider = TagProvider(mockTagService);
     });
 
     testWidgets('renders Image Details heading and expected metadata labels', (
@@ -30,10 +53,14 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: ViewerMetadataSidebar(item: testItem, tags: const []),
+            body: ChangeNotifierProvider<TagProvider>.value(
+              value: tagProvider,
+              child: ViewerMetadataSidebar(item: testItem),
+            ),
           ),
         ),
       );
+      await tester.pumpAndSettle();
 
       expect(find.text('Image Details'), findsOneWidget);
       expect(find.text('Filename'), findsOneWidget);
@@ -42,26 +69,47 @@ void main() {
       expect(find.text('Size'), findsOneWidget);
       expect(find.text('Path'), findsOneWidget);
       expect(find.text('Imported'), findsOneWidget);
-      expect(find.text('Tags'), findsOneWidget);
     });
 
-    testWidgets('omits AI-tag triggers and editing workflows', (
+    testWidgets('includes AI-tag triggers and editing workflows', (
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: ViewerMetadataSidebar(item: testItem, tags: const []),
+            body: ChangeNotifierProvider<TagProvider>.value(
+              value: tagProvider,
+              child: ViewerMetadataSidebar(item: testItem),
+            ),
           ),
         ),
       );
+      await tester.pumpAndSettle();
 
-      // Assert absence of "生成" / "AI 标签" buttons or anything related to triggering AI.
-      expect(find.text('AI 标签'), findsNothing);
-      expect(find.text('生成'), findsNothing);
-      expect(find.byIcon(Icons.edit), findsNothing);
-      expect(find.byIcon(Icons.add), findsNothing);
-      expect(find.byIcon(Icons.merge_type), findsNothing);
+      expect(find.text('AI 标签'), findsOneWidget);
+      expect(find.text('生成'), findsOneWidget);
+      expect(find.byIcon(Icons.add), findsOneWidget);
+    });
+
+    testWidgets('opens add tag dialog from viewer sidebar', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChangeNotifierProvider<TagProvider>.value(
+              value: tagProvider,
+              child: ViewerMetadataSidebar(item: testItem),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+
+      expect(find.text('添加标签'), findsOneWidget);
     });
   });
 }

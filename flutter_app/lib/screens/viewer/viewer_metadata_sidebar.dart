@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gallery/models/viewer_session.dart';
-import 'package:gallery/models/tag.dart';
-import 'package:gallery/widgets/tag_chip.dart';
+import 'package:gallery/widgets/image_metadata_panel.dart';
 
 class ViewerMetadataSidebar extends StatelessWidget {
   final ViewerSessionItem item;
-  final List<Tag> tags;
 
-  const ViewerMetadataSidebar({
-    super.key,
-    required this.item,
-    required this.tags,
-  });
+  const ViewerMetadataSidebar({super.key, required this.item});
 
   @override
   Widget build(BuildContext context) {
@@ -28,15 +22,15 @@ class ViewerMetadataSidebar extends StatelessWidget {
           left: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
         ),
       ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildMetadataSection(context, foreground, mutedForeground),
-            const SizedBox(height: 16),
-            _buildTagsSection(context, foreground),
-          ],
+      child: Material(
+        type: MaterialType.transparency,
+        child: ImageMetadataPanel(
+          imageId: item.imageId,
+          metadataSection: _buildMetadataSection(
+            context,
+            foreground,
+            mutedForeground,
+          ),
         ),
       ),
     );
@@ -88,31 +82,6 @@ class ViewerMetadataSidebar extends StatelessWidget {
           foreground,
           mutedForeground,
         ),
-      ],
-    );
-  }
-
-  Widget _buildTagsSection(BuildContext context, Color foreground) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Tags',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(color: foreground),
-        ),
-        const SizedBox(height: 6),
-        if (tags.isNotEmpty)
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: tags
-                .map((tag) => TagChip(tag: tag, style: TagChipStyle.confirmed))
-                .toList(),
-          )
-        else
-          Text('No Tags', style: TextStyle(color: foreground)),
       ],
     );
   }
