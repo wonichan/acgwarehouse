@@ -139,6 +139,21 @@ func TestPackagedSidecarBootstrapWritesDiagnosticOnStartFailure(t *testing.T) {
 	}
 }
 
+func TestStartSidecarProcessClosesLogFileOnStartFailure(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "logs", "sidecar.log")
+
+	proc, err := startSidecarProcess(context.Background(), filepath.Join(t.TempDir(), "missing.exe"), nil, logPath)
+	if err == nil {
+		t.Fatal("startSidecarProcess() error = nil, want start failure")
+	}
+	if proc != nil {
+		t.Fatal("startSidecarProcess() process != nil on start failure")
+	}
+	if removeErr := os.Remove(logPath); removeErr != nil {
+		t.Fatalf("Remove(%q) error = %v, want closed log file handle", logPath, removeErr)
+	}
+}
+
 type bootstrapRuntimeCapture struct {
 	cfg sidecar.RuntimeConfig
 }

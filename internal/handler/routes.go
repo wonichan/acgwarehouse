@@ -30,6 +30,7 @@ type Dependencies struct {
 	BatchSvc       *service.BatchService
 	AdminSvc       AdminServiceInterface
 	MonitoringBus  *service.MonitoringEventBus
+	LogStreamSvc   *service.LogStreamService
 	JobManager     *worker.Manager
 	AdminCfg       *config.Config
 	ConfigReloader *config.Reloader // For hot-reloadable config access
@@ -77,6 +78,10 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	if adminHandler != nil {
 		admin.Use(adminHandler.AuthMiddleware())
 		{
+			if deps != nil {
+				logStreamHandler := NewLogStreamHandler(deps.LogStreamSvc, deps.AdminCfg)
+				admin.GET("/logs/ws", logStreamHandler.HandleLogStream)
+			}
 			if deps != nil && deps.MonitoringBus != nil {
 				wsHandler := NewWSHandler(deps.MonitoringBus)
 				wsHandler.cfg = deps.AdminCfg

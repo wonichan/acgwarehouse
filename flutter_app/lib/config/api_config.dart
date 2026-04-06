@@ -117,4 +117,9 @@ class ApiConfig {
     final wsHost = hostUrl.replaceFirst('http', 'ws');
     return '$wsHost/admin/api/monitoring/ws';
   }
+
+  static String logStreamWs({required String source, int tail = 200}) {
+    final wsHost = hostUrl.replaceFirst('http', 'ws');
+    return '$wsHost/admin/api/logs/ws?source=$source&tail=$tail';
+  }
 }

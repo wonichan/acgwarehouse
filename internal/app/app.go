@@ -75,6 +75,7 @@ type App struct {
 	searchSvc     *service.SearchService
 	adminSvc      *service.AdminService
 	monitoringBus *service.MonitoringEventBus
+	logStreamSvc  *service.LogStreamService
 	autoScheduler *service.AITagAutoScheduler
 
 	// Background task control
@@ -86,6 +87,8 @@ type App struct {
 	newAutoScheduler     func(*config.Config) autoSchedulerLifecycle
 	autoSchedulerStarted bool
 	runtimeManifestPath  string
+	logSourcePaths       LogSourcePaths
+	logCleanup           func()
 	sidecarRuntime       sidecarRuntimeLifecycle
 	monitoringBusCancel  context.CancelFunc
 	sidecarBaseURL       string
@@ -108,10 +111,21 @@ func New(cfgPath string) (*App, error) {
 	}
 	app.cfgReloader = cfgReloader
 	app.config = cfgReloader.Get()
+	paths := ResolveLogSourcePaths()
+	app.logSourcePaths = paths
+	app.logStreamSvc = service.NewLogStreamService(paths.GoLogPath, paths.SidecarLogPath)
+	logCleanup, err := SetupGoLogging(paths)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup go logging: %w", err)
+	}
+	app.logCleanup = logCleanup
 
 	// Initialize database
 	db, err := openDatabase(app.config)
 	if err != nil {
+		if app.logCleanup != nil {
+			app.logCleanup()
+		}
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 	app.db = db
@@ -119,6 +133,9 @@ func New(cfgPath string) (*App, error) {
 	// Ensure database schema
 	if err := repository.EnsureScanSchema(db); err != nil {
 		db.Close()
+		if app.logCleanup != nil {
+			app.logCleanup()
+		}
 		return nil, fmt.Errorf("failed to ensure scan schema: %w", err)
 	}
 
@@ -133,6 +150,9 @@ func New(cfgPath string) (*App, error) {
 	// Initialize worker manager
 	if err := app.initWorkerManager(); err != nil {
 		db.Close()
+		if app.logCleanup != nil {
+			app.logCleanup()
+		}
 		return nil, fmt.Errorf("failed to initialize worker manager: %w", err)
 	}
 
@@ -151,6 +171,13 @@ func New(cfgPath string) (*App, error) {
 	app.monitoringBus = service.NewMonitoringEventBus(app.adminSvc)
 
 	return app, nil
+}
+
+func (a *App) LogSourcePaths() LogSourcePaths {
+	if a == nil {
+		return LogSourcePaths{}
+	}
+	return a.logSourcePaths
 }
 
 // Run starts the HTTP server and blocks until the server stops.
@@ -175,6 +202,9 @@ func (a *App) Run() error {
 		busCtx, cancel := context.WithCancel(context.Background())
 		a.monitoringBusCancel = cancel
 		a.monitoringBus.Start(busCtx, time.Second)
+	}
+	if a.logStreamSvc != nil {
+		a.logStreamSvc.Start(context.Background())
 	}
 	// Setup HTTP routes
 	r := gin.New()
@@ -205,6 +235,7 @@ func (a *App) Run() error {
 		SearchSvc:      a.searchSvc,
 		SidecarRuntime: unwrapRuntime(a.sidecarRuntime),
 		MonitoringBus:  a.monitoringBus,
+		LogStreamSvc:   a.logStreamSvc,
 		JobManager:     a.jobManager,
 		AdminSvc:       a.adminSvc,
 		AdminCfg:       a.cfgReloader.Get(),
@@ -286,6 +317,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 		if a.monitoringBus != nil {
 			a.monitoringBus.Stop()
 		}
+		if a.logStreamSvc != nil {
+			a.logStreamSvc.Stop()
+		}
 
 		if err := RemoveRuntimeManifest(a.runtimeManifestPath); err != nil {
 			log.Printf("runtime manifest cleanup failed: %v", err)
@@ -302,6 +336,11 @@ func (a *App) Shutdown(ctx context.Context) error {
 		// Close database
 		if a.db != nil {
 			shutdownErr = a.db.Close()
+		}
+
+		if a.logCleanup != nil {
+			a.logCleanup()
+			a.logCleanup = nil
 		}
 	})
 	return shutdownErr

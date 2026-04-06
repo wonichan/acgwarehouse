@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
@@ -27,7 +28,9 @@ func NewWSHandler(bus *service.MonitoringEventBus) *WSHandler {
 }
 
 func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !h.authorized(w, r) {
+	ginCtx, _ := gin.CreateTestContext(w)
+	ginCtx.Request = r
+	if !authorizeAdminWS(ginCtx, h.cfg) {
 		return
 	}
 	if h.bus == nil {
@@ -79,36 +82,36 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *WSHandler) authorized(w http.ResponseWriter, r *http.Request) bool {
-	if h.cfg == nil || (h.cfg.Admin.Username == "" && h.cfg.Admin.Password == "") {
+func authorizeAdminWS(c *gin.Context, cfg *config.Config) bool {
+	if cfg == nil || (cfg.Admin.Username == "" && cfg.Admin.Password == "") {
 		return true
 	}
 
-	authHeader := r.Header.Get("Authorization")
+	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
-		w.Header().Set("WWW-Authenticate", `Basic realm="admin"`)
-		w.WriteHeader(http.StatusUnauthorized)
+		c.Header("WWW-Authenticate", `Basic realm="admin"`)
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return false
 	}
 	if !strings.HasPrefix(authHeader, "Basic ") {
-		w.WriteHeader(http.StatusUnauthorized)
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return false
 	}
 
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return false
 	}
 
 	parts := strings.SplitN(string(decoded), ":", 2)
 	if len(parts) != 2 {
-		w.WriteHeader(http.StatusUnauthorized)
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return false
 	}
 
-	if parts[0] != h.cfg.Admin.Username || parts[1] != h.cfg.Admin.Password {
-		w.WriteHeader(http.StatusUnauthorized)
+	if parts[0] != cfg.Admin.Username || parts[1] != cfg.Admin.Password {
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return false
 	}
 
