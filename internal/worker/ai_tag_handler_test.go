@@ -346,6 +346,47 @@ func TestAITagHandler_AIServiceError(t *testing.T) {
 	}
 }
 
+func TestAITagHandler_RejectsErrorLikeModelOutput(t *testing.T) {
+	db := mustOpenAIWorkerDB(t)
+	seedAIWorkerImage(t, db, 777)
+
+	obsRepo := repository.NewTagObservationRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	aliasRepo := repository.NewTagAliasRepository(db)
+	imageTagRepo := repository.NewImageTagRepository(db)
+	governance := service.NewTagGovernanceService(tagRepo, aliasRepo, obsRepo, imageTagRepo)
+	mockClient := &mockAIClient{
+		result: &ai.TagResult{
+			Tags:        []string{"无法分析图片内容，因当前输入中未提供任何图像或图片描述。请上传或描述图片内容后重试。"},
+			Confidence:  0.85,
+			ModelName:   "qwen-plus",
+			RawResponse: `{"choices":[{"message":{"content":"无法分析图片内容，因当前输入中未提供任何图像或图片描述。请上传或描述图片内容后重试。"}}]}`,
+		},
+	}
+
+	handler := NewAITagJobHandler(mockClient, obsRepo, governance, nil)
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 777, Path: "/images/test.png"})
+	err := handler(context.Background(), 9, string(payloadBytes))
+	if err == nil {
+		t.Fatal("expected invalid AI output to be rejected")
+	}
+
+	observations, err := obsRepo.FindByImageID(context.Background(), 777)
+	if err != nil {
+		t.Fatalf("FindByImageID() observations error = %v", err)
+	}
+	if len(observations) != 0 {
+		t.Fatalf("expected 0 observations for invalid AI output, got %d", len(observations))
+	}
+	imageTags, err := imageTagRepo.FindByImageID(context.Background(), 777)
+	if err != nil {
+		t.Fatalf("FindByImageID() image tags error = %v", err)
+	}
+	if len(imageTags) != 0 {
+		t.Fatalf("expected 0 image tags for invalid AI output, got %d", len(imageTags))
+	}
+}
+
 // ========== Mocks ==========
 
 type mockJobRepoForAI struct {

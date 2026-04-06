@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
+
+var errInvalidAITagOutput = errors.New("invalid ai tag output")
 
 // AITagPayload AI 标签生成任务的 payload 结构
 type AITagPayload struct {
@@ -175,6 +178,9 @@ func handleAITagGeneration(ctx context.Context, id int64, payload string, client
 	if err != nil {
 		return fmt.Errorf("generate tags: %w", err)
 	}
+	if err := validateGeneratedTags(result.Tags); err != nil {
+		return fmt.Errorf("generate tags: %w", err)
+	}
 
 	// 保存观测记录
 	obs := &domain.TagObservation{
@@ -200,4 +206,46 @@ func handleAITagGeneration(ctx context.Context, id int64, payload string, client
 	}
 
 	return nil
+}
+
+func validateGeneratedTags(tags []string) error {
+	cleaned := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
+	}
+	if len(cleaned) == 0 {
+		return fmt.Errorf("%w: empty tag list", errInvalidAITagOutput)
+	}
+	if len(cleaned) == 1 && looksLikeAIErrorMessage(cleaned[0]) {
+		return fmt.Errorf("%w: %s", errInvalidAITagOutput, cleaned[0])
+	}
+	return nil
+}
+
+func looksLikeAIErrorMessage(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	if normalized == "" {
+		return false
+	}
+	phrases := []string{
+		"无法分析",
+		"未提供任何图像",
+		"请上传",
+		"请提供",
+		"后重试",
+		"unable to analyze",
+		"cannot analyze",
+		"no image",
+		"please upload",
+		"please provide",
+	}
+	for _, phrase := range phrases {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
 }
