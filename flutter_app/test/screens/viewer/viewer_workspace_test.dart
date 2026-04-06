@@ -309,11 +309,8 @@ void main() {
         await tester.pump();
 
         expect(find.text('Viewer - 1.jpg'), findsOneWidget);
-        expect(
-          find.text('Failed to load viewer window: reload failed'),
-          findsOneWidget,
-        );
-        expect(find.text('Dismiss'), findsOneWidget);
+        expect(find.text('加载查看器窗口失败: reload failed'), findsOneWidget);
+        expect(find.text('关闭'), findsOneWidget);
       },
     );
 
@@ -343,9 +340,9 @@ void main() {
 
         await tester.pump();
 
-        expect(find.text('Failed to load viewer window'), findsOneWidget);
+        expect(find.text('加载查看器窗口失败'), findsOneWidget);
         expect(find.text('viewer failed'), findsOneWidget);
-        expect(find.text('Retry'), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
       },
     );
   });
@@ -391,6 +388,9 @@ class _RecordingTagService extends TagService {
     return imageTagsById[imageId] ??
         {'confirmed': const [], 'pending': const [], 'rejected': const []};
   }
+
+  @override
+  Future<String> getDefaultAIPrompt() async => 'default prompt';
 }
 
 class _FakeViewerApiService extends ApiService {

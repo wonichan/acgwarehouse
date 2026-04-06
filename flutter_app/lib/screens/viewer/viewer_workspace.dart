@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:gallery/models/tag.dart';
 import 'package:gallery/models/viewer_session.dart';
 import 'package:gallery/models/viewer_window_context.dart';
 import 'package:gallery/models/viewer_window_result.dart';
@@ -246,9 +245,6 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
       value: _tagProvider,
       child: Consumer<TagProvider>(
         builder: (context, tagProvider, child) {
-          final confirmedTags =
-              tagProvider.imageTags['confirmed'] ?? const <Tag>[];
-
           return ViewerKeyboardScope(
             onNext: _handleNext,
             onPrevious: _handlePrevious,
@@ -319,10 +315,7 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
                           child: ViewerStage(item: currentItem),
                         ),
                       ),
-                      ViewerMetadataSidebar(
-                        item: currentItem,
-                        tags: confirmedTags,
-                      ),
+                      ViewerMetadataSidebar(item: currentItem),
                     ],
                   ),
                 ),
