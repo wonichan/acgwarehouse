@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
+
+var ErrViewerRequestOutOfRange = errors.New("selected_index is out of range for the supplied snapshot")
 
 // SearchOptions defines the search parameters.
 type SearchOptions struct {
@@ -22,6 +25,16 @@ type SearchResult struct {
 	Images  []domain.Image
 	Total   int64
 	HasMore bool
+}
+
+type ViewerWindowResult struct {
+	Images                []domain.Image
+	Total                 int64
+	WindowStart           int
+	SelectedIndex         int
+	SelectedIndexInWindow int
+	HasPrevious           bool
+	HasNext               bool
 }
 
 // SearchService provides search functionality.
@@ -68,10 +81,8 @@ func (s *SearchService) Search(ctx context.Context, opts SearchOptions) (*Search
 
 	switch {
 	case opts.Query != "" && len(opts.TagIDs) > 0:
-		// Combined search: FTS first, then filter by tags
 		images, total, err = s.combinedSearch(ctx, opts)
 	case opts.Query != "":
-		// Full-text search only
 		images, total, err = s.ftsSearch(ctx, opts)
 	case len(opts.TagIDs) > 0:
 		// Tag search only (use existing repository method)
@@ -94,26 +105,20 @@ func (s *SearchService) Search(ctx context.Context, opts SearchOptions) (*Search
 
 // ftsSearch performs a full-text search.
 func (s *SearchService) ftsSearch(ctx context.Context, opts SearchOptions) ([]domain.Image, int64, error) {
-	// Get matching image IDs from FTS
-	ids, err := s.searchRepo.FTSFullTextSearch(ctx, opts.Query, opts.Limit, opts.Offset)
+	images, err := s.searchRepo.SearchImages(ctx, repository.SearchQueryOptions{
+		Query:     opts.Query,
+		SortBy:    opts.SortBy,
+		SortOrder: opts.SortOrder,
+		Limit:     opts.Limit,
+		Offset:    opts.Offset,
+	})
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Get total count
-	total, err := s.searchRepo.CountFTSFullTextSearch(ctx, opts.Query)
+	total, err := s.searchRepo.CountSearchImages(ctx, repository.SearchQueryOptions{Query: opts.Query, SortBy: opts.SortBy, SortOrder: opts.SortOrder})
 	if err != nil {
 		return nil, 0, err
-	}
-
-	// Fetch images by IDs
-	images := make([]domain.Image, 0, len(ids))
-	for _, id := range ids {
-		img, err := s.imageRepo.FindByID(id)
-		if err != nil {
-			continue // Skip if image not found
-		}
-		images = append(images, *img)
 	}
 
 	return images, total, nil
@@ -137,45 +142,22 @@ func (s *SearchService) tagSearch(ctx context.Context, opts SearchOptions) ([]do
 // combinedSearch performs a combined FTS and tag search.
 // It first gets FTS results, then filters by tags.
 func (s *SearchService) combinedSearch(ctx context.Context, opts SearchOptions) ([]domain.Image, int64, error) {
-	// Get all FTS matches (no pagination)
-	allIDs, err := s.searchRepo.FTSFullTextSearch(ctx, opts.Query, 10000, 0)
+	images, err := s.searchRepo.SearchImages(ctx, repository.SearchQueryOptions{
+		Query:     opts.Query,
+		TagIDs:    opts.TagIDs,
+		SortBy:    opts.SortBy,
+		SortOrder: opts.SortOrder,
+		Limit:     opts.Limit,
+		Offset:    opts.Offset,
+	})
 	if err != nil {
 		return nil, 0, err
 	}
-
-	// Filter by tags
-	filteredImages := make([]domain.Image, 0)
-	for _, id := range allIDs {
-		img, err := s.imageRepo.FindByID(id)
-		if err != nil {
-			continue
-		}
-
-		// Check if image has all required tags
-		if s.imageHasAllTags(ctx, img.ID, opts.TagIDs) {
-			filteredImages = append(filteredImages, *img)
-		}
+	total, err := s.searchRepo.CountSearchImages(ctx, repository.SearchQueryOptions{Query: opts.Query, TagIDs: opts.TagIDs, SortBy: opts.SortBy, SortOrder: opts.SortOrder})
+	if err != nil {
+		return nil, 0, err
 	}
-
-	// Apply pagination
-	total := int64(len(filteredImages))
-	start := opts.Offset
-	end := opts.Offset + opts.Limit
-	if start >= len(filteredImages) {
-		return []domain.Image{}, total, nil
-	}
-	if end > len(filteredImages) {
-		end = len(filteredImages)
-	}
-
-	return filteredImages[start:end], total, nil
-}
-
-// imageHasAllTags checks if an image has all the specified tags.
-func (s *SearchService) imageHasAllTags(ctx context.Context, imageID int64, tagIDs []int64) bool {
-	// This is a simplified check. In production, you'd query the image_tags table.
-	// For now, we use the repository's FindByTagIDs to check.
-	return true // Simplified for now; actual implementation would query image_tags
+	return images, total, nil
 }
 
 // allImages returns all images with pagination.
@@ -214,4 +196,98 @@ func (s *SearchService) SearchByFilename(ctx context.Context, pattern string, li
 		Total:   total,
 		HasMore: int64(offset+len(images)) < total,
 	}, nil
+}
+
+func (s *SearchService) ViewerWindow(ctx context.Context, opts SearchOptions, selectedIndex, limit int) (*ViewerWindowResult, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 10 {
+		limit = 10
+	}
+	if selectedIndex < 0 {
+		return nil, ErrViewerRequestOutOfRange
+	}
+
+	total, err := s.viewerWindowTotal(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	if int64(selectedIndex) >= total {
+		return nil, ErrViewerRequestOutOfRange
+	}
+
+	windowStart := viewerWindowStart(selectedIndex, limit, int(total))
+	images, err := s.viewerWindowImages(ctx, opts, windowStart, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ViewerWindowResult{
+		Images:                images,
+		Total:                 total,
+		WindowStart:           windowStart,
+		SelectedIndex:         selectedIndex,
+		SelectedIndexInWindow: selectedIndex - windowStart,
+		HasPrevious:           selectedIndex > 0,
+		HasNext:               int64(selectedIndex) < total-1,
+	}, nil
+}
+
+func (s *SearchService) viewerWindowTotal(ctx context.Context, opts SearchOptions) (int64, error) {
+	if opts.Query != "" {
+		return s.searchRepo.CountSearchImages(ctx, repository.SearchQueryOptions{
+			Query:     opts.Query,
+			TagIDs:    opts.TagIDs,
+			SortBy:    opts.SortBy,
+			SortOrder: opts.SortOrder,
+		})
+	}
+	if len(opts.TagIDs) > 0 {
+		return s.imageRepo.CountByTagIDs(ctx, opts.TagIDs)
+	}
+	return s.imageRepo.Count()
+}
+
+func (s *SearchService) viewerWindowImages(ctx context.Context, opts SearchOptions, offset, limit int) ([]domain.Image, error) {
+	if opts.Query != "" {
+		return s.searchRepo.SearchImages(ctx, repository.SearchQueryOptions{
+			Query:     opts.Query,
+			TagIDs:    opts.TagIDs,
+			SortBy:    opts.SortBy,
+			SortOrder: opts.SortOrder,
+			Limit:     limit,
+			Offset:    offset,
+		})
+	}
+	sortBy := opts.SortBy
+	sortOrder := opts.SortOrder
+	if sortBy == "" || sortBy == "relevance" {
+		sortBy = "id"
+	}
+	if sortOrder == "" {
+		sortOrder = "desc"
+	}
+	if len(opts.TagIDs) > 0 {
+		return s.imageRepo.FindByTagIDs(ctx, opts.TagIDs, limit, offset, sortBy, sortOrder)
+	}
+	return s.imageRepo.FindAll(limit, offset, sortBy, sortOrder)
+}
+
+func viewerWindowStart(selectedIndex, limit, total int) int {
+	if total <= 0 {
+		return 0
+	}
+	start := selectedIndex - limit/2
+	if start < 0 {
+		start = 0
+	}
+	maxStart := total - limit
+	if maxStart < 0 {
+		maxStart = 0
+	}
+	if start > maxStart {
+		start = maxStart
+	}
+	return start
 }

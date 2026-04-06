@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
@@ -252,5 +254,213 @@ func TestSearchService_EmptyQuery(t *testing.T) {
 
 	if len(result.Images) != 5 {
 		t.Errorf("Expected 5 images, got %d", len(result.Images))
+	}
+}
+
+func TestSearchService_ViewerWindowSearchWithTagsUsesRealTagFiltering(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("Failed to create schema: %v", err)
+	}
+
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	searchRepo := repository.NewSearchRepository(db)
+	imageTagRepo := repository.NewImageTagRepository(db)
+	searchService := NewSearchService(imageRepo, tagRepo, searchRepo)
+	ctx := context.Background()
+	now := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
+
+	tag := &domain.Tag{PreferredLabel: "keep", Slug: "keep", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	for i := 0; i < 4; i++ {
+		img := &domain.Image{
+			Path:       fmt.Sprintf("/images/viewer-%d-cat.jpg", i),
+			Filename:   fmt.Sprintf("viewer-%d-cat.jpg", i),
+			SourceRoot: "/images",
+			FileSize:   100,
+			Format:     "jpg",
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+		if _, err := imageRepo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+		if i == 0 || i == 2 {
+			if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: img.ID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+				t.Fatalf("save image tag: %v", err)
+			}
+		}
+	}
+
+	if err := repository.RebuildFTSIndex(db); err != nil {
+		t.Fatalf("rebuild fts: %v", err)
+	}
+
+	window, err := searchService.ViewerWindow(ctx, SearchOptions{
+		Query:     "cat",
+		TagIDs:    []int64{tag.ID},
+		SortBy:    "created_at",
+		SortOrder: "asc",
+	}, 1, 3)
+	if err != nil {
+		t.Fatalf("ViewerWindow failed: %v", err)
+	}
+
+	if window.Total != 2 {
+		t.Fatalf("window.Total = %d, want 2", window.Total)
+	}
+	if len(window.Images) != 2 {
+		t.Fatalf("len(window.Images) = %d, want 2", len(window.Images))
+	}
+	if window.WindowStart != 0 {
+		t.Fatalf("window.WindowStart = %d, want 0", window.WindowStart)
+	}
+	if window.Images[0].ID >= window.Images[1].ID {
+		t.Fatalf("expected deterministic id order, got %d then %d", window.Images[0].ID, window.Images[1].ID)
+	}
+	if window.Images[window.SelectedIndexInWindow].ID != window.Images[1].ID {
+		t.Fatalf("selected image id = %d, want %d", window.Images[window.SelectedIndexInWindow].ID, window.Images[1].ID)
+	}
+}
+
+func TestSearchService_CombinedSearchRespectsTagFilter(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("Failed to create schema: %v", err)
+	}
+
+	ctx := context.Background()
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	searchRepo := repository.NewSearchRepository(db)
+	imageTagRepo := repository.NewImageTagRepository(db)
+	searchService := NewSearchService(imageRepo, tagRepo, searchRepo)
+
+	tag := &domain.Tag{PreferredLabel: "required", Slug: "required", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		img := &domain.Image{Path: fmt.Sprintf("/images/cat-%d.jpg", i), Filename: fmt.Sprintf("cat-%d.jpg", i)}
+		if _, err := imageRepo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+		if i == 1 {
+			if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: img.ID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+				t.Fatalf("save image tag: %v", err)
+			}
+		}
+	}
+
+	if err := repository.RebuildFTSIndex(db); err != nil {
+		t.Fatalf("rebuild fts: %v", err)
+	}
+
+	result, err := searchService.Search(ctx, SearchOptions{Query: "cat", TagIDs: []int64{tag.ID}, Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("result.Total = %d, want 1", result.Total)
+	}
+	if len(result.Images) != 1 {
+		t.Fatalf("len(result.Images) = %d, want 1", len(result.Images))
+	}
+	if result.Images[0].Filename != "cat-1.jpg" {
+		t.Fatalf("result.Images[0].Filename = %q, want %q", result.Images[0].Filename, "cat-1.jpg")
+	}
+}
+
+func TestSearchService_ViewerWindowAllImagesBeyondTenThousand(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("Failed to create schema: %v", err)
+	}
+
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	searchRepo := repository.NewSearchRepository(db)
+	searchService := NewSearchService(imageRepo, tagRepo, searchRepo)
+
+	for i := 0; i < 10005; i++ {
+		img := &domain.Image{Path: fmt.Sprintf("/images/all-%05d.jpg", i), Filename: fmt.Sprintf("all-%05d.jpg", i)}
+		if _, err := imageRepo.SaveImage(img); err != nil {
+			t.Fatalf("save image %d: %v", i, err)
+		}
+	}
+
+	window, err := searchService.ViewerWindow(context.Background(), SearchOptions{SortBy: "id", SortOrder: "asc"}, 10002, 5)
+	if err != nil {
+		t.Fatalf("ViewerWindow failed: %v", err)
+	}
+	if window.Total != 10005 {
+		t.Fatalf("window.Total = %d, want 10005", window.Total)
+	}
+	if len(window.Images) != 5 {
+		t.Fatalf("len(window.Images) = %d, want 5", len(window.Images))
+	}
+	if window.Images[window.SelectedIndexInWindow].Filename != "all-10002.jpg" {
+		t.Fatalf("selected filename = %q, want %q", window.Images[window.SelectedIndexInWindow].Filename, "all-10002.jpg")
+	}
+}
+
+func TestSearchService_ViewerWindowFTSQueryBeyondTenThousand(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("Failed to create schema: %v", err)
+	}
+
+	imageRepo := repository.NewImageRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	searchRepo := repository.NewSearchRepository(db)
+	searchService := NewSearchService(imageRepo, tagRepo, searchRepo)
+
+	for i := 0; i < 10005; i++ {
+		img := &domain.Image{Path: fmt.Sprintf("/images/cat-%05d.jpg", i), Filename: fmt.Sprintf("cat-%05d.jpg", i)}
+		if _, err := imageRepo.SaveImage(img); err != nil {
+			t.Fatalf("save image %d: %v", i, err)
+		}
+	}
+	if err := repository.RebuildFTSIndex(db); err != nil {
+		t.Fatalf("rebuild fts: %v", err)
+	}
+
+	window, err := searchService.ViewerWindow(context.Background(), SearchOptions{Query: "cat", SortBy: "relevance", SortOrder: "desc"}, 10002, 5)
+	if err != nil {
+		t.Fatalf("ViewerWindow failed: %v", err)
+	}
+	if window.Total != 10005 {
+		t.Fatalf("window.Total = %d, want 10005", window.Total)
+	}
+	if len(window.Images) != 5 {
+		t.Fatalf("len(window.Images) = %d, want 5", len(window.Images))
+	}
+	if window.Images[window.SelectedIndexInWindow].Filename != "cat-10002.jpg" {
+		t.Fatalf("selected filename = %q, want %q", window.Images[window.SelectedIndexInWindow].Filename, "cat-10002.jpg")
 	}
 }
