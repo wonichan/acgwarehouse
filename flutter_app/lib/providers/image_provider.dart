@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/image.dart';
+import '../models/viewer_window_context.dart';
 import '../services/api_service.dart';
 
 enum ViewMode { grid, masonry }
@@ -8,7 +9,7 @@ enum SortField { createdAt, filename, fileSize }
 
 class ImageListProvider extends ChangeNotifier {
   final ApiService _apiService;
-  
+
   List<ImageModel> _images = [];
   bool _isLoading = false;
   bool _hasMore = true;
@@ -19,9 +20,9 @@ class ImageListProvider extends ChangeNotifier {
   bool _sortAsc = false;
   List<int> _selectedTagIds = [];
   bool? _hasTagsFilter;
-  
+
   ImageListProvider(this._apiService);
-  
+
   List<ImageModel> get images => _images;
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
@@ -31,49 +32,68 @@ class ImageListProvider extends ChangeNotifier {
   bool get sortAsc => _sortAsc;
   List<int> get selectedTagIds => _selectedTagIds;
   bool? get hasTagsFilter => _hasTagsFilter;
-  
+  ViewerWindowGallerySnapshot get viewerWindowSnapshot =>
+      ViewerWindowGallerySnapshot(
+        sortBy: _sortField.name == 'createdAt'
+            ? 'created_at'
+            : _sortField.name == 'fileSize'
+            ? 'file_size'
+            : 'filename',
+        sortDir: _sortAsc ? 'asc' : 'desc',
+        tagIds: List<int>.unmodifiable(_selectedTagIds),
+        hasTags: _hasTagsFilter,
+      );
+
+  int indexOfImage(int imageId) =>
+      _images.indexWhere((image) => image.id == imageId);
+
   Future<void> loadImages({bool refresh = false}) async {
     // Prevent duplicate in-flight loads
     if (_isLoading) return;
-    
+
     // Stop at last page
     if (!refresh && !_hasMore) return;
-    
+
     _isLoading = true;
     notifyListeners();
-    
+
     try {
       // On refresh, reset offset and hasMore
       if (refresh) {
         _currentOffset = 0;
         _hasMore = true;
       }
-      
-      debugPrint('加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds, hasTags=$_hasTagsFilter, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}');
-      
+
+      debugPrint(
+        '加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds, hasTags=$_hasTagsFilter, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}',
+      );
+
       final response = await _apiService.fetchImages(
         offset: refresh ? 0 : _currentOffset,
-        sortBy: _sortField.name == 'createdAt' ? 'created_at' : 
-                _sortField.name == 'fileSize' ? 'file_size' : 'filename',
+        sortBy: _sortField.name == 'createdAt'
+            ? 'created_at'
+            : _sortField.name == 'fileSize'
+            ? 'file_size'
+            : 'filename',
         sortDir: _sortAsc ? 'asc' : 'desc',
         tagIds: _selectedTagIds.isNotEmpty ? _selectedTagIds : null,
         hasTags: _hasTagsFilter,
       );
-      
+
       if (refresh) {
         _images = response.items;
       } else {
         _images.addAll(response.items);
       }
-      
+
       _total = response.total;
-      
+
       // Update offset for next page based on current loaded count
       _currentOffset = _images.length;
-      
+
       // Update hasMore state from backend response
       _hasMore = response.hasMore;
-      
+
       // Safety check: hasMore should also be false if we've loaded all items
       if (_currentOffset >= _total && _total > 0) {
         _hasMore = false;
@@ -85,12 +105,12 @@ class ImageListProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   void setViewMode(ViewMode mode) {
     _viewMode = mode;
     notifyListeners();
   }
-  
+
   Future<void> setSort(SortField field, bool asc) async {
     debugPrint('setSort 被调用: field=${field.name}, asc=$asc');
     _sortField = field;
@@ -100,7 +120,7 @@ class ImageListProvider extends ChangeNotifier {
     _hasMore = true;
     await loadImages(refresh: true);
   }
-  
+
   /// Sets the tag filter and reloads images with the new filter
   /// Preserves current sort settings and resets pagination
   Future<void> setTagFilter(List<int> tagIds) async {
