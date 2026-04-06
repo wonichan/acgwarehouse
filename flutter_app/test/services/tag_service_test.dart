@@ -54,6 +54,35 @@ void main() {
 
         expect(jobId, 888);
       });
+
+      test(
+        'reuses existing job when backend skips duplicate trigger',
+        () async {
+          when(
+            mockClient.post(
+              any,
+              headers: anyNamed('headers'),
+              body: anyNamed('body'),
+            ),
+          ).thenAnswer(
+            (_) async => http.Response(
+              '{"status":"skipped","created_tasks":0,"skipped_tasks":1}',
+              202,
+            ),
+          );
+          when(mockClient.get(any)).thenAnswer(
+            (_) async =>
+                http.Response('{"job_id":456,"status":"running"}', 200),
+          );
+
+          final jobId = await tagService.triggerAITags(123);
+
+          expect(jobId, 456);
+          final captured =
+              verify(mockClient.get(captureAny)).captured.single as Uri;
+          expect(captured.toString(), ApiConfig.aiTagStatus(123));
+        },
+      );
     });
 
     group('getTagStatistics', () {

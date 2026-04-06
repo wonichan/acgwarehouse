@@ -156,6 +156,7 @@ class TagService {
       throw Exception('Failed to trigger AI tags: ${response.statusCode}');
     }
     final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final status = json['status'] as String?;
     final legacyJobID = json['job_id'];
     if (legacyJobID is int) {
       return legacyJobID;
@@ -164,6 +165,15 @@ class TagService {
     final jobIDs = json['job_ids'];
     if (jobIDs is List && jobIDs.isNotEmpty && jobIDs.first is int) {
       return jobIDs.first as int;
+    }
+
+    if (status == 'skipped') {
+      final existingStatus = await getAITagStatus(imageId);
+      final existingJobID = existingStatus['job_id'];
+      if (existingJobID is int) {
+        return existingJobID;
+      }
+      throw Exception('AI 标签任务已存在，但未找到可复用的任务状态');
     }
 
     throw Exception('Failed to parse AI trigger response: missing job id');
