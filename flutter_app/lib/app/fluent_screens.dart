@@ -50,6 +50,13 @@ class FluentGalleryPage extends StatelessWidget {
                     );
                   },
                 ),
+                CommandBarButton(
+                  icon: const Icon(FluentIcons.sort),
+                  label: const Text('排序'),
+                  onPressed: () {
+                    _showGallerySortOptions(context, imageProvider);
+                  },
+                ),
                 const CommandBarSeparator(),
                 // Refresh button
                 CommandBarButton(
@@ -84,6 +91,71 @@ class FluentGalleryPage extends StatelessWidget {
         const SizedBox(width: 1, child: ColoredBox(color: Color(0x22000000))),
         const GalleryFilterPanel(),
       ],
+    );
+  }
+
+  void _showGallerySortOptions(
+    BuildContext context,
+    ImageListProvider imageProvider,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => ContentDialog(
+        title: const Text('排序选项'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('源文件创建时间（新→旧）'),
+              onPressed: () {
+                imageProvider.setSort(SortField.createdAt, false);
+                Navigator.pop(dialogContext);
+              },
+            ),
+            ListTile(
+              title: const Text('源文件创建时间（旧→新）'),
+              onPressed: () {
+                imageProvider.setSort(SortField.createdAt, true);
+                Navigator.pop(dialogContext);
+              },
+            ),
+            ListTile(
+              title: const Text('源文件大小（大→小）'),
+              onPressed: () {
+                imageProvider.setSort(SortField.fileSize, false);
+                Navigator.pop(dialogContext);
+              },
+            ),
+            ListTile(
+              title: const Text('源文件大小（小→大）'),
+              onPressed: () {
+                imageProvider.setSort(SortField.fileSize, true);
+                Navigator.pop(dialogContext);
+              },
+            ),
+            ListTile(
+              title: const Text('源文件文件名（A-Z）'),
+              onPressed: () {
+                imageProvider.setSort(SortField.filename, true);
+                Navigator.pop(dialogContext);
+              },
+            ),
+            ListTile(
+              title: const Text('源文件文件名（Z-A）'),
+              onPressed: () {
+                imageProvider.setSort(SortField.filename, false);
+                Navigator.pop(dialogContext);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          Button(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(dialogContext),
+          ),
+        ],
+      ),
     );
   }
 

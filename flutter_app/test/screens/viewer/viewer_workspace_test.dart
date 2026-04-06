@@ -87,11 +87,39 @@ void main() {
         expect(find.byType(ViewerWorkspace), findsOneWidget);
         expect(find.byType(ViewerMetadataSidebar), findsOneWidget);
         expect(find.text('Viewer - 1.jpg'), findsOneWidget);
+        expect(find.text('上一张'), findsOneWidget);
+        expect(find.text('下一张'), findsOneWidget);
+        expect(find.text('快捷键：←/→ 切换，Esc 关闭'), findsOneWidget);
         expect(find.text('1 of 12'), findsOneWidget);
         expect(apiService.requests.single.context.selectedImageId, 1);
         expect(tagLoads, [1]);
       },
     );
+
+    testWidgets('tapping visible next button re-queries backend', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ViewerWorkspace(
+              launchContext: _context(selectedIndex: 0, selectedImageId: 1),
+              apiService: apiService,
+              tagProvider: tagProvider,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.tap(find.widgetWithText(TextButton, '下一张'));
+      await tester.pump();
+
+      expect(apiService.requests, hasLength(2));
+      expect(apiService.requests.last.context.selectedIndex, 1);
+      expect(apiService.requests.last.context.selectedImageId, 2);
+      expect(find.text('Viewer - 2.jpg'), findsOneWidget);
+    });
 
     testWidgets(
       'refreshes title, metadata, and tags when keyboard selection changes',

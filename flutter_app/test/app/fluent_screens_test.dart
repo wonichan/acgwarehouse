@@ -56,11 +56,13 @@ void main() {
         return http.Response('{}', 200);
       });
 
+      final imageProvider = ImageListProvider(ApiService(client: mockClient));
+
       await tester.pumpWidget(
         MultiProvider(
           providers: [
             ChangeNotifierProvider<ImageListProvider>(
-              create: (_) => ImageListProvider(ApiService(client: mockClient)),
+              create: (_) => imageProvider,
             ),
             ChangeNotifierProvider<TagProvider>(
               create: (_) => TagProvider(TagService(client: mockClient)),
@@ -77,6 +79,22 @@ void main() {
       expect(find.byType(fluent.ScaffoldPage), findsOneWidget);
       expect(find.text('图库'), findsWidgets);
       expect(find.byIcon(fluent.FluentIcons.filter), findsNothing);
+
+      await tester.tap(find.text('排序').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('源文件创建时间（新→旧）'), findsOneWidget);
+      expect(find.text('源文件创建时间（旧→新）'), findsOneWidget);
+      expect(find.text('源文件大小（大→小）'), findsOneWidget);
+      expect(find.text('源文件大小（小→大）'), findsOneWidget);
+      expect(find.text('源文件文件名（A-Z）'), findsOneWidget);
+      expect(find.text('源文件文件名（Z-A）'), findsOneWidget);
+
+      await tester.tap(find.text('源文件大小（小→大）'));
+      await tester.pumpAndSettle();
+
+      expect(imageProvider.sortField, SortField.fileSize);
+      expect(imageProvider.sortAsc, isTrue);
     },
   );
 
