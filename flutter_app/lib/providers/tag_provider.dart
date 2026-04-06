@@ -19,6 +19,7 @@ class TagProvider extends ChangeNotifier {
     'rejected': [],
   };
   bool _isLoadingImageTags = false;
+  int _imageTagsRequestVersion = 0;
 
   // Tag governance statistics
   List<TagStatistics> _statistics = [];
@@ -144,19 +145,39 @@ class TagProvider extends ChangeNotifier {
 
   // 加载图片的标签
   Future<void> loadImageTags(int imageId) async {
+    final requestVersion = ++_imageTagsRequestVersion;
     _isLoadingImageTags = true;
     _error = null;
+    _imageTags = _emptyImageTags();
     notifyListeners();
 
     try {
-      _imageTags = await _tagService.getImageTags(imageId);
+      final imageTags = await _tagService.getImageTags(imageId);
+      if (requestVersion != _imageTagsRequestVersion) {
+        return;
+      }
+      _imageTags = {
+        'confirmed': List<Tag>.from(imageTags['confirmed'] ?? const <Tag>[]),
+        'pending': List<Tag>.from(imageTags['pending'] ?? const <Tag>[]),
+        'rejected': List<Tag>.from(imageTags['rejected'] ?? const <Tag>[]),
+      };
     } catch (e) {
+      if (requestVersion != _imageTagsRequestVersion) {
+        return;
+      }
       _error = e.toString();
       debugPrint('Error loading image tags: $e');
     } finally {
+      if (requestVersion != _imageTagsRequestVersion) {
+        return;
+      }
       _isLoadingImageTags = false;
       notifyListeners();
     }
+  }
+
+  Map<String, List<Tag>> _emptyImageTags() {
+    return {'confirmed': <Tag>[], 'pending': <Tag>[], 'rejected': <Tag>[]};
   }
 
   // 确认图片标签

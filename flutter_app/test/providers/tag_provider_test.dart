@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/tag.dart';
 import 'package:gallery/models/tag_governance.dart';
@@ -186,6 +188,61 @@ void main() {
         await tagProvider.loadImageTags(123);
 
         expect(tagProvider.imageTags['confirmed']!.length, 1);
+        expect(tagProvider.isLoadingImageTags, false);
+      });
+
+      test('loadImageTags ignores stale results from older requests', () async {
+        final firstRequest = Completer<Map<String, List<Tag>>>();
+        final secondRequest = Completer<Map<String, List<Tag>>>();
+
+        when(
+          () => mockTagService.getImageTags(1),
+        ).thenAnswer((_) => firstRequest.future);
+        when(
+          () => mockTagService.getImageTags(2),
+        ).thenAnswer((_) => secondRequest.future);
+
+        final firstLoad = tagProvider.loadImageTags(1);
+        final secondLoad = tagProvider.loadImageTags(2);
+
+        secondRequest.complete({
+          'confirmed': [
+            Tag(
+              id: 2,
+              preferredLabel: 'Current Tag',
+              slug: 'current-tag',
+              reviewState: 'confirmed',
+              trustScore: 0.9,
+              usageCount: 3,
+              createdAt: DateTime.now(),
+            ),
+          ],
+          'pending': [],
+          'rejected': [],
+        });
+        await secondLoad;
+
+        firstRequest.complete({
+          'confirmed': [
+            Tag(
+              id: 1,
+              preferredLabel: 'Stale Tag',
+              slug: 'stale-tag',
+              reviewState: 'confirmed',
+              trustScore: 0.5,
+              usageCount: 1,
+              createdAt: DateTime.now(),
+            ),
+          ],
+          'pending': [],
+          'rejected': [],
+        });
+        await firstLoad;
+
+        expect(
+          tagProvider.imageTags['confirmed']!.single.preferredLabel,
+          'Current Tag',
+        );
         expect(tagProvider.isLoadingImageTags, false);
       });
 
