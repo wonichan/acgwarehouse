@@ -131,7 +131,7 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 			return
 		}
 		for _, img := range untaggedImages {
-			images = append(images, img)
+			images = append(images, rewriteImageForRequest(c.Request, img))
 		}
 	} else if tagIDsStr != "" {
 		// Parse comma-separated tag IDs
@@ -152,7 +152,7 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 			return
 		}
 		for _, img := range filteredImages {
-			images = append(images, img)
+			images = append(images, rewriteImageForRequest(c.Request, img))
 		}
 	} else {
 		// No filter - return all images
@@ -167,7 +167,7 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 			return
 		}
 		for _, img := range allImages {
-			images = append(images, img)
+			images = append(images, rewriteImageForRequest(c.Request, img))
 		}
 	}
 
@@ -203,7 +203,7 @@ func (h *ImageHandler) GetImage(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, image)
+	c.JSON(http.StatusOK, rewriteImageForRequest(c.Request, *image))
 }
 
 // TriggerImport handles POST /api/v1/images/scan and queues a manual scan job.
@@ -402,7 +402,7 @@ func serviceViewerWindowStart(selectedIndex, limit, total int) int {
 
 func respondViewerWindow(c *gin.Context, items []interface{}, windowStart, selectedIndex, selectedIndexInWindow int, total int64) {
 	c.JSON(http.StatusOK, gin.H{
-		"items":                    items,
+		"items":                    rewriteViewerItemsForRequest(c.Request, items),
 		"window_start_index":       windowStart,
 		"selected_index":           selectedIndex,
 		"selected_index_in_window": selectedIndexInWindow,

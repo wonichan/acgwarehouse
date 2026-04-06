@@ -102,7 +102,7 @@ func (h *DuplicateHandler) ListDuplicates(c *gin.Context) {
 	hasMore := offset+len(groups) < int(total)
 
 	c.JSON(http.StatusOK, ListResponse{
-		Groups:  groups,
+		Groups:  rewriteDuplicateGroupsForRequest(c.Request, groups),
 		Total:   total,
 		HasMore: hasMore,
 	})
@@ -128,7 +128,7 @@ func (h *DuplicateHandler) GetDuplicate(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, group)
+	c.JSON(http.StatusOK, rewriteDuplicateGroupForRequest(c.Request, *group))
 }
 
 // DeleteDuplicate DELETE /api/v1/duplicates/:id

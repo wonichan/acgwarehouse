@@ -98,7 +98,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"images":   result.Images,
+		"images":   rewriteImagesForRequest(c.Request, result.Images),
 		"total":    result.Total,
 		"has_more": result.HasMore,
 	})
@@ -137,7 +137,7 @@ func (h *SearchHandler) SearchByFilename(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"images":   result.Images,
+		"images":   rewriteImagesForRequest(c.Request, result.Images),
 		"total":    result.Total,
 		"has_more": result.HasMore,
 	})
