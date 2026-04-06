@@ -14,6 +14,7 @@ import 'providers/search_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/config_provider.dart';
 import 'bootstrap/packaged_desktop_bootstrap.dart';
+import 'bootstrap/viewer_window_runtime_bootstrap.dart';
 import 'bootstrap/single_instance_guard.dart';
 import 'bootstrap/runtime_manifest_loader.dart';
 import 'services/api_service.dart';
@@ -56,6 +57,10 @@ void main(List<String> args) async {
   }
 
   if (viewerBootstrap != null) {
+    await configureViewerWindowRuntime(
+      isDevelopmentMode: !kReleaseMode,
+      isDesktopTarget: !kIsWeb,
+    );
     runApp(ViewerWindowApp(bootstrapData: viewerBootstrap));
     return;
   }

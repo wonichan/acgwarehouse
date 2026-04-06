@@ -35,6 +35,7 @@ class MonitoringProvider extends ChangeNotifier {
   bool _wsConnected = false;
   bool _isLoading = false;
   bool _isRestarting = false;
+  bool _isRetrying = false;
   bool _serviceUnavailable = false;
   RestartImpact? _restartImpact;
   int? _selectedBatchId;
@@ -54,6 +55,7 @@ class MonitoringProvider extends ChangeNotifier {
   bool get wsConnected => _wsConnected;
   bool get isLoading => _isLoading;
   bool get isRestarting => _isRestarting;
+  bool get isRetrying => _isRetrying;
   bool get serviceUnavailable => _serviceUnavailable;
   RestartImpact? get restartImpact => _restartImpact;
   int? get selectedBatchId => _selectedBatchId;
@@ -93,6 +95,36 @@ class MonitoringProvider extends ChangeNotifier {
       await _refreshData();
     } finally {
       _isRestarting = false;
+      _notifySafely();
+    }
+  }
+
+  Future<RetryResult?> retryFailedBatch(int batchId) async {
+    _isRetrying = true;
+    _notifySafely();
+    try {
+      final result = await _service.retryFailedBatchTasks(batchId);
+      await _refreshData();
+      return result;
+    } catch (_) {
+      return null;
+    } finally {
+      _isRetrying = false;
+      _notifySafely();
+    }
+  }
+
+  Future<RetryResult?> retryFailedTask(int taskId) async {
+    _isRetrying = true;
+    _notifySafely();
+    try {
+      final result = await _service.retryFailedTask(taskId);
+      await _refreshData();
+      return result;
+    } catch (_) {
+      return null;
+    } finally {
+      _isRetrying = false;
       _notifySafely();
     }
   }

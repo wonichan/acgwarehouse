@@ -132,6 +132,39 @@ class _BatchRowTile extends StatelessWidget {
             ),
             if (isSelected) ...[
               const SizedBox(height: 16),
+              if (_canRetryBatch(batch)) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Consumer<MonitoringProvider>(
+                    builder: (context, provider, _) {
+                      return Row(
+                        children: [
+                          Button(
+                            onPressed: provider.isRetrying
+                                ? null
+                                : () => _handleRetryBatch(context, batch.id),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (provider.isRetrying)
+                                  const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: ProgressRing(strokeWidth: 2),
+                                  )
+                                else
+                                  const Icon(FluentIcons.refresh, size: 14),
+                                const SizedBox(width: 6),
+                                Text(provider.isRetrying ? '重试中...' : '重试失败任务'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
               _TaskDetailList(batch: batch),
             ],
           ],
@@ -139,6 +172,18 @@ class _BatchRowTile extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _canRetryBatch(BatchRow batch) {
+  return const ['failed', 'partial_failed'].contains(batch.status);
+}
+
+void _handleRetryBatch(BuildContext context, int batchId) {
+  context.read<MonitoringProvider>().retryFailedBatch(batchId);
+}
+
+void _handleRetryTask(BuildContext context, int taskId) {
+  context.read<MonitoringProvider>().retryFailedTask(taskId);
 }
 
 class _TaskDetailList extends StatelessWidget {
@@ -160,6 +205,7 @@ class _TaskDetailList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: tasks.map((task) {
         final retryHint = _retryHintForTask(batch, task);
+        final canRetry = task.status == 'failed';
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Container(
@@ -184,6 +230,36 @@ class _TaskDetailList extends StatelessWidget {
                       ),
                     ),
                     _StatusBadge(status: task.status),
+                    if (canRetry) ...[
+                      const SizedBox(width: 8),
+                      Consumer<MonitoringProvider>(
+                        builder: (context, provider, _) {
+                          return HyperlinkButton(
+                            onPressed: provider.isRetrying
+                                ? null
+                                : () => _handleRetryTask(context, task.id),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (provider.isRetrying)
+                                  const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: ProgressRing(strokeWidth: 2),
+                                  )
+                                else
+                                  const Icon(FluentIcons.refresh, size: 12),
+                                const SizedBox(width: 4),
+                                Text(
+                                  provider.isRetrying ? '重试中' : '重试',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ],
                 ),
                 if ((task.errorSummary ?? '').isNotEmpty) ...[

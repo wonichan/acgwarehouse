@@ -81,16 +81,21 @@ class _ImageGalleryViewerState extends State<ImageGalleryViewer> {
   }
 
   Widget _buildImagePage(ImageModel image) {
+    // 优先使用缩略图，如果缩略图为空则回退到原始图片路径
     final largeUrl = image.thumbnailLargeUrl;
+    final originalPath = image.path;
+    final displayUrl = (largeUrl != null && largeUrl.isNotEmpty)
+        ? largeUrl
+        : originalPath;
 
-    if (largeUrl == null || largeUrl.isEmpty) {
+    if (displayUrl.isEmpty) {
       return const Center(
         child: Icon(Icons.error, color: Colors.white, size: 48),
       );
     }
 
     return ExtendedImage.network(
-      largeUrl,
+      displayUrl,
       fit: BoxFit.contain,
       mode: ExtendedImageMode.gesture,
       initGestureConfigHandler: (state) {

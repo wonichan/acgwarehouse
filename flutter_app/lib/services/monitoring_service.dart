@@ -85,6 +85,30 @@ class MonitoringService {
     );
   }
 
+  Future<RetryResult> retryFailedBatchTasks(int batchId) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.retryBatch(batchId)),
+      headers: _headers(),
+    );
+    _ensureSuccess(response, 'retry failed batch tasks');
+
+    return RetryResult.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
+  Future<RetryResult> retryFailedTask(int taskId) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.retryTask(taskId)),
+      headers: _headers(),
+    );
+    _ensureSuccess(response, 'retry failed task');
+
+    return RetryResult.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
   Map<String, String> _headers() {
     return {
       'Content-Type': 'application/json',

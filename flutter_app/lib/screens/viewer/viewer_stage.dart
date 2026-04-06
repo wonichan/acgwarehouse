@@ -9,15 +9,21 @@ class ViewerStage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 优先使用缩略图，如果缩略图为空则回退到原始图片路径
     final largeUrl = item.thumbnailLargeUrl;
-    if (largeUrl == null || largeUrl.isEmpty) {
+    final originalPath = item.path;
+    final displayUrl = (largeUrl != null && largeUrl.isNotEmpty)
+        ? largeUrl
+        : originalPath;
+
+    if (displayUrl.isEmpty) {
       return const Center(
         child: Icon(Icons.image, size: 64, color: Colors.grey),
       );
     }
 
     return ExtendedImage.network(
-      largeUrl,
+      displayUrl,
       key: ValueKey(item.imageId),
       fit: BoxFit.contain,
       mode: ExtendedImageMode.gesture,

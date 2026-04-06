@@ -389,9 +389,14 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
         _opaqueColor(
           Theme.of(resolvedContext).colorScheme.surfaceContainerHighest,
         );
+    // 优先使用缩略图，如果缩略图为空则回退到原始图片路径
     final largeUrl = widget.image.thumbnailLargeUrl;
+    final originalPath = widget.image.path;
+    final displayUrl = (largeUrl != null && largeUrl.isNotEmpty)
+        ? largeUrl
+        : originalPath;
 
-    if (largeUrl == null || largeUrl.isEmpty) {
+    if (displayUrl.isEmpty) {
       return Container(
         height: 300,
         color: resolvedPanelSurface,
@@ -405,7 +410,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       onTap: () {
         ImageLightbox.show(
           context,
-          imageUrl: largeUrl,
+          imageUrl: displayUrl,
           heroTag: 'image-${widget.image.id}',
         );
       },
@@ -423,7 +428,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
             Hero(
               tag: 'image-${widget.image.id}',
               child: ExtendedImage.network(
-                largeUrl,
+                displayUrl,
                 fit: BoxFit.contain,
                 // Enable zoom functionality with gesture mode
                 mode: ExtendedImageMode.gesture,

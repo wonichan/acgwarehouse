@@ -107,6 +107,12 @@ class ApiConfig {
   static String get sidecarRestart =>
       '$hostUrl/admin/api/actions/sidecar/restart';
 
+  static String retryBatch(int batchId) =>
+      '$hostUrl/admin/api/actions/task-batches/$batchId/retry-failed';
+
+  static String retryTask(int taskId) =>
+      '$hostUrl/admin/api/actions/tasks/$taskId/retry-failed';
+
   static String get monitoringWs {
     final wsHost = hostUrl.replaceFirst('http', 'ws');
     return '$wsHost/admin/api/monitoring/ws';

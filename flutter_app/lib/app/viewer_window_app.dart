@@ -29,7 +29,7 @@ class _ViewerWindowAppState extends State<ViewerWindowApp> {
     return fluent.FluentApp(
       title: widget.bootstrapData.policy.title,
       theme: AppTheme.getFluentTheme(Brightness.dark),
-      home: fluent.NavigationView(
+      home: fluent.ScaffoldPage(
         content: ViewerWorkspace(
           session: widget.bootstrapData.session,
           onItemChanged: (item) {

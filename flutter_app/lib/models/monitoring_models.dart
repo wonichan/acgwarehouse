@@ -395,6 +395,25 @@ class RestartImpact {
   }
 }
 
+class RetryResult {
+  final int retryCount;
+  final int batchId;
+
+  const RetryResult({required this.retryCount, required this.batchId});
+
+  factory RetryResult.fromJson(Map<String, dynamic> json) {
+    final payload = (json['data'] as Map<String, dynamic>?) ?? json;
+    return RetryResult(
+      retryCount: (payload['retry_count'] as num?)?.toInt() ?? 0,
+      batchId: (payload['batch_id'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'retry_count': retryCount, 'batch_id': batchId};
+  }
+}
+
 Map<String, int> _parseCountMap(Object? value) {
   final input = value as Map<String, dynamic>?;
   if (input == null) {

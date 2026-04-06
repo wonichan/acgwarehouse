@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param(
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$All,
+    [switch]$Go,
+    [switch]$Python,
+    [switch]$Flutter
 )
 
 Set-StrictMode -Version Latest
@@ -177,6 +181,11 @@ function Add-ZipEntry {
     [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($Archive, $Item.FullName, $relativePath, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
 }
 
+# Default behavior: compile all if no specific compile option specified
+if (-not ($All -or $Go -or $Python -or $Flutter)) {
+    $All = $true
+}
+
 Assert-Command -Name 'go'
 Assert-Command -Name 'python'
 Assert-Command -Name 'flutter'
@@ -193,32 +202,59 @@ Ensure-Directory -Path (Join-Path $PortableRoot 'data')
 Ensure-Directory -Path (Join-Path $PortableRoot 'storage')
 Ensure-Directory -Path (Join-Path $PortableRoot 'library')
 
-Invoke-External -FilePath 'go' -Arguments @('build', '-o', $GoOutputExecutable, './cmd/server')
-
-Invoke-External -FilePath 'python' -Arguments @(
-    '-m',
-    'PyInstaller',
-    '--noconfirm',
-    '--clean',
-    '--distpath', $PyInstallerDistRoot,
-    '--workpath', $PyInstallerWorkDir,
-    $SidecarSpecPath
-) -WorkingDirectory $RepoRoot
-
-Write-Host "Running $FlutterBuildCommand"
-Invoke-External -FilePath 'flutter' -Arguments @('build', 'windows', '--release') -WorkingDirectory $FlutterProjectDir
-
-Copy-DirectoryContents -Source $FlutterReleaseDir -Destination $PortableRoot
-
-if (-not (Test-Path -LiteralPath $FlutterOutputExecutable)) {
-    throw "Expected Flutter Windows executable not found: $FlutterOutputExecutable"
+if ($All -or $Go) {
+    Write-Host "Building Go server with optimizations..."
+    # Build optimizations for reduced size and faster startup:
+    # CGO_ENABLED=0: create static binary, avoid dynamic linker overhead
+    # -ldflags "-s -w": strip symbol table and DWARF debug info (~30% size reduction)
+    # -trimpath: remove file system paths for reproducible builds
+    $env:CGO_ENABLED = '0'
+    Invoke-External -FilePath 'go' -Arguments @(
+        'build',
+        '-ldflags', '-s -w',
+        '-trimpath',
+        '-o', $GoOutputExecutable,
+        './cmd/server'
+    )
 }
 
-$PortableExecutable = Join-Path $PortableRoot 'ACGWarehouse.exe'
-if (Test-Path -LiteralPath $PortableExecutable) {
-    Remove-Item -LiteralPath $PortableExecutable -Force
+if ($All -or $Python) {
+    Write-Host "Building Python sidecar with PyInstaller..."
+    Invoke-External -FilePath 'python' -Arguments @(
+        '-m',
+        'PyInstaller',
+        '--noconfirm',
+        '--clean',
+        '--distpath', $PyInstallerDistRoot,
+        '--workpath', $PyInstallerWorkDir,
+        $SidecarSpecPath
+    ) -WorkingDirectory $RepoRoot
 }
-Move-Item -LiteralPath (Join-Path $PortableRoot 'gallery.exe') -Destination $PortableExecutable -Force
+
+if ($All -or $Flutter) {
+    Write-Host "Building Flutter Windows app..."
+    Invoke-External -FilePath 'flutter' -Arguments @('build', 'windows', '--release') -WorkingDirectory $FlutterProjectDir
+}
+
+if ($All -or $Flutter) {
+    Copy-DirectoryContents -Source $FlutterReleaseDir -Destination $PortableRoot
+
+    if (-not (Test-Path -LiteralPath $FlutterOutputExecutable)) {
+        throw "Expected Flutter Windows executable not found: $FlutterOutputExecutable"
+    }
+
+    $PortableExecutable = Join-Path $PortableRoot 'ACGWarehouse.exe'
+    if (Test-Path -LiteralPath $PortableExecutable) {
+        Remove-Item -LiteralPath $PortableExecutable -Force
+    }
+    Move-Item -LiteralPath (Join-Path $PortableRoot 'gallery.exe') -Destination $PortableExecutable -Force
+} else {
+    $PortableExecutable = Join-Path $PortableRoot 'ACGWarehouse.exe'
+    if (-not (Test-Path -LiteralPath $PortableExecutable)) {
+        throw "Flutter executable not found at: $PortableExecutable. Run with -All or -Flutter first to build Flutter app."
+    }
+    Write-Host "Skipping Flutter packaging (using existing build)"
+}
 
 Copy-DirectoryContents -Source $ConfigSourceDir -Destination (Join-Path $PortableRoot 'config')
 Write-PackagedConfig -Path $PackagedConfigPath
