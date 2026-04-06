@@ -38,13 +38,13 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
   Widget build(BuildContext context) {
     return ScaffoldPage(
       header: PageHeader(
-        title: const Text('Tag Governance'),
+        title: const Text('标签治理'),
         commandBar: CommandBar(
           mainAxisAlignment: MainAxisAlignment.end,
           primaryItems: [
             CommandBarButton(
               icon: const Icon(FluentIcons.refresh),
-              label: const Text('Refresh'),
+              label: const Text('刷新'),
               onPressed: () {
                 context.read<TagProvider>().loadGovernanceTags(
                   search: _searchQuery.isNotEmpty ? _searchQuery : null,
@@ -68,13 +68,13 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Error: ${tagProvider.governanceError}',
+                    '错误: ${tagProvider.governanceError}',
                     style: TextStyle(color: Colors.red),
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () => tagProvider.loadGovernanceTags(),
-                    child: const Text('Retry'),
+                    child: const Text('重试'),
                   ),
                 ],
               ),
@@ -135,13 +135,13 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _buildStatCard(context, 'Usage', totalUsage),
+          _buildStatCard(context, '使用量', totalUsage),
           const SizedBox(width: 12),
           _buildStatCard(context, 'AI', totalAI),
           const SizedBox(width: 12),
-          _buildStatCard(context, 'Manual', totalManual),
+          _buildStatCard(context, '手动', totalManual),
           const SizedBox(width: 12),
-          _buildStatCard(context, 'Pending', totalPending),
+          _buildStatCard(context, '待处理', totalPending),
         ],
       ),
     );
@@ -170,7 +170,7 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: TextBox(
-        placeholder: 'Search tags...',
+        placeholder: '搜索标签...',
         onChanged: (value) {
           _searchQuery = value;
           context.read<TagProvider>().loadGovernanceTags(
@@ -200,22 +200,21 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
 
     final preview = provider.deletePreview;
     final String blockingReason =
-        preview?.blockingReason ??
-        (row.canDelete ? '' : 'Tag is in use by images');
+        preview?.blockingReason ?? (row.canDelete ? '' : '标签正在被图片使用');
     final int affectedCount =
         preview?.affectedImageCount ?? row.affectedImageCount;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => ContentDialog(
-        title: const Text('Delete Tag'),
+        title: const Text('删除标签'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Tag: ${row.preferredLabel}'),
+            Text('标签: ${row.preferredLabel}'),
             const SizedBox(height: 8),
-            Text('$affectedCount affected image(s)'),
+            Text('$affectedCount 张受影响的图片'),
             if (blockingReason.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(blockingReason, style: TextStyle(color: Colors.red)),
@@ -224,12 +223,12 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
         ),
         actions: [
           Button(
-            child: const Text('Cancel'),
+            child: const Text('取消'),
             onPressed: () => Navigator.pop(context, false),
           ),
           if (row.canDelete)
             FilledButton(
-              child: const Text('Delete'),
+              child: const Text('删除'),
               onPressed: () => Navigator.pop(context, true),
             ),
         ],

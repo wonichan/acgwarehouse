@@ -25,7 +25,7 @@ class TagManagementList extends StatelessWidget {
         final rows = provider.governanceRows;
 
         if (rows.isEmpty) {
-          return const Center(child: Text('No governance tags found'));
+          return const Center(child: Text('暂无治理标签'));
         }
 
         return ListView.builder(
@@ -89,7 +89,7 @@ class _GovernanceRowTile extends StatelessWidget {
                   style: TextStyle(fontSize: 11, color: Colors.grey[100]),
                 ),
               Text(
-                'Usage: ${row.usageCount} | AI: ${row.aiCount} | Manual: ${row.manualCount}',
+                '使用量: ${row.usageCount} | AI: ${row.aiCount} | 手动: ${row.manualCount}',
                 style: const TextStyle(fontSize: 11),
               ),
             ],
@@ -99,12 +99,12 @@ class _GovernanceRowTile extends StatelessWidget {
             spacing: 8,
             runSpacing: 4,
             children: [
-              HyperlinkButton(onPressed: onEdit, child: const Text('Edit')),
-              HyperlinkButton(onPressed: onMerge, child: const Text('Merge')),
-              HyperlinkButton(onPressed: onDelete, child: const Text('Delete')),
+              HyperlinkButton(onPressed: onEdit, child: const Text('编辑')),
+              HyperlinkButton(onPressed: onMerge, child: const Text('合并')),
+              HyperlinkButton(onPressed: onDelete, child: const Text('删除')),
               HyperlinkButton(
                 onPressed: onViewAffectedImages,
-                child: const Text('View affected images'),
+                child: const Text('查看受影响图片'),
               ),
             ],
           ),

@@ -42,14 +42,11 @@ class _GalleryFilterPanelState extends State<GalleryFilterPanel> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Filter by Tags',
-                style: FluentTheme.of(context).typography.subtitle,
-              ),
+              Text('按标签筛选', style: FluentTheme.of(context).typography.subtitle),
               const SizedBox(height: 12),
               Row(
                 children: [
-                  const Expanded(child: Text('Show untagged images only')),
+                  const Expanded(child: Text('仅显示无标签图片')),
                   ToggleSwitch(
                     checked: imageProvider.hasTagsFilter == false,
                     onChanged: (checked) async {
@@ -84,10 +81,7 @@ class _GalleryFilterPanelState extends State<GalleryFilterPanel> {
     }
 
     if (tagProvider.allTags.isEmpty) {
-      return Text(
-        'No tags available',
-        style: FluentTheme.of(context).typography.body,
-      );
+      return Text('暂无可用标签', style: FluentTheme.of(context).typography.body);
     }
 
     return ListView.separated(

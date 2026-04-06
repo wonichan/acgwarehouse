@@ -37,30 +37,24 @@ class _TagEditDialogState extends State<TagEditDialog> {
   @override
   Widget build(BuildContext context) {
     return ContentDialog(
-      title: Text('Edit Tag: ${widget.row.preferredLabel}'),
+      title: Text('编辑标签: ${widget.row.preferredLabel}'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           InfoLabel(
-            label: 'Label',
-            child: TextBox(
-              controller: _labelController,
-              placeholder: 'Tag label',
-            ),
+            label: '标签名',
+            child: TextBox(controller: _labelController, placeholder: '标签名称'),
           ),
           const SizedBox(height: 12),
           InfoLabel(
-            label: 'Category',
-            child: TextBox(
-              controller: _categoryController,
-              placeholder: 'Primary category',
-            ),
+            label: '分类',
+            child: TextBox(controller: _categoryController, placeholder: '主分类'),
           ),
         ],
       ),
       actions: [
         Button(
-          child: const Text('Cancel'),
+          child: const Text('取消'),
           onPressed: () => Navigator.pop(context),
         ),
         FilledButton(
@@ -71,7 +65,7 @@ class _TagEditDialogState extends State<TagEditDialog> {
                   height: 14,
                   child: ProgressRing(strokeWidth: 2),
                 )
-              : const Text('Save'),
+              : const Text('保存'),
         ),
       ],
     );
@@ -102,11 +96,11 @@ class _TagEditDialogState extends State<TagEditDialog> {
         await showDialog(
           context: context,
           builder: (_) => ContentDialog(
-            title: const Text('Error'),
-            content: Text('Failed to save: $e'),
+            title: const Text('错误'),
+            content: Text('保存失败: $e'),
             actions: [
               Button(
-                child: const Text('OK'),
+                child: const Text('确定'),
                 onPressed: () => Navigator.pop(context),
               ),
             ],

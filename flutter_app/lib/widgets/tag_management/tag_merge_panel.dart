@@ -51,7 +51,7 @@ class _TagMergePanelState extends State<TagMergePanel> {
           Row(
             children: [
               Text(
-                'Merge "${widget.sourceRow.preferredLabel}" into:',
+                '将 "${widget.sourceRow.preferredLabel}" 合并到:',
                 style: FluentTheme.of(context).typography.bodyStrong,
               ),
               const Spacer(),
@@ -63,7 +63,7 @@ class _TagMergePanelState extends State<TagMergePanel> {
           ),
           const SizedBox(height: 8),
           TextBox(
-            placeholder: 'Search target tag...',
+            placeholder: '搜索目标标签...',
             onChanged: (value) => setState(() => _searchQuery = value),
           ),
           const SizedBox(height: 8),
@@ -76,7 +76,7 @@ class _TagMergePanelState extends State<TagMergePanel> {
                 return ListTile(
                   title: Text(row.preferredLabel),
                   subtitle: Text(
-                    'targetTagId: ${row.tagId}',
+                    'tagId: ${row.tagId}',
                     style: const TextStyle(fontSize: 10),
                   ),
                   trailing: isSelected
@@ -92,7 +92,7 @@ class _TagMergePanelState extends State<TagMergePanel> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Button(child: const Text('Cancel'), onPressed: widget.onCancel),
+              Button(child: const Text('取消'), onPressed: widget.onCancel),
               const SizedBox(width: 8),
               FilledButton(
                 onPressed: (_selectedTargetTagId != null && !_isMerging)
@@ -104,7 +104,7 @@ class _TagMergePanelState extends State<TagMergePanel> {
                         height: 16,
                         child: ProgressRing(strokeWidth: 2),
                       )
-                    : const Text('Confirm Merge'),
+                    : const Text('确认合并'),
               ),
             ],
           ),

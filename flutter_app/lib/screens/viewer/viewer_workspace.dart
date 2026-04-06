@@ -133,7 +133,7 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
       }
       setState(() {
         _isLoadingWindow = false;
-        _windowError = 'Unable to load viewer window';
+        _windowError = '无法加载查看器窗口';
       });
     }
   }
@@ -232,12 +232,15 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
         return const Center(child: CircularProgressIndicator());
       }
       return _ViewerWindowErrorState(
-        message: _windowError ?? 'Failed to load viewer window',
+        message: _windowError ?? '加载查看器窗口失败',
         onRetry: () => _loadWindow(_currentContext ?? widget.launchContext),
       );
     }
 
     final currentItem = _currentItem!;
+    final canGoPrevious =
+        !_isLoadingWindow && (_currentWindow?.hasPrevious ?? false);
+    final canGoNext = !_isLoadingWindow && (_currentWindow?.hasNext ?? false);
 
     return ChangeNotifierProvider<TagProvider>.value(
       value: _tagProvider,
@@ -253,10 +256,27 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
             child: Column(
               children: [
                 Container(
-                  height: 40,
+                  height: 48,
                   color: Theme.of(context).colorScheme.surface,
-                  child: Center(
-                    child: Text('Viewer - ${currentItem.filename}'),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text('Viewer - ${currentItem.filename}')),
+                      Text(
+                        '快捷键：←/→ 切换，Esc 关闭',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(width: 12),
+                      TextButton(
+                        onPressed: canGoPrevious ? _handlePrevious : null,
+                        child: const Text('上一张'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: canGoNext ? _handleNext : null,
+                        child: const Text('下一张'),
+                      ),
+                    ],
                   ),
                 ),
                 if (_windowError != null)
@@ -271,7 +291,7 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
                         children: [
                           Expanded(
                             child: Text(
-                              'Failed to load viewer window: $_windowError',
+                              '加载查看器窗口失败: $_windowError',
                               style: TextStyle(
                                 color: Theme.of(
                                   context,
@@ -282,7 +302,7 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
                           TextButton(
                             onPressed: () =>
                                 setState(() => _windowError = null),
-                            child: const Text('Dismiss'),
+                            child: const Text('关闭'),
                           ),
                         ],
                       ),
@@ -355,14 +375,11 @@ class _ViewerWindowErrorState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'Failed to load viewer window',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('加载查看器窗口失败', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Text(message),
           const SizedBox(height: 12),
-          FilledButton(onPressed: onRetry, child: const Text('Retry')),
+          FilledButton(onPressed: onRetry, child: const Text('重试')),
         ],
       ),
     );

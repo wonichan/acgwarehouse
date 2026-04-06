@@ -42,7 +42,7 @@ class TagBulkActionBar extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
-                    '$selectedCount selected',
+                    '$selectedCount 已选中',
                     style: FluentTheme.of(context).typography.bodyStrong,
                   ),
                   if (provider.isRunningGovernanceAction)
@@ -55,17 +55,17 @@ class TagBulkActionBar extends StatelessWidget {
                     onPressed: provider.isRunningGovernanceAction
                         ? null
                         : () => _handleCleanup(context, provider),
-                    child: const Text('Cleanup selected'),
+                    child: const Text('清理已选中'),
                   ),
                   Button(
                     onPressed: provider.isRunningGovernanceAction
                         ? null
                         : () => _showMergeTargetDialog(context, provider),
-                    child: const Text('Merge into...'),
+                    child: const Text('合并到...'),
                   ),
                   HyperlinkButton(
                     onPressed: () => provider.clearGovernanceSelection(),
-                    child: const Text('Clear selection'),
+                    child: const Text('清除选择'),
                   ),
                 ],
               ),
@@ -91,9 +91,7 @@ class TagBulkActionBar extends StatelessWidget {
         : (result.failures.isEmpty ? 1 : 0);
 
     return InfoBar(
-      title: Text(
-        '$successCount succeeded${failed > 0 ? ', $failed failed' : ''}',
-      ),
+      title: Text('$successCount 成功${failed > 0 ? '，$failed 失败' : ''}'),
       severity: failed > 0 ? InfoBarSeverity.warning : InfoBarSeverity.success,
     );
   }
@@ -113,7 +111,7 @@ class TagBulkActionBar extends StatelessWidget {
     showDialog(
       context: context,
       builder: (dialogContext) => ContentDialog(
-        title: const Text('Merge selected into target'),
+        title: const Text('将已选中合并到目标'),
         content: SizedBox(
           width: 300,
           height: 200,
@@ -135,7 +133,7 @@ class TagBulkActionBar extends StatelessWidget {
         ),
         actions: [
           Button(
-            child: const Text('Cancel'),
+            child: const Text('取消'),
             onPressed: () => Navigator.pop(dialogContext),
           ),
         ],

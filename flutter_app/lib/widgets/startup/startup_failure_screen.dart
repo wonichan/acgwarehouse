@@ -30,7 +30,7 @@ class StartupFailureScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   Text(failure.message),
                   const SizedBox(height: 16),
-                  Text('Logs', style: Theme.of(context).textTheme.titleMedium),
+                  Text('日志', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   for (final logPath in failure.logPaths)
                     Padding(
@@ -48,9 +48,9 @@ class StartupFailureScreen extends StatelessWidget {
 
   String _labelFor(StartupFailureType type) {
     return switch (type) {
-      StartupFailureType.go => 'Failure class: go',
-      StartupFailureType.python => 'Failure class: python',
-      StartupFailureType.startupChain => 'Failure class: startup_chain',
+      StartupFailureType.go => '失败类型: go',
+      StartupFailureType.python => '失败类型: python',
+      StartupFailureType.startupChain => '失败类型: startup_chain',
     };
   }
 }

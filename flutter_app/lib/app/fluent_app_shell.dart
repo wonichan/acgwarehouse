@@ -176,12 +176,12 @@ class _DesktopShellTopBarState extends State<_DesktopShellTopBar> {
       await _importService.triggerImport();
       if (!mounted) return;
       setState(() {
-        _importFeedback = 'Library import queued';
+        _importFeedback = '导入任务已排队';
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _importFeedback = 'Library import could not start';
+        _importFeedback = '导入任务无法启动';
       });
     }
   }
@@ -199,7 +199,7 @@ class _DesktopShellTopBarState extends State<_DesktopShellTopBar> {
                 width: 260,
                 child: TextBox(
                   controller: _searchController,
-                  placeholder: 'Search images and tags',
+                  placeholder: '搜索图片和标签',
                   onSubmitted: (_) {
                     _submitSearch();
                   },
@@ -208,7 +208,7 @@ class _DesktopShellTopBarState extends State<_DesktopShellTopBar> {
               const SizedBox(width: 8),
               FilledButton(
                 onPressed: _triggerImport,
-                child: const Text('Import Library'),
+                child: const Text('导入图库'),
               ),
               const SizedBox(width: 8),
               Button(
@@ -217,14 +217,14 @@ class _DesktopShellTopBarState extends State<_DesktopShellTopBar> {
                     NavigationProvider.settingsIndex,
                   );
                 },
-                child: const Text('Open Settings'),
+                child: const Text('打开设置'),
               ),
             ],
           ),
           if (_importFeedback != null) ...[
             const SizedBox(height: 8),
             InfoBar(
-              severity: _importFeedback == 'Library import queued'
+              severity: _importFeedback == '导入任务已排队'
                   ? InfoBarSeverity.success
                   : InfoBarSeverity.error,
               title: Text(_importFeedback!),
