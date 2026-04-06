@@ -167,8 +167,8 @@ func (r *sqliteImageRepository) FindAll(limit, offset int, sortBy, sortDir strin
 
 	query := fmt.Sprintf(`
 		SELECT id, path, filename, source_root, file_size, width, height, format, COALESCE(phash, 0), COALESCE(phash_hex, ''), thumbnail_small_url, thumbnail_large_url, created_at, updated_at
-		FROM images ORDER BY %s %s LIMIT ? OFFSET ?
-	`, sortColumn, sortDir)
+		FROM images ORDER BY %s %s, id %s LIMIT ? OFFSET ?
+	`, sortColumn, sortDir, sortDir)
 
 	rows, err := r.db.Query(query, limit, offset)
 	if err != nil {
@@ -268,9 +268,9 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 		WHERE it.tag_id IN (%s) AND it.review_state != 'rejected'
 		GROUP BY i.id
 		HAVING COUNT(DISTINCT it.tag_id) = ?
-		ORDER BY %s %s
+		ORDER BY %s %s, i.id %s
 		LIMIT ? OFFSET ?
-	`, strings.Join(placeholders, ", "), sortColumn, sortDir)
+	`, strings.Join(placeholders, ", "), sortColumn, sortDir, sortDir)
 
 	args = append(args, int64(len(tagIDs)), int64(limit), int64(offset))
 
@@ -372,9 +372,9 @@ func (r *sqliteImageRepository) FindUntagged(ctx context.Context, limit, offset 
 		FROM images i
 		LEFT JOIN image_tags it ON it.image_id = i.id
 		WHERE it.image_id IS NULL
-		ORDER BY %s %s
+		ORDER BY %s %s, i.id %s
 		LIMIT ? OFFSET ?
-	`, sortColumn, sortDir)
+	`, sortColumn, sortDir, sortDir)
 
 	rows, err := r.db.QueryContext(ctx, query, int64(limit), int64(offset))
 	if err != nil {

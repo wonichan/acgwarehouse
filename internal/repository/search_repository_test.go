@@ -230,3 +230,34 @@ func TestSearchRepository_CombinedSearch(t *testing.T) {
 		t.Errorf("Expected at least 1 result for 'cat', got %d", len(ids))
 	}
 }
+
+func TestSearchRepository_FTSFullTextSearchEscapesUnsafeTokens(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	if err := EnsureScanSchema(db); err != nil {
+		t.Fatalf("Failed to create schema: %v", err)
+	}
+
+	_, err = db.Exec(`
+		INSERT INTO images (path, filename, source_root, file_size, width, height, format, created_at, updated_at)
+		VALUES ('/images/cat.jpg', 'cat.jpg', '', 1000, 100, 100, 'jpg', datetime('now'), datetime('now'))
+	`)
+	if err != nil {
+		t.Fatalf("Failed to create test image: %v", err)
+	}
+	if err := RebuildFTSIndex(db); err != nil {
+		t.Fatalf("Failed to rebuild FTS index: %v", err)
+	}
+
+	searchRepo := NewSearchRepository(db)
+	if _, err := searchRepo.FTSFullTextSearch(context.Background(), `cat" OR dog`, 10, 0); err != nil {
+		t.Fatalf("FTSFullTextSearch returned error for escaped query: %v", err)
+	}
+	if _, err := searchRepo.CountFTSFullTextSearch(context.Background(), `cat" OR dog`); err != nil {
+		t.Fatalf("CountFTSFullTextSearch returned error for escaped query: %v", err)
+	}
+}

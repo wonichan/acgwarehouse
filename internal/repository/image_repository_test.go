@@ -429,6 +429,79 @@ func TestFindUntaggedSupportsSorting(t *testing.T) {
 	}
 }
 
+func TestImageRepositorySortingUsesIDTieBreaker(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
+
+	images := []*domain.Image{
+		{Path: "/img/a.png", Filename: "same.png", SourceRoot: "/img", FileSize: 100, Format: "png", CreatedAt: now, UpdatedAt: now},
+		{Path: "/img/b.png", Filename: "same.png", SourceRoot: "/img", FileSize: 100, Format: "png", CreatedAt: now, UpdatedAt: now},
+		{Path: "/img/c.png", Filename: "same.png", SourceRoot: "/img", FileSize: 100, Format: "png", CreatedAt: now, UpdatedAt: now},
+	}
+	for _, img := range images {
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	tagRepo := NewTagRepository(db)
+	tag := &domain.Tag{PreferredLabel: "viewer", Slug: "viewer", ReviewState: "confirmed"}
+	if err := tagRepo.Save(ctx, tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+	imageTagRepo := NewImageTagRepository(db)
+	for _, img := range images[:2] {
+		if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: img.ID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+			t.Fatalf("save image tag: %v", err)
+		}
+	}
+
+	assertIDs := func(label string, got []domain.Image, want []int64) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("%s len = %d, want %d", label, len(got), len(want))
+		}
+		for i, image := range got {
+			if image.ID != want[i] {
+				t.Fatalf("%s[%d].ID = %d, want %d", label, i, image.ID, want[i])
+			}
+		}
+	}
+
+	allAsc, err := repo.FindAll(10, 0, "created_at", "asc")
+	if err != nil {
+		t.Fatalf("FindAll asc: %v", err)
+	}
+	assertIDs("FindAll asc", allAsc, []int64{images[0].ID, images[1].ID, images[2].ID})
+
+	allDesc, err := repo.FindAll(10, 0, "created_at", "desc")
+	if err != nil {
+		t.Fatalf("FindAll desc: %v", err)
+	}
+	assertIDs("FindAll desc", allDesc, []int64{images[2].ID, images[1].ID, images[0].ID})
+
+	tagAsc, err := repo.FindByTagIDs(ctx, []int64{tag.ID}, 10, 0, "file_size", "asc")
+	if err != nil {
+		t.Fatalf("FindByTagIDs asc: %v", err)
+	}
+	assertIDs("FindByTagIDs asc", tagAsc, []int64{images[0].ID, images[1].ID})
+
+	tagDesc, err := repo.FindByTagIDs(ctx, []int64{tag.ID}, 10, 0, "file_size", "desc")
+	if err != nil {
+		t.Fatalf("FindByTagIDs desc: %v", err)
+	}
+	assertIDs("FindByTagIDs desc", tagDesc, []int64{images[1].ID, images[0].ID})
+
+	untaggedAsc, err := repo.FindUntagged(ctx, 10, 0, "filename", "asc")
+	if err != nil {
+		t.Fatalf("FindUntagged asc: %v", err)
+	}
+	assertIDs("FindUntagged asc", untaggedAsc, []int64{images[2].ID})
+}
+
 func TestCountUntaggedReturnsCorrectCount(t *testing.T) {
 	t.Parallel()
 
