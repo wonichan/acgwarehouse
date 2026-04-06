@@ -132,15 +132,18 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	imageList := gin.HandlerFunc(placeholderHandler)
 	imageGet := gin.HandlerFunc(placeholderHandler)
 	imageScan := gin.HandlerFunc(placeholderHandler)
+	imageViewerWindow := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.ImageRepo != nil && deps.TagRepo != nil && deps.ImageTagRepo != nil {
-		imageHandler := NewImageHandler(deps.ImageRepo, deps.TagRepo, deps.ImageTagRepo, deps.AdminSvc)
+		imageHandler := NewImageHandler(deps.ImageRepo, deps.TagRepo, deps.ImageTagRepo, deps.SearchSvc, deps.AdminSvc)
 		imageList = imageHandler.ListImages
 		imageGet = imageHandler.GetImage
 		imageScan = imageHandler.TriggerImport
+		imageViewerWindow = imageHandler.ViewerWindow
 	}
 	images.GET("", imageList)
 	images.GET("/:id", imageGet)
 	images.POST("/scan", imageScan)
+	api.POST("/viewer/window", imageViewerWindow)
 
 	tagGet := gin.HandlerFunc(placeholderHandler)
 	tagCreate := gin.HandlerFunc(placeholderHandler)

@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -361,6 +363,7 @@ func TestImageHandlerTagFilteredPaginationPreservesContract(t *testing.T) {
 }
 
 type imageHandlerTestRepos struct {
+	db           *sql.DB
 	imageRepo    repository.ImageRepository
 	tagRepo      repository.TagRepository
 	imageTagRepo repository.ImageTagRepository
@@ -395,6 +398,7 @@ func newImageHandlerTestRouter(t *testing.T) (*gin.Engine, *imageHandlerTestRepo
 	}
 
 	repos := &imageHandlerTestRepos{
+		db:           db,
 		imageRepo:    repository.NewImageRepository(db),
 		tagRepo:      repository.NewTagRepository(db),
 		imageTagRepo: repository.NewImageTagRepository(db),
@@ -683,6 +687,207 @@ func TestImageHandler_TriggerImportRouteIsProductHandlerNotPlaceholder(t *testin
 	}
 }
 
+func TestImageHandlerViewerWindowGalleryReturnsWindow(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newViewerWindowTestRouter(t)
+	body := map[string]any{
+		"source":            "gallery",
+		"selected_index":    6,
+		"selected_image_id": 7,
+		"limit":             99,
+		"snapshot": map[string]any{
+			"sort_by":  "created_at",
+			"sort_dir": "asc",
+		},
+	}
+
+	w := performViewerWindowRequest(t, router, body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Items                 []map[string]any `json:"items"`
+		WindowStartIndex      int              `json:"window_start_index"`
+		SelectedIndex         int              `json:"selected_index"`
+		SelectedIndexInWindow int              `json:"selected_index_in_window"`
+		Total                 int              `json:"total"`
+		HasPrevious           bool             `json:"has_previous"`
+		HasNext               bool             `json:"has_next"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Items) != 10 {
+		t.Fatalf("len(items) = %d, want 10", len(resp.Items))
+	}
+	if resp.WindowStartIndex != 1 {
+		t.Fatalf("window_start_index = %d, want 1", resp.WindowStartIndex)
+	}
+	if resp.SelectedIndex != 6 {
+		t.Fatalf("selected_index = %d, want 6", resp.SelectedIndex)
+	}
+	if resp.SelectedIndexInWindow != 5 {
+		t.Fatalf("selected_index_in_window = %d, want 5", resp.SelectedIndexInWindow)
+	}
+	if resp.Total != 12 {
+		t.Fatalf("total = %d, want 12", resp.Total)
+	}
+	if !resp.HasPrevious || !resp.HasNext {
+		t.Fatalf("has_previous=%v has_next=%v, want true/true", resp.HasPrevious, resp.HasNext)
+	}
+	if resp.Items[resp.SelectedIndexInWindow]["id"].(float64) != 7 {
+		t.Fatalf("selected item id = %v, want 7", resp.Items[resp.SelectedIndexInWindow]["id"])
+	}
+}
+
+func TestImageHandlerViewerWindowGalleryRejectsOutOfRangeIndex(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newViewerWindowTestRouter(t)
+	w := performViewerWindowRequest(t, router, map[string]any{
+		"source":            "gallery",
+		"selected_index":    99,
+		"selected_image_id": 1,
+		"limit":             10,
+		"snapshot": map[string]any{
+			"sort_by":  "id",
+			"sort_dir": "asc",
+		},
+	})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+
+	var resp map[string]any
+	decodeJSONResponse(t, w, &resp)
+	if resp["error"] != "invalid_viewer_request" {
+		t.Fatalf("error = %v, want invalid_viewer_request", resp["error"])
+	}
+}
+
+func TestImageHandlerViewerWindowGalleryDetectsSnapshotDrift(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newViewerWindowTestRouter(t)
+	w := performViewerWindowRequest(t, router, map[string]any{
+		"source":            "gallery",
+		"selected_index":    2,
+		"selected_image_id": 999,
+		"limit":             10,
+		"snapshot": map[string]any{
+			"sort_by":  "id",
+			"sort_dir": "asc",
+		},
+	})
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusConflict, w.Body.String())
+	}
+
+	var resp map[string]any
+	decodeJSONResponse(t, w, &resp)
+	if resp["error"] != "viewer_snapshot_drift" {
+		t.Fatalf("error = %v, want viewer_snapshot_drift", resp["error"])
+	}
+}
+
+func TestImageHandlerViewerWindowSearchReturnsWindow(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newViewerWindowTestRouter(t)
+	seedViewerWindowSearchData(t, repos)
+
+	w := performViewerWindowRequest(t, router, map[string]any{
+		"source":            "search",
+		"selected_index":    1,
+		"selected_image_id": 3,
+		"limit":             10,
+		"snapshot": map[string]any{
+			"q":          "cat",
+			"tag_ids":    []int64{1},
+			"sort_by":    "created_at",
+			"sort_order": "asc",
+		},
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Items                 []map[string]any `json:"items"`
+		WindowStartIndex      int              `json:"window_start_index"`
+		SelectedIndexInWindow int              `json:"selected_index_in_window"`
+		Total                 int              `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if resp.Total != 2 {
+		t.Fatalf("total = %d, want 2", resp.Total)
+	}
+	if len(resp.Items) != 2 {
+		t.Fatalf("len(items) = %d, want 2", len(resp.Items))
+	}
+	if resp.WindowStartIndex != 0 || resp.SelectedIndexInWindow != 1 {
+		t.Fatalf("window_start_index=%d selected_index_in_window=%d, want 0 and 1", resp.WindowStartIndex, resp.SelectedIndexInWindow)
+	}
+	if resp.Items[0]["id"].(float64) != 1 || resp.Items[1]["id"].(float64) != 3 {
+		t.Fatalf("ids = [%v %v], want [1 3]", resp.Items[0]["id"], resp.Items[1]["id"])
+	}
+}
+
+func TestImageHandlerViewerWindowSearchHandlesWindowDriftWithoutPanic(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	h := NewImageHandler(nil, nil, nil, viewerWindowSearchServiceStub{
+		result: &service.ViewerWindowResult{
+			Images:                []domain.Image{{ID: 1, Filename: "cat-1.jpg"}},
+			Total:                 2,
+			WindowStart:           1,
+			SelectedIndex:         1,
+			SelectedIndexInWindow: 1,
+			HasPrevious:           true,
+			HasNext:               false,
+		},
+	})
+	router.POST("/api/v1/viewer/window", h.ViewerWindow)
+
+	w := performViewerWindowRequest(t, router, map[string]any{
+		"source":            "search",
+		"selected_index":    1,
+		"selected_image_id": 1,
+		"limit":             10,
+		"snapshot": map[string]any{
+			"q":          "cat",
+			"sort_by":    "relevance",
+			"sort_order": "desc",
+		},
+	})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+
+	var resp map[string]any
+	decodeJSONResponse(t, w, &resp)
+	if resp["error"] != "invalid_viewer_request" {
+		t.Fatalf("error = %v, want invalid_viewer_request", resp["error"])
+	}
+}
+
+type viewerWindowSearchServiceStub struct {
+	result *service.ViewerWindowResult
+	err    error
+}
+
+func (s viewerWindowSearchServiceStub) ViewerWindow(ctx context.Context, opts service.SearchOptions, selectedIndex, limit int) (*service.ViewerWindowResult, error) {
+	return s.result, s.err
+}
+
 func newImageHandlerTriggerImportRouter(t *testing.T, adminSvc AdminServiceInterface, adminCfg *config.Config) *gin.Engine {
 	t.Helper()
 
@@ -702,4 +907,89 @@ func newImageHandlerTriggerImportRouter(t *testing.T, adminSvc AdminServiceInter
 	SetupRoutes(router, deps)
 
 	return router
+}
+
+func newViewerWindowTestRouter(t *testing.T) (*gin.Engine, *imageHandlerTestRepos) {
+	t.Helper()
+
+	gin.SetMode(gin.TestMode)
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "viewer-window.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	now := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
+	for i := 1; i <= 12; i++ {
+		_, err := db.Exec(`
+			INSERT INTO images (id, path, filename, source_root, file_size, width, height, format, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, i, filepath.Join("/viewer", itoa(int64(i))+".jpg"), itoa(int64(i))+".jpg", "/viewer", 100, 100, 100, "jpg", now, now)
+		if err != nil {
+			t.Fatalf("seed image %d: %v", i, err)
+		}
+	}
+
+	repos := &imageHandlerTestRepos{
+		db:           db,
+		imageRepo:    repository.NewImageRepository(db),
+		tagRepo:      repository.NewTagRepository(db),
+		imageTagRepo: repository.NewImageTagRepository(db),
+	}
+	searchSvc := service.NewSearchService(repos.imageRepo, repos.tagRepo, repository.NewSearchRepository(db))
+
+	router := gin.New()
+	deps := &Dependencies{
+		ImageRepo:    repos.imageRepo,
+		TagRepo:      repos.tagRepo,
+		ImageTagRepo: repos.imageTagRepo,
+		SearchSvc:    searchSvc,
+	}
+	SetupRoutes(router, deps)
+	return router, repos
+}
+
+func seedViewerWindowSearchData(t *testing.T, repos *imageHandlerTestRepos) {
+	t.Helper()
+
+	ctx := context.Background()
+	tag := &domain.Tag{PreferredLabel: "viewer-search", Slug: "viewer-search", ReviewState: "confirmed"}
+	if err := repos.tagRepo.Save(ctx, tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+	if tag.ID != 1 {
+		t.Fatalf("tag.ID = %d, want 1 for stable test payload", tag.ID)
+	}
+	for _, imageID := range []int64{1, 3} {
+		if err := repos.imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: imageID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+			t.Fatalf("save image tag: %v", err)
+		}
+	}
+	for _, imageID := range []int64{1, 2, 3, 4} {
+		if _, err := repos.db.Exec(`
+			UPDATE images SET filename = ?, path = ?, source_root = ?, created_at = ?, updated_at = ? WHERE id = ?
+		`, "cat-"+itoa(imageID)+".jpg", "/viewer/cat-"+itoa(imageID)+".jpg", "/viewer", time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC), time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC), imageID); err != nil {
+			t.Fatalf("update image %d: %v", imageID, err)
+		}
+	}
+	if err := repository.RebuildFTSIndex(repos.db); err != nil {
+		t.Fatalf("rebuild fts: %v", err)
+	}
+}
+
+func performViewerWindowRequest(t *testing.T, router *gin.Engine, body map[string]any) *httptest.ResponseRecorder {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/viewer/window", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	return w
 }

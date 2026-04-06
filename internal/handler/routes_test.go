@@ -25,6 +25,7 @@ func TestRoutesRegistersTagAndImageTagEndpoints(t *testing.T) {
 		{method: http.MethodGet, path: "/api/v1/tags"},
 		{method: http.MethodPost, path: "/api/v1/tags"},
 		{method: http.MethodGet, path: "/api/v1/images/1/tags"},
+		{method: http.MethodPost, path: "/api/v1/viewer/window"},
 		{method: http.MethodPost, path: "/api/v1/images/1/ai-tags"},
 	} {
 		w := httptest.NewRecorder()

@@ -9,13 +9,16 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
+	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
 
 type ImageHandler struct {
 	imageRepo    repository.ImageRepository
 	tagRepo      repository.TagRepository
 	imageTagRepo repository.ImageTagRepository
+	searchSvc    imageSearchWindowProvider
 	adminSvc     imageScanTrigger
 }
 
@@ -23,16 +26,44 @@ type imageScanTrigger interface {
 	TriggerScan(ctx context.Context) (int64, error)
 }
 
-func NewImageHandler(imageRepo repository.ImageRepository, tagRepo repository.TagRepository, imageTagRepo repository.ImageTagRepository, adminSvcOpt ...imageScanTrigger) *ImageHandler {
+type imageSearchWindowProvider interface {
+	ViewerWindow(ctx context.Context, opts service.SearchOptions, selectedIndex, limit int) (*service.ViewerWindowResult, error)
+}
+
+type viewerWindowRequest struct {
+	Source          string               `json:"source"`
+	SelectedIndex   int                  `json:"selected_index"`
+	SelectedImageID int64                `json:"selected_image_id"`
+	Limit           int                  `json:"limit"`
+	Snapshot        viewerWindowSnapshot `json:"snapshot"`
+}
+
+type viewerWindowSnapshot struct {
+	SortBy    string  `json:"sort_by"`
+	SortDir   string  `json:"sort_dir"`
+	TagIDs    []int64 `json:"tag_ids"`
+	HasTags   *bool   `json:"has_tags"`
+	Query     string  `json:"q"`
+	SortOrder string  `json:"sort_order"`
+}
+
+func NewImageHandler(imageRepo repository.ImageRepository, tagRepo repository.TagRepository, imageTagRepo repository.ImageTagRepository, depsOpt ...any) *ImageHandler {
 	var adminSvc imageScanTrigger
-	if len(adminSvcOpt) > 0 {
-		adminSvc = adminSvcOpt[0]
+	var searchSvc imageSearchWindowProvider
+	for _, dep := range depsOpt {
+		switch v := dep.(type) {
+		case imageScanTrigger:
+			adminSvc = v
+		case imageSearchWindowProvider:
+			searchSvc = v
+		}
 	}
 
 	return &ImageHandler{
 		imageRepo:    imageRepo,
 		tagRepo:      tagRepo,
 		imageTagRepo: imageTagRepo,
+		searchSvc:    searchSvc,
 		adminSvc:     adminSvc,
 	}
 }
@@ -198,6 +229,199 @@ func (h *ImageHandler) TriggerImport(c *gin.Context) {
 		"status": "queued",
 		"job_id": jobID,
 	})
+}
+
+func (h *ImageHandler) ViewerWindow(c *gin.Context) {
+	var req viewerWindowRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondViewerRequestError(c, "invalid viewer request")
+		return
+	}
+	if req.SelectedIndex < 0 || req.SelectedImageID <= 0 {
+		respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
+		return
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 10 {
+		limit = 10
+	}
+
+	source := strings.ToLower(strings.TrimSpace(req.Source))
+	switch source {
+	case "gallery":
+		h.viewerWindowGallery(c, req, limit)
+	case "search":
+		h.viewerWindowSearch(c, req, limit)
+	default:
+		respondViewerRequestError(c, "unsupported viewer source")
+	}
+}
+
+func (h *ImageHandler) viewerWindowGallery(c *gin.Context, req viewerWindowRequest, limit int) {
+	ctx := c.Request.Context()
+	sortBy, sortDir := normalizeGallerySort(req.Snapshot.SortBy, req.Snapshot.SortDir)
+	if req.Snapshot.HasTags != nil && !*req.Snapshot.HasTags && len(req.Snapshot.TagIDs) > 0 {
+		respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
+		return
+	}
+
+	var (
+		total int64
+		items []interface{}
+		err   error
+	)
+
+	switch {
+	case req.Snapshot.HasTags != nil && !*req.Snapshot.HasTags:
+		total, err = h.imageRepo.CountUntagged(ctx)
+	case len(req.Snapshot.TagIDs) > 0:
+		total, err = h.imageRepo.CountByTagIDs(ctx, req.Snapshot.TagIDs)
+	default:
+		total, err = h.imageRepo.Count()
+	}
+	if err != nil {
+		respondViewerServerError(c)
+		return
+	}
+	if int64(req.SelectedIndex) >= total {
+		respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
+		return
+	}
+
+	windowStart := serviceViewerWindowStart(req.SelectedIndex, limit, int(total))
+	switch {
+	case req.Snapshot.HasTags != nil && !*req.Snapshot.HasTags:
+		untagged, err := h.imageRepo.FindUntagged(ctx, limit, windowStart, sortBy, sortDir)
+		if err != nil {
+			respondViewerServerError(c)
+			return
+		}
+		for _, image := range untagged {
+			items = append(items, image)
+		}
+	case len(req.Snapshot.TagIDs) > 0:
+		filtered, err := h.imageRepo.FindByTagIDs(ctx, req.Snapshot.TagIDs, limit, windowStart, sortBy, sortDir)
+		if err != nil {
+			respondViewerServerError(c)
+			return
+		}
+		for _, image := range filtered {
+			items = append(items, image)
+		}
+	default:
+		all, err := h.imageRepo.FindAll(limit, windowStart, sortBy, sortDir)
+		if err != nil {
+			respondViewerServerError(c)
+			return
+		}
+		for _, image := range all {
+			items = append(items, image)
+		}
+	}
+
+	selectedIndexInWindow := req.SelectedIndex - windowStart
+	if selectedIndexInWindow < 0 || selectedIndexInWindow >= len(items) {
+		respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
+		return
+	}
+	selectedItem, ok := items[selectedIndexInWindow].(domain.Image)
+	if !ok {
+		respondViewerServerError(c)
+		return
+	}
+	if selectedItem.ID != req.SelectedImageID {
+		respondViewerSnapshotDrift(c)
+		return
+	}
+
+	respondViewerWindow(c, items, windowStart, req.SelectedIndex, selectedIndexInWindow, total)
+}
+
+func (h *ImageHandler) viewerWindowSearch(c *gin.Context, req viewerWindowRequest, limit int) {
+	if h.searchSvc == nil {
+		respondViewerServerError(c)
+		return
+	}
+	result, err := h.searchSvc.ViewerWindow(c.Request.Context(), service.SearchOptions{
+		Query:     strings.TrimSpace(req.Snapshot.Query),
+		TagIDs:    req.Snapshot.TagIDs,
+		SortBy:    req.Snapshot.SortBy,
+		SortOrder: req.Snapshot.SortOrder,
+	}, req.SelectedIndex, limit)
+	if err != nil {
+		if errors.Is(err, service.ErrViewerRequestOutOfRange) {
+			respondViewerRequestError(c, err.Error())
+			return
+		}
+		respondViewerServerError(c)
+		return
+	}
+	if result.SelectedIndexInWindow < 0 || result.SelectedIndexInWindow >= len(result.Images) {
+		respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
+		return
+	}
+	if result.Images[result.SelectedIndexInWindow].ID != req.SelectedImageID {
+		respondViewerSnapshotDrift(c)
+		return
+	}
+	items := make([]interface{}, 0, len(result.Images))
+	for _, image := range result.Images {
+		items = append(items, image)
+	}
+	respondViewerWindow(c, items, result.WindowStart, result.SelectedIndex, result.SelectedIndexInWindow, result.Total)
+}
+
+func normalizeGallerySort(sortBy, sortDir string) (string, string) {
+	validSortFields := map[string]bool{"created_at": true, "filename": true, "file_size": true, "id": true}
+	if !validSortFields[sortBy] {
+		sortBy = "id"
+	}
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+	return sortBy, sortDir
+}
+
+func serviceViewerWindowStart(selectedIndex, limit, total int) int {
+	start := selectedIndex - limit/2
+	if start < 0 {
+		start = 0
+	}
+	maxStart := total - limit
+	if maxStart < 0 {
+		maxStart = 0
+	}
+	if start > maxStart {
+		start = maxStart
+	}
+	return start
+}
+
+func respondViewerWindow(c *gin.Context, items []interface{}, windowStart, selectedIndex, selectedIndexInWindow int, total int64) {
+	c.JSON(http.StatusOK, gin.H{
+		"items":                    items,
+		"window_start_index":       windowStart,
+		"selected_index":           selectedIndex,
+		"selected_index_in_window": selectedIndexInWindow,
+		"total":                    total,
+		"has_previous":             selectedIndex > 0,
+		"has_next":                 int64(selectedIndex+1) < total,
+	})
+}
+
+func respondViewerRequestError(c *gin.Context, message string) {
+	c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_viewer_request", "message": message})
+}
+
+func respondViewerSnapshotDrift(c *gin.Context) {
+	c.JSON(http.StatusConflict, gin.H{"error": "viewer_snapshot_drift", "message": "selected_image_id no longer matches the supplied selected_index"})
+}
+
+func respondViewerServerError(c *gin.Context) {
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "viewer_window_failed", "message": "failed to load viewer window"})
 }
 
 func parseTagIDs(s string) ([]int64, error) {
