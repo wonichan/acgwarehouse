@@ -30,6 +30,7 @@ const (
 	logsDirEnv           = "ACG_LOGS_DIR"
 	defaultSidecarHost   = "127.0.0.1"
 	defaultSidecarPort   = "8000"
+	sidecarShutdownPath  = "/shutdown"
 )
 
 var (
@@ -138,10 +139,33 @@ func (a *App) initSidecarRuntime() {
 			}
 			return nil
 		},
-		ShutdownProbe: func(context.Context) error {
-			return nil
+		ShutdownProbe: func(ctx context.Context) error {
+			return requestSidecarShutdown(ctx, a.sidecarBaseURL)
 		},
 	})
+}
+
+func requestSidecarShutdown(parent context.Context, baseURL string) error {
+	shutdownCtx, cancel := context.WithTimeout(parent, 2*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(shutdownCtx, http.MethodPost, baseURL+sidecarShutdownPath, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := sidecarHTTPDo(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("sidecar shutdown status: %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func fallbackSidecarBootstrapSettings() sidecarBootstrapSettings {

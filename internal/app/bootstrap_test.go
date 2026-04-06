@@ -83,6 +83,51 @@ func TestPackagedSidecarBootstrapUsesExplicitExecutableAndPort(t *testing.T) {
 	if probeURL != "http://127.0.0.1:9311/health" {
 		t.Fatalf("probe URL = %q, want %q", probeURL, "http://127.0.0.1:9311/health")
 	}
+
+	var shutdownURL string
+	sidecarHTTPDo = func(req *http.Request) (*http.Response, error) {
+		shutdownURL = req.URL.String()
+		return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}
+	if err := capture.cfg.ShutdownProbe(context.Background()); err != nil {
+		t.Fatalf("ShutdownProbe() error = %v", err)
+	}
+	if shutdownURL != "http://127.0.0.1:9311/shutdown" {
+		t.Fatalf("shutdown URL = %q, want %q", shutdownURL, "http://127.0.0.1:9311/shutdown")
+	}
+}
+
+func TestPackagedSidecarBootstrapShutdownProbeFailsOnUnexpectedStatus(t *testing.T) {
+	t.Setenv("ACG_SIDECAR_PORT", "9510")
+
+	capture := &bootstrapRuntimeCapture{}
+	originalRuntimeFactory := newSidecarRuntime
+	newSidecarRuntime = func(cfg sidecar.RuntimeConfig) sidecarRuntimeLifecycle {
+		capture.cfg = cfg
+		return capture
+	}
+	defer func() {
+		newSidecarRuntime = originalRuntimeFactory
+	}()
+
+	originalHTTPDo := sidecarHTTPDo
+	sidecarHTTPDo = func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/shutdown" {
+			return &http.Response{StatusCode: http.StatusInternalServerError, Body: io.NopCloser(strings.NewReader(""))}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}
+	defer func() {
+		sidecarHTTPDo = originalHTTPDo
+	}()
+
+	app := &App{refillStopCh: make(chan struct{})}
+	app.initSidecarRuntime()
+
+	err := capture.cfg.ShutdownProbe(context.Background())
+	if err == nil {
+		t.Fatal("ShutdownProbe() error = nil, want non-2xx response error")
+	}
 }
 
 func TestPackagedSidecarBootstrapWritesDiagnosticOnStartFailure(t *testing.T) {

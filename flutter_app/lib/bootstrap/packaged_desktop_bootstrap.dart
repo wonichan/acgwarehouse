@@ -388,9 +388,14 @@ class PackagedDesktopBootstrap {
   static Future<void> _defaultShutdownRequest(Uri shutdownUri) async {
     final client = HttpClient();
     try {
-      final request = await client.postUrl(shutdownUri);
-      final response = await request.close();
-      await response.drain<void>();
+      client.connectionTimeout = const Duration(seconds: 2);
+      final request = await client
+          .postUrl(shutdownUri)
+          .timeout(const Duration(seconds: 2));
+      final response = await request.close().timeout(
+        const Duration(seconds: 2),
+      );
+      await response.drain<void>().timeout(const Duration(seconds: 2));
     } finally {
       client.close(force: true);
     }

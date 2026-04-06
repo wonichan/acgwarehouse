@@ -172,7 +172,15 @@ func (r *Runtime) terminateProcess(ctx context.Context) error {
 	case err := <-waitDone:
 		return err
 	case <-ctx.Done():
-		return ctx.Err()
+		if killErr := proc.Kill(); killErr != nil {
+			return killErr
+		}
+		select {
+		case err := <-waitDone:
+			return err
+		case <-time.After(200 * time.Millisecond):
+			return ctx.Err()
+		}
 	}
 }
 

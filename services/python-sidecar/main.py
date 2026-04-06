@@ -1,8 +1,10 @@
 # pyright: reportMissingImports=false
 
 import argparse
+import signal
 import os
 import sys
+import threading
 
 from fastapi import FastAPI
 import uvicorn
@@ -15,6 +17,22 @@ app = FastAPI(title="ACGWarehouse Compute Sidecar")
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/shutdown", status_code=202)
+async def shutdown() -> dict[str, str]:
+    schedule_shutdown()
+    return {"status": "shutting_down"}
+
+
+def schedule_shutdown(delay_seconds: float = 0.05) -> None:
+    timer = threading.Timer(delay_seconds, terminate_current_process)
+    timer.daemon = True
+    timer.start()
+
+
+def terminate_current_process() -> None:
+    os.kill(os.getpid(), signal.SIGTERM)
 
 
 app.include_router(duplicates.router)

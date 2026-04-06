@@ -257,6 +257,38 @@ void main() {
       expect(terminatedProcess, same(process));
     });
 
+    test('shutdown ignores shutdown request timeout and still exits', () async {
+      final harness = await _BootstrapHarness.create(tempDir);
+      final manifestFile = File(
+        _join(harness.bundleDir.path, 'runtime', 'runtime-manifest.json'),
+      );
+      final process = _BlockingProcess();
+      Process? terminatedProcess;
+      final bootstrap = harness.createBootstrap(
+        processFactory: () => process,
+        shutdownTimeout: const Duration(milliseconds: 1),
+        shutdownRequest: (_) async {
+          throw TimeoutException('shutdown request timeout');
+        },
+        processTerminator: (target) async {
+          terminatedProcess = target;
+          target.kill();
+        },
+        onStart: () async {
+          await manifestFile.writeAsString(
+            '{"version":1,"generated_at":"2026-04-05T12:00:00Z","go":{"base_url":"http://127.0.0.1:19090","ready":true}}',
+          );
+        },
+      );
+
+      final startResult = await bootstrap.startIfNeeded();
+      expect(startResult.isSuccess, isTrue);
+
+      await bootstrap.shutdown();
+
+      expect(terminatedProcess, same(process));
+    });
+
     testWidgets('MyApp requests packaged bootstrap shutdown on dispose', (
       tester,
     ) async {

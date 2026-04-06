@@ -114,6 +114,46 @@ func TestRuntimeShutdownFallsBackToKillAndWaitsForProcess(t *testing.T) {
 	}
 }
 
+func TestRuntimeShutdownKillsProcessWhenWaitTimesOutAfterSuccessfulProbe(t *testing.T) {
+	t.Parallel()
+
+	process := newFakeProcess()
+	runtime := NewRuntime(RuntimeConfig{
+		StartupTimeout: 200 * time.Millisecond,
+		ProbeInterval:  10 * time.Millisecond,
+		CommandFactory: func(context.Context) (Process, error) {
+			return process, nil
+		},
+		Probe: func(context.Context) error {
+			return nil
+		},
+		ShutdownProbe: func(context.Context) error {
+			return nil
+		},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err := runtime.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer stopCancel()
+
+	if err := runtime.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop() error = %v, want nil after forced kill", err)
+	}
+
+	if process.KillCalls() != 1 {
+		t.Fatalf("Kill() calls = %d, want 1", process.KillCalls())
+	}
+	if process.WaitCalls() != 1 {
+		t.Fatalf("Wait() calls = %d, want 1", process.WaitCalls())
+	}
+}
+
 type fakeProcess struct {
 	mu        sync.Mutex
 	killCalls int
@@ -129,7 +169,12 @@ func newFakeProcess() *fakeProcess {
 func (f *fakeProcess) Kill() error {
 	f.mu.Lock()
 	f.killCalls++
-	close(f.waitCh)
+	select {
+	case <-f.waitCh:
+		// already closed
+	default:
+		close(f.waitCh)
+	}
 	f.mu.Unlock()
 	return nil
 }
