@@ -13,7 +13,7 @@ import '../widgets/fluent_search_content.dart';
 import '../widgets/monitoring/monitoring_workspace.dart';
 import '../widgets/tag_management/tag_management_workspace.dart';
 import '../models/image.dart';
-import '../models/viewer_session.dart';
+import '../models/viewer_window_context.dart';
 import '../services/viewer_window_service.dart';
 
 /// Fluent 风格图库页面
@@ -73,11 +73,10 @@ class FluentGalleryPage extends StatelessWidget {
         Expanded(
           child: FluentGalleryContent(
             onImageTap: null, // Removed single click routing
-            onImageDoubleTap: (image) => _showImageDetail(
+            onImageDoubleTap: (image) => _showGalleryImageDetail(
               context,
               image,
-              context.read<ImageListProvider>().images,
-              ViewerSessionSource.gallery,
+              context.read<ImageListProvider>(),
             ),
           ),
         ),
@@ -134,19 +133,24 @@ class FluentGalleryPage extends StatelessWidget {
     );
   }
 
-  void _showImageDetail(
+  void _showGalleryImageDetail(
     BuildContext context,
     ImageModel image,
-    List<ImageModel> results,
-    ViewerSessionSource source,
+    ImageListProvider imageProvider,
   ) {
+    final selectedIndex = imageProvider.indexOfImage(image.id);
+    if (selectedIndex < 0) {
+      return;
+    }
+
     ViewerWindowService(
       adapter: DesktopMultiWindowViewerWindowAdapter(),
-    ).openSession(
-      ViewerSession.fromResultSet(
-        source: source,
-        images: results,
+    ).openWindow(
+      selectedFilename: image.filename,
+      context: ViewerWindowContext.gallery(
+        selectedIndex: selectedIndex,
         selectedImageId: image.id,
+        snapshot: imageProvider.viewerWindowSnapshot,
       ),
     );
   }
@@ -209,12 +213,8 @@ class _FluentSearchPageState extends State<FluentSearchPage> {
               Expanded(
                 child: FluentSearchContent(
                   onImageTap: null, // Removed single click routing
-                  onImageDoubleTap: (image) => _showImageDetail(
-                    context,
-                    image,
-                    provider.results,
-                    ViewerSessionSource.search,
-                  ),
+                  onImageDoubleTap: (image) =>
+                      _showSearchImageDetail(context, image, provider),
                 ),
               ),
             ],
@@ -316,19 +316,24 @@ class _FluentSearchPageState extends State<FluentSearchPage> {
     );
   }
 
-  void _showImageDetail(
+  void _showSearchImageDetail(
     BuildContext context,
     ImageModel image,
-    List<ImageModel> results,
-    ViewerSessionSource source,
+    SearchProvider provider,
   ) {
+    final selectedIndex = provider.indexOfResult(image.id);
+    if (selectedIndex < 0) {
+      return;
+    }
+
     ViewerWindowService(
       adapter: DesktopMultiWindowViewerWindowAdapter(),
-    ).openSession(
-      ViewerSession.fromResultSet(
-        source: source,
-        images: results,
+    ).openWindow(
+      selectedFilename: image.filename,
+      context: ViewerWindowContext.search(
+        selectedIndex: selectedIndex,
         selectedImageId: image.id,
+        snapshot: provider.viewerWindowSnapshot,
       ),
     );
   }

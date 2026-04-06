@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/viewer_session.dart';
+import 'package:gallery/models/viewer_window_context.dart';
 import 'package:gallery/services/viewer_window_service.dart';
 import 'package:gallery/utils/window_manager.dart';
 
@@ -18,28 +19,21 @@ void main() {
       () async {
         final adapter = FakeViewerWindowAdapter();
         final service = ViewerWindowService(adapter: adapter);
-        final session = ViewerSession(
-          source: ViewerSessionSource.gallery,
-          items: const [
-            ViewerSessionItem(
-              imageId: 1,
-              path: 'C:/images/alpha.png',
-              filename: 'alpha.png',
-              sourceRoot: 'C:/images',
-              fileSize: 2048,
-              width: 800,
-              height: 600,
-              format: 'png',
-              thumbnailSmallUrl: '/thumbs/alpha-small.jpg',
-              thumbnailLargeUrl: '/thumbs/alpha.jpg',
-              createdAtIso8601: '2026-04-05T00:00:00.000Z',
-              updatedAtIso8601: '2026-04-05T00:00:00.000Z',
-            ),
-          ],
-          initialSelectedIndex: 0,
+        final context = ViewerWindowContext.gallery(
+          selectedIndex: 0,
+          selectedImageId: 1,
+          snapshot: const ViewerWindowGallerySnapshot(
+            sortBy: 'created_at',
+            sortDir: 'desc',
+            tagIds: [5, 8],
+            hasTags: null,
+          ),
         );
 
-        await service.openSession(session);
+        await service.openWindow(
+          selectedFilename: 'alpha.png',
+          context: context,
+        );
 
         expect(adapter.launches, hasLength(1));
         expect(adapter.restoreStateCalls, 0);
@@ -63,48 +57,30 @@ void main() {
         final adapter = FakeViewerWindowAdapter();
         final service = ViewerWindowService(adapter: adapter);
 
-        await service.openSession(
-          ViewerSession(
-            source: ViewerSessionSource.gallery,
-            items: const [
-              ViewerSessionItem(
-                imageId: 1,
-                path: 'C:/images/alpha.png',
-                filename: 'alpha.png',
-                sourceRoot: 'C:/images',
-                fileSize: 2048,
-                width: 800,
-                height: 600,
-                format: 'png',
-                thumbnailSmallUrl: '/thumbs/alpha-small.jpg',
-                thumbnailLargeUrl: '/thumbs/alpha.jpg',
-                createdAtIso8601: '2026-04-05T00:00:00.000Z',
-                updatedAtIso8601: '2026-04-05T00:00:00.000Z',
-              ),
-            ],
-            initialSelectedIndex: 0,
+        await service.openWindow(
+          selectedFilename: 'alpha.png',
+          context: ViewerWindowContext.gallery(
+            selectedIndex: 0,
+            selectedImageId: 1,
+            snapshot: const ViewerWindowGallerySnapshot(
+              sortBy: 'created_at',
+              sortDir: 'desc',
+              tagIds: [],
+              hasTags: null,
+            ),
           ),
         );
-        await service.openSession(
-          ViewerSession(
-            source: ViewerSessionSource.search,
-            items: const [
-              ViewerSessionItem(
-                imageId: 2,
-                path: 'C:/images/beta.png',
-                filename: 'beta.png',
-                sourceRoot: 'C:/images',
-                fileSize: 2048,
-                width: 800,
-                height: 600,
-                format: 'png',
-                thumbnailSmallUrl: '/thumbs/beta-small.jpg',
-                thumbnailLargeUrl: '/thumbs/beta.jpg',
-                createdAtIso8601: '2026-04-05T00:00:00.000Z',
-                updatedAtIso8601: '2026-04-05T00:00:00.000Z',
-              ),
-            ],
-            initialSelectedIndex: 0,
+        await service.openWindow(
+          selectedFilename: 'beta.png',
+          context: ViewerWindowContext.search(
+            selectedIndex: 3,
+            selectedImageId: 2,
+            snapshot: const ViewerWindowSearchSnapshot(
+              query: 'beta',
+              tagIds: [9],
+              sortBy: 'relevance',
+              sortOrder: 'desc',
+            ),
           ),
         );
 
@@ -121,33 +97,29 @@ void main() {
       () async {
         final adapter = FakeViewerWindowAdapter();
         final service = ViewerWindowService(adapter: adapter);
-        final session = ViewerSession(
-          source: ViewerSessionSource.search,
-          items: const [
-            ViewerSessionItem(
-              imageId: 9,
-              path: 'C:/images/launch-target.png',
-              filename: 'launch-target.png',
-              sourceRoot: 'C:/images',
-              fileSize: 2048,
-              width: 800,
-              height: 600,
-              format: 'png',
-              thumbnailSmallUrl: '/thumbs/launch-target-small.jpg',
-              thumbnailLargeUrl: '/thumbs/launch-target.jpg',
-              createdAtIso8601: '2026-04-05T00:00:00.000Z',
-              updatedAtIso8601: '2026-04-05T00:00:00.000Z',
-            ),
-          ],
-          initialSelectedIndex: 0,
+        final context = ViewerWindowContext.search(
+          selectedIndex: 4,
+          selectedImageId: 9,
+          snapshot: const ViewerWindowSearchSnapshot(
+            query: 'launch target',
+            tagIds: [4, 5],
+            sortBy: 'relevance',
+            sortOrder: 'desc',
+          ),
         );
 
-        await service.openSession(session);
+        await service.openWindow(
+          selectedFilename: 'launch-target.png',
+          context: context,
+        );
 
         final payload = adapter.launches.single.arguments;
         expect(payload['kind'], 'viewer-window');
-        expect(payload['session']['source'], 'search');
-        expect(payload['session']['items'][0]['filename'], 'launch-target.png');
+        expect(payload['context']['source'], 'search');
+        expect(payload['context']['selected_index'], 4);
+        expect(payload['context']['selected_image_id'], 9);
+        expect(payload['context']['snapshot']['q'], 'launch target');
+        expect(payload['context']['snapshot']['tag_ids'], [4, 5]);
       },
     );
 
@@ -155,13 +127,19 @@ void main() {
       final data = ViewerWindowBootstrapData.fromCommandLine([
         'multi_window',
         '7',
-        '{"kind":"viewer-window","session":{"source":"gallery","items":[{"image_id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","thumbnail_small_url":"/thumbs/alpha-small.jpg","thumbnail_large_url":"/thumbs/alpha.jpg","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"initial_selected_index":0}}',
+        '{"kind":"viewer-window","context":{"source":"gallery","selected_index":12,"selected_image_id":1,"snapshot":{"sort_by":"created_at","sort_dir":"desc","tag_ids":[1,2],"has_tags":false}}}',
       ]);
 
       expect(data, isNotNull);
       expect(data!.windowId, 7);
-      expect(data.session.selectedItem.filename, 'alpha.png');
-      expect(data.policy.title, 'ACGWarehouse Viewer — alpha.png');
+      expect(data.context.source, ViewerWindowSource.gallery);
+      expect(data.context.selectedIndex, 12);
+      expect(data.context.selectedImageId, 1);
+      expect(
+        (data.context.snapshot as ViewerWindowGallerySnapshot).hasTags,
+        isFalse,
+      );
+      expect(data.policy.title, 'ACGWarehouse Viewer');
     });
 
     test(
@@ -174,6 +152,74 @@ void main() {
         );
       },
     );
+
+    test(
+      'rejects legacy openSession path to avoid losing context state',
+      () async {
+        final adapter = FakeViewerWindowAdapter();
+        final service = ViewerWindowService(adapter: adapter);
+
+        await expectLater(
+          () => service.openSession(
+            const ViewerSession(
+              source: ViewerSessionSource.search,
+              items: [
+                ViewerSessionItem(
+                  imageId: 1,
+                  path: 'C:/images/alpha.png',
+                  filename: 'alpha.png',
+                  sourceRoot: 'C:/images',
+                  fileSize: 2048,
+                  width: 800,
+                  height: 600,
+                  format: 'png',
+                  thumbnailSmallUrl: null,
+                  thumbnailLargeUrl: null,
+                  createdAtIso8601: '2026-04-05T00:00:00.000Z',
+                  updatedAtIso8601: '2026-04-05T00:00:00.000Z',
+                ),
+              ],
+              initialSelectedIndex: 0,
+            ),
+          ),
+          throwsA(isA<UnsupportedError>()),
+        );
+        expect(adapter.launches, isEmpty);
+      },
+    );
+
+    test('rejects malformed bootstrap json instead of throwing', () {
+      expect(
+        ViewerWindowBootstrapData.fromCommandLine([
+          'multi_window',
+          '7',
+          '{"kind":"viewer-window","context":',
+        ]),
+        isNull,
+      );
+    });
+
+    test('rejects bootstrap payloads missing selected index', () {
+      expect(
+        ViewerWindowBootstrapData.fromCommandLine([
+          'multi_window',
+          '7',
+          '{"kind":"viewer-window","context":{"source":"gallery","selected_image_id":1,"snapshot":{"sort_by":"created_at","sort_dir":"desc","tag_ids":[],"has_tags":null}}}',
+        ]),
+        isNull,
+      );
+    });
+
+    test('rejects bootstrap payloads missing selected image id', () {
+      expect(
+        ViewerWindowBootstrapData.fromCommandLine([
+          'multi_window',
+          '7',
+          '{"kind":"viewer-window","context":{"source":"search","selected_index":5,"snapshot":{"q":"alpha","tag_ids":[],"sort_by":"relevance","sort_order":"desc"}}}',
+        ]),
+        isNull,
+      );
+    });
   });
 }
 

@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import '../models/viewer_session.dart';
+import '../models/viewer_window_context.dart';
 import '../utils/window_manager.dart';
 
 abstract class ViewerWindowAdapter {
@@ -17,31 +18,48 @@ abstract class ViewerWindowAdapter {
 class ViewerWindowLaunchPayload {
   final String logicalWindowId;
   final String title;
-  final ViewerSession session;
+  final ViewerWindowContext context;
 
   const ViewerWindowLaunchPayload({
     required this.logicalWindowId,
     required this.title,
-    required this.session,
+    required this.context,
   });
 
   factory ViewerWindowLaunchPayload.fromJson(Map<String, dynamic> json) {
+    final context = ViewerWindowContext.tryFromJson(
+      json['context'] as Map<String, dynamic>? ?? const {},
+    );
+    if (context == null) {
+      throw const FormatException('Invalid viewer window context payload');
+    }
+
     return ViewerWindowLaunchPayload(
       logicalWindowId: json['logical_window_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      session: ViewerSession.fromJson(json['session'] as Map<String, dynamic>),
+      context: context,
     );
   }
 
   static ViewerWindowLaunchPayload? fromEncodedJson(String raw) {
-    final decoded = jsonDecode(raw);
+    Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } on FormatException {
+      return null;
+    }
+
     if (decoded is! Map<String, dynamic>) {
       return null;
     }
     if (decoded['kind'] != 'viewer-window') {
       return null;
     }
-    return ViewerWindowLaunchPayload.fromJson(decoded);
+    try {
+      return ViewerWindowLaunchPayload.fromJson(decoded);
+    } on FormatException {
+      return null;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -49,7 +67,7 @@ class ViewerWindowLaunchPayload {
       'kind': 'viewer-window',
       'logical_window_id': logicalWindowId,
       'title': title,
-      'session': session.toJson(),
+      'context': context.toJson(),
     };
   }
 }
@@ -57,13 +75,13 @@ class ViewerWindowLaunchPayload {
 class ViewerWindowLaunchRequest {
   final String windowId;
   final String title;
-  final ViewerSession session;
+  final ViewerWindowContext context;
   final AppWindowPolicy policy;
 
   const ViewerWindowLaunchRequest({
     required this.windowId,
     required this.title,
-    required this.session,
+    required this.context,
     required this.policy,
   });
 
@@ -71,18 +89,29 @@ class ViewerWindowLaunchRequest {
     return ViewerWindowLaunchPayload(
       logicalWindowId: windowId,
       title: title,
-      session: session,
+      context: context,
     ).toJson();
   }
 }
 
 class ViewerWindowBootstrapData {
   final int windowId;
+  final ViewerWindowContext context;
   final ViewerSession session;
   final AppWindowPolicy policy;
 
   const ViewerWindowBootstrapData({
     required this.windowId,
+    this.context = const ViewerWindowContext.gallery(
+      selectedIndex: 0,
+      selectedImageId: 0,
+      snapshot: ViewerWindowGallerySnapshot(
+        sortBy: 'created_at',
+        sortDir: 'desc',
+        tagIds: [],
+        hasTags: null,
+      ),
+    ),
     required this.session,
     required this.policy,
   });
@@ -102,14 +131,12 @@ class ViewerWindowBootstrapData {
       return null;
     }
 
-    final session = payload.session;
-    final title = payload.title.isEmpty
-        ? buildViewerWindowTitle(session.selectedItem.filename)
-        : payload.title;
+    final title = payload.title.isEmpty ? 'ACGWarehouse Viewer' : payload.title;
 
     return ViewerWindowBootstrapData(
       windowId: windowId,
-      session: session,
+      context: payload.context,
+      session: buildLegacyViewerSession(context: payload.context, title: title),
       policy: viewerWindowOptions(title),
     );
   }
@@ -153,17 +180,26 @@ class ViewerWindowService {
     return buildViewerWindowTitle(filename);
   }
 
-  Future<void> openSession(ViewerSession session) async {
+  Future<void> openWindow({
+    required String selectedFilename,
+    required ViewerWindowContext context,
+  }) async {
     _windowCounter += 1;
-    final title = buildWindowTitle(session.selectedItem.filename);
+    final title = buildWindowTitle(selectedFilename);
 
     await adapter.launch(
       ViewerWindowLaunchRequest(
         windowId: 'viewer-window-$_windowCounter',
         title: title,
-        session: session,
+        context: context,
         policy: viewerWindowOptions(title),
       ),
+    );
+  }
+
+  Future<void> openSession(ViewerSession session) {
+    throw UnsupportedError(
+      'openSession discards launch-context state; use openWindow instead.',
     );
   }
 }
