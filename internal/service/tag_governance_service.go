@@ -38,6 +38,15 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 		}
 	}
 
+	existingImageTags, err := s.imageTagRepo.FindByImageID(ctx, imageID)
+	if err != nil {
+		return err
+	}
+	existingByTagID := make(map[int64]*domain.ImageTag, len(existingImageTags))
+	for _, item := range existingImageTags {
+		existingByTagID[item.TagID] = item
+	}
+
 	for _, rawTag := range tags {
 		normalized := strings.TrimSpace(rawTag)
 		if normalized == "" {
@@ -75,12 +84,12 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 				return err
 			}
 		} else {
+			if existing := existingByTagID[tag.ID]; existing != nil && existing.ReviewState == "confirmed" {
+				continue
+			}
 			// Check if image-tag association already exists before incrementing count
 			// This prevents double-counting when retrying failed AI tag generation tasks
-			exists, err := s.imageTagRepo.Exists(ctx, imageID, tag.ID)
-			if err != nil {
-				return err
-			}
+			_, exists := existingByTagID[tag.ID]
 			if !exists {
 				if err := s.tagRepo.IncrementUsageCount(ctx, tag.ID); err != nil {
 					return err
@@ -105,8 +114,31 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 		}); err != nil {
 			return err
 		}
+		existingByTagID[tag.ID] = &domain.ImageTag{ImageID: imageID, TagID: tag.ID, Source: source, SourceObservationID: sourceObservationID, Confidence: confidence, ReviewState: "pending"}
 	}
 
+	return nil
+}
+
+func (s *TagGovernanceService) RemovePendingAITags(ctx context.Context, imageID int64) error {
+	items, err := s.imageTagRepo.FindByImageID(ctx, imageID)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if item.Source != domain.ImageTagSourceAI || item.ReviewState != "pending" {
+			continue
+		}
+		rowsAffected, err := s.imageTagRepo.Delete(ctx, imageID, item.TagID)
+		if err != nil {
+			return err
+		}
+		if rowsAffected > 0 {
+			if err := s.tagRepo.DecrementUsageCount(ctx, item.TagID); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

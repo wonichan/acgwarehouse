@@ -24,6 +24,11 @@ type TagGovernanceMerger interface {
 	MergeTags(ctx context.Context, imageID int64, tags []string, observationID int64, confidence float64) error
 }
 
+type TagGovernanceRegenerator interface {
+	TagGovernanceMerger
+	RemovePendingAITags(ctx context.Context, imageID int64) error
+}
+
 type AITagPresenceChecker interface {
 	HasAITags(ctx context.Context, imageID int64) (bool, error)
 }
@@ -114,6 +119,22 @@ func RegisterAITagHandler(manager *Manager, client ai.AIProvider, obsRepo reposi
 func NewAITagJobHandler(client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, aiTagChecker AITagPresenceChecker) JobFunc {
 	return func(ctx context.Context, id int64, payload string) error {
 		return handleAITagGeneration(ctx, id, payload, client, obsRepo, governance, aiTagChecker)
+	}
+}
+
+func NewAITagRegenerationJobHandler(client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceRegenerator) JobFunc {
+	return func(ctx context.Context, id int64, payload string) error {
+		if governance == nil {
+			return fmt.Errorf("regenerate tags: governance service is nil")
+		}
+		var p AITagPayload
+		if err := json.Unmarshal([]byte(payload), &p); err != nil {
+			return fmt.Errorf("parse payload: %w", err)
+		}
+		if err := governance.RemovePendingAITags(ctx, p.ImageID); err != nil {
+			return fmt.Errorf("remove pending ai tags: %w", err)
+		}
+		return handleAITagGeneration(ctx, id, payload, client, obsRepo, governance, nil)
 	}
 }
 

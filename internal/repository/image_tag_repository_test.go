@@ -103,6 +103,25 @@ func TestImageTagRepositoryDeleteRemovesAssociation(t *testing.T) {
 	}
 }
 
+func TestImageTagRepositoryHasAITagsIgnoresRejectedAITags(t *testing.T) {
+	t.Parallel()
+
+	repo := newImageTagRepositoryForTest(t)
+	ctx := context.Background()
+
+	if err := repo.Save(ctx, &domain.ImageTag{ImageID: 1, TagID: 1, Source: domain.ImageTagSourceAI, ReviewState: "rejected"}); err != nil {
+		t.Fatalf("Save(rejected ai tag) error = %v", err)
+	}
+
+	hasAITags, err := repo.HasAITags(ctx, 1)
+	if err != nil {
+		t.Fatalf("HasAITags() error = %v", err)
+	}
+	if hasAITags {
+		t.Fatal("HasAITags() = true, want false when only rejected AI tags remain")
+	}
+}
+
 func newImageTagRepositoryForTest(t *testing.T) ImageTagRepository {
 	t.Helper()
 

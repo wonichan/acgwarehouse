@@ -457,7 +457,9 @@ func (a *App) registerAIHandlers() {
 
 	client := ai.NewRateLimitedClient(provider, a.config.AI.RequestsPerMinute)
 	aiHandler := worker.NewAITagJobHandler(client, a.obsRepo, a.governanceSvc, a.imageTagRepo)
+	aiRegenerationHandler := worker.NewAITagRegenerationJobHandler(client, a.obsRepo, a.governanceSvc)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagGeneration, aiHandler)
+	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagRegeneration, aiRegenerationHandler)
 }
 
 func (a *App) newTaskPlatformService() *service.TaskPlatformService {

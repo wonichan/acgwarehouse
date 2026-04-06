@@ -16,6 +16,7 @@ const (
 	PlatformTaskTypeImageImported     = "image_imported"
 	PlatformTaskTypeThumbnailGenerate = "thumbnail_generate"
 	PlatformTaskTypeAITagGeneration   = "ai_tag_generation"
+	PlatformTaskTypeAITagRegeneration = "ai_tag_regeneration"
 )
 
 const (

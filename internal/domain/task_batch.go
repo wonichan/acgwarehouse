@@ -3,10 +3,11 @@ package domain
 import "time"
 
 const (
-	TaskBatchSourceImportScan   = "import_scan"
-	TaskBatchSourceManualSingle = "manual_single"
-	TaskBatchSourceManualBatch  = "manual_batch"
-	TaskBatchSourceRetry        = "retry"
+	TaskBatchSourceImportScan            = "import_scan"
+	TaskBatchSourceManualSingle          = "manual_single"
+	TaskBatchSourceManualBatch           = "manual_batch"
+	TaskBatchSourceManualBatchRegenerate = "manual_batch_regenerate"
+	TaskBatchSourceRetry                 = "retry"
 )
 
 const (

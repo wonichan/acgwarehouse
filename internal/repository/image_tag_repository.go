@@ -123,7 +123,7 @@ func (r *imageTagRepository) HasAITags(ctx context.Context, imageID int64) (bool
 	err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*)
 		FROM image_tags
-		WHERE image_id = ? AND source = ?
+		WHERE image_id = ? AND source = ? AND review_state != 'rejected'
 	`, imageID, domain.ImageTagSourceAI).Scan(&count)
 	if err != nil {
 		return false, err

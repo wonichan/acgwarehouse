@@ -66,6 +66,36 @@ func TestAITagTriggerCreatesManualSingleBatch(t *testing.T) {
 	}
 }
 
+func TestAITagTriggerCreatesNewTaskWhenHistoricalCompletedTaskExists(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newAITagHandlerTestRouter(t)
+	seedCompletedAITagTask(t, repos, 1)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/1/ai-tags", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	var resp struct {
+		CreatedTasks int     `json:"created_tasks"`
+		SkippedTasks int     `json:"skipped_tasks"`
+		JobIDs       []int64 `json:"job_ids"`
+	}
+	decodeAIJSONBody(t, w.Body.Bytes(), &resp)
+
+	if resp.CreatedTasks != 1 || resp.SkippedTasks != 0 {
+		t.Fatalf("created/skipped = %d/%d, want 1/0", resp.CreatedTasks, resp.SkippedTasks)
+	}
+	if len(resp.JobIDs) != 1 || resp.JobIDs[0] == 0 {
+		t.Fatalf("job_ids = %+v, want one new async job", resp.JobIDs)
+	}
+}
+
 func TestAITagTriggerUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
 	t.Parallel()
 
@@ -215,6 +245,78 @@ func TestBatchAITagTriggerCreatesManualBatchAndSkipsDuplicateQueue(t *testing.T)
 	}
 }
 
+func TestBatchAITagTriggerCreatesTasksWhenOnlyHistoricalCompletedTasksExist(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newAITagHandlerTestRouter(t)
+	seedCompletedAITagTask(t, repos, 1)
+
+	body, _ := json.Marshal(map[string]any{
+		"image_ids": []int64{1, 2},
+	})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/batch-ai-tags", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	var resp struct {
+		CreatedTasks int     `json:"created_tasks"`
+		SkippedTasks int     `json:"skipped_tasks"`
+		JobIDs       []int64 `json:"job_ids"`
+	}
+	decodeAIJSONBody(t, w.Body.Bytes(), &resp)
+
+	if resp.CreatedTasks != 2 || resp.SkippedTasks != 0 {
+		t.Fatalf("created/skipped = %d/%d, want 2/0", resp.CreatedTasks, resp.SkippedTasks)
+	}
+	if len(resp.JobIDs) != 2 {
+		t.Fatalf("job_ids = %+v, want two queued jobs", resp.JobIDs)
+	}
+}
+
+func TestBatchRegenerateAITagTriggerCreatesDedicatedBatchAndTaskType(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newAITagHandlerTestRouter(t)
+	body, _ := json.Marshal(map[string]any{
+		"image_ids": []int64{1},
+	})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/batch-ai-tags/regenerate", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	var resp struct {
+		BatchID         int64   `json:"batch_id"`
+		SourceType      string  `json:"source_type"`
+		CreatedTasks    int     `json:"created_tasks"`
+		PlatformTaskIDs []int64 `json:"platform_task_ids"`
+	}
+	decodeAIJSONBody(t, w.Body.Bytes(), &resp)
+
+	if resp.SourceType != domain.TaskBatchSourceManualBatchRegenerate {
+		t.Fatalf("source_type = %q, want %q", resp.SourceType, domain.TaskBatchSourceManualBatchRegenerate)
+	}
+	if resp.CreatedTasks != 1 || len(resp.PlatformTaskIDs) != 1 {
+		t.Fatalf("created/platform_task_ids = %d/%+v, want 1/new task", resp.CreatedTasks, resp.PlatformTaskIDs)
+	}
+	task, err := repos.taskRepo.FindByID(t.Context(), resp.PlatformTaskIDs[0])
+	if err != nil {
+		t.Fatalf("FindByID(regenerate task) error = %v", err)
+	}
+	if task.TaskType != domain.PlatformTaskTypeAITagRegeneration {
+		t.Fatalf("task type = %q, want %q", task.TaskType, domain.PlatformTaskTypeAITagRegeneration)
+	}
+}
+
 func TestBatchAITagTriggerSupportsTagFilterWithoutImageIDs(t *testing.T) {
 	t.Parallel()
 
@@ -348,6 +450,7 @@ func newAITagHandlerTestRouterWithConfig(t *testing.T, cfg *config.Config) (*gin
 	api.POST("/images/:id/ai-tags", h.TriggerAITags)
 	api.GET("/images/:id/ai-tags/status", h.GetAITagStatus)
 	api.POST("/images/batch-ai-tags", h.BatchTriggerAITags)
+	api.POST("/images/batch-ai-tags/regenerate", h.BatchRegenerateAITags)
 
 	return router, &aiTagHandlerTestRepos{
 		db:              db,
@@ -373,5 +476,39 @@ func decodeAIJSONBody(t *testing.T, body []byte, target any) {
 
 	if err := json.Unmarshal(body, target); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v; body = %s", err, string(body))
+	}
+}
+
+func seedCompletedAITagTask(t *testing.T, repos *aiTagHandlerTestRepos, imageID int64) {
+	t.Helper()
+
+	ctx := context.Background()
+	image := repos.mustFindImage(t, imageID)
+	plan, err := repos.taskPlatformSvc.PlanBatch(ctx, service.TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "seed completed ai task",
+		TaskTypes:    []string{domain.PlatformTaskTypeAITagGeneration},
+		Items: []service.TaskPlatformPlanItem{{
+			ImageID:          image.ID,
+			ImageVersionKey:  service.BuildImageVersionKey(image),
+			SourceDescriptor: image.Path,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PlanBatch(seed completed) error = %v", err)
+	}
+	if len(plan.CreatedTasks) != 1 {
+		t.Fatalf("seed created tasks = %d, want 1", len(plan.CreatedTasks))
+	}
+
+	completedAt := time.Now()
+	seedTask := plan.CreatedTasks[0]
+	seedTask.Status = domain.PlatformTaskStatusCompleted
+	seedTask.FinishedAt = &completedAt
+	if err := repos.taskRepo.Update(ctx, &seedTask); err != nil {
+		t.Fatalf("Update(seed completed task) error = %v", err)
+	}
+	if _, err := repos.batchRepo.RefreshStatus(ctx, plan.Batch.ID); err != nil {
+		t.Fatalf("RefreshStatus(seed completed batch) error = %v", err)
 	}
 }

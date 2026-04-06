@@ -21,12 +21,13 @@ type TaskPlatformPlanItem struct {
 }
 
 type TaskPlatformPlanRequest struct {
-	SourceType   string
-	TriggerKey   string
-	SummaryLabel string
-	SourceRoots  []string
-	TaskTypes    []string
-	Items        []TaskPlatformPlanItem
+	SourceType                string
+	TriggerKey                string
+	SummaryLabel              string
+	SourceRoots               []string
+	TaskTypes                 []string
+	IgnoreHistoricalCompleted bool
+	Items                     []TaskPlatformPlanItem
 }
 
 type TaskPlatformPlanResult struct {
@@ -96,6 +97,9 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 			existing, err := s.taskRepo.FindActiveByDedupeKey(ctx, dedupeKey)
 			if err != nil {
 				return nil, err
+			}
+			if existing != nil && req.IgnoreHistoricalCompleted && existing.Status == domain.PlatformTaskStatusCompleted {
+				existing = nil
 			}
 			if existing != nil {
 				batch.SkippedDuplicateTasks++

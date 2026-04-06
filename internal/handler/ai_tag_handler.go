@@ -46,7 +46,7 @@ func (h *AITagHandler) TriggerAITags(c *gin.Context) {
 	// 忽略解析错误，因为 prompt 是可选的
 	_ = c.ShouldBindJSON(&req)
 
-	result, err := h.enqueueAITagBatch(c.Request.Context(), domain.TaskBatchSourceManualSingle, []*domain.Image{image}, req.Prompt)
+	result, err := h.enqueueAITagBatch(c.Request.Context(), domain.TaskBatchSourceManualSingle, domain.PlatformTaskTypeAITagGeneration, []*domain.Image{image}, req.Prompt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -109,7 +109,33 @@ func (h *AITagHandler) BatchTriggerAITags(c *gin.Context) {
 		return
 	}
 
-	result, err := h.enqueueAITagBatch(c.Request.Context(), domain.TaskBatchSourceManualBatch, images, req.Prompt)
+	result, err := h.enqueueAITagBatch(c.Request.Context(), domain.TaskBatchSourceManualBatch, domain.PlatformTaskTypeAITagGeneration, images, req.Prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, result)
+}
+
+func (h *AITagHandler) BatchRegenerateAITags(c *gin.Context) {
+	var req batchAITagRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	images, err := h.resolveBatchImages(c.Request.Context(), req)
+	if err != nil {
+		if errors.Is(err, errInvalidBatchFilter) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		respondRepoError(c, err)
+		return
+	}
+
+	result, err := h.enqueueAITagBatch(c.Request.Context(), domain.TaskBatchSourceManualBatchRegenerate, domain.PlatformTaskTypeAITagRegeneration, images, req.Prompt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -209,7 +235,7 @@ type aiTagBatchResponse struct {
 	JobIDs          []int64 `json:"job_ids,omitempty"`
 }
 
-func (h *AITagHandler) enqueueAITagBatch(ctx context.Context, sourceType string, images []*domain.Image, prompt string) (*aiTagBatchResponse, error) {
+func (h *AITagHandler) enqueueAITagBatch(ctx context.Context, sourceType, taskType string, images []*domain.Image, prompt string) (*aiTagBatchResponse, error) {
 	if h.taskPlatformSvc == nil {
 		return nil, sql.ErrConnDone
 	}
@@ -224,11 +250,12 @@ func (h *AITagHandler) enqueueAITagBatch(ctx context.Context, sourceType string,
 		roots = append(roots, image.SourceRoot)
 	}
 	plan, err := h.taskPlatformSvc.PlanBatch(ctx, service.TaskPlatformPlanRequest{
-		SourceType:   sourceType,
-		SummaryLabel: service.BuildTaskBatchSummaryLabel(sourceType, roots, len(items)),
-		SourceRoots:  roots,
-		TaskTypes:    []string{domain.PlatformTaskTypeAITagGeneration},
-		Items:        items,
+		SourceType:                sourceType,
+		SummaryLabel:              service.BuildTaskBatchSummaryLabel(sourceType, roots, len(items)),
+		SourceRoots:               roots,
+		TaskTypes:                 []string{taskType},
+		IgnoreHistoricalCompleted: true,
+		Items:                     items,
 	})
 	if err != nil {
 		return nil, err
@@ -249,13 +276,13 @@ func (h *AITagHandler) enqueueAITagBatch(ctx context.Context, sourceType string,
 		if err != nil {
 			return nil, err
 		}
-		job, err := h.taskPlatformSvc.QueueTask(ctx, &task, domain.PlatformTaskTypeAITagGeneration, string(payload))
+		job, err := h.taskPlatformSvc.QueueTask(ctx, &task, taskType, string(payload))
 		if err != nil {
 			return nil, err
 		}
 		response.PlatformTaskIDs = append(response.PlatformTaskIDs, task.ID)
 		response.JobIDs = append(response.JobIDs, job.ID)
-		if h.jobManager != nil && h.jobManager.QueuedByType(domain.PlatformTaskTypeAITagGeneration) < service.ResolveAITagQueueLimit(h.currentConfig()) {
+		if h.jobManager != nil && h.queuedAITagJobs() < service.ResolveAITagQueueLimit(h.currentConfig()) {
 			h.jobManager.LoadExistingJob(job)
 		}
 	}
@@ -263,6 +290,13 @@ func (h *AITagHandler) enqueueAITagBatch(ctx context.Context, sourceType string,
 		response.Status = "queued"
 	}
 	return response, nil
+}
+
+func (h *AITagHandler) queuedAITagJobs() int {
+	if h == nil || h.jobManager == nil {
+		return 0
+	}
+	return h.jobManager.QueuedByType(domain.PlatformTaskTypeAITagGeneration) + h.jobManager.QueuedByType(domain.PlatformTaskTypeAITagRegeneration)
 }
 
 func (h *AITagHandler) findLatestJobForImage(imageID int64) (*repositoryJobView, error) {
