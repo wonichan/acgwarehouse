@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -92,23 +93,20 @@ func (h *AITagHandler) GetDefaultPrompt(c *gin.Context) {
 }
 
 func (h *AITagHandler) BatchTriggerAITags(c *gin.Context) {
-	var req struct {
-		ImageIDs []int64 `json:"image_ids"`
-		Prompt   string  `json:"prompt"` // 可选的自定义提示词
-	}
+	var req batchAITagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
-	images := make([]*domain.Image, 0, len(req.ImageIDs))
-	for _, imageID := range req.ImageIDs {
-		image, err := h.imageRepo.FindByID(imageID)
-		if err != nil {
-			respondRepoError(c, err)
+	images, err := h.resolveBatchImages(c.Request.Context(), req)
+	if err != nil {
+		if errors.Is(err, errInvalidBatchFilter) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		images = append(images, image)
+		respondRepoError(c, err)
+		return
 	}
 
 	result, err := h.enqueueAITagBatch(c.Request.Context(), domain.TaskBatchSourceManualBatch, images, req.Prompt)
@@ -118,6 +116,87 @@ func (h *AITagHandler) BatchTriggerAITags(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusAccepted, result)
+}
+
+type batchAITagRequest struct {
+	ImageIDs []int64 `json:"image_ids"`
+	TagIDs   []int64 `json:"tag_ids"`
+	HasTags  *bool   `json:"has_tags"`
+	SortBy   string  `json:"sort_by"`
+	SortDir  string  `json:"sort_dir"`
+	Prompt   string  `json:"prompt"`
+}
+
+var errInvalidBatchFilter = errors.New("has_tags=false is incompatible with tag_ids parameter")
+
+func (h *AITagHandler) resolveBatchImages(ctx context.Context, req batchAITagRequest) ([]*domain.Image, error) {
+	if len(req.ImageIDs) > 0 {
+		images := make([]*domain.Image, 0, len(req.ImageIDs))
+		for _, imageID := range req.ImageIDs {
+			image, err := h.imageRepo.FindByID(imageID)
+			if err != nil {
+				return nil, err
+			}
+			images = append(images, image)
+		}
+		return images, nil
+	}
+
+	if req.HasTags != nil && !*req.HasTags && len(req.TagIDs) > 0 {
+		return nil, errInvalidBatchFilter
+	}
+
+	sortBy, sortDir := normalizeBatchSort(req.SortBy, req.SortDir)
+	const pageSize = 500
+
+	collectPointers := func(source []domain.Image, out []*domain.Image) []*domain.Image {
+		for i := range source {
+			img := source[i]
+			out = append(out, &img)
+		}
+		return out
+	}
+
+	images := make([]*domain.Image, 0)
+	offset := 0
+	for {
+		var page []domain.Image
+		var err error
+		switch {
+		case req.HasTags != nil && !*req.HasTags:
+			page, err = h.imageRepo.FindUntagged(ctx, pageSize, offset, sortBy, sortDir)
+		case len(req.TagIDs) > 0:
+			page, err = h.imageRepo.FindByTagIDs(ctx, req.TagIDs, pageSize, offset, sortBy, sortDir)
+		default:
+			page, err = h.imageRepo.FindAll(pageSize, offset, sortBy, sortDir)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			break
+		}
+		images = collectPointers(page, images)
+		offset += len(page)
+	}
+
+	return images, nil
+}
+
+func normalizeBatchSort(sortBy, sortDir string) (string, string) {
+	validSortFields := map[string]bool{
+		"created_at": true,
+		"filename":   true,
+		"file_size":  true,
+		"id":         true,
+	}
+	if !validSortFields[sortBy] {
+		sortBy = "id"
+	}
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+	return sortBy, sortDir
 }
 
 type aiTagBatchResponse struct {

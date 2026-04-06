@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gallery/models/viewer_session.dart';
 import 'package:gallery/widgets/image_metadata_panel.dart';
+import 'package:gallery/widgets/image_metadata_pane_theme.dart';
 
 class ViewerMetadataSidebar extends StatelessWidget {
   final ViewerSessionItem item;
@@ -9,26 +10,20 @@ class ViewerMetadataSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Windows Photos-like background, always light regardless of app theme
-    const panelSurface = Color(0xFFF3F3F3);
-    final foreground = _foregroundForSurface(panelSurface);
-    final mutedForeground = _mutedForegroundForSurface(panelSurface);
+    final paneTheme = ImageMetadataPaneTheme.of(context);
 
     return Container(
+      key: const ValueKey('viewer-metadata-sidebar'),
       width: 320,
-      decoration: const BoxDecoration(
-        color: panelSurface,
-        border: Border(left: BorderSide(color: Color(0xFFE5E5E5))),
+      decoration: BoxDecoration(
+        color: paneTheme.panelSurface,
+        border: Border(left: BorderSide(color: paneTheme.borderColor)),
       ),
       child: Material(
         type: MaterialType.transparency,
         child: ImageMetadataPanel(
           imageId: item.imageId,
-          metadataSection: _buildMetadataSection(
-            context,
-            foreground,
-            mutedForeground,
-          ),
+          metadataSection: _buildMetadataSection(context, paneTheme),
         ),
       ),
     );
@@ -36,17 +31,11 @@ class ViewerMetadataSidebar extends StatelessWidget {
 
   Widget _buildMetadataSection(
     BuildContext context,
-    Color foreground,
-    Color mutedForeground,
+    ImageMetadataPaneTheme paneTheme,
   ) {
-    return Card(
-      elevation: 0,
+    return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFE5E5E5)),
-      ),
-      color: Colors.white,
+      decoration: paneTheme.sectionDecoration,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -55,7 +44,7 @@ class ViewerMetadataSidebar extends StatelessWidget {
             Text(
               'Image Details',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: foreground,
+                color: paneTheme.textForeground,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -63,33 +52,38 @@ class ViewerMetadataSidebar extends StatelessWidget {
             _buildMetadataRow(
               'Filename',
               item.filename,
-              foreground,
-              mutedForeground,
+              paneTheme.textForeground,
+              paneTheme.textMuted,
             ),
             _buildMetadataRow(
               'Format',
               item.format.toUpperCase(),
-              foreground,
-              mutedForeground,
+              paneTheme.textForeground,
+              paneTheme.textMuted,
             ),
             _buildMetadataRow(
               'Resolution',
               '${item.width}x${item.height}',
-              foreground,
-              mutedForeground,
+              paneTheme.textForeground,
+              paneTheme.textMuted,
             ),
             _buildMetadataRow(
               'Size',
               '${(item.fileSize / 1024).toStringAsFixed(1)} KB',
-              foreground,
-              mutedForeground,
+              paneTheme.textForeground,
+              paneTheme.textMuted,
             ),
-            _buildMetadataRow('Path', item.path, foreground, mutedForeground),
+            _buildMetadataRow(
+              'Path',
+              item.path,
+              paneTheme.textForeground,
+              paneTheme.textMuted,
+            ),
             _buildMetadataRow(
               'Imported',
               item.createdAtIso8601,
-              foreground,
-              mutedForeground,
+              paneTheme.textForeground,
+              paneTheme.textMuted,
             ),
           ],
         ),
@@ -128,17 +122,5 @@ class ViewerMetadataSidebar extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Color _foregroundForSurface(Color surface) {
-    return ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
-        ? Colors.white
-        : Colors.black87;
-  }
-
-  Color _mutedForegroundForSurface(Color surface) {
-    return ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
-        ? Colors.white70
-        : Colors.black54;
   }
 }

@@ -19,6 +19,43 @@ void main() {
   });
 
   group('TagService', () {
+    group('triggerAITags', () {
+      test('parses accepted batch response with job_ids list', () async {
+        when(
+          mockClient.post(
+            any,
+            headers: anyNamed('headers'),
+            body: anyNamed('body'),
+          ),
+        ).thenAnswer(
+          (_) async => http.Response(
+            '{"batch_id":1,"status":"queued","job_ids":[321]}',
+            202,
+          ),
+        );
+
+        final jobId = await tagService.triggerAITags(123);
+
+        expect(jobId, 321);
+      });
+
+      test('keeps compatibility with legacy job_id response', () async {
+        when(
+          mockClient.post(
+            any,
+            headers: anyNamed('headers'),
+            body: anyNamed('body'),
+          ),
+        ).thenAnswer(
+          (_) async => http.Response('{"status":"queued","job_id":888}', 202),
+        );
+
+        final jobId = await tagService.triggerAITags(123);
+
+        expect(jobId, 888);
+      });
+    });
+
     group('getTagStatistics', () {
       test('parses wrapped {"stats": [...]} response from backend', () async {
         // Arrange - backend returns wrapped response

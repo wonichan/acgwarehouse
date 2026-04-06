@@ -357,7 +357,7 @@ class _GalleryContentState extends State<_GalleryContent> {
 
   void _triggerAITagsAsync(TagService tagService, List<int> imageIds) async {
     try {
-      await tagService.batchTriggerAITags(imageIds);
+      await tagService.batchTriggerAITags(imageIds: imageIds);
       // Success - no need to show another message
     } catch (e) {
       // Log error but don't show to user since we're async

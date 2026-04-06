@@ -66,6 +66,20 @@ class FluentGalleryPage extends StatelessWidget {
                     imageProvider.loadImages(refresh: true);
                   },
                 ),
+                const CommandBarSeparator(),
+                CommandBarButton(
+                  icon: const Icon(FluentIcons.auto_enhance_on),
+                  label: const Text('批量AI标签'),
+                  onPressed: imageProvider.images.isEmpty
+                      ? null
+                      : () {
+                          _confirmAndTriggerBatchAITags(
+                            context,
+                            imageProvider,
+                            tagProvider,
+                          );
+                        },
+                ),
               ],
             ),
           ),
@@ -207,6 +221,99 @@ class FluentGalleryPage extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => ImageDetailScreen(image: image)));
+  }
+
+  Future<void> _confirmAndTriggerBatchAITags(
+    BuildContext context,
+    ImageListProvider imageProvider,
+    TagProvider tagProvider,
+  ) async {
+    final totalByFilter = imageProvider.total > 0
+        ? imageProvider.total
+        : imageProvider.images.length;
+    if (totalByFilter <= 0) {
+      return;
+    }
+
+    final sortBy = _toApiSortBy(imageProvider.sortField);
+    final sortDir = imageProvider.sortAsc ? 'asc' : 'desc';
+    final selectedTagIDs = imageProvider.selectedTagIds.isNotEmpty
+        ? List<int>.from(imageProvider.selectedTagIds)
+        : null;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => ContentDialog(
+        title: const Text('批量触发 AI 标签'),
+        content: Text('将按当前筛选条件为 $totalByFilter 张图片创建 AI 标签生成任务。'),
+        actions: [
+          Button(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+          ),
+          FilledButton(
+            child: const Text('确认'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    try {
+      await tagProvider.tagService.batchTriggerAITags(
+        tagIds: selectedTagIDs,
+        hasTags: imageProvider.hasTagsFilter,
+        sortBy: sortBy,
+        sortDir: sortDir,
+      );
+      if (!context.mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => ContentDialog(
+          title: const Text('任务已提交'),
+          content: Text('已按当前筛选条件提交 $totalByFilter 张图片的 AI 标签生成任务。'),
+          actions: [
+            FilledButton(
+              child: const Text('知道了'),
+              onPressed: () => Navigator.pop(dialogContext),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => ContentDialog(
+          title: const Text('提交失败'),
+          content: Text('批量 AI 标签任务提交失败：$error'),
+          actions: [
+            FilledButton(
+              child: const Text('关闭'),
+              onPressed: () => Navigator.pop(dialogContext),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  String _toApiSortBy(SortField sortField) {
+    switch (sortField) {
+      case SortField.createdAt:
+        return 'created_at';
+      case SortField.filename:
+        return 'filename';
+      case SortField.fileSize:
+        return 'file_size';
+    }
   }
 }
 

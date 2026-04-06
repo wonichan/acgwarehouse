@@ -6,6 +6,7 @@ import '../providers/tag_provider.dart';
 import '../widgets/tag_chip.dart';
 import '../widgets/add_tag_dialog.dart';
 import '../widgets/edit_tag_dialog.dart';
+import '../widgets/image_metadata_pane_theme.dart';
 
 class ImageMetadataPanel extends StatefulWidget {
   final int imageId;
@@ -151,8 +152,8 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
   }
 
   Future<void> _loadImageTagsWithRetry() async {
-    await _loadImageTags();
     final tagProvider = context.read<TagProvider>();
+    await _loadImageTags();
     final pending = tagProvider.imageTags['pending'] ?? [];
     if (pending.isEmpty) {
       await Future.delayed(const Duration(milliseconds: 1000));
@@ -188,6 +189,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
 
   Future<void> _showMergeDialog(Tag pendingTag) async {
     final tagProvider = context.read<TagProvider>();
+    final messenger = ScaffoldMessenger.of(context);
     final targetTag = await showDialog<Tag>(
       context: context,
       builder: (context) =>
@@ -202,13 +204,11 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
           targetTagId: targetTag.id,
         );
         await _loadImageTags();
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('已合并到 ${targetTag.preferredLabel}')),
         );
       } catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('合并失败: $e')));
+        messenger.showSnackBar(SnackBar(content: Text('合并失败: $e')));
       }
     }
   }
@@ -289,33 +289,36 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
 
   @override
   Widget build(BuildContext context) {
-    // Force light theme colors for Windows Photos-inspired styling regardless of app theme
-    const panelSurface = Color(0xFFF3F3F3);
+    final theme = ImageMetadataPaneTheme.of(context);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          widget.metadataSection,
-          _buildAITagSection(context, panelSurface),
-          _buildTagsSection(context, panelSurface),
-        ],
+    return Container(
+      key: const Key('metadata-pane-root'),
+      color: theme.panelSurface,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              key: const Key('metadata-section-basic'),
+              child: widget.metadataSection,
+            ),
+            _buildAITagSection(context, theme),
+            _buildTagsSection(context, theme),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildAITagSection(BuildContext context, Color panelSurface) {
-    final foreground = _foregroundForSurface(panelSurface);
-    final mutedForeground = _mutedForegroundForSurface(panelSurface);
-    return Card(
-      elevation: 0,
+  Widget _buildAITagSection(
+    BuildContext context,
+    ImageMetadataPaneTheme theme,
+  ) {
+    return Container(
+      key: const Key('metadata-section-ai'),
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFE5E5E5)),
-      ),
-      color: Colors.white,
+      decoration: theme.sectionDecoration,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -323,16 +326,12 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.auto_awesome,
-                  color: Colors.blueGrey.shade600,
-                  size: 20,
-                ),
+                Icon(Icons.auto_awesome, color: theme.iconColor, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   'AI 标签',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: foreground,
+                    color: theme.textForeground,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -369,14 +368,14 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFEFEF),
+                      color: theme.statusBackground,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       _aiStatus!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.black87,
+                        color: theme.statusForeground,
                       ),
                     ),
                   ),
@@ -390,7 +389,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   '自定义提示词',
                   style: TextStyle(
                     fontSize: 13,
-                    color: mutedForeground,
+                    color: theme.textMuted,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -400,8 +399,8 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   onChanged: (value) {
                     setState(() => _useCustomPrompt = value);
                   },
-                  activeColor: Colors.blue,
-                  activeTrackColor: Colors.blue.withOpacity(0.2),
+                  activeThumbColor: Colors.blue,
+                  activeTrackColor: Colors.blue.withValues(alpha: 0.2),
                 ),
                 if (_isLoadingPrompt)
                   const SizedBox(
@@ -416,28 +415,28 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
               TextField(
                 controller: _promptController,
                 maxLines: 6,
-                style: TextStyle(fontSize: 13, color: foreground),
+                style: TextStyle(fontSize: 13, color: theme.textForeground),
                 decoration: InputDecoration(
                   hintText: '输入自定义提示词...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: Color(0xFFE5E5E5)),
+                    borderSide: BorderSide(color: theme.borderColor),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: Color(0xFFE5E5E5)),
+                    borderSide: BorderSide(color: theme.borderColor),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(6),
                     borderSide: const BorderSide(color: Colors.blue),
                   ),
                   filled: true,
-                  fillColor: const Color(0xFFFAFAFA),
+                  fillColor: theme.inputFillColor,
                   contentPadding: const EdgeInsets.all(12),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.refresh, size: 18),
                     tooltip: '恢复默认提示词',
-                    color: mutedForeground,
+                    color: theme.textMuted,
                     onPressed: () {
                       _promptController.text = _defaultPrompt;
                     },
@@ -447,14 +446,14 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
               const SizedBox(height: 8),
               Text(
                 '提示：可编辑提示词以自定义 AI 生成的标签类型和风格',
-                style: TextStyle(fontSize: 12, color: mutedForeground),
+                style: TextStyle(fontSize: 12, color: theme.textMuted),
               ),
             ] else
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
                   '点击"生成"触发 AI 分析，标签将自动添加到待确认列表中',
-                  style: TextStyle(fontSize: 12, color: mutedForeground),
+                  style: TextStyle(fontSize: 12, color: theme.textMuted),
                 ),
               ),
           ],
@@ -463,23 +462,17 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
     );
   }
 
-  Widget _buildTagsSection(BuildContext context, Color panelSurface) {
-    final foreground = _foregroundForSurface(panelSurface);
-    final mutedForeground = _mutedForegroundForSurface(panelSurface);
+  Widget _buildTagsSection(BuildContext context, ImageMetadataPaneTheme theme) {
     return Consumer<TagProvider>(
       builder: (context, provider, child) {
         final confirmed = provider.imageTags['confirmed'] ?? [];
         final pending = provider.imageTags['pending'] ?? [];
         final rejected = provider.imageTags['rejected'] ?? [];
 
-        return Card(
-          elevation: 0,
+        return Container(
+          key: const Key('metadata-section-tags'),
           margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0xFFE5E5E5)),
-          ),
-          color: Colors.white,
+          decoration: theme.sectionDecoration,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -491,7 +484,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                     Text(
                       '标签',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: foreground,
+                        color: theme.textForeground,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -499,7 +492,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                       icon: const Icon(Icons.add, size: 20),
                       onPressed: _addTag,
                       tooltip: '添加标签',
-                      color: Colors.blueGrey.shade700,
+                      color: theme.iconColor,
                       constraints: const BoxConstraints(),
                       padding: EdgeInsets.zero,
                     ),
@@ -512,7 +505,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: mutedForeground,
+                      color: theme.textMuted,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -537,7 +530,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: mutedForeground,
+                      color: theme.textMuted,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -545,7 +538,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                     spacing: 6,
                     runSpacing: 6,
                     children: pending
-                        .map((tag) => _buildPendingTagChip(tag))
+                        .map((tag) => _buildPendingTagChip(tag, theme))
                         .toList(),
                   ),
                   const SizedBox(height: 16),
@@ -556,7 +549,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: mutedForeground,
+                      color: theme.textMuted,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -574,7 +567,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                 if (confirmed.isEmpty && pending.isEmpty && rejected.isEmpty)
                   Text(
                     '暂无标签',
-                    style: TextStyle(color: mutedForeground, fontSize: 13),
+                    style: TextStyle(color: theme.textMuted, fontSize: 13),
                   ),
               ],
             ),
@@ -584,11 +577,11 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
     );
   }
 
-  Widget _buildPendingTagChip(Tag tag) {
+  Widget _buildPendingTagChip(Tag tag, ImageMetadataPaneTheme theme) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F8F8),
-        border: Border.all(color: const Color(0xFFE5E5E5)),
+        color: theme.pendingTagBackground,
+        border: Border.all(color: theme.borderColor),
         borderRadius: BorderRadius.circular(4),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -597,8 +590,8 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
         children: [
           Text(
             tag.preferredLabel,
-            style: const TextStyle(
-              color: Colors.black87,
+            style: TextStyle(
+              color: theme.textForeground,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -607,47 +600,31 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
           Container(
             height: 16,
             width: 1,
-            color: const Color(0xFFD0D0D0),
+            color: theme.pendingTagDivider,
             margin: const EdgeInsets.symmetric(horizontal: 4),
           ),
           InkWell(
             onTap: () => _confirmTag(tag.id),
-            child: const Icon(Icons.check, size: 16, color: Colors.blueGrey),
+            child: Icon(Icons.check, size: 16, color: theme.iconColor),
           ),
           const SizedBox(width: 6),
           InkWell(
             onTap: () => _rejectTag(tag.id),
-            child: const Icon(Icons.close, size: 16, color: Colors.blueGrey),
+            child: Icon(Icons.close, size: 16, color: theme.iconColor),
           ),
           const SizedBox(width: 6),
           InkWell(
             onTap: () => _showMergeDialog(tag),
-            child: const Icon(
-              Icons.merge_type,
-              size: 16,
-              color: Colors.blueGrey,
-            ),
+            child: Icon(Icons.merge_type, size: 16, color: theme.iconColor),
           ),
           const SizedBox(width: 6),
           InkWell(
             onTap: () => _showEditTagDialog(tag),
-            child: const Icon(Icons.edit, size: 16, color: Colors.blueGrey),
+            child: Icon(Icons.edit, size: 16, color: theme.iconColor),
           ),
         ],
       ),
     );
-  }
-
-  Color _foregroundForSurface(Color surface) {
-    return ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
-        ? Colors.white
-        : Colors.black87;
-  }
-
-  Color _mutedForegroundForSurface(Color surface) {
-    return ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
-        ? Colors.white70
-        : Colors.black54;
   }
 }
 

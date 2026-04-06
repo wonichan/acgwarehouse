@@ -23,6 +23,37 @@ class MockTagService implements TagService {
 }
 
 void main() {
+  bool isForbiddenLegacyMetadataSurface(Widget widget) {
+    const legacyPaneColor = Color(0xFFF3F3F3);
+
+    if (widget is Card) {
+      final color = widget.color;
+      return color == Colors.white || color == legacyPaneColor;
+    }
+
+    if (widget is Container) {
+      final decoration = widget.decoration;
+      if (decoration is BoxDecoration) {
+        final color = decoration.color;
+        return color == Colors.white || color == legacyPaneColor;
+      }
+    }
+
+    if (widget is DecoratedBox) {
+      final decoration = widget.decoration;
+      if (decoration is BoxDecoration) {
+        final color = decoration.color;
+        return color == Colors.white || color == legacyPaneColor;
+      }
+    }
+
+    if (widget is ColoredBox) {
+      return widget.color == Colors.white || widget.color == legacyPaneColor;
+    }
+
+    return false;
+  }
+
   group('ViewerMetadataSidebar', () {
     late ViewerSessionItem testItem;
     late MockTagService mockTagService;
@@ -113,62 +144,7 @@ void main() {
     });
 
     testWidgets(
-      'implements Windows Photos-inspired visual structure (cards, white sections, #f3f3f3 background)',
-      (WidgetTester tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: ThemeData.light(),
-            home: Scaffold(
-              body: ChangeNotifierProvider<TagProvider>.value(
-                value: tagProvider,
-                child: ViewerMetadataSidebar(item: testItem),
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        // Ensure the root container has the light gray/f3f3f3-ish background
-        final sidebarContainerFinder = find.byType(Container).first;
-        final Container sidebarContainer = tester.widget(
-          sidebarContainerFinder,
-        );
-        final BoxDecoration decoration =
-            sidebarContainer.decoration as BoxDecoration;
-        expect(
-          decoration.color?.value,
-          equals(const Color(0xFFF3F3F3).value),
-          reason: 'Sidebar should have #f3f3f3 background',
-        );
-
-        // The metadata panel should use Cards or grouped white containers for sections
-        expect(
-          find.byType(Card),
-          findsWidgets,
-          reason: 'Should use Card widgets for grouping',
-        );
-
-        // The AI trigger button should be styled as a blue primary button (often a FilledButton with blue)
-        final generateButtonFinder = find.byWidgetPredicate(
-          (widget) => widget is FilledButton && widget.onPressed != null,
-          description: 'Generate FilledButton',
-        );
-        expect(generateButtonFinder, findsOneWidget);
-        final FilledButton generateBtn = tester.widget(generateButtonFinder);
-        expect(
-          generateBtn.style?.backgroundColor?.resolve({}),
-          equals(Colors.blue),
-          reason: 'Generate button should be blue',
-        );
-        expect(
-          generateBtn.style?.shape?.resolve({}),
-          isA<RoundedRectangleBorder>(),
-          reason: 'Generate button should be rectangular',
-        );
-      },
-    );
-    testWidgets(
-      'implements Windows Photos-inspired visual structure even under dark theme (cards, white sections, #f3f3f3 background)',
+      'uses a dark theme-aware metadata pane shell instead of the old light treatment',
       (WidgetTester tester) async {
         await tester.pumpWidget(
           MaterialApp(
@@ -183,32 +159,39 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Ensure the root container has the light gray/f3f3f3-ish background regardless of theme
-        final sidebarContainerFinder = find.byType(Container).first;
-        final Container sidebarContainer = tester.widget(
-          sidebarContainerFinder,
-        );
-        final BoxDecoration decoration =
-            sidebarContainer.decoration as BoxDecoration;
         expect(
-          decoration.color?.value,
-          equals(const Color(0xFFF3F3F3).value),
-          reason: 'Sidebar should have #f3f3f3 background even in dark mode',
+          find.byKey(const ValueKey('viewer-metadata-sidebar')),
+          findsOneWidget,
         );
-
-        // The metadata panel should use Cards or grouped white containers for sections
-        final cardFinder = find.byType(Card);
         expect(
-          cardFinder,
-          findsWidgets,
-          reason: 'Should use Card widgets for grouping',
+          find.byKey(const ValueKey('metadata-pane-root')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('metadata-section-basic')),
+          findsOneWidget,
         );
 
-        final Card firstCard = tester.widget(cardFinder.first);
         expect(
-          firstCard.color?.value,
-          equals(Colors.white.value),
-          reason: 'Cards should be white even in dark mode',
+          find.descendant(
+            of: find.byKey(const ValueKey('metadata-pane-root')),
+            matching: find.byType(Card),
+          ),
+          findsNothing,
+          reason:
+              'Dark-mode metadata pane should not keep card-based grouping anymore.',
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('viewer-metadata-sidebar')),
+            matching: find.byWidgetPredicate(
+              isForbiddenLegacyMetadataSurface,
+              description: 'legacy light metadata surface',
+            ),
+          ),
+          findsNothing,
+          reason:
+              'Dark-mode sidebar host should stop forcing legacy light metadata surfaces.',
         );
       },
     );

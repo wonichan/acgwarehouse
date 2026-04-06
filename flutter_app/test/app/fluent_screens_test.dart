@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:ui' show Size;
+
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/providers/image_provider.dart';
@@ -122,6 +125,71 @@ void main() {
       expect(find.byType(fluent.TextBox), findsOneWidget);
     },
   );
+
+  testWidgets('FluentGalleryPage exposes batch AI trigger action', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Map<String, dynamic>? batchRequestBody;
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        return http.Response(
+          '{"images":[{"id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","phash":123,"thumbnail_small_url":"http://example.com/thumb.png","thumbnail_large_url":"http://example.com/large.png","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"total":1,"has_more":false}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/images/batch-ai-tags')) {
+        batchRequestBody = jsonDecode(request.body) as Map<String, dynamic>?;
+        return http.Response('{"job_ids":[101],"status":"queued"}', 202);
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response('{"tags":[]}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final imageProvider = ImageListProvider(ApiService(client: mockClient));
+    await imageProvider.loadImages(refresh: true);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ImageListProvider>(
+            create: (_) => imageProvider,
+          ),
+          ChangeNotifierProvider<TagProvider>(
+            create: (_) => TagProvider(TagService(client: mockClient)),
+          ),
+          ChangeNotifierProvider<NavigationProvider>(
+            create: (_) => NavigationProvider(),
+          ),
+        ],
+        child: const fluent.FluentApp(home: FluentGalleryPage()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('批量AI标签'), findsOneWidget);
+
+    await tester.tap(find.text('批量AI标签'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('批量触发 AI 标签'), findsOneWidget);
+    expect(find.textContaining('1 张图片'), findsOneWidget);
+
+    await tester.tap(find.text('确认').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(batchRequestBody, isNotNull);
+    expect(batchRequestBody!.containsKey('image_ids'), isFalse);
+    expect(batchRequestBody!['sort_by'], equals('created_at'));
+    expect(batchRequestBody!['sort_dir'], equals('desc'));
+  });
 
   testWidgets('FluentGalleryPage opens in-window detail on image double tap', (
     tester,

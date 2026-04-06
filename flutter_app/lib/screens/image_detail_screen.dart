@@ -7,6 +7,7 @@ import '../providers/tag_provider.dart';
 import '../services/tag_service.dart';
 import '../widgets/image_lightbox.dart';
 import '../widgets/image_metadata_panel.dart';
+import '../widgets/image_metadata_pane_theme.dart';
 
 class ImageDetailScreen extends StatefulWidget {
   final ImageModel image;
@@ -43,7 +44,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
     final isDesktopLayout = MediaQuery.of(context).size.width >= 900;
     final pageSurface = _opaqueColor(
       Color.alphaBlend(
-        colorScheme.outlineVariant.withOpacity(0.08),
+        colorScheme.outlineVariant.withValues(alpha: 0.08),
         colorScheme.surface,
       ),
     );
@@ -70,6 +71,8 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
     Color pageSurface,
     Color panelSurface,
   ) {
+    final paneTheme = ImageMetadataPaneTheme.of(context);
+
     return Container(
       color: pageSurface,
       padding: const EdgeInsets.all(24),
@@ -79,13 +82,18 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 320),
             child: Container(
+              key: const ValueKey('image-detail-metadata-pane'),
               decoration: BoxDecoration(
-                color: panelSurface,
+                color: paneTheme.panelSurface,
                 borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: paneTheme.borderColor),
               ),
-              child: ImageMetadataPanel(
-                imageId: widget.image.id,
-                metadataSection: _buildMetadataSection(context, panelSurface),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: ImageMetadataPanel(
+                  imageId: widget.image.id,
+                  metadataSection: _buildMetadataSection(context, paneTheme),
+                ),
               ),
             ),
           ),
@@ -110,6 +118,8 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
     Color pageSurface,
     Color panelSurface,
   ) {
+    final paneTheme = ImageMetadataPaneTheme.of(context);
+
     return Container(
       color: pageSurface,
       child: SingleChildScrollView(
@@ -127,13 +137,18 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
             ),
             const SizedBox(height: 16),
             Container(
+              key: const ValueKey('image-detail-metadata-pane'),
               decoration: BoxDecoration(
-                color: panelSurface,
+                color: paneTheme.panelSurface,
                 borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: paneTheme.borderColor),
               ),
-              child: ImageMetadataPanel(
-                imageId: widget.image.id,
-                metadataSection: _buildMetadataSection(context, panelSurface),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: ImageMetadataPanel(
+                  imageId: widget.image.id,
+                  metadataSection: _buildMetadataSection(context, paneTheme),
+                ),
               ),
             ),
           ],
@@ -256,65 +271,71 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
     );
   }
 
-  Widget _buildMetadataSection(BuildContext context, Color panelSurface) {
-    final foreground = _foregroundForSurface(panelSurface);
-    final mutedForeground = _mutedForegroundForSurface(panelSurface);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: SelectionArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '元数据',
-              style: Theme.of(
+  Widget _buildMetadataSection(
+    BuildContext context,
+    ImageMetadataPaneTheme paneTheme,
+  ) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      decoration: paneTheme.sectionDecoration,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SelectionArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '元数据',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: paneTheme.textForeground,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildMetadataRow(
                 context,
-              ).textTheme.titleMedium?.copyWith(color: foreground),
-            ),
-            const SizedBox(height: 6),
-            _buildMetadataRow(
-              context,
-              '文件名',
-              widget.image.filename,
-              foreground,
-              mutedForeground,
-            ),
-            _buildMetadataRow(
-              context,
-              '尺寸',
-              widget.image.displaySize,
-              foreground,
-              mutedForeground,
-            ),
-            _buildMetadataRow(
-              context,
-              '格式',
-              widget.image.format.toUpperCase(),
-              foreground,
-              mutedForeground,
-            ),
-            _buildMetadataRow(
-              context,
-              '大小',
-              widget.image.displayFileSize,
-              foreground,
-              mutedForeground,
-            ),
-            _buildMetadataRow(
-              context,
-              '路径',
-              widget.image.path,
-              foreground,
-              mutedForeground,
-            ),
-            _buildMetadataRow(
-              context,
-              '导入时间',
-              widget.image.createdAt.toString(),
-              foreground,
-              mutedForeground,
-            ),
-          ],
+                '文件名',
+                widget.image.filename,
+                paneTheme.textForeground,
+                paneTheme.textMuted,
+              ),
+              _buildMetadataRow(
+                context,
+                '尺寸',
+                widget.image.displaySize,
+                paneTheme.textForeground,
+                paneTheme.textMuted,
+              ),
+              _buildMetadataRow(
+                context,
+                '格式',
+                widget.image.format.toUpperCase(),
+                paneTheme.textForeground,
+                paneTheme.textMuted,
+              ),
+              _buildMetadataRow(
+                context,
+                '大小',
+                widget.image.displayFileSize,
+                paneTheme.textForeground,
+                paneTheme.textMuted,
+              ),
+              _buildMetadataRow(
+                context,
+                '路径',
+                widget.image.path,
+                paneTheme.textForeground,
+                paneTheme.textMuted,
+              ),
+              _buildMetadataRow(
+                context,
+                '导入时间',
+                widget.image.createdAt.toString(),
+                paneTheme.textForeground,
+                paneTheme.textMuted,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -355,18 +376,6 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   }
 
   Color _opaqueColor(Color color) {
-    return Color.fromARGB(255, color.red, color.green, color.blue);
-  }
-
-  Color _foregroundForSurface(Color surface) {
-    return ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
-        ? Colors.white
-        : Colors.black87;
-  }
-
-  Color _mutedForegroundForSurface(Color surface) {
-    return ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
-        ? Colors.white70
-        : Colors.black54;
+    return color.withValues(alpha: 1);
   }
 }

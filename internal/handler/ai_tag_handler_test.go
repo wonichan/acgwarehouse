@@ -215,6 +215,53 @@ func TestBatchAITagTriggerCreatesManualBatchAndSkipsDuplicateQueue(t *testing.T)
 	}
 }
 
+func TestBatchAITagTriggerSupportsTagFilterWithoutImageIDs(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newAITagHandlerTestRouter(t)
+	now := time.Now()
+	if _, err := repos.db.Exec(`
+		INSERT INTO tags (id, preferred_label, slug, review_state, trust_score, usage_count, created_at)
+		VALUES (10, 'heroine', 'heroine', 'confirmed', 1.0, 0, ?)
+	`, now); err != nil {
+		t.Fatalf("seed tag: %v", err)
+	}
+	if _, err := repos.db.Exec(`
+		INSERT INTO image_tags (image_id, tag_id, source, confidence, review_state)
+		VALUES (2, 10, 'manual', 1.0, 'confirmed')
+	`); err != nil {
+		t.Fatalf("seed image tag: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"tag_ids":  []int64{10},
+		"sort_by":  "id",
+		"sort_dir": "asc",
+	})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/batch-ai-tags", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	var resp struct {
+		CreatedTasks int     `json:"created_tasks"`
+		SkippedTasks int     `json:"skipped_tasks"`
+		JobIDs       []int64 `json:"job_ids"`
+	}
+	decodeAIJSONBody(t, w.Body.Bytes(), &resp)
+
+	if resp.CreatedTasks != 1 || resp.SkippedTasks != 0 {
+		t.Fatalf("created/skipped = %d/%d, want 1/0", resp.CreatedTasks, resp.SkippedTasks)
+	}
+	if len(resp.JobIDs) != 1 {
+		t.Fatalf("job_ids = %+v, want one queued job", resp.JobIDs)
+	}
+}
+
 func TestAITagTriggerDoesNotLoadJobImmediatelyWhenAIQueueLimitReached(t *testing.T) {
 	t.Parallel()
 

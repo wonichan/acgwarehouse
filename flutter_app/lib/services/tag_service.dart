@@ -156,7 +156,17 @@ class TagService {
       throw Exception('Failed to trigger AI tags: ${response.statusCode}');
     }
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return json['job_id'] as int;
+    final legacyJobID = json['job_id'];
+    if (legacyJobID is int) {
+      return legacyJobID;
+    }
+
+    final jobIDs = json['job_ids'];
+    if (jobIDs is List && jobIDs.isNotEmpty && jobIDs.first is int) {
+      return jobIDs.first as int;
+    }
+
+    throw Exception('Failed to parse AI trigger response: missing job id');
   }
 
   /// 获取默认 AI 提示词
@@ -181,11 +191,29 @@ class TagService {
   }
 
   /// 批量触发 AI 标签生成
-  Future<Map<String, dynamic>> batchTriggerAITags(List<int> imageIds) async {
+  ///
+  /// 支持两种触发方式：
+  /// 1) 传 imageIds：显式按图片 ID 列表触发（兼容旧调用）
+  /// 2) 传 tagIds/hasTags/sortBy/sortDir：按当前筛选条件全量触发
+  Future<Map<String, dynamic>> batchTriggerAITags({
+    List<int>? imageIds,
+    List<int>? tagIds,
+    bool? hasTags,
+    String? sortBy,
+    String? sortDir,
+  }) async {
+    final body = <String, dynamic>{
+      if (imageIds != null && imageIds.isNotEmpty) 'image_ids': imageIds,
+      if (tagIds != null && tagIds.isNotEmpty) 'tag_ids': tagIds,
+      if (hasTags != null) 'has_tags': hasTags,
+      if (sortBy != null && sortBy.isNotEmpty) 'sort_by': sortBy,
+      if (sortDir != null && sortDir.isNotEmpty) 'sort_dir': sortDir,
+    };
+
     final response = await _client.post(
       Uri.parse(ApiConfig.batchAITags),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'image_ids': imageIds}),
+      body: jsonEncode(body),
     );
     if (response.statusCode != 200 && response.statusCode != 202) {
       throw Exception(
