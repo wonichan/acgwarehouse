@@ -53,6 +53,9 @@ var (
 			cmd.Stderr = file
 		}
 		if err := cmd.Start(); err != nil {
+			if file, ok := cmd.Stdout.(*os.File); ok {
+				_ = file.Close()
+			}
 			return nil, err
 		}
 		return &sidecarCmdProcess{cmd: cmd}, nil
@@ -157,24 +160,21 @@ func resolveSidecarBootstrapSettings() (sidecarBootstrapSettings, error) {
 	}
 	settings.baseURL = fmt.Sprintf("http://%s:%s", defaultSidecarHost, port)
 
+	paths := ResolveLogSourcePaths()
 	runtimeRoot := strings.TrimSpace(os.Getenv(portableRuntimeRootEnv))
 	diagnosticsDir := strings.TrimSpace(os.Getenv(diagnosticsDirEnv))
-	logsDir := strings.TrimSpace(os.Getenv(logsDirEnv))
 	if runtimeRoot != "" {
 		layout := resolvePortableRuntimeLayoutRoot(runtimeRoot)
 		if diagnosticsDir == "" {
 			diagnosticsDir = layout.DiagnosticsDir
 		}
-		if logsDir == "" {
-			logsDir = layout.LogsDir
-		}
 	}
 	if diagnosticsDir != "" {
 		settings.diagnosticPath = filepath.Join(diagnosticsDir, startupDiagnosticFileName)
 	}
-	if logsDir != "" {
-		settings.sidecarLogPath = filepath.Join(logsDir, "python-sidecar.log")
-		settings.logPaths = []string{filepath.Join(logsDir, "go.log"), settings.sidecarLogPath}
+	if paths.GoLogPath != "" || paths.SidecarLogPath != "" {
+		settings.sidecarLogPath = paths.SidecarLogPath
+		settings.logPaths = []string{paths.GoLogPath, paths.SidecarLogPath}
 	}
 
 	configuredExecutable := strings.TrimSpace(os.Getenv(sidecarExecutableEnv))

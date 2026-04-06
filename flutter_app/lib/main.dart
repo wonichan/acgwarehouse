@@ -22,6 +22,7 @@ import 'services/tag_service.dart';
 import 'services/duplicate_service.dart';
 import 'services/search_service.dart';
 import 'services/monitoring_service.dart';
+import 'services/log_stream_service.dart';
 import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
 import 'app/material_app_shell.dart';
@@ -31,6 +32,8 @@ import 'theme/app_theme.dart';
 import 'utils/window_manager.dart';
 import 'config/api_config.dart';
 import 'providers/monitoring_provider.dart';
+import 'providers/log_viewer_provider.dart';
+import 'models/log_models.dart';
 import 'widgets/startup/startup_failure_screen.dart';
 import 'widgets/startup/startup_progress_screen.dart';
 
@@ -198,6 +201,19 @@ class MyApp extends StatelessWidget {
           create: (context) => MonitoringProvider(
             service: context.read<MonitoringService>(),
             wsUriFactory: () => Uri.parse(ApiConfig.monitoringWs),
+          ),
+        ),
+        Provider(
+          create: (_) =>
+              LogStreamService(basicAuthHeader: ApiConfig.adminBasicAuthHeader),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => LogViewerProvider(
+            service: context.read<LogStreamService>(),
+            wsUriFactory: ({required LogSource source, int tail = 200}) =>
+                Uri.parse(
+                  ApiConfig.logStreamWs(source: source.name, tail: tail),
+                ),
           ),
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
