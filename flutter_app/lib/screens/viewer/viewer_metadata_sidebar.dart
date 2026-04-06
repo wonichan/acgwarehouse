@@ -9,18 +9,16 @@ class ViewerMetadataSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final panelSurface = _opaqueColor(colorScheme.surfaceContainerHighest);
+    // Windows Photos-like background, always light regardless of app theme
+    const panelSurface = Color(0xFFF3F3F3);
     final foreground = _foregroundForSurface(panelSurface);
     final mutedForeground = _mutedForegroundForSurface(panelSurface);
 
     return Container(
       width: 320,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: panelSurface,
-        border: Border(
-          left: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
-        ),
+        border: Border(left: BorderSide(color: Color(0xFFE5E5E5))),
       ),
       child: Material(
         type: MaterialType.transparency,
@@ -41,48 +39,61 @@ class ViewerMetadataSidebar extends StatelessWidget {
     Color foreground,
     Color mutedForeground,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Image Details',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(color: foreground),
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFE5E5E5)),
+      ),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Image Details',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: foreground,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildMetadataRow(
+              'Filename',
+              item.filename,
+              foreground,
+              mutedForeground,
+            ),
+            _buildMetadataRow(
+              'Format',
+              item.format.toUpperCase(),
+              foreground,
+              mutedForeground,
+            ),
+            _buildMetadataRow(
+              'Resolution',
+              '${item.width}x${item.height}',
+              foreground,
+              mutedForeground,
+            ),
+            _buildMetadataRow(
+              'Size',
+              '${(item.fileSize / 1024).toStringAsFixed(1)} KB',
+              foreground,
+              mutedForeground,
+            ),
+            _buildMetadataRow('Path', item.path, foreground, mutedForeground),
+            _buildMetadataRow(
+              'Imported',
+              item.createdAtIso8601,
+              foreground,
+              mutedForeground,
+            ),
+          ],
         ),
-        const SizedBox(height: 6),
-        _buildMetadataRow(
-          'Filename',
-          item.filename,
-          foreground,
-          mutedForeground,
-        ),
-        _buildMetadataRow(
-          'Format',
-          item.format.toUpperCase(),
-          foreground,
-          mutedForeground,
-        ),
-        _buildMetadataRow(
-          'Resolution',
-          '${item.width}x${item.height}',
-          foreground,
-          mutedForeground,
-        ),
-        _buildMetadataRow(
-          'Size',
-          '${(item.fileSize / 1024).toStringAsFixed(1)} KB',
-          foreground,
-          mutedForeground,
-        ),
-        _buildMetadataRow('Path', item.path, foreground, mutedForeground),
-        _buildMetadataRow(
-          'Imported',
-          item.createdAtIso8601,
-          foreground,
-          mutedForeground,
-        ),
-      ],
+      ),
     );
   }
 
@@ -117,10 +128,6 @@ class ViewerMetadataSidebar extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Color _opaqueColor(Color color) {
-    return Color.fromARGB(255, color.red, color.green, color.blue);
   }
 
   Color _foregroundForSurface(Color surface) {

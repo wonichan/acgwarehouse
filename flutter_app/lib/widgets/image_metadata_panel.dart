@@ -289,11 +289,11 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final panelSurface = _opaqueColor(colorScheme.surfaceContainerHighest);
+    // Force light theme colors for Windows Photos-inspired styling regardless of app theme
+    const panelSurface = Color(0xFFF3F3F3);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -308,91 +308,157 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
   Widget _buildAITagSection(BuildContext context, Color panelSurface) {
     final foreground = _foregroundForSurface(panelSurface);
     final mutedForeground = _mutedForegroundForSurface(panelSurface);
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: panelSurface,
-        borderRadius: BorderRadius.circular(12),
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFE5E5E5)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome, color: mutedForeground),
-              const SizedBox(width: 8),
-              Text(
-                'AI 标签',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(color: foreground),
-              ),
-              const Spacer(),
-              if (!_isAITriggered)
-                FilledButton.icon(
-                  onPressed: _triggerAITags,
-                  icon: const Icon(Icons.play_arrow, size: 18),
-                  label: const Text('生成'),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  color: Colors.blueGrey.shade600,
+                  size: 20,
                 ),
-              if (_aiStatus != null) ...[
                 const SizedBox(width: 8),
-                Chip(label: Text(_aiStatus!)),
+                Text(
+                  'AI 标签',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: foreground,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                if (!_isAITriggered)
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    onPressed: _triggerAITags,
+                    icon: const Icon(Icons.play_arrow, size: 16),
+                    label: const Text(
+                      '生成',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                if (_aiStatus != null) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFEFEF),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _aiStatus!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Text(
-                '自定义提示词',
-                style: TextStyle(fontSize: 13, color: mutedForeground),
-              ),
-              const SizedBox(width: 8),
-              Switch(
-                value: _useCustomPrompt,
-                onChanged: (value) {
-                  setState(() => _useCustomPrompt = value);
-                },
-              ),
-              if (_isLoadingPrompt)
-                const SizedBox(
-                  width: 8,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Text(
+                  '自定义提示词',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: mutedForeground,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-            ],
-          ),
-          if (_useCustomPrompt) ...[
-            const SizedBox(height: 8),
-            TextField(
-              controller: _promptController,
-              maxLines: 6,
-              decoration: InputDecoration(
-                hintText: '输入自定义提示词...',
-                border: const OutlineInputBorder(),
-                filled: true,
-                fillColor: Colors.white,
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.refresh, size: 20),
-                  tooltip: '恢复默认提示词',
-                  onPressed: () {
-                    _promptController.text = _defaultPrompt;
+                const SizedBox(width: 8),
+                Switch(
+                  value: _useCustomPrompt,
+                  onChanged: (value) {
+                    setState(() => _useCustomPrompt = value);
                   },
+                  activeColor: Colors.blue,
+                  activeTrackColor: Colors.blue.withOpacity(0.2),
+                ),
+                if (_isLoadingPrompt)
+                  const SizedBox(
+                    width: 8,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            if (_useCustomPrompt) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _promptController,
+                maxLines: 6,
+                style: TextStyle(fontSize: 13, color: foreground),
+                decoration: InputDecoration(
+                  hintText: '输入自定义提示词...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFFE5E5E5)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Color(0xFFE5E5E5)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: Colors.blue),
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFFAFAFA),
+                  contentPadding: const EdgeInsets.all(12),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.refresh, size: 18),
+                    tooltip: '恢复默认提示词',
+                    color: mutedForeground,
+                    onPressed: () {
+                      _promptController.text = _defaultPrompt;
+                    },
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '提示：可编辑提示词以自定义 AI 生成的标签类型和风格',
-              style: TextStyle(fontSize: 11, color: mutedForeground),
-            ),
-          ] else
-            Text(
-              '点击"生成"触发 AI 分析，标签将自动添加到待确认列表中',
-              style: TextStyle(fontSize: 12, color: mutedForeground),
-            ),
-        ],
+              const SizedBox(height: 8),
+              Text(
+                '提示：可编辑提示词以自定义 AI 生成的标签类型和风格',
+                style: TextStyle(fontSize: 12, color: mutedForeground),
+              ),
+            ] else
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  '点击"生成"触发 AI 分析，标签将自动添加到待确认列表中',
+                  style: TextStyle(fontSize: 12, color: mutedForeground),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -406,91 +472,112 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
         final pending = provider.imageTags['pending'] ?? [];
         final rejected = provider.imageTags['rejected'] ?? [];
 
-        return Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
+        return Card(
+          elevation: 0,
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: Color(0xFFE5E5E5)),
+          ),
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '标签',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: foreground,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add, size: 20),
+                      onPressed: _addTag,
+                      tooltip: '添加标签',
+                      color: Colors.blueGrey.shade700,
+                      constraints: const BoxConstraints(),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (confirmed.isNotEmpty) ...[
                   Text(
-                    '标签',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleLarge?.copyWith(color: foreground),
+                    '已确认',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: mutedForeground,
+                    ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    onPressed: _addTag,
-                    tooltip: '添加标签',
-                    color: foreground,
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: confirmed
+                        .map(
+                          (tag) => TagChip(
+                            tag: tag,
+                            style: TagChipStyle.confirmed,
+                            onDelete: () => _removeTag(tag.id),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (pending.isNotEmpty) ...[
+                  Text(
+                    '待确认',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: mutedForeground,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: pending
+                        .map((tag) => _buildPendingTagChip(tag))
+                        .toList(),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (rejected.isNotEmpty) ...[
+                  Text(
+                    '已拒绝',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: mutedForeground,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: rejected
+                        .map(
+                          (tag) =>
+                              TagChip(tag: tag, style: TagChipStyle.rejected),
+                        )
+                        .toList(),
                   ),
                 ],
-              ),
-              const SizedBox(height: 16),
-              if (confirmed.isNotEmpty) ...[
-                Text(
-                  '已确认',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleMedium?.copyWith(color: foreground),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: confirmed
-                      .map(
-                        (tag) => TagChip(
-                          tag: tag,
-                          style: TagChipStyle.confirmed,
-                          onDelete: () => _removeTag(tag.id),
-                        ),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 12),
+                if (confirmed.isEmpty && pending.isEmpty && rejected.isEmpty)
+                  Text(
+                    '暂无标签',
+                    style: TextStyle(color: mutedForeground, fontSize: 13),
+                  ),
               ],
-              if (pending.isNotEmpty) ...[
-                Text(
-                  '待确认',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleMedium?.copyWith(color: foreground),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: pending
-                      .map((tag) => _buildPendingTagChip(tag))
-                      .toList(),
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (rejected.isNotEmpty) ...[
-                Text(
-                  '已拒绝',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleMedium?.copyWith(color: mutedForeground),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: rejected
-                      .map(
-                        (tag) =>
-                            TagChip(tag: tag, style: TagChipStyle.rejected),
-                      )
-                      .toList(),
-                ),
-              ],
-              if (confirmed.isEmpty && pending.isEmpty && rejected.isEmpty)
-                Text('暂无标签', style: TextStyle(color: foreground)),
-            ],
+            ),
           ),
         );
       },
@@ -498,45 +585,57 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
   }
 
   Widget _buildPendingTagChip(Tag tag) {
-    return Card(
-      margin: const EdgeInsets.only(right: 8, bottom: 4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              tag.preferredLabel,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F8F8),
+        border: Border.all(color: const Color(0xFFE5E5E5)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            tag.preferredLabel,
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
-            const SizedBox(width: 8),
-            InkWell(
-              onTap: () => _confirmTag(tag.id),
-              child: const Icon(Icons.check, size: 18, color: Colors.green),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            height: 16,
+            width: 1,
+            color: const Color(0xFFD0D0D0),
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+          ),
+          InkWell(
+            onTap: () => _confirmTag(tag.id),
+            child: const Icon(Icons.check, size: 16, color: Colors.blueGrey),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: () => _rejectTag(tag.id),
+            child: const Icon(Icons.close, size: 16, color: Colors.blueGrey),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: () => _showMergeDialog(tag),
+            child: const Icon(
+              Icons.merge_type,
+              size: 16,
+              color: Colors.blueGrey,
             ),
-            const SizedBox(width: 4),
-            InkWell(
-              onTap: () => _rejectTag(tag.id),
-              child: const Icon(Icons.close, size: 18, color: Colors.red),
-            ),
-            const SizedBox(width: 4),
-            InkWell(
-              onTap: () => _showMergeDialog(tag),
-              child: const Icon(Icons.merge_type, size: 18, color: Colors.blue),
-            ),
-            const SizedBox(width: 4),
-            InkWell(
-              onTap: () => _showEditTagDialog(tag),
-              child: const Icon(Icons.edit, size: 18, color: Colors.orange),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: () => _showEditTagDialog(tag),
+            child: const Icon(Icons.edit, size: 16, color: Colors.blueGrey),
+          ),
+        ],
       ),
     );
-  }
-
-  Color _opaqueColor(Color color) {
-    return Color.fromARGB(255, color.red, color.green, color.blue);
   }
 
   Color _foregroundForSurface(Color surface) {

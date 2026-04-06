@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:ui' as ui show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'providers/image_provider.dart';
@@ -54,11 +56,6 @@ void main(List<String> args) async {
 
   final packagedBootstrap = PackagedDesktopBootstrap();
 
-  // Initialize window manager for Windows desktop
-  if (defaultTargetPlatform == TargetPlatform.windows) {
-    await AppWindowManager.ensureInitialized(policy: viewerBootstrap?.policy);
-  }
-
   if (viewerBootstrap != null) {
     await configureViewerWindowRuntime(
       isDevelopmentMode: !kReleaseMode,
@@ -66,6 +63,13 @@ void main(List<String> args) async {
     );
     runApp(ViewerWindowApp(bootstrapData: viewerBootstrap));
     return;
+  }
+
+  // Initialize window manager only for main window.
+  // Viewer windows are controlled by desktop_multi_window to avoid
+  // close-event routing conflicts across multi-window isolates.
+  if (defaultTargetPlatform == TargetPlatform.windows) {
+    await AppWindowManager.ensureInitialized();
   }
 
   runApp(
@@ -249,7 +253,7 @@ class _ThemeBootstrapper extends StatefulWidget {
 }
 
 class _ThemeBootstrapperState extends State<_ThemeBootstrapper>
-    with WindowListener {
+    with WindowListener, WidgetsBindingObserver {
   bool _scheduled = false;
   bool _closeHookAttached = false;
   bool _isClosing = false;
@@ -257,6 +261,7 @@ class _ThemeBootstrapperState extends State<_ThemeBootstrapper>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_syncWindowCloseHook());
   }
 
@@ -270,6 +275,7 @@ class _ThemeBootstrapperState extends State<_ThemeBootstrapper>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (_closeHookAttached) {
       windowManager.removeListener(this);
       _closeHookAttached = false;
@@ -284,7 +290,21 @@ class _ThemeBootstrapperState extends State<_ThemeBootstrapper>
 
   @override
   Future<void> onWindowClose() async {
-    if (!_closeHookAttached || _isClosing) {
+    if (!_closeHookAttached) {
+      return;
+    }
+
+    await _handleCloseRequest();
+  }
+
+  @override
+  Future<ui.AppExitResponse> didRequestAppExit() async {
+    await _handleCloseRequest();
+    return ui.AppExitResponse.cancel;
+  }
+
+  Future<void> _handleCloseRequest() async {
+    if (_isClosing) {
       return;
     }
 
@@ -292,6 +312,7 @@ class _ThemeBootstrapperState extends State<_ThemeBootstrapper>
       _isClosing = true;
     });
     try {
+      await _closeViewerSubWindows();
       await widget.packagedBootstrap?.shutdown();
       await widget.singleInstanceGuard?.release();
     } finally {
@@ -299,6 +320,24 @@ class _ThemeBootstrapperState extends State<_ThemeBootstrapper>
       _closeHookAttached = false;
       await windowManager.setPreventClose(false);
       await windowManager.destroy();
+    }
+  }
+
+  Future<void> _closeViewerSubWindows() async {
+    try {
+      final subWindowIds = await DesktopMultiWindow.getAllSubWindowIds()
+          .timeout(const Duration(seconds: 2));
+      for (final id in subWindowIds) {
+        try {
+          await WindowController.fromWindowId(
+            id,
+          ).close().timeout(const Duration(milliseconds: 800));
+        } catch (_) {
+          // Best-effort close only. Main shutdown continues.
+        }
+      }
+    } catch (_) {
+      // Ignore and continue shutdown; some environments may not expose sub windows.
     }
   }
 
