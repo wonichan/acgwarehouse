@@ -1,16 +1,20 @@
-import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:gallery/models/viewer_session.dart';
+import 'package:flutter/material.dart';
+import 'package:gallery/models/image.dart';
 
 class ViewerFilmstrip extends StatefulWidget {
-  final ViewerSession session;
+  final List<ImageModel> items;
+  final int selectedIndexInWindow;
   final int selectedIndex;
+  final int total;
   final ValueChanged<int> onIndexChanged;
 
   const ViewerFilmstrip({
     super.key,
-    required this.session,
+    required this.items,
+    required this.selectedIndexInWindow,
     required this.selectedIndex,
+    required this.total,
     required this.onIndexChanged,
   });
 
@@ -24,15 +28,16 @@ class _ViewerFilmstripState extends State<ViewerFilmstrip> {
   @override
   void didUpdateWidget(ViewerFilmstrip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedIndex != widget.selectedIndex) {
-      _scrollToIndex(widget.selectedIndex);
+    if (oldWidget.selectedIndexInWindow != widget.selectedIndexInWindow) {
+      _scrollToIndex(widget.selectedIndexInWindow);
     }
   }
 
   void _scrollToIndex(int index) {
-    if (!_scrollController.hasClients) return;
+    if (!_scrollController.hasClients) {
+      return;
+    }
 
-    // Very simple auto-center based on fixed width 120 (100 for image + 20 for margin)
     final offset =
         (index * 120.0) - (MediaQuery.of(context).size.width / 2) + 60;
     _scrollController.animateTo(
@@ -50,8 +55,6 @@ class _ViewerFilmstripState extends State<ViewerFilmstrip> {
 
   @override
   Widget build(BuildContext context) {
-    final items = widget.session.items;
-
     return Container(
       height: 120,
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -60,7 +63,7 @@ class _ViewerFilmstripState extends State<ViewerFilmstrip> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Text(
-              '${widget.selectedIndex + 1} of ${items.length}',
+              '${widget.selectedIndex + 1} of ${widget.total}',
               style: Theme.of(context).textTheme.labelSmall,
             ),
           ),
@@ -68,10 +71,10 @@ class _ViewerFilmstripState extends State<ViewerFilmstrip> {
             child: ListView.builder(
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
-              itemCount: items.length,
+              itemCount: widget.items.length,
               itemBuilder: (context, index) {
-                final item = items[index];
-                final isSelected = index == widget.selectedIndex;
+                final item = widget.items[index];
+                final isSelected = index == widget.selectedIndexInWindow;
 
                 return GestureDetector(
                   onTap: () => widget.onIndexChanged(index),
@@ -94,7 +97,7 @@ class _ViewerFilmstripState extends State<ViewerFilmstrip> {
                               BoxShadow(
                                 color: Theme.of(
                                   context,
-                                ).colorScheme.primary.withOpacity(0.4),
+                                ).colorScheme.primary.withValues(alpha: 0.4),
                                 blurRadius: 4,
                               ),
                             ]
