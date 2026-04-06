@@ -147,6 +147,11 @@ ai:
   auto_scan_interval_minutes: 5
   auto_scan_batch_size: 100
 
+cos:
+  bucket_url: "https://acgwarehouse-1301393037.cos.ap-shanghai.myqcloud.com"
+  secret_id: ""
+  secret_key: ""
+
 admin:
   username: "admin"
   password: "admin"
