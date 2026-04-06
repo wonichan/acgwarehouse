@@ -201,6 +201,59 @@ void main() {
       },
     );
 
+    test(
+      'does not treat stale runtime-manifest from previous run as successful startup',
+      () async {
+        final harness = await _BootstrapHarness.create(tempDir);
+        final staleManifest = File(
+          _join(harness.bundleDir.path, 'runtime', 'runtime-manifest.json'),
+        );
+        await staleManifest.writeAsString(
+          '{"version":1,"generated_at":"2026-04-01T00:00:00Z","go":{"base_url":"http://127.0.0.1:19999","ready":true}}',
+        );
+        final bootstrap = harness.createBootstrap();
+
+        final result = await bootstrap.startIfNeeded();
+
+        expect(result.isSuccess, isFalse);
+        expect(result.failure, isNotNull);
+        expect(result.failure!.type, StartupFailureType.startupChain);
+      },
+    );
+
+    test(
+      'does not fail startup because of stale startup-error diagnostic from previous run',
+      () async {
+        final harness = await _BootstrapHarness.create(tempDir);
+        final staleDiagnostic = File(
+          _join(
+            harness.bundleDir.path,
+            'runtime',
+            'diagnostics',
+            'startup-error.json',
+          ),
+        );
+        final manifestFile = File(
+          _join(harness.bundleDir.path, 'runtime', 'runtime-manifest.json'),
+        );
+        await staleDiagnostic.writeAsString(
+          '{"component":"go","message":"stale failure","log_paths":["old.log"]}',
+        );
+
+        final bootstrap = harness.createBootstrap(
+          onStart: () async {
+            await manifestFile.writeAsString(
+              '{"version":1,"generated_at":"2026-04-05T12:00:00Z","go":{"base_url":"http://127.0.0.1:19090","ready":true}}',
+            );
+          },
+        );
+
+        final result = await bootstrap.startIfNeeded();
+
+        expect(result.isSuccess, isTrue);
+      },
+    );
+
     testWidgets('MyApp renders StartupFailureScreen when bootstrap fails', (
       tester,
     ) async {

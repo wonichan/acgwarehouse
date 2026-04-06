@@ -177,6 +177,8 @@ class PackagedDesktopBootstrap {
     await Directory(layout.logsDir).create(recursive: true);
     await Directory(layout.diagnosticsDir).create(recursive: true);
 
+    await _clearStartupArtifacts(layout);
+
     final serverPort = await _portAllocator();
     final sidecarPort = await _portAllocator();
     _childProcess = await _processStarter(
@@ -200,6 +202,24 @@ class PackagedDesktopBootstrap {
       _baseUri = await _readBaseUri(layout.manifestPath);
     }
     return outcome;
+  }
+
+  Future<void> _clearStartupArtifacts(
+    PackagedDesktopBootstrapLayout layout,
+  ) async {
+    final staleManifest = File(layout.manifestPath);
+    if (await staleManifest.exists()) {
+      try {
+        await staleManifest.delete();
+      } catch (_) {}
+    }
+
+    final staleDiagnostic = File(layout.startupDiagnosticPath);
+    if (await staleDiagnostic.exists()) {
+      try {
+        await staleDiagnostic.delete();
+      } catch (_) {}
+    }
   }
 
   Future<void> shutdown() async {
