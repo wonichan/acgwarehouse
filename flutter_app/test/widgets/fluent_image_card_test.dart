@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' show Material;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/image.dart';
@@ -70,5 +71,32 @@ void main() {
 
     // Since we trigger both, doubleTapped should be true
     expect(doubleTapped, isTrue);
+  });
+
+  testWidgets('FluentImageCard triggers onSecondaryTapDown on right click', (
+    tester,
+  ) async {
+    ImageModel? tappedImage;
+
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: fluent.ScaffoldPage(
+          content: Material(
+            child: FluentImageCard(
+              image: testImage,
+              onSecondaryTapDown: (image, details) => tappedImage = image,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.byType(fluent.GestureDetector),
+      buttons: kSecondaryButton,
+    );
+    await tester.pump();
+
+    expect(tappedImage?.id, testImage.id);
   });
 }

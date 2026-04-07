@@ -1,4 +1,13 @@
-import imagehash
+# pyright: reportMissingImports=false
+
+from imagededup.methods import PHash
+
+
+HashRecord = dict[str, object]
+GroupRecord = dict[str, object]
+
+
+_PHASHER = PHash(verbose=False)
 
 
 class UnionFind:
@@ -34,59 +43,80 @@ class UnionFind:
         }
 
 
+def _phash_to_int(hash_value: str) -> int:
+    return int(hash_value, 16)
+
+
 def hamming_distance(hash1: str, hash2: str) -> int:
-    return imagehash.hex_to_hash(hash1) - imagehash.hex_to_hash(hash2)
+    return (_phash_to_int(hash1) ^ _phash_to_int(hash2)).bit_count()
 
 
-def group_duplicates(hashes: list[dict], threshold: int) -> list[dict]:
-    groups: list[dict] = []
-    group_id = 1
+def group_duplicates(hashes: list[HashRecord], threshold: int) -> list[GroupRecord]:
+    if len(hashes) < 2:
+        return []
+
+    uf = UnionFind(len(hashes))
+
     exact_groups: dict[str, list[int]] = {}
-    exact_member_indices: set[int] = set()
-
     for index, item in enumerate(hashes):
-        sha256 = item.get("sha256")
-        if sha256:
-            exact_groups.setdefault(sha256, []).append(index)
+        sha256_obj = item.get("sha256")
+        if isinstance(sha256_obj, str) and sha256_obj:
+            exact_groups.setdefault(sha256_obj, []).append(index)
 
     for members in exact_groups.values():
-        if len(members) > 1:
-            sorted_members = sorted(members)
-            groups.append(
-                {
-                    "group_id": group_id,
-                    "member_indices": sorted_members,
-                    "type": "exact",
-                }
-            )
-            exact_member_indices.update(sorted_members)
-            group_id += 1
+        for i in range(1, len(members)):
+            uf.union(members[0], members[i])
 
-    remaining_indices = [
-        index
-        for index, item in enumerate(hashes)
-        if index not in exact_member_indices and item.get("phash")
-    ]
+    normalized_threshold = max(0, threshold)
+    encoding_map: dict[str, str] = {}
+    for index, item in enumerate(hashes):
+        phash_obj = item.get("phash")
+        if not isinstance(phash_obj, str) or not phash_obj:
+            continue
+        if len(phash_obj) != 16:
+            continue
+        try:
+            _phash_to_int(phash_obj)
+        except ValueError:
+            continue
+        encoding_map[str(index)] = phash_obj
 
-    if len(remaining_indices) < 2:
-        return groups
+    if encoding_map:
+        duplicate_map = _PHASHER.find_duplicates(
+            encoding_map=encoding_map,
+            max_distance_threshold=normalized_threshold,
+            scores=True,
+            num_dist_workers=0,
+        )
+        for source_key, matches in duplicate_map.items():
+            source_index = int(source_key)
+            for match in matches:
+                if isinstance(match, tuple):
+                    target_key = match[0]
+                else:
+                    target_key = match
+                try:
+                    target_index = int(target_key)
+                except (TypeError, ValueError):
+                    continue
+                uf.union(source_index, target_index)
 
-    uf = UnionFind(len(remaining_indices))
-    for i in range(len(remaining_indices)):
-        for j in range(i + 1, len(remaining_indices)):
-            left = hashes[remaining_indices[i]]
-            right = hashes[remaining_indices[j]]
-            distance = hamming_distance(left["phash"], right["phash"])
-            if distance <= threshold:
-                uf.union(i, j)
-
+    groups: list[GroupRecord] = []
+    group_id = 1
     for members in uf.groups().values():
-        original_indices = sorted(remaining_indices[member] for member in members)
+        sorted_members = sorted(members)
+        sha_values = {
+            sha
+            for idx in sorted_members
+            for sha in [hashes[idx].get("sha256")]
+            if isinstance(sha, str) and sha
+        }
+        group_type = "exact" if len(sha_values) == 1 and len(sha_values) > 0 else "similar"
         groups.append(
             {
                 "group_id": group_id,
-                "member_indices": original_indices,
-                "type": "similar",
+                "member_indices": sorted_members,
+                "type": group_type,
             }
         )
         group_id += 1

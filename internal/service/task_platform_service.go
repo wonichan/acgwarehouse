@@ -80,6 +80,10 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 	createdTasks := make([]domain.PlatformTask, 0)
 	createdImages := make(map[int64]struct{})
 	taskTypes := uniqueNonEmptyStrings(req.TaskTypes)
+	existingByDedupeKey, err := s.buildExistingTaskLookup(ctx, req.Items, taskTypes, req.IgnoreHistoricalCompleted)
+	if err != nil {
+		return nil, err
+	}
 	for _, item := range req.Items {
 		if item.SkipPlanning {
 			batch.SkippedImages++
@@ -94,13 +98,7 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 		createdForImage := false
 		for _, taskType := range taskTypes {
 			dedupeKey := buildPlatformTaskDedupeKey(item.ImageVersionKey, taskType)
-			existing, err := s.taskRepo.FindActiveByDedupeKey(ctx, dedupeKey)
-			if err != nil {
-				return nil, err
-			}
-			if existing != nil && req.IgnoreHistoricalCompleted && existing.Status == domain.PlatformTaskStatusCompleted {
-				existing = nil
-			}
+			existing := existingByDedupeKey[dedupeKey]
 			if existing != nil {
 				batch.SkippedDuplicateTasks++
 				batch.SkippedUnchanged++
@@ -121,6 +119,8 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 				return nil, err
 			}
 			createdTasks = append(createdTasks, task)
+			taskCopy := task
+			existingByDedupeKey[dedupeKey] = &taskCopy
 			createdImages[item.ImageID] = struct{}{}
 			createdForImage = true
 		}
@@ -139,6 +139,71 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 		return nil, err
 	}
 	return &TaskPlatformPlanResult{Batch: refreshed, CreatedTasks: createdTasks}, nil
+}
+
+func (s *TaskPlatformService) buildExistingTaskLookup(
+	ctx context.Context,
+	items []TaskPlatformPlanItem,
+	taskTypes []string,
+	ignoreHistoricalCompleted bool,
+) (map[string]*domain.PlatformTask, error) {
+	wantedKeys := make(map[string]struct{})
+	for _, item := range items {
+		if item.SkipPlanning {
+			continue
+		}
+		for _, taskType := range taskTypes {
+			wantedKeys[buildPlatformTaskDedupeKey(item.ImageVersionKey, taskType)] = struct{}{}
+		}
+	}
+
+	lookup := make(map[string]*domain.PlatformTask, len(wantedKeys))
+	if len(wantedKeys) == 0 {
+		return lookup, nil
+	}
+
+	for _, status := range []string{
+		domain.PlatformTaskStatusRunning,
+		domain.PlatformTaskStatusQueued,
+		domain.PlatformTaskStatusPending,
+		domain.PlatformTaskStatusCompleted,
+	} {
+		tasks, err := s.taskRepo.List(ctx, repository.PlatformTaskListFilter{Status: status, Limit: 1000000, Offset: 0})
+		if err != nil {
+			return nil, err
+		}
+		for i := range tasks {
+			task := tasks[i]
+			if _, ok := wantedKeys[task.DedupeKey]; !ok {
+				continue
+			}
+			if ignoreHistoricalCompleted && task.Status == domain.PlatformTaskStatusCompleted {
+				continue
+			}
+			current := lookup[task.DedupeKey]
+			if current == nil || platformTaskStatusPriority(task.Status) < platformTaskStatusPriority(current.Status) {
+				taskCopy := task
+				lookup[task.DedupeKey] = &taskCopy
+			}
+		}
+	}
+
+	return lookup, nil
+}
+
+func platformTaskStatusPriority(status string) int {
+	switch status {
+	case domain.PlatformTaskStatusRunning:
+		return 0
+	case domain.PlatformTaskStatusQueued:
+		return 1
+	case domain.PlatformTaskStatusPending:
+		return 2
+	case domain.PlatformTaskStatusCompleted:
+		return 3
+	default:
+		return 4
+	}
 }
 
 func (s *TaskPlatformService) RefreshBatchStatus(ctx context.Context, batchID int64) (*domain.TaskBatch, error) {

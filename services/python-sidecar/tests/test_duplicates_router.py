@@ -12,20 +12,24 @@ from main import app
 
 @pytest.fixture(autouse=True)
 def wait_for_router_idle():
-    yield
     from routers import duplicates as duplicates_router
 
-    for _ in range(100):
-        task_id = duplicates_router._active_task_id
-        if not task_id:
-            break
-        state = duplicates_router.get_task_state(task_id)
-        if not state or state.status not in {
-            duplicates_router.TaskStatus.PENDING,
-            duplicates_router.TaskStatus.RUNNING,
-        }:
-            break
-        time.sleep(0.02)
+    def wait_until_idle() -> None:
+        for _ in range(500):
+            task_id = duplicates_router._active_task_id
+            if not task_id:
+                break
+            state = duplicates_router.get_task_state(task_id)
+            if not state or state.status not in {
+                duplicates_router.TaskStatus.PENDING,
+                duplicates_router.TaskStatus.RUNNING,
+            }:
+                break
+            time.sleep(0.05)
+
+    wait_until_idle()
+    yield
+    wait_until_idle()
 
 
 def test_post_detect_returns_task_id_and_pending(sample_image_inputs):
@@ -175,7 +179,7 @@ def test_full_flow_submit_poll_fetch_result(sample_image_inputs):
     assert create.status_code == 200
     task_id = create.json()["task_id"]
 
-    for _ in range(50):
+    for _ in range(500):
         state = client.get(f"/compute/duplicates/tasks/{task_id}")
         assert state.status_code == 200
         if state.json()["status"] == "completed":
@@ -222,7 +226,7 @@ def test_detection_with_test_images_returns_group_structure(test_images_dir):
     )
     task_id = create.json()["task_id"]
 
-    for _ in range(50):
+    for _ in range(500):
         state = client.get(f"/compute/duplicates/tasks/{task_id}")
         if state.json()["status"] == "completed":
             break

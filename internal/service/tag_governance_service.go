@@ -36,6 +36,9 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 		if _, err := s.obsRepo.FindByID(ctx, observationID); err != nil {
 			return err
 		}
+		if err := s.RemoveRejectedAITags(ctx, imageID); err != nil {
+			return err
+		}
 	}
 
 	existingImageTags, err := s.imageTagRepo.FindByImageID(ctx, imageID)
@@ -121,12 +124,20 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 }
 
 func (s *TagGovernanceService) RemovePendingAITags(ctx context.Context, imageID int64) error {
+	return s.removeAITagsByState(ctx, imageID, "pending")
+}
+
+func (s *TagGovernanceService) RemoveRejectedAITags(ctx context.Context, imageID int64) error {
+	return s.removeAITagsByState(ctx, imageID, "rejected")
+}
+
+func (s *TagGovernanceService) removeAITagsByState(ctx context.Context, imageID int64, state string) error {
 	items, err := s.imageTagRepo.FindByImageID(ctx, imageID)
 	if err != nil {
 		return err
 	}
 	for _, item := range items {
-		if item.Source != domain.ImageTagSourceAI || item.ReviewState != "pending" {
+		if item.Source != domain.ImageTagSourceAI || item.ReviewState != state {
 			continue
 		}
 		rowsAffected, err := s.imageTagRepo.Delete(ctx, imageID, item.TagID)

@@ -13,8 +13,7 @@ func TestRateLimitedClient_LimitsRequests(t *testing.T) {
 		err:    nil,
 	}
 
-	// 设置 10 请求/分钟 = 1 请求/6秒
-	client := NewRateLimitedClient(mockProvider, 10)
+	client := NewRateLimitedClient(mockProvider, 600)
 
 	start := time.Now()
 	ctx := context.Background()
@@ -32,10 +31,8 @@ func TestRateLimitedClient_LimitsRequests(t *testing.T) {
 
 	elapsed := time.Since(start)
 
-	// 第二个请求应该等待约 6 秒 (60/10)
-	// 使用较小的误差范围
-	if elapsed < 5*time.Second {
-		t.Errorf("expected at least 5 seconds between requests, got %v", elapsed)
+	if elapsed < 80*time.Millisecond {
+		t.Errorf("expected at least 80ms between requests, got %v", elapsed)
 	}
 
 	// 验证底层 provider 被调用了两次
@@ -51,8 +48,7 @@ func TestRateLimitedClient_ContinuousRequests(t *testing.T) {
 		err:    nil,
 	}
 
-	// 设置 60 请求/分钟 = 1 请求/秒
-	client := NewRateLimitedClient(mockProvider, 60)
+	client := NewRateLimitedClient(mockProvider, 1200)
 
 	ctx := context.Background()
 	start := time.Now()
@@ -67,9 +63,8 @@ func TestRateLimitedClient_ContinuousRequests(t *testing.T) {
 
 	elapsed := time.Since(start)
 
-	// 3 个请求应该等待约 2 秒 (间隔 1 秒)
-	if elapsed < 1800*time.Millisecond {
-		t.Errorf("expected at least 1.8 seconds for 3 requests, got %v", elapsed)
+	if elapsed < 90*time.Millisecond {
+		t.Errorf("expected at least 90ms for 3 requests, got %v", elapsed)
 	}
 }
 
@@ -152,7 +147,7 @@ func (m *mockProvider) Name() string {
 	return "mock"
 }
 
-func (m *mockProvider) GenerateTags(ctx interface{}, imageURL, prompt string) (*TagResult, error) {
+func (m *mockProvider) GenerateTags(ctx context.Context, imageURL, prompt string) (*TagResult, error) {
 	m.callCount++
 	m.lastURL = imageURL
 	m.lastPrompt = prompt

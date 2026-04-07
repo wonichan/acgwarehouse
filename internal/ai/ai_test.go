@@ -158,9 +158,29 @@ func TestNewProvider_UsesExtendedHTTPTimeout(t *testing.T) {
 				if actual.httpClient.Timeout != expectedTimeout {
 					t.Fatalf("expected timeout %v, got %v", expectedTimeout, actual.httpClient.Timeout)
 				}
+				transport, ok := actual.httpClient.Transport.(*http.Transport)
+				if !ok || transport == nil {
+					t.Fatalf("expected qwen provider to configure *http.Transport")
+				}
+				if transport.TLSHandshakeTimeout <= 0 {
+					t.Fatalf("expected TLSHandshakeTimeout to be set, got %v", transport.TLSHandshakeTimeout)
+				}
+				if transport.ResponseHeaderTimeout <= 0 {
+					t.Fatalf("expected ResponseHeaderTimeout to be set, got %v", transport.ResponseHeaderTimeout)
+				}
 			case *DoubaoProvider:
 				if actual.httpClient.Timeout != expectedTimeout {
 					t.Fatalf("expected timeout %v, got %v", expectedTimeout, actual.httpClient.Timeout)
+				}
+				transport, ok := actual.httpClient.Transport.(*http.Transport)
+				if !ok || transport == nil {
+					t.Fatalf("expected doubao provider to configure *http.Transport")
+				}
+				if transport.TLSHandshakeTimeout <= 0 {
+					t.Fatalf("expected TLSHandshakeTimeout to be set, got %v", transport.TLSHandshakeTimeout)
+				}
+				if transport.ResponseHeaderTimeout <= 0 {
+					t.Fatalf("expected ResponseHeaderTimeout to be set, got %v", transport.ResponseHeaderTimeout)
 				}
 			default:
 				t.Fatalf("unexpected provider type %T", provider)

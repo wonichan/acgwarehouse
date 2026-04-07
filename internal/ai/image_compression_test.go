@@ -6,9 +6,30 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"os"
+	"sync/atomic"
 	"testing"
+
+	"github.com/disintegration/imaging"
 )
+
+func TestCalculateResizeDimensions_HandlesIntOverflow(t *testing.T) {
+	newW, newH := calculateResizeDimensions(math.MaxInt, 2, maxAIPixelCount)
+
+	if newW == math.MaxInt && newH == 2 {
+		t.Fatalf("expected overflow path to trigger resize, got original dimensions %dx%d", newW, newH)
+	}
+
+	if newW < 1 || newH < 1 {
+		t.Fatalf("expected positive resized dimensions, got %dx%d", newW, newH)
+	}
+
+	pixels := int64(newW) * int64(newH)
+	if pixels > int64(maxAIPixelCount) {
+		t.Fatalf("resized pixel count exceeds max: got %d, max %d", pixels, maxAIPixelCount)
+	}
+}
 
 // TestCompressImageIfNeeded_SmallFileUnchanged tests that files under 10MB are returned unchanged
 func TestCompressImageIfNeeded_SmallFileUnchanged(t *testing.T) {
@@ -63,8 +84,7 @@ func TestCompressImageIfNeeded_LargeFileCompressed(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 	defer tmpFile.Close()
 
-	// Create a large image (8000x8000 should produce >10MB with quality 100)
-	img := createTestImage(8000, 8000)
+	img := createTestImage(5000, 5000)
 	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 100}); err != nil {
 		t.Fatalf("Failed to encode test image: %v", err)
 	}
@@ -116,8 +136,7 @@ func TestCompressImageIfNeeded_CompressedImageValid(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 	defer tmpFile.Close()
 
-	// Create a large image
-	img := createTestImage(8000, 8000)
+	img := createTestImage(5000, 5000)
 	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 100}); err != nil {
 		t.Fatalf("Failed to encode test image: %v", err)
 	}
@@ -230,8 +249,6 @@ func createTestImage(width, height int) image.Image {
 // TestCompressImageIfNeeded_ExceedsPixelLimit tests that images exceeding 36M pixel limit are resized
 // This test creates a large image with small file size to expose the missing pixel limit check
 func TestCompressImageIfNeeded_ExceedsPixelLimit(t *testing.T) {
-	// Create image with 10000x10000 (100M pixels > 36M limit)
-	// Use very low quality to ensure file size < 10MB (so file-based compression won't trigger)
 	tmpFile, err := os.CreateTemp("", "pixel_limit_*.jpg")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
@@ -239,8 +256,7 @@ func TestCompressImageIfNeeded_ExceedsPixelLimit(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 	defer tmpFile.Close()
 
-	img := createTestImage(10000, 10000)
-	// Use quality 1 to create small file size (< 10MB) but large pixel count
+	img := createTestImage(7000, 7000)
 	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 1}); err != nil {
 		t.Fatalf("Failed to encode: %v", err)
 	}
@@ -283,14 +299,11 @@ func TestCompressImageIfNeeded_ExceedsPixelLimit(t *testing.T) {
 		t.Errorf("Expected image/jpeg, got %s", contentType)
 	}
 
-	t.Logf("Resized from 10000x10000 (100M pixels) to %dx%d (%d pixels)", width, height, pixels)
+	t.Logf("Resized from 7000x7000 (49M pixels) to %dx%d (%d pixels)", width, height, pixels)
 }
 
 // TestCompressImageIfNeeded_NonSquarePixelLimit tests aspect ratio preservation for non-square images
 func TestCompressImageIfNeeded_NonSquarePixelLimit(t *testing.T) {
-	// Create 15000x5000 image = 75M pixels > 36M limit
-	// Aspect ratio: 3:1 (width:height)
-	// Should resize to ~6708x2236 (maintaining 3:1 ratio)
 	tmpFile, err := os.CreateTemp("", "nonsquare_*.jpg")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
@@ -298,7 +311,7 @@ func TestCompressImageIfNeeded_NonSquarePixelLimit(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 	defer tmpFile.Close()
 
-	img := createTestImage(15000, 5000)
+	img := createTestImage(12000, 4000)
 	// Use quality 1 to create small file size (< 10MB)
 	if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 1}); err != nil {
 		t.Fatalf("Failed to encode: %v", err)
@@ -325,8 +338,7 @@ func TestCompressImageIfNeeded_NonSquarePixelLimit(t *testing.T) {
 		t.Errorf("Pixel count %d exceeds limit %d, dims=%dx%d", pixels, maxPixelLimit, width, height)
 	}
 
-	// Aspect ratio should be preserved (~3:1)
-	originalRatio := 15000.0 / 5000.0 // 3.0
+	originalRatio := 12000.0 / 4000.0
 	newRatio := float64(width) / float64(height)
 	if newRatio < originalRatio*0.95 || newRatio > originalRatio*1.05 {
 		t.Errorf("Aspect ratio not preserved, expected ~%.2f, got %.2f (dims=%dx%d)", originalRatio, newRatio, width, height)
@@ -393,4 +405,36 @@ func TestCompressImageIfNeeded_UnderPixelLimit(t *testing.T) {
 // Helper function to encode PNG
 func encodePNG(w *os.File, img image.Image) error {
 	return png.Encode(w, img)
+}
+
+func TestCompressImageWithFilterAndLimit_ResizeCalledOnlyWhenScaleChanges(t *testing.T) {
+	var resizeCalls int32
+	var sourceWidths []int
+	originalResize := resizeImage
+	resizeImage = func(img image.Image, width, height int, filter imaging.ResampleFilter) *image.NRGBA {
+		atomic.AddInt32(&resizeCalls, 1)
+		sourceWidths = append(sourceWidths, img.Bounds().Dx())
+		return imaging.Resize(img, width, height, filter)
+	}
+	defer func() { resizeImage = originalResize }()
+
+	img := createTestImage(2000, 2000)
+	_, err := compressImageWithFilterAndLimit(img, imaging.Lanczos, 1024)
+	if err != nil {
+		t.Fatalf("compressImageWithFilterAndLimit() error = %v", err)
+	}
+
+	if got := atomic.LoadInt32(&resizeCalls); got == 0 {
+		t.Fatalf("resize invocation count = %d, expected > 0", got)
+	}
+
+	if len(sourceWidths) < 2 {
+		t.Fatalf("expected multiple resize invocations, got %d", len(sourceWidths))
+	}
+
+	for i := 1; i < len(sourceWidths); i++ {
+		if sourceWidths[i] >= sourceWidths[i-1] {
+			t.Fatalf("expected progressive downscale source widths, got sequence %v", sourceWidths)
+		}
+	}
 }

@@ -1,4 +1,5 @@
-# Miscellaneous
+# Third-party libraries (libvips)
+thirdparty/
 *.class
 *.log
 *.pyc

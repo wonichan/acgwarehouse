@@ -6,6 +6,8 @@ import 'package:gallery/providers/navigation_provider.dart';
 import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/providers/selection_provider.dart';
+import 'package:gallery/providers/theme_provider.dart';
+import 'package:gallery/providers/config_provider.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/services/tag_service.dart';
 import 'package:provider/provider.dart';
@@ -16,13 +18,15 @@ void main() {
       return MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => NavigationProvider()),
-          ChangeNotifierProvider(create: (_) => ImageListProvider(ApiService())),
+          ChangeNotifierProvider(
+            create: (_) => ImageListProvider(ApiService()),
+          ),
           ChangeNotifierProvider(create: (_) => TagProvider(TagService())),
           ChangeNotifierProvider(create: (_) => SelectionProvider()),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => ConfigProvider()),
         ],
-        child: const MaterialApp(
-          home: MaterialAppShell(),
-        ),
+        child: const MaterialApp(home: MaterialAppShell()),
       );
     }
 
@@ -38,7 +42,9 @@ void main() {
       expect(find.byType(NavigationRail), findsNothing);
     });
 
-    testWidgets('shows NavigationRail on medium screen (tablet)', (tester) async {
+    testWidgets('shows NavigationRail on medium screen (tablet)', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(700, 1000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.reset());
@@ -98,15 +104,15 @@ void main() {
       expect(find.byType(VerticalDivider), findsOneWidget);
     });
 
-    testWidgets('shows settings button and opens settings screen', (tester) async {
+    testWidgets('navigates to settings screen from navigation destination', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.reset());
 
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
-
-      expect(find.byIcon(Icons.settings), findsOneWidget);
 
       await tester.tap(find.text('设置'));
       await tester.pumpAndSettle();

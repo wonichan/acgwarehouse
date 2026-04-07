@@ -55,14 +55,14 @@ func TestManagerProcessesJobsSequentially(t *testing.T) {
 		t.Fatalf("AddJob() second error = %v", err)
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
 		j1, err1 := jobRepo.FindByID(id1)
 		j2, err2 := jobRepo.FindByID(id2)
 		if err1 == nil && err2 == nil && j1.Status == "finished" && j2.Status == "finished" {
 			break
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	j1, err := jobRepo.FindByID(id1)
@@ -120,8 +120,7 @@ func TestManagerProcessesJobsParallel(t *testing.T) {
 		order = append(order, id)
 		startTimes = append(startTimes, time.Now())
 		mu.Unlock()
-		// 模拟一些工作
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		return nil
 	})
 
@@ -139,13 +138,13 @@ func TestManagerProcessesJobsParallel(t *testing.T) {
 	}
 
 	// 等待所有任务完成
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
 		jobs, _ := jobRepo.FindByStatus("finished")
 		if len(jobs) >= 4 {
 			break
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// 验证所有任务完成
@@ -228,7 +227,7 @@ func TestManager_PausePreservesQueue(t *testing.T) {
 
 	// Register a slow handler
 	slowHandler := func(ctx context.Context, id int64, payload string) error {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		return nil
 	}
 	manager.RegisterHandler("slow_job", slowHandler)
@@ -248,7 +247,7 @@ func TestManager_PausePreservesQueue(t *testing.T) {
 	manager.Pause()
 
 	// Wait a bit for any in-flight job to complete
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 
 	// Verify the job still exists
 	job, err := jobRepo.FindByID(jobID)
@@ -363,9 +362,17 @@ func TestManager_AddJobWhilePaused(t *testing.T) {
 		t.Errorf("Expected job status 'ready' while paused, got '%s'", job.Status)
 	}
 
-	// Resume and wait for processing
 	manager.Resume()
-	time.Sleep(200 * time.Millisecond)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		procMu.Lock()
+		done := processed
+		procMu.Unlock()
+		if done {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// Job should now be processed
 	procMu.Lock()
@@ -444,5 +451,159 @@ func TestManager_SetWorkerCount(t *testing.T) {
 	mgr.SetWorkerCount(ctx, 1)
 	if count := mgr.GetWorkerCount(); count != 1 {
 		t.Fatalf("after decrease, worker count = %d, want 1", count)
+	}
+}
+
+func TestManager_QueueSizeIncludesDispatchPendingDuringSubmitRetry(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	mgr := NewManagerWithConfig(jobRepo, 1, 1)
+
+	mgr.poolMu.Lock()
+	mgr.pool = nil
+	mgr.runningMu.Lock()
+	mgr.running = true
+	mgr.runningMu.Unlock()
+	mgr.stopCh = make(chan struct{})
+	mgr.poolMu.Unlock()
+
+	job := &domain.AsyncJob{ID: 1, Type: "retry_job", Payload: "{}", Status: "ready", CreatedAt: time.Now()}
+	if err := mgr.enqueueJob(context.Background(), job); err != nil {
+		t.Fatalf("enqueueJob() error = %v", err)
+	}
+
+	mgr.dispatchWg.Add(1)
+	go mgr.dispatchLoop()
+	defer func() {
+		close(mgr.stopCh)
+		mgr.dispatchWg.Wait()
+	}()
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if mgr.QueueSize() == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if got := mgr.QueueSize(); got != 1 {
+		t.Fatalf("QueueSize() = %d, want 1 when dispatch has pending retry", got)
+	}
+
+	if got := mgr.QueuedByType("retry_job"); got != 1 {
+		t.Fatalf("QueuedByType(retry_job) = %d, want 1", got)
+	}
+}
+
+func TestManager_AddJobQueueFullStillReturnsCreatedJob(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	mgr := NewManagerWithConfig(jobRepo, 1, 1)
+
+	ctx := context.Background()
+	firstID, err := mgr.AddJob(ctx, "queue_full_test", `{"k":1}`)
+	if err != nil {
+		t.Fatalf("first AddJob() error = %v", err)
+	}
+
+	secondID, err := mgr.AddJob(ctx, "queue_full_test", `{"k":2}`)
+	if err != nil {
+		t.Fatalf("second AddJob() should still create job when queue full, got err = %v", err)
+	}
+	if secondID == 0 || secondID == firstID {
+		t.Fatalf("second job id invalid: first=%d second=%d", firstID, secondID)
+	}
+
+	readyJobs, err := jobRepo.FindByStatus("ready")
+	if err != nil {
+		t.Fatalf("FindByStatus(ready) error = %v", err)
+	}
+	if len(readyJobs) != 2 {
+		t.Fatalf("expected 2 ready jobs persisted, got %d", len(readyJobs))
+	}
+
+	if got := mgr.QueueSize(); got != 1 {
+		t.Fatalf("QueueSize() = %d, want 1 when buffer is full", got)
+	}
+}
+
+func TestManager_StopWaitsForRunningJobs(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	mgr := NewManagerWithConfig(jobRepo, 1, 4)
+
+	started := make(chan struct{})
+	allowFinish := make(chan struct{})
+	mgr.RegisterHandler("blocking_job", func(ctx context.Context, id int64, payload string) error {
+		close(started)
+		<-allowFinish
+		return nil
+	})
+
+	ctx := context.Background()
+	mgr.Start(ctx)
+
+	if _, err := mgr.AddJob(ctx, "blocking_job", `{}`); err != nil {
+		t.Fatalf("AddJob() error = %v", err)
+	}
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("job did not start in time")
+	}
+
+	stopDone := make(chan struct{})
+	go func() {
+		mgr.Stop()
+		close(stopDone)
+	}()
+
+	select {
+	case <-stopDone:
+		t.Fatal("Stop returned before running job finished")
+	case <-time.After(120 * time.Millisecond):
+	}
+
+	close(allowFinish)
+
+	select {
+	case <-stopDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not return after running job finished")
 	}
 }

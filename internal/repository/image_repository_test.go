@@ -261,6 +261,101 @@ func TestFindUntaggedReturnsOnlyImagesWithoutTags(t *testing.T) {
 	}
 }
 
+func TestFindUntaggedIgnoresRejectedTags(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	rejectedOnly := saveImageForAITagSelectionTest(t, repo, "/untagged-rejected.png", "/thumb/untagged-rejected.jpg")
+	confirmed := saveImageForAITagSelectionTest(t, repo, "/untagged-confirmed.png", "/thumb/untagged-confirmed.jpg")
+
+	addManualTagForSelectionTest(t, db, rejectedOnly.ID, "rejected")
+	addManualTagForSelectionTest(t, db, confirmed.ID, "confirmed")
+
+	untagged, err := repo.FindUntagged(ctx, 10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindUntagged() error = %v", err)
+	}
+	if !containsImageID(untagged, rejectedOnly.ID) {
+		t.Fatalf("expected image %d with only rejected tags to be treated as untagged, got %+v", rejectedOnly.ID, imageIDs(untagged))
+	}
+	if containsImageID(untagged, confirmed.ID) {
+		t.Fatalf("image %d with confirmed tag should not be untagged, got %+v", confirmed.ID, imageIDs(untagged))
+	}
+
+	count, err := repo.CountUntagged(ctx)
+	if err != nil {
+		t.Fatalf("CountUntagged() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("CountUntagged() = %d, want 1", count)
+	}
+}
+
+func TestFindImagesWithoutAITagsTreatsRejectedAITagsAsAbsent(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	rejectedOnly := saveImageForAITagSelectionTest(t, repo, "/rejected-only.png", "/thumb/rejected-only.jpg")
+	pending := saveImageForAITagSelectionTest(t, repo, "/pending.png", "/thumb/pending.jpg")
+	confirmed := saveImageForAITagSelectionTest(t, repo, "/confirmed.png", "/thumb/confirmed.jpg")
+
+	addAITagForSelectionTest(t, db, rejectedOnly.ID, "rejected")
+	addAITagForSelectionTest(t, db, pending.ID, "pending")
+	addAITagForSelectionTest(t, db, confirmed.ID, "confirmed")
+
+	images, err := repo.FindImagesWithoutAITags(ctx, 10)
+	if err != nil {
+		t.Fatalf("FindImagesWithoutAITags() error = %v", err)
+	}
+
+	if !containsImageID(images, rejectedOnly.ID) {
+		t.Fatalf("expected rejected-only image %d to remain eligible, got %+v", rejectedOnly.ID, imageIDs(images))
+	}
+	if containsImageID(images, pending.ID) {
+		t.Fatalf("pending AI-tagged image %d should not be eligible, got %+v", pending.ID, imageIDs(images))
+	}
+	if containsImageID(images, confirmed.ID) {
+		t.Fatalf("confirmed AI-tagged image %d should not be eligible, got %+v", confirmed.ID, imageIDs(images))
+	}
+}
+
+func TestBackfillCandidateQueriesIgnoreRejectedAITags(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+	filter := BackfillCandidateFilter{}
+
+	rejectedOnly := saveImageForAITagSelectionTest(t, repo, "/backfill-rejected.png", "/thumb/backfill-rejected.jpg")
+	pending := saveImageForAITagSelectionTest(t, repo, "/backfill-pending.png", "/thumb/backfill-pending.jpg")
+
+	addAITagForSelectionTest(t, db, rejectedOnly.ID, "rejected")
+	addAITagForSelectionTest(t, db, pending.ID, "pending")
+
+	candidates, err := repo.FindBackfillCandidates(ctx, filter)
+	if err != nil {
+		t.Fatalf("FindBackfillCandidates() error = %v", err)
+	}
+	if !containsImageID(candidates, rejectedOnly.ID) {
+		t.Fatalf("expected rejected-only image %d to be backfill candidate, got %+v", rejectedOnly.ID, imageIDs(candidates))
+	}
+	if containsImageID(candidates, pending.ID) {
+		t.Fatalf("pending AI-tagged image %d should not be backfill candidate, got %+v", pending.ID, imageIDs(candidates))
+	}
+
+	skippedWithAITag, err := repo.CountBackfillSkippedWithAITag(ctx, filter)
+	if err != nil {
+		t.Fatalf("CountBackfillSkippedWithAITag() error = %v", err)
+	}
+	if skippedWithAITag != 1 {
+		t.Fatalf("skippedWithAITag = %d, want 1 (pending only)", skippedWithAITag)
+	}
+}
+
 func TestImage_PHashHexColumn(t *testing.T) {
 	t.Parallel()
 
@@ -290,6 +385,77 @@ func TestImage_PHashHexColumn(t *testing.T) {
 	if got != phashHex {
 		t.Fatalf("phash_hex = %q, want %q", got, phashHex)
 	}
+}
+
+func saveImageForAITagSelectionTest(t *testing.T, repo ImageRepository, path, thumbnailSmallURL string) *domain.Image {
+	t.Helper()
+
+	image := &domain.Image{
+		Path:              path,
+		Filename:          filepath.Base(path),
+		SourceRoot:        "/",
+		Format:            "png",
+		ThumbnailSmallUrl: thumbnailSmallURL,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
+	if _, err := repo.SaveImage(image); err != nil {
+		t.Fatalf("save image: %v", err)
+	}
+	return image
+}
+
+func addAITagForSelectionTest(t *testing.T, db *sql.DB, imageID int64, reviewState string) {
+	t.Helper()
+	addTagForSelectionTest(t, db, imageID, domain.ImageTagSourceAI, reviewState)
+}
+
+func addManualTagForSelectionTest(t *testing.T, db *sql.DB, imageID int64, reviewState string) {
+	t.Helper()
+	addTagForSelectionTest(t, db, imageID, domain.ImageTagSourceManual, reviewState)
+}
+
+func addTagForSelectionTest(t *testing.T, db *sql.DB, imageID int64, source, reviewState string) {
+	t.Helper()
+
+	ctx := context.Background()
+	tagRepo := NewTagRepository(db)
+	tag := &domain.Tag{
+		PreferredLabel: fmt.Sprintf("ai-%s-%d", reviewState, time.Now().UnixNano()),
+		Slug:           fmt.Sprintf("ai-%s-%d", reviewState, time.Now().UnixNano()),
+		ReviewState:    "confirmed",
+	}
+	if err := tagRepo.Save(ctx, tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	imageTagRepo := NewImageTagRepository(db)
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{
+		ImageID:     imageID,
+		TagID:       tag.ID,
+		Source:      source,
+		ReviewState: reviewState,
+		Confidence:  0.9,
+	}); err != nil {
+		t.Fatalf("save image-tag: %v", err)
+	}
+}
+
+func containsImageID(images []domain.Image, target int64) bool {
+	for _, image := range images {
+		if image.ID == target {
+			return true
+		}
+	}
+	return false
+}
+
+func imageIDs(images []domain.Image) []int64 {
+	ids := make([]int64, 0, len(images))
+	for _, image := range images {
+		ids = append(ids, image.ID)
+	}
+	return ids
 }
 
 func TestUpdateImagePHashHex(t *testing.T) {

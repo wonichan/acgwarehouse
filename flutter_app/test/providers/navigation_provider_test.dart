@@ -3,14 +3,14 @@ import 'package:gallery/config/api_config.dart';
 import 'package:gallery/providers/navigation_provider.dart';
 
 void main() {
-  group('NavigationProvider - 6 item navigation', () {
+  group('NavigationProvider - 7 item navigation', () {
     late NavigationProvider provider;
 
     setUp(() {
       provider = NavigationProvider();
     });
 
-    test('has correct 6 page titles', () {
+    test('has correct 7 page titles', () {
       expect(provider.currentPageTitle, '图库');
 
       provider.setSelectedIndex(0);
@@ -30,10 +30,13 @@ void main() {
 
       provider.setSelectedIndex(5);
       expect(provider.currentPageTitle, '运营监控');
+
+      provider.setSelectedIndex(6);
+      expect(provider.currentPageTitle, '日志终端');
     });
 
     test('throws error for invalid index', () {
-      expect(() => provider.setSelectedIndex(6), throwsRangeError);
+      expect(() => provider.setSelectedIndex(7), throwsRangeError);
       expect(() => provider.setSelectedIndex(-1), throwsRangeError);
     });
 
@@ -44,10 +47,11 @@ void main() {
       expect(NavigationProvider.tagManagementIndex, 3);
       expect(NavigationProvider.settingsIndex, 4);
       expect(NavigationProvider.operationsMonitoringIndex, 5);
+      expect(NavigationProvider.logViewerIndex, 6);
     });
 
-    test('itemCount is 6', () {
-      expect(NavigationProvider.itemCount, 6);
+    test('itemCount is 7', () {
+      expect(NavigationProvider.itemCount, 7);
     });
   });
 

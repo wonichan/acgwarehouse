@@ -96,6 +96,7 @@ func (a *App) initServices() {
 	a.sidecarClient = sidecar.NewSidecarClient(a.sidecarBaseURL)
 	a.duplicateSvc = service.NewDuplicateService(a.imageRepo, a.duplicateRepo, a.sidecarClient, unwrapRuntime(a.sidecarRuntime))
 	a.searchSvc = service.NewSearchService(a.imageRepo, a.tagRepo, a.searchRepo)
+	a.collectionSvc = service.NewCollectionService(a.collectionRepo)
 }
 
 func (a *App) initSidecarRuntime() {
@@ -329,6 +330,26 @@ func (a *App) handleAutoSchedulerConfigChange(old, new *config.Config) {
 	}
 }
 
+// handleAIConfigChange 处理 AI 配置的热更新
+func (a *App) handleAIConfigChange(old, new *config.Config) {
+	if old == nil || new == nil {
+		return
+	}
+	oldAI := old.AI
+	newAI := new.AI
+
+	if oldAI.MaxConcurrency != newAI.MaxConcurrency {
+		worker.SetAITagConcurrencyLimiter(newAI.MaxConcurrency)
+	}
+
+	if oldAI.RequestsPerMinute != newAI.RequestsPerMinute {
+		if a.aiRateLimitedClient != nil {
+			a.aiRateLimitedClient.SetRequestsPerMinute(newAI.RequestsPerMinute)
+			log.Printf("AI 请求限流已调整为: %d 请求/分钟", newAI.RequestsPerMinute)
+		}
+	}
+}
+
 // initWorkerManager initializes the worker manager and registers all handlers.
 func (a *App) initWorkerManager() error {
 	// Create job manager with config
@@ -456,6 +477,8 @@ func (a *App) registerAIHandlers() {
 	worker.InitAITagConcurrencyLimiter(a.config.AI.MaxConcurrency)
 
 	client := ai.NewRateLimitedClient(provider, a.config.AI.RequestsPerMinute)
+	a.aiRateLimitedClient = client
+
 	aiHandler := worker.NewAITagJobHandler(client, a.obsRepo, a.governanceSvc, a.imageTagRepo)
 	aiRegenerationHandler := worker.NewAITagRegenerationJobHandler(client, a.obsRepo, a.governanceSvc)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagGeneration, aiHandler)

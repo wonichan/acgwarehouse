@@ -28,17 +28,14 @@ void main() {
       expect(notified, isTrue);
     });
 
-    test('摆脱买量，微小、抖小都在摆脱买量，微小、抖小都在布局，下一个流量机会？ - 腾讯新闻', () {
+    test('setThemeMode(dark) 会更新状态并通知监听器', () async {
       final provider = ThemeProvider();
       var notified = false;
       provider.addListener(() => notified = true);
 
-      // Test async operations
-      test('setThemeMode(dark) 会更新状态并通知监听器', () async {
-        await provider.setThemeMode(ThemeMode.dark);
-        expect(provider.themeMode, ThemeMode.dark);
-        expect(notified, isTrue);
-      });
+      await provider.setThemeMode(ThemeMode.dark);
+      expect(provider.themeMode, ThemeMode.dark);
+      expect(notified, isTrue);
     });
 
     test('连续设置相同模式不会重复通知', () async {
@@ -60,9 +57,7 @@ void main() {
     });
 
     test('initialize 会加载已保存的主题模式', () async {
-      SharedPreferences.setMockInitialValues({
-        'theme_mode': 'dark',
-      });
+      SharedPreferences.setMockInitialValues({'theme_mode': 'dark'});
 
       final provider = ThemeProvider();
 

@@ -121,6 +121,57 @@ func TestTagGovernanceMergeTagsCreatesPendingTagsByDefault(t *testing.T) {
 	}
 }
 
+func TestTagGovernanceMergeTagsRemovesRejectedAITagsBeforeSavingNewOnes(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, imageTagRepo := newTagGovernanceServiceForTest(t)
+	ctx := context.Background()
+
+	rejected := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "old-rejected", Slug: "old-rejected", ReviewState: "confirmed", UsageCount: 1})
+	manual := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "keep-manual", Slug: "keep-manual", ReviewState: "confirmed", UsageCount: 1})
+
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: 1, TagID: rejected.ID, Source: domain.ImageTagSourceAI, ReviewState: "rejected", Confidence: 0.4}); err != nil {
+		t.Fatalf("Save(rejected ai tag) error = %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: 1, TagID: manual.ID, Source: domain.ImageTagSourceManual, ReviewState: "confirmed", Confidence: 1}); err != nil {
+		t.Fatalf("Save(manual tag) error = %v", err)
+	}
+
+	if err := service.MergeTags(ctx, 1, []string{"new-generated"}, 1, 0.9); err != nil {
+		t.Fatalf("MergeTags() error = %v", err)
+	}
+
+	items, err := imageTagRepo.FindByImageID(ctx, 1)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	for _, item := range items {
+		if item.TagID == rejected.ID {
+			t.Fatalf("rejected AI tag should be removed before merge, got %+v", item)
+		}
+	}
+	newTag, err := tagRepo.FindByLabel(ctx, "new-generated")
+	if err != nil {
+		t.Fatalf("FindByLabel(new-generated) error = %v", err)
+	}
+	seenManual := false
+	seenNew := false
+	for _, item := range items {
+		switch item.TagID {
+		case manual.ID:
+			seenManual = true
+		case newTag.ID:
+			seenNew = true
+		}
+	}
+	if !seenManual {
+		t.Fatal("manual tag should be preserved")
+	}
+	if !seenNew {
+		t.Fatal("new AI tag should be saved")
+	}
+}
+
 func TestTagGovernanceMergeTagsIncrementsUsageCount(t *testing.T) {
 	t.Parallel()
 

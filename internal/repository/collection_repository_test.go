@@ -539,3 +539,106 @@ func TestCollectionRepositoryDeleteCascades(t *testing.T) {
 		t.Errorf("FindImagesByCollection() = %d images, want 0 (cascade delete)", len(images))
 	}
 }
+
+func TestCollectionRepositoryFindCollectionIDsByImage(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newCollectionRepositoryForTest(t)
+	ctx := context.Background()
+
+	collectionA := &domain.Collection{Name: "A"}
+	collectionB := &domain.Collection{Name: "B"}
+	mustSaveCollection(t, repo, collectionA)
+	mustSaveCollection(t, repo, collectionB)
+
+	image := &domain.Image{
+		Path:       "/shared.png",
+		Filename:   "shared.png",
+		SourceRoot: "/",
+		Format:     "png",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	mustSaveImage(t, db, image)
+
+	if err := repo.AddImage(ctx, collectionA.ID, image.ID); err != nil {
+		t.Fatalf("AddImage A error = %v", err)
+	}
+	if err := repo.AddImage(ctx, collectionB.ID, image.ID); err != nil {
+		t.Fatalf("AddImage B error = %v", err)
+	}
+
+	ids, err := repo.FindCollectionIDsByImage(ctx, image.ID)
+	if err != nil {
+		t.Fatalf("FindCollectionIDsByImage() error = %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("len(ids) = %d, want 2", len(ids))
+	}
+
+	seen := map[int64]bool{}
+	for _, id := range ids {
+		seen[id] = true
+	}
+	if !seen[collectionA.ID] || !seen[collectionB.ID] {
+		t.Fatalf("ids = %v, want both %d and %d", ids, collectionA.ID, collectionB.ID)
+	}
+}
+
+func TestCollectionRepositoryReconcileAfterImageDelete(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newCollectionRepositoryForTest(t)
+	ctx := context.Background()
+
+	collection := &domain.Collection{Name: "C"}
+	mustSaveCollection(t, repo, collection)
+
+	image1 := &domain.Image{
+		Path:       "/c-1.png",
+		Filename:   "c-1.png",
+		SourceRoot: "/",
+		Format:     "png",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	image2 := &domain.Image{
+		Path:       "/c-2.png",
+		Filename:   "c-2.png",
+		SourceRoot: "/",
+		Format:     "png",
+		CreatedAt:  time.Now().Add(time.Second),
+		UpdatedAt:  time.Now().Add(time.Second),
+	}
+	mustSaveImage(t, db, image1)
+	mustSaveImage(t, db, image2)
+
+	if err := repo.AddImage(ctx, collection.ID, image1.ID); err != nil {
+		t.Fatalf("AddImage image1 error = %v", err)
+	}
+	if err := repo.AddImage(ctx, collection.ID, image2.ID); err != nil {
+		t.Fatalf("AddImage image2 error = %v", err)
+	}
+	if err := repo.UpdateCover(ctx, collection.ID, image2.ID); err != nil {
+		t.Fatalf("UpdateCover() error = %v", err)
+	}
+
+	if _, err := db.ExecContext(ctx, `DELETE FROM images WHERE id = ?`, image2.ID); err != nil {
+		t.Fatalf("delete image2 error = %v", err)
+	}
+
+	if err := repo.ReconcileAfterImageDelete(ctx, collection.ID); err != nil {
+		t.Fatalf("ReconcileAfterImageDelete() error = %v", err)
+	}
+
+	found, err := repo.FindByID(ctx, collection.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if found.ImageCount != 1 {
+		t.Fatalf("image_count = %d, want 1", found.ImageCount)
+	}
+	if found.CoverImageID == nil || *found.CoverImageID != image1.ID {
+		t.Fatalf("cover_image_id = %v, want %d", found.CoverImageID, image1.ID)
+	}
+}

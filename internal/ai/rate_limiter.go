@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"errors"
 
 	"golang.org/x/time/rate"
 )
@@ -25,7 +24,6 @@ func NewRateLimitedClient(provider AIProvider, requestsPerMinute int) *RateLimit
 
 	// burst = 1 表示严格限制，不允许突发
 	limiter := rate.NewLimiter(rate.Limit(rps), 1)
-
 	return &RateLimitedClient{
 		provider: provider,
 		limiter:  limiter,
@@ -38,17 +36,21 @@ func (c *RateLimitedClient) Name() string {
 }
 
 // GenerateTags 生成标签，带限流控制
-func (c *RateLimitedClient) GenerateTags(ctx interface{}, imageURL, prompt string) (*TagResult, error) {
-	contextCtx, ok := ctx.(context.Context)
-	if !ok {
-		return nil, errors.New("invalid context type")
-	}
-
+func (c *RateLimitedClient) GenerateTags(ctx context.Context, imageURL, prompt string) (*TagResult, error) {
 	// 等待令牌
-	if err := c.limiter.Wait(contextCtx); err != nil {
+	if err := c.limiter.Wait(ctx); err != nil {
 		return nil, err
 	}
 
 	// 调用底层提供商
 	return c.provider.GenerateTags(ctx, imageURL, prompt)
+}
+
+// SetRequestsPerMinute 动态调整每分钟请求数限制
+func (c *RateLimitedClient) SetRequestsPerMinute(requestsPerMinute int) {
+	if requestsPerMinute <= 0 {
+		requestsPerMinute = 60
+	}
+	rps := float64(requestsPerMinute) / 60.0
+	c.limiter.SetLimit(rate.Limit(rps))
 }

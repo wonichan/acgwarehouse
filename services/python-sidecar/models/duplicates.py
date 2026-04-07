@@ -11,7 +11,7 @@ class ImageInput(BaseModel):
 
 
 class DetectRequest(BaseModel):
-    threshold: int = 40
+    threshold: int = 10
     images: list[ImageInput]
 
 

@@ -38,6 +38,24 @@ func (s *BatchService) BatchAddTags(ctx context.Context, imageIDs, tagIDs []int6
 		return 0, errors.New("image_ids and tag_ids must not be empty")
 	}
 
+	validTags := make(map[int64]struct{}, len(tagIDs))
+	for _, tagID := range tagIDs {
+		if _, checked := validTags[tagID]; checked {
+			continue
+		}
+		_, err := s.tagRepo.FindByID(ctx, tagID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return 0, err
+		}
+		validTags[tagID] = struct{}{}
+	}
+	if len(validTags) == 0 {
+		return 0, nil
+	}
+
 	successCount := 0
 	for _, imageID := range imageIDs {
 		// Verify image exists
@@ -50,13 +68,8 @@ func (s *BatchService) BatchAddTags(ctx context.Context, imageIDs, tagIDs []int6
 		}
 
 		for _, tagID := range tagIDs {
-			// Verify tag exists
-			_, err := s.tagRepo.FindByID(ctx, tagID)
-			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					continue // Skip non-existent tags
-				}
-				return successCount, err
+			if _, ok := validTags[tagID]; !ok {
+				continue
 			}
 
 			// Add tag to image (using pending state)

@@ -19,7 +19,7 @@ def test_compute_image_hashes_returns_sha256_and_phash_for_valid_image(
     assert isinstance(result["sha256"], str)
     assert len(result["sha256"]) == 64
     assert isinstance(result["phash"], str)
-    assert len(result["phash"]) == 64
+    assert len(result["phash"]) == 16
 
 
 def test_compute_image_hashes_returns_error_for_nonexistent_file():
@@ -72,10 +72,10 @@ def test_batch_compute_hashes_skips_bad_files_and_continues(
     assert by_path[str(sorted(test_images_dir.glob("*.png"))[0])]["error"] is None
 
 
-def test_phash_is_exactly_64_hex_characters(test_images_dir: Path):
+def test_phash_is_exactly_16_hex_characters(test_images_dir: Path):
     image_path = sorted(test_images_dir.glob("*.png"))[0]
 
     result = compute_image_hashes(str(image_path))
 
     assert result["phash"] is not None
-    assert len(result["phash"]) == 64
+    assert len(result["phash"]) == 16

@@ -44,7 +44,7 @@ void main() {
       expect(provider.currentPageTitle, equals('图库'));
     });
 
-    test('currentPageTitle 随索引切换更新 (6-item navigation)', () {
+    test('currentPageTitle 随索引切换更新 (7-item navigation)', () {
       final provider = NavigationProvider();
 
       // Index 0: Gallery
@@ -69,12 +69,16 @@ void main() {
       // Index 5: Operations monitoring
       provider.setSelectedIndex(5);
       expect(provider.currentPageTitle, equals('运营监控'));
+
+      // Index 6: Log viewer
+      provider.setSelectedIndex(6);
+      expect(provider.currentPageTitle, equals('日志终端'));
     });
 
     test('throws error for invalid index', () {
       final provider = NavigationProvider();
 
-      expect(() => provider.setSelectedIndex(6), throwsRangeError);
+      expect(() => provider.setSelectedIndex(7), throwsRangeError);
       expect(() => provider.setSelectedIndex(-1), throwsRangeError);
     });
 
@@ -85,10 +89,11 @@ void main() {
       expect(NavigationProvider.tagManagementIndex, 3);
       expect(NavigationProvider.settingsIndex, 4);
       expect(NavigationProvider.operationsMonitoringIndex, 5);
+      expect(NavigationProvider.logViewerIndex, 6);
     });
 
-    test('itemCount is 6', () {
-      expect(NavigationProvider.itemCount, 6);
+    test('itemCount is 7', () {
+      expect(NavigationProvider.itemCount, 7);
     });
   });
 }

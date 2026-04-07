@@ -1,7 +1,9 @@
 package ai
 
 import (
+	"context"
 	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -26,7 +28,7 @@ type AIProvider interface {
 	// GenerateTags 为图片生成标签
 	// imageURL 可以是本地文件路径或远程 URL
 	// prompt 是标签生成提示词
-	GenerateTags(ctx interface{}, imageURL, prompt string) (*TagResult, error)
+	GenerateTags(ctx context.Context, imageURL, prompt string) (*TagResult, error)
 }
 
 // NewProvider 根据配置创建 AI 提供商实例
@@ -37,6 +39,19 @@ func NewProvider(cfg *config.AIConfig) (AIProvider, error) {
 
 	httpClient := &http.Client{
 		Timeout: defaultAIRequestTimeout,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+		},
 	}
 
 	switch cfg.Provider {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -15,11 +16,13 @@ import (
 )
 
 type ImageHandler struct {
-	imageRepo    repository.ImageRepository
-	tagRepo      repository.TagRepository
-	imageTagRepo repository.ImageTagRepository
-	searchSvc    imageSearchWindowProvider
-	adminSvc     imageScanTrigger
+	imageRepo      repository.ImageRepository
+	tagRepo        repository.TagRepository
+	imageTagRepo   repository.ImageTagRepository
+	collectionRepo repository.CollectionRepository
+	fileActions    imageFileActionExecutor
+	searchSvc      imageSearchWindowProvider
+	adminSvc       imageScanTrigger
 }
 
 type imageScanTrigger interface {
@@ -50,21 +53,32 @@ type viewerWindowSnapshot struct {
 func NewImageHandler(imageRepo repository.ImageRepository, tagRepo repository.TagRepository, imageTagRepo repository.ImageTagRepository, depsOpt ...any) *ImageHandler {
 	var adminSvc imageScanTrigger
 	var searchSvc imageSearchWindowProvider
+	var collectionRepo repository.CollectionRepository
+	var fileActions imageFileActionExecutor
 	for _, dep := range depsOpt {
 		switch v := dep.(type) {
 		case imageScanTrigger:
 			adminSvc = v
 		case imageSearchWindowProvider:
 			searchSvc = v
+		case repository.CollectionRepository:
+			collectionRepo = v
+		case imageFileActionExecutor:
+			fileActions = v
 		}
+	}
+	if fileActions == nil {
+		fileActions = newDefaultImageFileActionExecutor()
 	}
 
 	return &ImageHandler{
-		imageRepo:    imageRepo,
-		tagRepo:      tagRepo,
-		imageTagRepo: imageTagRepo,
-		searchSvc:    searchSvc,
-		adminSvc:     adminSvc,
+		imageRepo:      imageRepo,
+		tagRepo:        tagRepo,
+		imageTagRepo:   imageTagRepo,
+		collectionRepo: collectionRepo,
+		fileActions:    fileActions,
+		searchSvc:      searchSvc,
+		adminSvc:       adminSvc,
 	}
 }
 
@@ -204,6 +218,81 @@ func (h *ImageHandler) GetImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, rewriteImageForRequest(c.Request, *image))
+}
+
+func (h *ImageHandler) OpenSourceFile(c *gin.Context) {
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+
+	image, err := h.imageRepo.FindByID(id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.fileActions.OpenSource(image.Path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "source file missing or inaccessible"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open source file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func (h *ImageHandler) PermanentDeleteImage(c *gin.Context) {
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	if h.collectionRepo == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "collection repository not configured"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	image, err := h.imageRepo.FindByID(id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	affectedCollectionIDs, err := h.collectionRepo.FindCollectionIDsByImage(ctx, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve related collections"})
+		return
+	}
+
+	if err := h.fileActions.DeleteSourceAndThumbnails(*image); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete source file or thumbnails"})
+		return
+	}
+
+	if err := h.imageRepo.Delete(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete image record"})
+		return
+	}
+
+	for _, collectionID := range affectedCollectionIDs {
+		if err := h.collectionRepo.ReconcileAfterImageDelete(ctx, collectionID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to reconcile related collections"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "deleted", "id": id})
 }
 
 // TriggerImport handles POST /api/v1/images/scan and queues a manual scan job.

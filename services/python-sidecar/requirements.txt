@@ -1,7 +1,7 @@
 fastapi==0.115.14
 uvicorn==0.35.0
 pydantic==2.11.7
-imagehash==4.3.2
+imagededup==0.3.3.post2
 Pillow==11.3.0
 numpy==2.3.2
 scipy==1.17.1
