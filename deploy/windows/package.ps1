@@ -257,20 +257,153 @@ Ensure-Directory -Path (Join-Path $PortableRoot 'data')
 Ensure-Directory -Path (Join-Path $PortableRoot 'storage')
 Ensure-Directory -Path (Join-Path $PortableRoot 'library')
 
-if ($All -or $Go) {
-    Write-Host "Building Go server with optimizations..."
-    # Build optimizations for reduced size and faster startup:
-    # CGO_ENABLED=0: create static binary, avoid dynamic linker overhead
-    # -ldflags "-s -w": strip symbol table and DWARF debug info (~30% size reduction)
-    # -trimpath: remove file system paths for reproducible builds
-    $env:CGO_ENABLED = '0'
-    Invoke-External -FilePath 'go' -Arguments @(
-        'build',
-        '-ldflags', '-s -w',
-        '-trimpath',
-        '-o', $GoBuildExecutable,
-        './cmd/server'
+function Install-Libvips {
+    param(
+        [string]$Destination,
+        [string]$RepoRoot
     )
+    
+    Write-Host "  libvips not found, downloading..."
+    
+    $libvipsVersion = "v8.17.2"
+    $downloadUrl = "https://github.com/libvips/build-win64-mxe/releases/download/$libvipsVersion/libvips-$libvipsVersion-windows-x64.zip"
+    $tempZip = Join-Path $env:TEMP "libvips-$libvipsVersion-windows-x64.zip"
+    $tempDir = Join-Path $env:TEMP "libvips-extract"
+    
+    try {
+        Write-Host "    Downloading from: $downloadUrl"
+        
+        # 下载文件
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -UseBasicParsing
+        
+        if (-not (Test-Path $tempZip)) {
+            throw "Download failed"
+        }
+        
+        Write-Host "    Extracting..."
+        
+        # 解压
+        Ensure-Directory -Path $tempDir
+        Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
+        
+        # 移动文件
+        $extractedPath = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
+        if ($extractedPath) {
+            $srcBin = Join-Path $extractedPath.FullName 'bin'
+            $srcInclude = Join-Path $extractedPath.FullName 'include'
+            
+            if (Test-Path $srcBin) {
+                Copy-Item -Path "$srcBin\*" -Destination $Destination -Force
+                Write-Host "    Copied DLLs to: $Destination"
+            }
+            
+            $includeDest = Join-Path $RepoRoot 'thirdparty\include'
+            Ensure-Directory -Path $includeDest
+            if (Test-Path $srcInclude) {
+                Copy-Item -Path "$srcInclude\*" -Destination $includeDest -Force -Recurse
+                Write-Host "    Copied headers to: $includeDest"
+            }
+        }
+        
+        Write-Host "    libvips installed successfully!"
+        
+    } catch {
+        Write-Warning "    Failed to auto-download libvips: $_"
+        Write-Host "    Please download manually from: https://github.com/libvips/build-win64-mxe/releases"
+        return $false
+    } finally {
+        # 清理临时文件
+        if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
+        if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
+    }
+    
+    return $true
+}
+
+if ($All -or $Go) {
+    Write-Host "Building Go server with libvips support..."
+    
+    # 检查 libvips 库是否存在
+    $libvipsPath = Join-Path $RepoRoot 'thirdparty\windows-x64'
+    Ensure-Directory -Path $libvipsPath
+    $libvipsExists = Test-Path (Join-Path $libvipsPath 'libvips.dll')
+    
+    if ($libvipsExists) {
+        # 使用 libvips (高性能)
+        $env:CGO_ENABLED = '1'
+        $env:CGO_LDFLAGS = "-L `"$libvipsPath`" -lvips"
+        Write-Host "  Using libvips from: $libvipsPath"
+        
+        Invoke-External -FilePath 'go' -Arguments @(
+            'build',
+            '-tags', 'libvips',
+            '-ldflags', '-s -w',
+            '-trimpath',
+            '-o', $GoBuildExecutable,
+            './cmd/server'
+        )
+        $usingLibvips = $true
+    } else {
+        # 尝试自动下载 libvips
+        Write-Host "  libvips not found, attempting auto-download..."
+        $downloadSuccess = Install-Libvips -Destination $libvipsPath -RepoRoot $RepoRoot
+        
+        if ($downloadSuccess) {
+            # 重新检查
+            $libvipsExists = Test-Path (Join-Path $libvipsPath 'libvips.dll')
+            
+            if ($libvipsExists) {
+                $env:CGO_ENABLED = '1'
+                $env:CGO_LDFLAGS = "-L `"$libvipsPath`" -lvips"
+                Write-Host "  Using libvips from: $libvipsPath"
+                
+                Invoke-External -FilePath 'go' -Arguments @(
+                    'build',
+                    '-tags', 'libvips',
+                    '-ldflags', '-s -w',
+                    '-trimpath',
+                    '-o', $GoBuildExecutable,
+                    './cmd/server'
+                )
+                $usingLibvips = $true
+            } else {
+                Write-Host "  libvips installation failed, falling back to pure Go"
+                $env:CGO_ENABLED = '0'
+                
+                Invoke-External -FilePath 'go' -Arguments @(
+                    'build',
+                    '-ldflags', '-s -w',
+                    '-trimpath',
+                    '-o', $GoBuildExecutable,
+                    './cmd/server'
+                )
+                $usingLibvips = $false
+            }
+        } else {
+            # 回退到纯 Go 方案
+            Write-Host "  libvips not available, using pure Go imaging library"
+            $env:CGO_ENABLED = '0'
+            
+            Invoke-External -FilePath 'go' -Arguments @(
+                'build',
+                '-ldflags', '-s -w',
+                '-trimpath',
+                '-o', $GoBuildExecutable,
+                './cmd/server'
+            )
+            $usingLibvips = $false
+        }
+    }
+    
+    # 复制 libvips DLL 到输出目录 (如果使用 libvips)
+    if ($usingLibvips) {
+        $dllFiles = Get-ChildItem -LiteralPath $libvipsPath -Filter '*.dll' -ErrorAction SilentlyContinue
+        foreach ($dll in $dllFiles) {
+            Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $PortableRoot 'runtime/bin/') -Force
+            Write-Host "  Copied: $($dll.Name)"
+        }
+    }
 }
 
 Assert-SourceArtifactExists -Path $GoBuildExecutable -Label 'Go build artifact' -RecoveryHint 'Run the default packaging command once, or include -Go in this packaging run.'

@@ -13,9 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
+	"github.com/wonichan/acgwarehouse-backend/internal/ai"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/handler"
+	"github.com/wonichan/acgwarehouse-backend/internal/imageruntime"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
@@ -69,15 +71,16 @@ type App struct {
 	collectionRepo repository.CollectionRepository
 
 	// Services
-	governanceSvc *service.TagGovernanceService
-	sidecarClient *sidecar.SidecarClient
-	duplicateSvc  *service.DuplicateService
-	searchSvc     *service.SearchService
-	collectionSvc *service.CollectionService
-	adminSvc      *service.AdminService
-	monitoringBus *service.MonitoringEventBus
-	logStreamSvc  *service.LogStreamService
-	autoScheduler *service.AITagAutoScheduler
+	governanceSvc       *service.TagGovernanceService
+	sidecarClient       *sidecar.SidecarClient
+	duplicateSvc        *service.DuplicateService
+	searchSvc           *service.SearchService
+	collectionSvc       *service.CollectionService
+	adminSvc            *service.AdminService
+	monitoringBus       *service.MonitoringEventBus
+	logStreamSvc        *service.LogStreamService
+	autoScheduler       *service.AITagAutoScheduler
+	aiRateLimitedClient *ai.RateLimitedClient
 
 	// Background task control
 	refillStopMu         sync.Mutex
@@ -120,6 +123,10 @@ func New(cfgPath string) (*App, error) {
 		return nil, fmt.Errorf("failed to setup go logging: %w", err)
 	}
 	app.logCleanup = logCleanup
+
+	if err := imageruntime.EnsureStarted(); err != nil {
+		return nil, fmt.Errorf("failed to start image runtime: %w", err)
+	}
 
 	// Initialize database
 	db, err := openDatabase(app.config)
@@ -189,6 +196,7 @@ func (a *App) Run() error {
 	}
 	a.cfgReloader.OnChange(func(old, new *config.Config) {
 		a.handleAutoSchedulerConfigChange(old, new)
+		a.handleAIConfigChange(old, new)
 	})
 	// Start job recovery in background
 	go a.recoverJobs()
@@ -344,6 +352,8 @@ func (a *App) Shutdown(ctx context.Context) error {
 			a.logCleanup()
 			a.logCleanup = nil
 		}
+
+		imageruntime.Shutdown()
 	})
 	return shutdownErr
 }

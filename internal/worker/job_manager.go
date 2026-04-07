@@ -93,8 +93,18 @@ func (m *Manager) Start(ctx context.Context) {
 	m.running = true
 	m.runningMu.Unlock()
 
-	// 创建 ants 协程池
-	pool, err := ants.NewPool(m.workerCount)
+	// 创建 ants 协程池（带优化选项）
+	pool, err := ants.NewPool(
+		m.workerCount,
+		// 预分配内存，提升高并发性能
+		ants.WithPreAlloc(true),
+		// 防止任务 panic 导致整个 pool 崩溃
+		ants.WithPanicHandler(func(i interface{}) {
+			log.Printf("[ANTS PANIC] task panicked: %v", i)
+		}),
+		// 空闲 goroutine 回收时间（10分钟）
+		ants.WithExpiryDuration(10*time.Minute),
+	)
 	if err != nil {
 		log.Printf("创建 ants 池失败: %v", err)
 		m.runningMu.Lock()
@@ -163,11 +173,7 @@ func (m *Manager) SetWorkerCount(ctx context.Context, newCount int) {
 
 // GetWorkerCount returns the current number of workers.
 func (m *Manager) GetWorkerCount() int {
-	m.poolMu.RLock()
-	defer m.poolMu.RUnlock()
-	if m.pool != nil {
-		return m.pool.Cap()
-	}
+	// 返回配置值（更准确，因为 ants.Tune 是异步的）
 	return m.workerCount
 }
 

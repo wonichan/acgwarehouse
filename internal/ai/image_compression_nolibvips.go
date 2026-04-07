@@ -1,17 +1,18 @@
-//go:build libvips
+//go:build !libvips
 
 package ai
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
+	"image"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/davidbyttow/govips/v2/vips"
-	"github.com/wonichan/acgwarehouse-backend/internal/imageruntime"
+	"github.com/disintegration/imaging"
 	_ "golang.org/x/image/webp"
 )
 
@@ -45,28 +46,19 @@ func calculateResizeDimensions(width, height int, maxPixels int) (int, int) {
 }
 
 func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
-	if err := imageruntime.EnsureStarted(); err != nil {
-		return nil, "", fmt.Errorf("start vips runtime: %w", err)
-	}
-
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return nil, "", fmt.Errorf("stat file: %w", err)
 	}
 	fileSize := fileInfo.Size()
 
-	img, err := vips.NewImageFromFile(filePath)
+	img, err := imaging.Open(filePath)
 	if err != nil {
 		return nil, "", fmt.Errorf("open image: %w", err)
 	}
-	defer img.Close()
 
-	if err := img.AutoRotate(); err != nil {
-		return nil, "", fmt.Errorf("autorotate image: %w", err)
-	}
-
-	width := img.Width()
-	height := img.Height()
+	width := img.Bounds().Dx()
+	height := img.Bounds().Dy()
 	pixels := width * height
 
 	if pixels <= maxAIPixelCount && fileSize <= int64(maxAIImageSize) {
@@ -74,31 +66,31 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("read file: %w", err)
 		}
-		return data, detectContentType(filePath), nil
+		contentType := detectContentType(filePath)
+		return data, contentType, nil
 	}
 
 	if pixels > maxAIPixelCount {
 		newWidth, newHeight := calculateResizeDimensions(width, height, targetPixelCount)
-		scale := float64(newWidth) / float64(width)
-		if err := img.Resize(scale, vips.KernelLanczos3); err != nil {
-			return nil, "", fmt.Errorf("resize image: %w", err)
-		}
+		img = imaging.Resize(img, newWidth, newHeight, imaging.Lanczos)
 		width, height = newWidth, newHeight
+		_ = width
 		_ = height
 	}
 
-	data, err := exportJPEG(img, 85)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := imaging.Encode(&buf, img, imaging.JPEG, imaging.JPEGQuality(85)); err != nil {
 		return nil, "", fmt.Errorf("encode image: %w", err)
 	}
+	data := buf.Bytes()
 	contentType := "image/jpeg"
 
 	if len(data) <= maxAIImageSize {
 		return data, contentType, nil
 	}
 
-	kernel := selectResizeKernelForAI(fileSize)
-	compressedData, err := compressImageWithKernel(img, kernel)
+	filter := selectResizeFilterForAI(fileSize)
+	compressedData, err := compressImageWithFilter(img, filter)
 	if err != nil {
 		return nil, "", fmt.Errorf("compress image: %w", err)
 	}
@@ -116,18 +108,13 @@ func PrepareImageForDataURL(filePath string) ([]byte, string, error) {
 		return data, contentType, nil
 	}
 
-	if err := imageruntime.EnsureStarted(); err != nil {
-		return nil, "", fmt.Errorf("start vips runtime: %w", err)
-	}
-
-	img, err := vips.NewImageFromBuffer(data)
+	img, err := imaging.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, "", fmt.Errorf("decode processed image: %w", err)
 	}
-	defer img.Close()
 
-	kernel := selectResizeKernelForAI(int64(len(data)))
-	adjustedData, err := compressImageWithKernelAndLimit(img, kernel, maxDecodedDataURLSize(contentType))
+	filter := selectResizeFilterForAI(int64(len(data)))
+	adjustedData, err := compressImageWithFilterAndLimit(img, filter, maxDecodedDataURLSize(contentType))
 	if err != nil {
 		return nil, "", fmt.Errorf("compress image for data url: %w", err)
 	}
@@ -152,50 +139,41 @@ func detectContentType(filePath string) string {
 	}
 }
 
-func selectResizeKernelForAI(fileSize int64) vips.Kernel {
+func selectResizeFilterForAI(fileSize int64) imaging.ResampleFilter {
 	switch {
 	case fileSize < smallFileThreshold:
-		return vips.KernelLanczos3
+		return imaging.Lanczos
 	case fileSize < mediumFileThreshold:
-		return vips.KernelLinear
+		return imaging.Linear
 	default:
-		return vips.KernelNearest
+		return imaging.Box
 	}
 }
 
-func compressImageWithKernel(img *vips.ImageRef, kernel vips.Kernel) ([]byte, error) {
-	return compressImageWithKernelAndLimit(img, kernel, maxAIImageSize)
+func compressImageWithFilter(img image.Image, filter imaging.ResampleFilter) ([]byte, error) {
+	return compressImageWithFilterAndLimit(img, filter, maxAIImageSize)
 }
 
-func compressImageWithKernelAndLimit(img *vips.ImageRef, kernel vips.Kernel, maxSize int) ([]byte, error) {
+func compressImageWithFilterAndLimit(img image.Image, filter imaging.ResampleFilter, maxSize int) ([]byte, error) {
 	quality := 85
 	scale := 1.0
 	maxIterations := 10
 	minQuality := 50
-	var lastEncoded []byte
 
 	for i := 0; i < maxIterations; i++ {
-		currentImg, err := img.Copy()
-		if err != nil {
-			return nil, fmt.Errorf("copy image: %w", err)
-		}
-
+		currentImg := img
 		if scale < 1.0 {
-			if err := currentImg.Resize(scale, kernel); err != nil {
-				currentImg.Close()
-				return nil, fmt.Errorf("resize image: %w", err)
-			}
+			newWidth := int(float64(img.Bounds().Dx()) * scale)
+			currentImg = imaging.Resize(img, newWidth, 0, filter)
 		}
 
-		encoded, err := exportJPEG(currentImg, quality)
-		currentImg.Close()
-		if err != nil {
+		var buf bytes.Buffer
+		if err := imaging.Encode(&buf, currentImg, imaging.JPEG, imaging.JPEGQuality(quality)); err != nil {
 			return nil, fmt.Errorf("encode image: %w", err)
 		}
-		lastEncoded = encoded
 
-		if len(encoded) <= maxSize {
-			return encoded, nil
+		if buf.Len() <= maxSize {
+			return buf.Bytes(), nil
 		}
 
 		if quality > minQuality {
@@ -208,46 +186,16 @@ func compressImageWithKernelAndLimit(img *vips.ImageRef, kernel vips.Kernel, max
 
 		scale -= 0.15
 		if scale <= 0.1 {
-			return lastEncoded, nil
+			return buf.Bytes(), nil
 		}
 	}
 
-	if len(lastEncoded) > 0 {
-		return lastEncoded, nil
+	var buf bytes.Buffer
+	scaledImg := imaging.Resize(img, int(float64(img.Bounds().Dx())*scale), 0, filter)
+	if err := imaging.Encode(&buf, scaledImg, imaging.JPEG, imaging.JPEGQuality(quality)); err != nil {
+		return nil, fmt.Errorf("encode image: %w", err)
 	}
-
-	fallbackImg, err := img.Copy()
-	if err != nil {
-		return nil, fmt.Errorf("copy image fallback: %w", err)
-	}
-	defer fallbackImg.Close()
-	if scale < 1.0 {
-		if err := fallbackImg.Resize(scale, kernel); err != nil {
-			return nil, fmt.Errorf("resize image fallback: %w", err)
-		}
-	}
-
-	return exportJPEG(fallbackImg, quality)
-}
-
-func exportJPEG(img *vips.ImageRef, quality int) ([]byte, error) {
-	if img.HasAlpha() {
-		if err := img.Flatten(&vips.Color{R: 255, G: 255, B: 255}); err != nil {
-			return nil, fmt.Errorf("flatten alpha for jpeg: %w", err)
-		}
-	}
-
-	params := vips.NewJpegExportParams()
-	params.Quality = quality
-	params.StripMetadata = true
-	params.OptimizeCoding = true
-	params.Interlace = true
-
-	data, _, err := img.ExportJpeg(params)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	return buf.Bytes(), nil
 }
 
 func dataURLSize(contentType string, dataSize int) int {

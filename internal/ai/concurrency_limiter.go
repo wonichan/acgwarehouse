@@ -6,7 +6,8 @@ import (
 
 // ConcurrencyLimiter 限制同时执行的 AI 请求数量
 type ConcurrencyLimiter struct {
-	sem chan struct{}
+	sem   chan struct{}
+	limit int
 }
 
 // NewConcurrencyLimiter 创建并发限制器
@@ -16,8 +17,24 @@ func NewConcurrencyLimiter(maxConcurrent int) *ConcurrencyLimiter {
 		maxConcurrent = 3 // 默认 3 个并发
 	}
 	return &ConcurrencyLimiter{
-		sem: make(chan struct{}, maxConcurrent),
+		sem:   make(chan struct{}, maxConcurrent),
+		limit: maxConcurrent,
 	}
+}
+
+// SetLimit 动态调整并发限制
+func (l *ConcurrencyLimiter) SetLimit(newLimit int) {
+	if newLimit <= 0 {
+		newLimit = 1
+	}
+	l.limit = newLimit
+	// 调整 channel 容量需要重新创建
+	newSem := make(chan struct{}, newLimit)
+	// 将现有槽位移到新 channel
+	for i := 0; i < len(l.sem); i++ {
+		newSem <- struct{}{}
+	}
+	l.sem = newSem
 }
 
 // Acquire 获取一个执行槽位，如果达到并发上限则阻塞

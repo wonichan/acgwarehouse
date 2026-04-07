@@ -25,7 +25,6 @@ func NewRateLimitedClient(provider AIProvider, requestsPerMinute int) *RateLimit
 
 	// burst = 1 表示严格限制，不允许突发
 	limiter := rate.NewLimiter(rate.Limit(rps), 1)
-
 	return &RateLimitedClient{
 		provider: provider,
 		limiter:  limiter,
@@ -51,4 +50,13 @@ func (c *RateLimitedClient) GenerateTags(ctx interface{}, imageURL, prompt strin
 
 	// 调用底层提供商
 	return c.provider.GenerateTags(ctx, imageURL, prompt)
+}
+
+// SetRequestsPerMinute 动态调整每分钟请求数限制
+func (c *RateLimitedClient) SetRequestsPerMinute(requestsPerMinute int) {
+	if requestsPerMinute <= 0 {
+		requestsPerMinute = 60
+	}
+	rps := float64(requestsPerMinute) / 60.0
+	c.limiter.SetLimit(rate.Limit(rps))
 }

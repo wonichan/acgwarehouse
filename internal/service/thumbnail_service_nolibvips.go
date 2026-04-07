@@ -1,14 +1,15 @@
-//go:build libvips
+//go:build !libvips
 
 package service
 
 import (
+	"bytes"
 	"fmt"
+	"image"
 	"os"
 
-	"github.com/davidbyttow/govips/v2/vips"
+	"github.com/disintegration/imaging"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
-	"github.com/wonichan/acgwarehouse-backend/internal/imageruntime"
 	_ "golang.org/x/image/webp"
 )
 
@@ -39,18 +40,9 @@ func NewThumbnailService() *ThumbnailService {
 }
 
 func (s *ThumbnailService) GenerateThumbnail(imgPath string, size string) (*domain.Thumbnail, error) {
-	if err := imageruntime.EnsureStarted(); err != nil {
-		return nil, fmt.Errorf("start vips runtime: %w", err)
-	}
-
-	src, err := vips.NewImageFromFile(imgPath)
+	src, err := imaging.Open(imgPath)
 	if err != nil {
 		return nil, fmt.Errorf("open image: %w", err)
-	}
-	defer src.Close()
-
-	if err := src.AutoRotate(); err != nil {
-		return nil, fmt.Errorf("autorotate image: %w", err)
 	}
 
 	width, quality, err := s.paramsBySize(size)
@@ -58,27 +50,30 @@ func (s *ThumbnailService) GenerateThumbnail(imgPath string, size string) (*doma
 		return nil, err
 	}
 
-	return s.generateThumbnail(src, width, quality, size, vips.KernelLanczos3)
+	resized := imaging.Resize(src, width, 0, imaging.Lanczos)
+
+	var buf bytes.Buffer
+	if err := imaging.Encode(&buf, resized, imaging.JPEG, imaging.JPEGQuality(quality)); err != nil {
+		return nil, fmt.Errorf("encode thumbnail: %w", err)
+	}
+
+	return &domain.Thumbnail{
+		Data:   buf.Bytes(),
+		Width:  resized.Bounds().Dx(),
+		Height: resized.Bounds().Dy(),
+		Size:   size,
+	}, nil
 }
 
 func (s *ThumbnailService) GenerateThumbnailDynamic(imgPath string, size string) (*domain.Thumbnail, error) {
-	if err := imageruntime.EnsureStarted(); err != nil {
-		return nil, fmt.Errorf("start vips runtime: %w", err)
-	}
-
 	fileSize, err := getFileSize(imgPath)
 	if err != nil {
 		return nil, fmt.Errorf("get file size: %w", err)
 	}
 
-	src, err := vips.NewImageFromFile(imgPath)
+	src, err := imaging.Open(imgPath)
 	if err != nil {
 		return nil, fmt.Errorf("open image: %w", err)
-	}
-	defer src.Close()
-
-	if err := src.AutoRotate(); err != nil {
-		return nil, fmt.Errorf("autorotate image: %w", err)
 	}
 
 	width, quality, err := s.paramsBySize(size)
@@ -86,39 +81,34 @@ func (s *ThumbnailService) GenerateThumbnailDynamic(imgPath string, size string)
 		return nil, err
 	}
 
-	kernel := selectResizeKernel(fileSize)
+	filter := selectResizeFilter(fileSize)
 
-	workingImg := src
 	if fileSize >= mediumFileThreshold {
 		maxPreScaleWidth := width * 4
 		if s.LargeWidth > width {
 			maxPreScaleWidth = s.LargeWidth * 4
 		}
-		workingImg, err = preScaleForLargeImage(src, maxPreScaleWidth)
-		if err != nil {
-			return nil, err
-		}
-		defer workingImg.Close()
+		src = preScaleForLargeImage(src, maxPreScaleWidth)
 	}
 
 	if size == "small" {
-		return s.generateSmallWithMinSize(workingImg, width, quality, kernel)
+		return s.generateSmallWithMinSize(src, width, quality, filter)
 	}
 
 	if size == "large" {
-		return s.generateLargeStandalone(workingImg, width, quality, kernel)
+		return s.generateLargeStandalone(src, width, quality, filter)
 	}
 
-	return s.generateThumbnail(workingImg, width, quality, size, kernel)
+	return s.generateThumbnail(src, width, quality, size, filter)
 }
 
-func (s *ThumbnailService) generateSmallWithMinSize(src *vips.ImageRef, width, quality int, kernel vips.Kernel) (*domain.Thumbnail, error) {
+func (s *ThumbnailService) generateSmallWithMinSize(src image.Image, width, quality int, filter imaging.ResampleFilter) (*domain.Thumbnail, error) {
 	currentWidth := width
 	currentQuality := quality
-	srcWidth := src.Width()
+	srcWidth := src.Bounds().Dx()
 
 	for i := 0; i < maxAdjustIterations; i++ {
-		thumb, err := s.generateThumbnail(src, currentWidth, currentQuality, "small", kernel)
+		thumb, err := s.generateThumbnail(src, currentWidth, currentQuality, "small", filter)
 		if err != nil {
 			return nil, err
 		}
@@ -147,16 +137,16 @@ func (s *ThumbnailService) generateSmallWithMinSize(src *vips.ImageRef, width, q
 		return thumb, nil
 	}
 
-	return s.generateThumbnail(src, currentWidth, currentQuality, "small", kernel)
+	return s.generateThumbnail(src, currentWidth, currentQuality, "small", filter)
 }
 
-func (s *ThumbnailService) generateLargeWithMaxSize(src *vips.ImageRef, width, quality int, smallSize int, kernel vips.Kernel) (*domain.Thumbnail, error) {
+func (s *ThumbnailService) generateLargeWithMaxSize(src image.Image, width, quality int, smallSize int, filter imaging.ResampleFilter) (*domain.Thumbnail, error) {
 	currentWidth := width
 	currentQuality := quality
-	srcWidth := src.Width()
+	srcWidth := src.Bounds().Dx()
 
 	for i := 0; i < maxAdjustIterations; i++ {
-		thumb, err := s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
+		thumb, err := s.generateThumbnail(src, currentWidth, currentQuality, "large", filter)
 		if err != nil {
 			return nil, err
 		}
@@ -204,16 +194,16 @@ func (s *ThumbnailService) generateLargeWithMaxSize(src *vips.ImageRef, width, q
 		}
 	}
 
-	return s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
+	return s.generateThumbnail(src, currentWidth, currentQuality, "large", filter)
 }
 
-func (s *ThumbnailService) generateLargeStandalone(src *vips.ImageRef, width, quality int, kernel vips.Kernel) (*domain.Thumbnail, error) {
+func (s *ThumbnailService) generateLargeStandalone(src image.Image, width, quality int, filter imaging.ResampleFilter) (*domain.Thumbnail, error) {
 	currentWidth := width
 	currentQuality := quality
-	srcWidth := src.Width()
+	srcWidth := src.Bounds().Dx()
 
 	for i := 0; i < maxAdjustIterations; i++ {
-		thumb, err := s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
+		thumb, err := s.generateThumbnail(src, currentWidth, currentQuality, "large", filter)
 		if err != nil {
 			return nil, err
 		}
@@ -256,83 +246,52 @@ func (s *ThumbnailService) generateLargeStandalone(src *vips.ImageRef, width, qu
 		}
 	}
 
-	return s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
+	return s.generateThumbnail(src, currentWidth, currentQuality, "large", filter)
 }
 
-func (s *ThumbnailService) generateThumbnail(src *vips.ImageRef, width, quality int, size string, kernel vips.Kernel) (*domain.Thumbnail, error) {
-	working, err := src.Copy()
-	if err != nil {
-		return nil, fmt.Errorf("copy image: %w", err)
-	}
-	defer working.Close()
+func (s *ThumbnailService) generateThumbnail(src image.Image, width, quality int, size string, filter imaging.ResampleFilter) (*domain.Thumbnail, error) {
+	resized := imaging.Resize(src, width, 0, filter)
 
-	srcWidth := working.Width()
-	if srcWidth <= 0 {
-		return nil, fmt.Errorf("invalid source width")
-	}
-
-	scale := float64(width) / float64(srcWidth)
-	if scale <= 0 {
-		return nil, fmt.Errorf("invalid resize scale")
-	}
-
-	if err := working.Resize(scale, kernel); err != nil {
-		return nil, fmt.Errorf("resize thumbnail: %w", err)
-	}
-
-	encoded, err := exportThumbnailJPEG(working, quality)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := imaging.Encode(&buf, resized, imaging.JPEG, imaging.JPEGQuality(quality)); err != nil {
 		return nil, fmt.Errorf("encode thumbnail: %w", err)
 	}
 
 	return &domain.Thumbnail{
-		Data:   encoded,
-		Width:  working.Width(),
-		Height: working.Height(),
+		Data:   buf.Bytes(),
+		Width:  resized.Bounds().Dx(),
+		Height: resized.Bounds().Dy(),
 		Size:   size,
 	}, nil
 }
 
 func (s *ThumbnailService) GenerateBoth(imgPath string) (small, large *domain.Thumbnail, err error) {
-	if err := imageruntime.EnsureStarted(); err != nil {
-		return nil, nil, fmt.Errorf("start vips runtime: %w", err)
-	}
-
 	fileSize, err := getFileSize(imgPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get file size: %w", err)
 	}
 
-	src, err := vips.NewImageFromFile(imgPath)
+	src, err := imaging.Open(imgPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open image: %w", err)
 	}
-	defer src.Close()
 
-	if err := src.AutoRotate(); err != nil {
-		return nil, nil, fmt.Errorf("autorotate image: %w", err)
-	}
-
-	kernel := selectResizeKernel(fileSize)
+	filter := selectResizeFilter(fileSize)
 
 	workingImg := src
 	if fileSize >= mediumFileThreshold {
 		maxPreScaleWidth := s.LargeWidth * 4
-		workingImg, err = preScaleForLargeImage(src, maxPreScaleWidth)
-		if err != nil {
-			return nil, nil, err
-		}
-		defer workingImg.Close()
+		workingImg = preScaleForLargeImage(src, maxPreScaleWidth)
 	}
 
 	smallWidth, smallQuality, _ := s.paramsBySize("small")
-	small, err = s.generateSmallWithMinSize(workingImg, smallWidth, smallQuality, kernel)
+	small, err = s.generateSmallWithMinSize(workingImg, smallWidth, smallQuality, filter)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	largeWidth, largeQuality, _ := s.paramsBySize("large")
-	large, err = s.generateLargeWithMaxSize(workingImg, largeWidth, largeQuality, len(small.Data), kernel)
+	large, err = s.generateLargeWithMaxSize(workingImg, largeWidth, largeQuality, len(small.Data), filter)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -359,53 +318,21 @@ func getFileSize(filePath string) (int64, error) {
 	return info.Size(), nil
 }
 
-func selectResizeKernel(fileSize int64) vips.Kernel {
+func selectResizeFilter(fileSize int64) imaging.ResampleFilter {
 	switch {
 	case fileSize < smallFileThreshold:
-		return vips.KernelLanczos3
+		return imaging.Lanczos
 	case fileSize < mediumFileThreshold:
-		return vips.KernelLinear
+		return imaging.Linear
 	default:
-		return vips.KernelNearest
+		return imaging.Box
 	}
 }
 
-func preScaleForLargeImage(img *vips.ImageRef, maxPreScaleWidth int) (*vips.ImageRef, error) {
-	copyImg, err := img.Copy()
-	if err != nil {
-		return nil, fmt.Errorf("copy image: %w", err)
-	}
-
-	srcWidth := copyImg.Width()
+func preScaleForLargeImage(img image.Image, maxPreScaleWidth int) image.Image {
+	srcWidth := img.Bounds().Dx()
 	if srcWidth <= maxPreScaleWidth {
-		return copyImg, nil
+		return img
 	}
-
-	scale := float64(maxPreScaleWidth) / float64(srcWidth)
-	if err := copyImg.Resize(scale, vips.KernelNearest); err != nil {
-		copyImg.Close()
-		return nil, fmt.Errorf("pre-scale image: %w", err)
-	}
-
-	return copyImg, nil
-}
-
-func exportThumbnailJPEG(img *vips.ImageRef, quality int) ([]byte, error) {
-	if img.HasAlpha() {
-		if err := img.Flatten(&vips.Color{R: 255, G: 255, B: 255}); err != nil {
-			return nil, fmt.Errorf("flatten alpha for jpeg: %w", err)
-		}
-	}
-
-	params := vips.NewJpegExportParams()
-	params.Quality = quality
-	params.StripMetadata = true
-	params.OptimizeCoding = true
-	params.Interlace = true
-
-	data, _, err := img.ExportJpeg(params)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	return imaging.Resize(img, maxPreScaleWidth, 0, imaging.Box)
 }

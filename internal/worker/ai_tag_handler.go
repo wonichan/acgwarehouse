@@ -111,6 +111,14 @@ func InitAITagConcurrencyLimiter(maxConcurrency int) {
 	log.Printf("AI 标签生成并发限制已设置: %d", maxConcurrency)
 }
 
+// SetAITagConcurrencyLimiter 动态调整 AI 标签生成的并发限制
+func SetAITagConcurrencyLimiter(maxConcurrency int) {
+	if AITagConcurrencyLimiter != nil {
+		AITagConcurrencyLimiter.SetLimit(maxConcurrency)
+		log.Printf("AI 标签生成并发限制已调整为: %d", maxConcurrency)
+	}
+}
+
 // RegisterAITagHandler 注册 AI 标签生成任务处理器
 func RegisterAITagHandler(manager *Manager, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, aiTagChecker AITagPresenceChecker) {
 	manager.RegisterHandler("ai_tag_generation", NewAITagJobHandler(client, obsRepo, governance, aiTagChecker))
