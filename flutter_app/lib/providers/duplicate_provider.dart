@@ -58,20 +58,19 @@ class DuplicateProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final groups = await _service.getDuplicateGroups(
+      final response = await _service.getDuplicateGroups(
         limit: _pageSize,
         offset: _currentOffset,
       );
 
       if (refresh) {
-        _groups = groups;
+        _groups = response.groups;
       } else {
-        _groups.addAll(groups);
+        _groups.addAll(response.groups);
       }
 
-      _currentOffset += groups.length;
-      _totalGroups =
-          _groups.length + (groups.length < _pageSize ? 0 : _pageSize);
+      _currentOffset += response.groups.length;
+      _totalGroups = response.total;
     } catch (e) {
       _error = e.toString();
     } finally {

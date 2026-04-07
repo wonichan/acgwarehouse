@@ -3,7 +3,33 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/image.dart';
 
-/// Duplicate detection result group
+/// Response from duplicate groups list API
+class DuplicateListResponse {
+  final List<DuplicateGroup> groups;
+  final int total;
+  final bool hasMore;
+
+  const DuplicateListResponse({
+    required this.groups,
+    required this.total,
+    required this.hasMore,
+  });
+
+  factory DuplicateListResponse.fromJson(Map<String, dynamic> json) {
+    final groups =
+        (json['groups'] as List?)
+            ?.map((g) => DuplicateGroup.fromJson(g as Map<String, dynamic>))
+            .toList() ??
+        [];
+
+    return DuplicateListResponse(
+      groups: groups,
+      total: json['total'] as int? ?? 0,
+      hasMore: json['has_more'] as bool? ?? false,
+    );
+  }
+}
+
 class DuplicateGroup {
   final int id;
   final int recommendedImageId;
@@ -68,17 +94,9 @@ class DuplicateRelation {
   }
 
   static bool _hasCompleteImageModel(Map<String, dynamic> json) {
-    return json['id'] != null &&
-        json['path'] != null &&
-        json['filename'] != null &&
-        json['source_root'] != null &&
-        json['file_size'] != null &&
-        json['width'] != null &&
-        json['height'] != null &&
-        json['format'] != null &&
-        json['phash'] != null &&
-        json['created_at'] != null &&
-        json['updated_at'] != null;
+    // Be more lenient - allow loading if we have at least id and path
+    // This fixes the issue where images show as gray icons when any field is missing
+    return json['id'] != null && json['path'] != null;
   }
 }
 
@@ -124,7 +142,7 @@ class DuplicateService {
   }
 
   /// Get list of duplicate groups
-  Future<List<DuplicateGroup>> getDuplicateGroups({
+  Future<DuplicateListResponse> getDuplicateGroups({
     int limit = 20,
     int offset = 0,
   }) async {
@@ -145,11 +163,7 @@ class DuplicateService {
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final groups = (json['groups'] as List)
-        .map((g) => DuplicateGroup.fromJson(g as Map<String, dynamic>))
-        .toList();
-
-    return groups;
+    return DuplicateListResponse.fromJson(json);
   }
 
   /// Get single duplicate group detail
