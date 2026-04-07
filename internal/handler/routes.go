@@ -13,29 +13,30 @@ import (
 )
 
 type Dependencies struct {
-	ImageRepo      repository.ImageRepository
-	JobRepo        repository.JobRepository
-	TagRepo        repository.TagRepository
-	AliasRepo      repository.TagAliasRepository
-	ObsRepo        repository.TagObservationRepository
-	ImageTagRepo   repository.ImageTagRepository
-	DuplicateRepo  repository.DuplicateRepository
-	SearchRepo     repository.SearchRepository
-	CollectionRepo repository.CollectionRepository
-	GovernanceSvc  *service.TagGovernanceService
-	DuplicateSvc   *service.DuplicateService
-	SearchSvc      *service.SearchService
-	SidecarRuntime *sidecar.Runtime
-	CollectionSvc  *service.CollectionService
-	BatchSvc       *service.BatchService
-	AdminSvc       AdminServiceInterface
-	MonitoringBus  *service.MonitoringEventBus
-	LogStreamSvc   *service.LogStreamService
-	JobManager     *worker.Manager
-	AdminCfg       *config.Config
-	ConfigReloader *config.Reloader // For hot-reloadable config access
-	AITagProcessor gin.HandlerFunc
-	DB             *sql.DB // for FTS rebuild and other direct DB operations
+	ImageRepo        repository.ImageRepository
+	JobRepo          repository.JobRepository
+	TagRepo          repository.TagRepository
+	AliasRepo        repository.TagAliasRepository
+	ObsRepo          repository.TagObservationRepository
+	ImageTagRepo     repository.ImageTagRepository
+	DuplicateRepo    repository.DuplicateRepository
+	SearchRepo       repository.SearchRepository
+	CollectionRepo   repository.CollectionRepository
+	GovernanceSvc    *service.TagGovernanceService
+	DuplicateSvc     *service.DuplicateService
+	SearchSvc        *service.SearchService
+	SidecarRuntime   *sidecar.Runtime
+	CollectionSvc    *service.CollectionService
+	BatchSvc         *service.BatchService
+	AdminSvc         AdminServiceInterface
+	MonitoringBus    *service.MonitoringEventBus
+	LogStreamSvc     *service.LogStreamService
+	JobManager       *worker.Manager
+	AdminCfg         *config.Config
+	ConfigReloader   *config.Reloader // For hot-reloadable config access
+	AITagProcessor   gin.HandlerFunc
+	DB               *sql.DB // for FTS rebuild and other direct DB operations
+	ImageFileActions imageFileActionExecutor
 }
 
 // SetupRoutes registers all HTTP routes.
@@ -138,16 +139,30 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	imageGet := gin.HandlerFunc(placeholderHandler)
 	imageScan := gin.HandlerFunc(placeholderHandler)
 	imageViewerWindow := gin.HandlerFunc(placeholderHandler)
+	imageOpenSource := gin.HandlerFunc(placeholderHandler)
+	imagePermanentDelete := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.ImageRepo != nil && deps.TagRepo != nil && deps.ImageTagRepo != nil {
-		imageHandler := NewImageHandler(deps.ImageRepo, deps.TagRepo, deps.ImageTagRepo, deps.SearchSvc, deps.AdminSvc)
+		imageHandler := NewImageHandler(
+			deps.ImageRepo,
+			deps.TagRepo,
+			deps.ImageTagRepo,
+			deps.SearchSvc,
+			deps.AdminSvc,
+			deps.CollectionRepo,
+			deps.ImageFileActions,
+		)
 		imageList = imageHandler.ListImages
 		imageGet = imageHandler.GetImage
 		imageScan = imageHandler.TriggerImport
 		imageViewerWindow = imageHandler.ViewerWindow
+		imageOpenSource = imageHandler.OpenSourceFile
+		imagePermanentDelete = imageHandler.PermanentDeleteImage
 	}
 	images.GET("", imageList)
 	images.GET("/:id", imageGet)
 	images.POST("/scan", imageScan)
+	images.POST("/:id/open-source", imageOpenSource)
+	images.DELETE("/:id/permanent", imagePermanentDelete)
 	api.POST("/viewer/window", imageViewerWindow)
 
 	tagGet := gin.HandlerFunc(placeholderHandler)

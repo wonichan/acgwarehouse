@@ -31,6 +31,9 @@ type CollectionRepository interface {
 
 	// Statistics
 	Count(ctx context.Context) (int64, error)
+
+	FindCollectionIDsByImage(ctx context.Context, imageID int64) ([]int64, error)
+	ReconcileAfterImageDelete(ctx context.Context, collectionID int64) error
 }
 
 type sqliteCollectionRepository struct {
@@ -279,4 +282,64 @@ func (r *sqliteCollectionRepository) Count(ctx context.Context) (int64, error) {
 	var count int64
 	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM collections`).Scan(&count)
 	return count, err
+}
+
+func (r *sqliteCollectionRepository) FindCollectionIDsByImage(ctx context.Context, imageID int64) ([]int64, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT DISTINCT collection_id
+		FROM collection_images
+		WHERE image_id = ?
+	`, imageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+
+	return ids, rows.Err()
+}
+
+func (r *sqliteCollectionRepository) ReconcileAfterImageDelete(ctx context.Context, collectionID int64) error {
+	var imageCount int64
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM collection_images WHERE collection_id = ?
+	`, collectionID).Scan(&imageCount); err != nil {
+		return err
+	}
+
+	var latestImageID sql.NullInt64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT image_id FROM collection_images
+		WHERE collection_id = ?
+		ORDER BY added_at DESC
+		LIMIT 1
+	`, collectionID).Scan(&latestImageID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	now := time.Now()
+	if latestImageID.Valid {
+		_, err = r.db.ExecContext(ctx, `
+			UPDATE collections
+			SET image_count = ?, cover_image_id = ?, updated_at = ?
+			WHERE id = ?
+		`, imageCount, latestImageID.Int64, now, collectionID)
+		return err
+	}
+
+	_, err = r.db.ExecContext(ctx, `
+		UPDATE collections
+		SET image_count = ?, cover_image_id = NULL, updated_at = ?
+		WHERE id = ?
+	`, imageCount, now, collectionID)
+	return err
 }

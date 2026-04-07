@@ -96,6 +96,7 @@ func (a *App) initServices() {
 	a.sidecarClient = sidecar.NewSidecarClient(a.sidecarBaseURL)
 	a.duplicateSvc = service.NewDuplicateService(a.imageRepo, a.duplicateRepo, a.sidecarClient, unwrapRuntime(a.sidecarRuntime))
 	a.searchSvc = service.NewSearchService(a.imageRepo, a.tagRepo, a.searchRepo)
+	a.collectionSvc = service.NewCollectionService(a.collectionRepo)
 }
 
 func (a *App) initSidecarRuntime() {

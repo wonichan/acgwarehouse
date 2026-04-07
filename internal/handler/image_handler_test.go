@@ -363,11 +363,12 @@ func TestImageHandlerTagFilteredPaginationPreservesContract(t *testing.T) {
 }
 
 type imageHandlerTestRepos struct {
-	db           *sql.DB
-	imageRepo    repository.ImageRepository
-	tagRepo      repository.TagRepository
-	imageTagRepo repository.ImageTagRepository
-	governance   *service.TagGovernanceService
+	db             *sql.DB
+	imageRepo      repository.ImageRepository
+	tagRepo        repository.TagRepository
+	imageTagRepo   repository.ImageTagRepository
+	collectionRepo repository.CollectionRepository
+	governance     *service.TagGovernanceService
 }
 
 func newImageHandlerTestRouter(t *testing.T) (*gin.Engine, *imageHandlerTestRepos) {
@@ -398,22 +399,118 @@ func newImageHandlerTestRouter(t *testing.T) (*gin.Engine, *imageHandlerTestRepo
 	}
 
 	repos := &imageHandlerTestRepos{
-		db:           db,
-		imageRepo:    repository.NewImageRepository(db),
-		tagRepo:      repository.NewTagRepository(db),
-		imageTagRepo: repository.NewImageTagRepository(db),
+		db:             db,
+		imageRepo:      repository.NewImageRepository(db),
+		tagRepo:        repository.NewTagRepository(db),
+		imageTagRepo:   repository.NewImageTagRepository(db),
+		collectionRepo: repository.NewCollectionRepository(db),
 	}
 	// Note: governance not needed for image listing, pass nil for optional repos
 	repos.governance = service.NewTagGovernanceService(repos.tagRepo, nil, nil, repos.imageTagRepo)
 
-	h := NewImageHandler(repos.imageRepo, repos.tagRepo, repos.imageTagRepo)
+	h := NewImageHandler(repos.imageRepo, repos.tagRepo, repos.imageTagRepo, repos.collectionRepo)
 
 	router := gin.New()
 	api := router.Group("/api/v1")
 	api.GET("/images", h.ListImages)
 	api.GET("/images/:id", h.GetImage)
+	api.POST("/images/:id/open-source", h.OpenSourceFile)
+	api.DELETE("/images/:id/permanent", h.PermanentDeleteImage)
 
 	return router, repos
+}
+
+type imageFileActionStub struct {
+	openErr        error
+	deleteErr      error
+	openedPath     string
+	deletedImageID int64
+}
+
+func (s *imageFileActionStub) OpenSource(path string) error {
+	s.openedPath = path
+	return s.openErr
+}
+
+func (s *imageFileActionStub) DeleteSourceAndThumbnails(image domain.Image) error {
+	s.deletedImageID = image.ID
+	return s.deleteErr
+}
+
+func newImageActionTestRouter(t *testing.T, actions imageFileActionExecutor) (*gin.Engine, *imageHandlerTestRepos) {
+	t.Helper()
+
+	_, repos := newImageHandlerTestRouter(t)
+	h := NewImageHandler(repos.imageRepo, repos.tagRepo, repos.imageTagRepo, repos.collectionRepo, actions)
+	router := gin.New()
+	api := router.Group("/api/v1")
+	api.POST("/images/:id/open-source", h.OpenSourceFile)
+	api.DELETE("/images/:id/permanent", h.PermanentDeleteImage)
+	return router, repos
+}
+
+func TestImageHandlerOpenSourceFileReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	stub := &imageFileActionStub{}
+	router, _ := newImageActionTestRouter(t, stub)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/1/open-source", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if stub.openedPath == "" {
+		t.Fatal("openedPath is empty")
+	}
+}
+
+func TestImageHandlerPermanentDeleteRemovesImageRecord(t *testing.T) {
+	t.Parallel()
+
+	stub := &imageFileActionStub{}
+	router, repos := newImageActionTestRouter(t, stub)
+	ctx := context.Background()
+
+	collection := &domain.Collection{Name: "fav"}
+	if err := repos.collectionRepo.Save(ctx, collection); err != nil {
+		t.Fatalf("Save collection error = %v", err)
+	}
+	if err := repos.collectionRepo.AddImage(ctx, collection.ID, 1); err != nil {
+		t.Fatalf("AddImage error = %v", err)
+	}
+	if err := repos.collectionRepo.UpdateCover(ctx, collection.ID, 1); err != nil {
+		t.Fatalf("UpdateCover error = %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/images/1/permanent", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if stub.deletedImageID != 1 {
+		t.Fatalf("deletedImageID = %d, want 1", stub.deletedImageID)
+	}
+
+	_, err := repos.imageRepo.FindByID(1)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("FindByID(1) error = %v, want sql.ErrNoRows", err)
+	}
+
+	foundCollection, err := repos.collectionRepo.FindByID(ctx, collection.ID)
+	if err != nil {
+		t.Fatalf("FindByID(collection) error = %v", err)
+	}
+	if foundCollection.ImageCount != 0 {
+		t.Fatalf("image_count = %d, want 0", foundCollection.ImageCount)
+	}
+	if foundCollection.CoverImageID != nil {
+		t.Fatalf("cover_image_id = %v, want nil", foundCollection.CoverImageID)
+	}
 }
 
 func joinInt64(ids []int64) string {

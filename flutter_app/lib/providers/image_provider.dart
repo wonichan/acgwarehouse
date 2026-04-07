@@ -156,4 +156,16 @@ class ImageListProvider extends ChangeNotifier {
     notifyListeners();
     await loadImages(refresh: true);
   }
+
+  void removeImageById(int imageId) {
+    final before = _images.length;
+    _images = _images.where((image) => image.id != imageId).toList();
+    if (_images.length != before) {
+      _total = _total > 0 ? _total - 1 : 0;
+      if (_currentOffset > _images.length) {
+        _currentOffset = _images.length;
+      }
+      notifyListeners();
+    }
+  }
 }

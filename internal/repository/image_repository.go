@@ -370,8 +370,9 @@ func (r *sqliteImageRepository) FindUntagged(ctx context.Context, limit, offset 
 	query := fmt.Sprintf(`
 		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), COALESCE(i.phash_hex, ''), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
-		LEFT JOIN image_tags it ON it.image_id = i.id
-		WHERE it.image_id IS NULL
+		WHERE NOT EXISTS (
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state != 'rejected'
+		)
 		ORDER BY %s %s, i.id %s
 		LIMIT ? OFFSET ?
 	`, sortColumn, sortDir, sortDir)
@@ -423,8 +424,9 @@ func (r *sqliteImageRepository) CountUntagged(ctx context.Context) (int64, error
 	err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(i.id)
 		FROM images i
-		LEFT JOIN image_tags it ON it.image_id = i.id
-		WHERE it.image_id IS NULL
+		WHERE NOT EXISTS (
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state != 'rejected'
+		)
 	`).Scan(&count)
 	return count, err
 }
@@ -444,6 +446,7 @@ func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, lim
 			  FROM image_tags it
 			  WHERE it.image_id = i.id
 			    AND it.source = 'ai'
+			    AND it.review_state != 'rejected'
 		  )
 		  AND NOT EXISTS (
 			  SELECT 1
@@ -533,9 +536,9 @@ func buildBackfillBaseWhere(filter BackfillCandidateFilter) (string, []any) {
 
 	if filter.HasTags != nil {
 		if !*filter.HasTags {
-			conds = append(conds, `NOT EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id)`)
+			conds = append(conds, `NOT EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id AND it2.review_state != 'rejected')`)
 		} else {
-			conds = append(conds, `EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id)`)
+			conds = append(conds, `EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id AND it2.review_state != 'rejected')`)
 		}
 	}
 
@@ -557,7 +560,7 @@ func (r *sqliteImageRepository) FindBackfillCandidates(ctx context.Context, filt
 		WHERE 1=1
 		%s
 		AND NOT EXISTS (
-			SELECT 1 FROM image_tags it3 WHERE it3.image_id = i.id AND it3.source = 'ai'
+			SELECT 1 FROM image_tags it3 WHERE it3.image_id = i.id AND it3.source = 'ai' AND it3.review_state != 'rejected'
 		)
 		AND NOT EXISTS (
 			SELECT 1 FROM platform_tasks pt WHERE pt.image_id = i.id
@@ -606,7 +609,7 @@ func (r *sqliteImageRepository) CountBackfillCandidates(ctx context.Context, fil
 		WHERE 1=1
 		%s
 		AND NOT EXISTS (
-			SELECT 1 FROM image_tags it3 WHERE it3.image_id = i.id AND it3.source = 'ai'
+			SELECT 1 FROM image_tags it3 WHERE it3.image_id = i.id AND it3.source = 'ai' AND it3.review_state != 'rejected'
 		)
 		AND NOT EXISTS (
 			SELECT 1 FROM platform_tasks pt WHERE pt.image_id = i.id
@@ -630,7 +633,7 @@ func (r *sqliteImageRepository) CountBackfillSkippedWithAITag(ctx context.Contex
 		WHERE 1=1
 		%s
 		AND EXISTS (
-			SELECT 1 FROM image_tags it3 WHERE it3.image_id = i.id AND it3.source = 'ai'
+			SELECT 1 FROM image_tags it3 WHERE it3.image_id = i.id AND it3.source = 'ai' AND it3.review_state != 'rejected'
 		)
 	`, baseWhere)
 

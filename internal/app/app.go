@@ -73,6 +73,7 @@ type App struct {
 	sidecarClient *sidecar.SidecarClient
 	duplicateSvc  *service.DuplicateService
 	searchSvc     *service.SearchService
+	collectionSvc *service.CollectionService
 	adminSvc      *service.AdminService
 	monitoringBus *service.MonitoringEventBus
 	logStreamSvc  *service.LogStreamService
@@ -233,6 +234,7 @@ func (a *App) Run() error {
 		GovernanceSvc:  a.governanceSvc,
 		DuplicateSvc:   a.duplicateSvc,
 		SearchSvc:      a.searchSvc,
+		CollectionSvc:  a.collectionSvc,
 		SidecarRuntime: unwrapRuntime(a.sidecarRuntime),
 		MonitoringBus:  a.monitoringBus,
 		LogStreamSvc:   a.logStreamSvc,

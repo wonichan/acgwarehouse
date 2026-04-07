@@ -172,5 +172,33 @@ void main() {
         expect(captured.queryParameters['sort_dir'], 'asc');
       });
     });
+
+    group('image actions', () {
+      test('openImageSourceFile sends POST to action endpoint', () async {
+        when(
+          mockClient.post(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response('{"status":"ok"}', 200));
+
+        await apiService.openImageSourceFile(42);
+
+        final captured = verify(
+          mockClient.post(captureAny, headers: anyNamed('headers')),
+        ).captured.single as Uri;
+        expect(captured.path, contains('/api/v1/images/42/open-source'));
+      });
+
+      test('permanentDeleteImage sends DELETE to action endpoint', () async {
+        when(
+          mockClient.delete(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response('{"status":"deleted"}', 200));
+
+        await apiService.permanentDeleteImage(7);
+
+        final captured = verify(
+          mockClient.delete(captureAny, headers: anyNamed('headers')),
+        ).captured.single as Uri;
+        expect(captured.path, contains('/api/v1/images/7/permanent'));
+      });
+    });
   });
 }

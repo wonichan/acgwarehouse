@@ -124,6 +124,34 @@ class ApiService {
     return ViewerWindowResult.fromJson(json);
   }
 
+  Future<void> openImageSourceFile(int imageId) async {
+    final response = await _client.post(
+      Uri.parse('$baseUrl/api/v1/images/$imageId/open-source'),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        'Failed to open image source file: ${response.statusCode}',
+        response.statusCode,
+      );
+    }
+  }
+
+  Future<void> permanentDeleteImage(int imageId) async {
+    final response = await _client.delete(
+      Uri.parse('$baseUrl/api/v1/images/$imageId/permanent'),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        'Failed to permanently delete image: ${response.statusCode}',
+        response.statusCode,
+      );
+    }
+  }
+
   void dispose() {
     _client.close();
   }

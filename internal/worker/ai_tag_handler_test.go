@@ -196,6 +196,60 @@ func TestAITagHandler_PersistsPendingImageTagsForReview(t *testing.T) {
 	}
 }
 
+func TestAITagHandler_RemovesRejectedAITagsBeforeSavingFreshResults(t *testing.T) {
+	db := mustOpenAIWorkerDB(t)
+	seedAIWorkerImage(t, db, 457)
+	ctx := context.Background()
+
+	obsRepo := repository.NewTagObservationRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	aliasRepo := repository.NewTagAliasRepository(db)
+	imageTagRepo := repository.NewImageTagRepository(db)
+	governance := service.NewTagGovernanceService(tagRepo, aliasRepo, obsRepo, imageTagRepo)
+
+	rejected := &domain.Tag{PreferredLabel: "old-rejected", Slug: "old-rejected", ReviewState: "confirmed", UsageCount: 1}
+	if err := tagRepo.Save(ctx, rejected); err != nil {
+		t.Fatalf("Save(rejected seed tag) error = %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: 457, TagID: rejected.ID, Source: domain.ImageTagSourceAI, ReviewState: "rejected", Confidence: 0.3}); err != nil {
+		t.Fatalf("Save(rejected ai tag) error = %v", err)
+	}
+
+	mockClient := &mockAIClient{
+		result: &ai.TagResult{
+			Tags:       []string{"fresh-tag"},
+			Confidence: 0.93,
+			ModelName:  "doubao-vision-pro",
+		},
+	}
+
+	manager := NewManager(&mockJobRepoForAI{})
+	RegisterAITagHandler(manager, mockClient, obsRepo, governance, imageTagRepo)
+
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 457, Path: "/test/image.png"})
+	handler := manager.handlers["ai_tag_generation"]
+	if err := handler(ctx, 3, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+
+	items, err := imageTagRepo.FindByImageID(ctx, 457)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	for _, item := range items {
+		if item.TagID == rejected.ID {
+			t.Fatalf("rejected AI tag should be removed before fresh generation merge: %+v", item)
+		}
+	}
+	newTag, err := tagRepo.FindByLabel(ctx, "fresh-tag")
+	if err != nil {
+		t.Fatalf("FindByLabel(fresh-tag) error = %v", err)
+	}
+	if len(items) != 1 || items[0].TagID != newTag.ID {
+		t.Fatalf("unexpected image tags after fresh generation: %+v", items)
+	}
+}
+
 func TestAITagHandler_SkipsWhenImageAlreadyHasAITags(t *testing.T) {
 	mockJobRepo := &mockJobRepoForAI{}
 	mockObsRepo := &mockTagObservationRepo{}
@@ -243,18 +297,23 @@ func TestAITagRegenerationHandlerReplacesPendingAITagsButPreservesConfirmedTags(
 	keepManual := &domain.Tag{PreferredLabel: "keep-manual", Slug: "keep-manual", ReviewState: "confirmed", UsageCount: 1}
 	oldPending := &domain.Tag{PreferredLabel: "old-pending-ai", Slug: "old-pending-ai", ReviewState: "confirmed", UsageCount: 1}
 	keepConfirmedAI := &domain.Tag{PreferredLabel: "keep-confirmed-ai", Slug: "keep-confirmed-ai", ReviewState: "confirmed", UsageCount: 1}
-	for _, tag := range []*domain.Tag{keepManual, oldPending, keepConfirmedAI} {
+	oldRejected := &domain.Tag{PreferredLabel: "old-rejected-ai", Slug: "old-rejected-ai", ReviewState: "confirmed", UsageCount: 1}
+	for _, tag := range []*domain.Tag{keepManual, oldPending, keepConfirmedAI, oldRejected} {
 		if err := tagRepo.Save(ctx, tag); err != nil {
 			t.Fatalf("Save(seed tag %s) error = %v", tag.PreferredLabel, err)
 		}
 	}
 	oldObs := &domain.TagObservation{ImageID: 999, RawText: "old-pending-ai", Confidence: 0.8, EvidenceType: "ai_generated", Provider: "mock", ModelName: "seed", PromptVersion: "v1", CreatedAt: time.Now()}
 	confirmedObs := &domain.TagObservation{ImageID: 999, RawText: "keep-confirmed-ai", Confidence: 0.85, EvidenceType: "ai_generated", Provider: "mock", ModelName: "seed", PromptVersion: "v1", CreatedAt: time.Now()}
+	rejectedObs := &domain.TagObservation{ImageID: 999, RawText: "old-rejected-ai", Confidence: 0.2, EvidenceType: "ai_generated", Provider: "mock", ModelName: "seed", PromptVersion: "v1", CreatedAt: time.Now()}
 	if err := obsRepo.Save(ctx, oldObs); err != nil {
 		t.Fatalf("Save(old observation) error = %v", err)
 	}
 	if err := obsRepo.Save(ctx, confirmedObs); err != nil {
 		t.Fatalf("Save(confirmed observation) error = %v", err)
+	}
+	if err := obsRepo.Save(ctx, rejectedObs); err != nil {
+		t.Fatalf("Save(rejected observation) error = %v", err)
 	}
 	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: 999, TagID: keepManual.ID, Source: domain.ImageTagSourceManual, ReviewState: "confirmed", Confidence: 1}); err != nil {
 		t.Fatalf("Save(manual confirmed) error = %v", err)
@@ -264,6 +323,9 @@ func TestAITagRegenerationHandlerReplacesPendingAITagsButPreservesConfirmedTags(
 	}
 	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: 999, TagID: keepConfirmedAI.ID, Source: domain.ImageTagSourceAI, SourceObservationID: &confirmedObs.ID, ReviewState: "confirmed", Confidence: 0.9}); err != nil {
 		t.Fatalf("Save(confirmed ai) error = %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: 999, TagID: oldRejected.ID, Source: domain.ImageTagSourceAI, SourceObservationID: &rejectedObs.ID, ReviewState: "rejected", Confidence: 0.2}); err != nil {
+		t.Fatalf("Save(rejected ai) error = %v", err)
 	}
 
 	mockClient := &mockAIClient{
@@ -290,6 +352,9 @@ func TestAITagRegenerationHandlerReplacesPendingAITagsButPreservesConfirmedTags(
 	}
 	if _, exists := states[oldPending.ID]; exists {
 		t.Fatalf("old pending AI tag should be removed during regeneration: %+v", states[oldPending.ID])
+	}
+	if _, exists := states[oldRejected.ID]; exists {
+		t.Fatalf("old rejected AI tag should be removed during regeneration: %+v", states[oldRejected.ID])
 	}
 	if states[keepManual.ID].ReviewState != "confirmed" || states[keepManual.ID].Source != domain.ImageTagSourceManual {
 		t.Fatalf("manual confirmed tag changed unexpectedly: %+v", states[keepManual.ID])
