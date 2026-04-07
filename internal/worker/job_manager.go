@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/panjf2000/ants/v2"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
@@ -28,17 +29,18 @@ type Manager struct {
 	queueSize   int
 	queueTypeMu sync.Mutex
 	queueTypes  map[string]int
-	stopOnce    sync.Once
-	stopCh      chan struct{}
-	runningMu   sync.Mutex
-	running     bool
-	pausedMu    sync.Mutex
-	paused      bool
 
-	// Worker pool management
-	workerCountMu sync.Mutex
-	workerCount   int
-	workerWg      sync.WaitGroup
+	// Worker pool (ants)
+	pool      *ants.Pool
+	poolMu    sync.RWMutex
+	stopCh    chan struct{}
+	running   bool
+	runningMu sync.Mutex
+	paused    bool
+	pausedMu  sync.Mutex
+
+	// 配置：worker 数量
+	workerCount int
 }
 
 // DefaultWorkerCount is the default number of workers.
@@ -65,22 +67,23 @@ func NewManagerWithConfig(jobRepo repository.JobRepository, workerCount, queueSi
 	if queueSize < 1 {
 		queueSize = DefaultQueueSize
 	}
-	return &Manager{
+	m := &Manager{
 		jobRepo:     jobRepo,
 		handlers:    make(map[string]JobFunc),
 		queue:       make(chan *domain.AsyncJob, queueSize),
 		queueSize:   queueSize,
 		queueTypes:  make(map[string]int),
-		workerCount: workerCount,
 		stopCh:      make(chan struct{}),
+		workerCount: workerCount,
 	}
+	return m
 }
 
 func (m *Manager) RegisterHandler(jobType string, handler JobFunc) {
 	m.handlers[jobType] = handler
 }
 
-// Start launches multiple worker goroutines to process jobs concurrently.
+// Start launches the ants pool to process jobs concurrently.
 func (m *Manager) Start(ctx context.Context) {
 	m.runningMu.Lock()
 	if m.running {
@@ -90,116 +93,85 @@ func (m *Manager) Start(ctx context.Context) {
 	m.running = true
 	m.runningMu.Unlock()
 
-	// 启动 worker 协程池
-	m.workerCountMu.Lock()
-	for i := 0; i < m.workerCount; i++ {
-		m.workerWg.Add(1)
-		go m.workerWithCountCheck(ctx, i)
+	// 创建 ants 协程池
+	pool, err := ants.NewPool(m.workerCount)
+	if err != nil {
+		log.Printf("创建 ants 池失败: %v", err)
+		m.runningMu.Lock()
+		m.running = false
+		m.runningMu.Unlock()
+		return
 	}
-	workerCount := m.workerCount
-	m.workerCountMu.Unlock()
 
-	log.Printf("启动 %d 个 worker 协程处理任务", workerCount)
+	m.poolMu.Lock()
+	m.pool = pool
+	m.poolMu.Unlock()
+
+	log.Printf("启动 %d 个 worker 协程处理任务 (ants pool)", m.workerCount)
 }
 
+// Stop releases the ants pool and waits for running tasks to complete.
 func (m *Manager) Stop() {
-	m.stopOnce.Do(func() {
+	// 关闭 stopCh
+	select {
+	case <-m.stopCh:
+		// already closed
+	default:
 		close(m.stopCh)
-	})
-	m.workerWg.Wait() // 等待所有 worker 退出
+	}
+
+	// 释放 ants 池
+	m.poolMu.Lock()
+	if m.pool != nil {
+		m.pool.Release()
+		m.pool = nil
+	}
+	m.poolMu.Unlock()
+
 	m.runningMu.Lock()
 	m.running = false
 	m.runningMu.Unlock()
 }
 
-// SetWorkerCount dynamically adjusts the number of workers.
-// It can add or remove workers at runtime.
-// Note: Reducing worker count is a graceful process - excess workers will
-// finish their current task before exiting.
+// SetWorkerCount dynamically adjusts the number of workers using ants.Tune.
 func (m *Manager) SetWorkerCount(ctx context.Context, newCount int) {
 	if newCount < 1 {
 		newCount = 1
 	}
 
-	m.workerCountMu.Lock()
-	defer m.workerCountMu.Unlock()
+	m.poolMu.Lock()
+	pool := m.pool
+	m.poolMu.Unlock()
+
+	if pool == nil {
+		m.workerCount = newCount
+		log.Printf("Worker 数量已调整为 %d (pool 未启动)", newCount)
+		return
+	}
 
 	currentCount := m.workerCount
 	if newCount == currentCount {
 		return
 	}
 
-	if newCount > currentCount {
-		// Add new workers
-		for i := currentCount; i < newCount; i++ {
-			m.workerWg.Add(1)
-			go m.workerWithCountCheck(ctx, i)
-		}
-		m.workerCount = newCount
-		log.Printf("Worker 数量已调整为 %d (增加 %d)", newCount, newCount-currentCount)
-	} else {
-		// Reducing workers: just update the count
-		// Workers will check and exit if their index >= newCount
-		m.workerCount = newCount
-		log.Printf("Worker 数量将调整为 %d (减少 %d)，多余的 worker 完成当前任务后退出", newCount, currentCount-newCount)
-	}
-}
+	// 使用 ants.Tune 动态调整池大小
+	pool.Tune(newCount)
 
-// workerWithCountCheck is a worker that checks if it should still be running.
-func (m *Manager) workerWithCountCheck(ctx context.Context, id int) {
-	defer m.workerWg.Done()
-
-	for {
-		// Check if this worker should still be running
-		m.workerCountMu.Lock()
-		shouldRun := id < m.workerCount
-		m.workerCountMu.Unlock()
-
-		if !shouldRun {
-			log.Printf("Worker #%d 退出（数量已减少）", id)
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-m.stopCh:
-			return
-		case job := <-m.queue:
-			if job == nil {
-				continue
-			}
-			m.dequeueType(job.Type)
-
-			// Check if paused
-			m.pausedMu.Lock()
-			isPaused := m.paused
-			m.pausedMu.Unlock()
-
-			if isPaused {
-				// Re-queue the job and wait
-				go func(j *domain.AsyncJob) {
-					time.Sleep(100 * time.Millisecond)
-					select {
-					case m.queue <- j:
-						m.enqueueType(j.Type)
-					default:
-						// Queue full, drop job (it's persisted in DB)
-					}
-				}(job)
-				continue
-			}
-			m.processJob(ctx, job)
-		}
-	}
+	m.workerCount = newCount
+	log.Printf("Worker 数量已调整为 %d", newCount)
 }
 
 // GetWorkerCount returns the current number of workers.
 func (m *Manager) GetWorkerCount() int {
-	m.workerCountMu.Lock()
-	defer m.workerCountMu.Unlock()
+	m.poolMu.RLock()
+	defer m.poolMu.RUnlock()
+	if m.pool != nil {
+		return m.pool.Cap()
+	}
 	return m.workerCount
 }
+
+// workerWithCountCheck removed - using ants pool instead
 
 func (m *Manager) AddJob(ctx context.Context, jobType, payload string) (int64, error) {
 	job := &domain.AsyncJob{
@@ -213,15 +185,55 @@ func (m *Manager) AddJob(ctx context.Context, jobType, payload string) (int64, e
 		return 0, err
 	}
 
-	// 非阻塞方式入队列，避免在 worker 执行时死锁
-	select {
-	case m.queue <- job:
-		m.enqueueType(job.Type)
-		return job.ID, nil
-	default:
-		// 队列已满，任务已存入数据库，等待后续加载
-		log.Printf("队列已满，任务 #%d 已保存到数据库，等待后续处理", job.ID)
-		return job.ID, nil
+	// 提交到 ants pool 执行
+	m.poolMu.RLock()
+	pool := m.pool
+	m.poolMu.RUnlock()
+
+	if pool != nil {
+		// 检查是否暂停
+		m.pausedMu.Lock()
+		isPaused := m.paused
+		m.pausedMu.Unlock()
+
+		if isPaused {
+			// 暂停时重新入队等待
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				m.submitJob(ctx, job)
+			}()
+		} else {
+			m.submitJob(ctx, job)
+		}
+	} else {
+		// pool 未启动时放入队列，等后续 LoadExistingJob 加载
+		select {
+		case m.queue <- job:
+			m.enqueueType(job.Type)
+		default:
+			log.Printf("队列已满，任务 #%d 已保存到数据库，等待后续处理", job.ID)
+		}
+	}
+
+	return job.ID, nil
+}
+
+// submitJob 提交任务到 ants pool 执行
+func (m *Manager) submitJob(ctx context.Context, job *domain.AsyncJob) {
+	m.poolMu.RLock()
+	pool := m.pool
+	m.poolMu.RUnlock()
+
+	if pool == nil {
+		return
+	}
+
+	err := pool.Submit(func() {
+		m.processJob(ctx, job)
+	})
+	if err != nil {
+		log.Printf("提交任务到 pool 失败: %v", err)
+		// 任务已持久化到 DB，可以后续重试
 	}
 }
 
@@ -349,15 +361,21 @@ func (m *Manager) GetStats() Stats {
 	paused := m.paused
 	m.pausedMu.Unlock()
 
-	m.workerCountMu.Lock()
-	workerCount := m.workerCount
-	m.workerCountMu.Unlock()
+	workerCount := m.GetWorkerCount()
+
+	// 获取队列类型统计
+	m.queueTypeMu.Lock()
+	jobTypes := make(map[string]int)
+	for k, v := range m.queueTypes {
+		jobTypes[k] = v
+	}
+	m.queueTypeMu.Unlock()
 
 	return Stats{
 		QueueSize:   len(m.queue),
 		IsRunning:   running,
 		IsPaused:    paused,
 		WorkerCount: workerCount,
-		JobTypes:    nil,
+		JobTypes:    jobTypes,
 	}
 }
