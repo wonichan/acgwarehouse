@@ -1,3 +1,4 @@
+import copy
 import threading
 import uuid
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ class TaskState:
 
 _tasks: dict[str, TaskState] = {}
 _task_lock = threading.Lock()
+_MAX_TERMINAL_TASKS = 1
 
 
 def _cleanup_old_tasks_unlocked() -> None:
@@ -31,7 +33,7 @@ def _cleanup_old_tasks_unlocked() -> None:
         for task_id, state in _tasks.items()
         if state.status in {TaskStatus.COMPLETED, TaskStatus.FAILED}
     ]
-    while len(historical) > 1:
+    while len(historical) > _MAX_TERMINAL_TASKS:
         stale_task_id = historical.pop(0)
         _tasks.pop(stale_task_id, None)
 
@@ -64,7 +66,10 @@ def start_task(task_id: str, message: str = "") -> None:
 
 def get_task_state(task_id: str) -> TaskState | None:
     with _task_lock:
-        return _tasks.get(task_id)
+        state = _tasks.get(task_id)
+        if state is None:
+            return None
+        return copy.deepcopy(state)
 
 
 def complete_task(task_id: str, result: Any) -> None:
@@ -76,6 +81,7 @@ def complete_task(task_id: str, result: Any) -> None:
         state.progress = 100.0
         state.result = result
         state.error = None
+        _cleanup_old_tasks_unlocked()
 
 
 def fail_task(task_id: str, error: str) -> None:
@@ -84,4 +90,6 @@ def fail_task(task_id: str, error: str) -> None:
         if state is None:
             return
         state.status = TaskStatus.FAILED
+        state.message = ""
         state.error = error
+        _cleanup_old_tasks_unlocked()

@@ -549,3 +549,61 @@ func TestManager_AddJobQueueFullStillReturnsCreatedJob(t *testing.T) {
 		t.Fatalf("QueueSize() = %d, want 1 when buffer is full", got)
 	}
 }
+
+func TestManager_StopWaitsForRunningJobs(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	mgr := NewManagerWithConfig(jobRepo, 1, 4)
+
+	started := make(chan struct{})
+	allowFinish := make(chan struct{})
+	mgr.RegisterHandler("blocking_job", func(ctx context.Context, id int64, payload string) error {
+		close(started)
+		<-allowFinish
+		return nil
+	})
+
+	ctx := context.Background()
+	mgr.Start(ctx)
+
+	if _, err := mgr.AddJob(ctx, "blocking_job", `{}`); err != nil {
+		t.Fatalf("AddJob() error = %v", err)
+	}
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("job did not start in time")
+	}
+
+	stopDone := make(chan struct{})
+	go func() {
+		mgr.Stop()
+		close(stopDone)
+	}()
+
+	select {
+	case <-stopDone:
+		t.Fatal("Stop returned before running job finished")
+	case <-time.After(120 * time.Millisecond):
+	}
+
+	close(allowFinish)
+
+	select {
+	case <-stopDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not return after running job finished")
+	}
+}

@@ -38,8 +38,8 @@ def test_union_find_groups_returns_only_multi_member_groups():
 
 def test_group_duplicates_identical_phashes_returns_one_group():
     hashes = [
-        {"image_id": 1, "sha256": "a" * 64, "phash": "0" * 64},
-        {"image_id": 2, "sha256": "b" * 64, "phash": "0" * 64},
+        {"image_id": 1, "sha256": "a" * 64, "phash": "0" * 16},
+        {"image_id": 2, "sha256": "b" * 64, "phash": "0" * 16},
     ]
 
     groups = group_duplicates(hashes, threshold=0)
@@ -50,8 +50,8 @@ def test_group_duplicates_identical_phashes_returns_one_group():
 
 def test_group_duplicates_dissimilar_hashes_returns_no_group():
     hashes = [
-        {"image_id": 1, "sha256": "a" * 64, "phash": "0" * 64},
-        {"image_id": 2, "sha256": "b" * 64, "phash": "f" * 64},
+        {"image_id": 1, "sha256": "a" * 64, "phash": "0" * 16},
+        {"image_id": 2, "sha256": "b" * 64, "phash": "f" * 16},
     ]
 
     groups = group_duplicates(hashes, threshold=3)
@@ -61,9 +61,9 @@ def test_group_duplicates_dissimilar_hashes_returns_no_group():
 
 def test_group_duplicates_mixed_similarity_groups_correctly():
     hashes = [
-        {"image_id": 1, "sha256": "a" * 64, "phash": "0" * 64},
-        {"image_id": 2, "sha256": "b" * 64, "phash": "0" * 64},
-        {"image_id": 3, "sha256": "c" * 64, "phash": "f" * 64},
+        {"image_id": 1, "sha256": "a" * 64, "phash": "0" * 16},
+        {"image_id": 2, "sha256": "b" * 64, "phash": "0" * 16},
+        {"image_id": 3, "sha256": "c" * 64, "phash": "f" * 16},
     ]
 
     groups = group_duplicates(hashes, threshold=0)
@@ -72,9 +72,42 @@ def test_group_duplicates_mixed_similarity_groups_correctly():
     assert groups[0]["member_indices"] == [0, 1]
 
 
+def test_group_duplicates_exact_cluster_can_pull_in_similar_neighbors():
+    hashes = [
+        {"image_id": 1, "sha256": "a" * 64, "phash": "0" * 16},
+        {"image_id": 2, "sha256": "a" * 64, "phash": "0" * 16},
+        {"image_id": 3, "sha256": "c" * 64, "phash": "0" * 15 + "1"},
+    ]
+
+    groups = group_duplicates(hashes, threshold=1)
+
+    assert len(groups) == 1
+    assert groups[0]["member_indices"] == [0, 1, 2]
+
+
+def test_group_duplicates_large_sparse_input_keeps_only_local_matches():
+    hashes = []
+    for i in range(50):
+        hashes.append(
+            {
+                "image_id": i,
+                "sha256": f"{i:064x}",
+                "phash": f"{i:016x}",
+            }
+        )
+
+    hashes.append({"image_id": 1001, "sha256": "d" * 64, "phash": "f" * 16})
+    hashes.append({"image_id": 1002, "sha256": "e" * 64, "phash": "f" * 16})
+
+    groups = group_duplicates(hashes, threshold=0)
+
+    matched = [g for g in groups if g["member_indices"] == [50, 51]]
+    assert len(matched) == 1
+
+
 def test_hamming_distance_same_hash_is_zero():
-    assert hamming_distance("0" * 64, "0" * 64) == 0
+    assert hamming_distance("0" * 16, "0" * 16) == 0
 
 
 def test_hamming_distance_known_difference_matches_expected():
-    assert hamming_distance("0" * 64, "f" * 64) == 256
+    assert hamming_distance("0" * 16, "f" * 16) == 64

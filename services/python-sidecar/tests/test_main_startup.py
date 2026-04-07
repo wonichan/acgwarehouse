@@ -37,10 +37,11 @@ def test_main_restores_missing_console_streams(monkeypatch):
 
 def test_shutdown_endpoint_returns_accepted_and_schedules_shutdown(monkeypatch):
     client = TestClient(main.app)
-    called = {"count": 0}
+    called = {"count": 0, "delay": None}
 
     def fake_schedule_shutdown(delay_seconds: float = 0.05):
         called["count"] += 1
+        called["delay"] = delay_seconds
 
     monkeypatch.setattr(main, "schedule_shutdown", fake_schedule_shutdown)
 
@@ -49,3 +50,4 @@ def test_shutdown_endpoint_returns_accepted_and_schedules_shutdown(monkeypatch):
     assert response.status_code == 202
     assert response.json() == {"status": "shutting_down"}
     assert called["count"] == 1
+    assert called["delay"] == 1.0

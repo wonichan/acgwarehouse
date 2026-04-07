@@ -91,6 +91,7 @@ type stubThumbnailUploader struct {
 	urls      map[string]string
 	err       error
 	errBySize map[string]error
+	deleteErr error
 	deleted   []string
 }
 
@@ -113,7 +114,7 @@ func (s *stubThumbnailUploader) Upload(ctx context.Context, filename, size strin
 
 func (s *stubThumbnailUploader) DeleteByURL(ctx context.Context, objectURL string) error {
 	s.deleted = append(s.deleted, objectURL)
-	return nil
+	return s.deleteErr
 }
 
 func TestThumbnailHandlerHandle_RollbackSmallOnLargeUploadFailure(t *testing.T) {
@@ -147,6 +148,42 @@ func TestThumbnailHandlerHandle_RollbackSmallOnLargeUploadFailure(t *testing.T) 
 	}
 	if repo.updateCalls != 0 {
 		t.Fatalf("UpdateThumbnails() calls = %d, want 0", repo.updateCalls)
+	}
+}
+
+func TestThumbnailHandlerHandle_RollbackFailureStillPreservesPrimaryError(t *testing.T) {
+	t.Parallel()
+
+	largeErr := errors.New("upload large failed")
+	rollbackErr := errors.New("delete small failed")
+
+	thumbSvc := &stubThumbnailGenerator{
+		small: &domain.Thumbnail{Data: []byte("small-bytes"), Size: "small"},
+		large: &domain.Thumbnail{Data: []byte("large-bytes"), Size: "large"},
+	}
+	cosSvc := &stubThumbnailUploader{
+		urls: map[string]string{
+			"small": "https://cos.local/thumbnails/test-image-small.jpg",
+		},
+		errBySize: map[string]error{
+			"large": largeErr,
+		},
+		deleteErr: rollbackErr,
+	}
+	repo := &stubThumbnailImageRepo{}
+
+	h := NewThumbnailHandler(thumbSvc, cosSvc, repo)
+	err := h.Handle(context.Background(), 99, `{"image_id":11,"path":"C:/tmp/a.png","filename":"test-image"}`)
+	if err == nil {
+		t.Fatal("Handle() expected error when large upload fails")
+	}
+
+	if !errors.Is(err, largeErr) {
+		t.Fatalf("expected wrapped primary error, got %v", err)
+	}
+
+	if len(cosSvc.deleted) != 1 {
+		t.Fatalf("expected rollback delete call, got %d", len(cosSvc.deleted))
 	}
 }
 

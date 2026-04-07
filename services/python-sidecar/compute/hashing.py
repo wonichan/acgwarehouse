@@ -1,15 +1,21 @@
+# pyright: reportMissingImports=false
+
 import hashlib
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Callable
 
-import imagehash
-from PIL import Image
+from imagededup.methods import PHash
 
 
-def compute_image_hashes(image_path: str) -> dict:
+_PHASHER = PHash(verbose=False)
+HashResult = dict[str, str | None]
+
+
+def compute_image_hashes(image_path: str) -> HashResult:
     path = Path(image_path)
-    result = {
+    result: HashResult = {
         "path": str(path),
         "sha256": None,
         "phash": None,
@@ -23,9 +29,8 @@ def compute_image_hashes(image_path: str) -> dict:
                 sha256.update(chunk)
         result["sha256"] = sha256.hexdigest()
 
-        with Image.open(path) as img:
-            phash = imagehash.phash(img, hash_size=16)
-        result["phash"] = str(phash)
+        phash = _PHASHER.encode_image(image_file=str(path))
+        result["phash"] = phash
     except Exception as error:
         result["sha256"] = None
         result["phash"] = None
@@ -37,14 +42,14 @@ def compute_image_hashes(image_path: str) -> dict:
 def batch_compute_hashes(
     image_paths: list[str],
     max_workers: int = 4,
-    progress_callback=None,
-) -> list[dict]:
+    progress_callback: Callable[[float], None] | None = None,
+) -> list[HashResult]:
     if not image_paths:
         return []
 
     cpu_count = os.cpu_count() or 1
     workers = max(1, min(cpu_count, max_workers))
-    results: list[dict] = []
+    results: list[HashResult] = []
     total = len(image_paths)
 
     with ThreadPoolExecutor(max_workers=workers) as executor:

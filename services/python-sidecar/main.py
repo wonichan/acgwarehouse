@@ -1,6 +1,7 @@
 # pyright: reportMissingImports=false
 
 import argparse
+import atexit
 import signal
 import os
 import sys
@@ -12,6 +13,7 @@ import uvicorn
 import routers.duplicates as duplicates
 
 app = FastAPI(title="ACGWarehouse Compute Sidecar")
+_fallback_streams: list[object] = []
 
 
 @app.get("/health")
@@ -21,11 +23,11 @@ async def health() -> dict[str, str]:
 
 @app.post("/shutdown", status_code=202)
 async def shutdown() -> dict[str, str]:
-    schedule_shutdown()
+    schedule_shutdown(1.0)
     return {"status": "shutting_down"}
 
 
-def schedule_shutdown(delay_seconds: float = 0.05) -> None:
+def schedule_shutdown(delay_seconds: float = 1.0) -> None:
     timer = threading.Timer(delay_seconds, terminate_current_process)
     timer.daemon = True
     timer.start()
@@ -47,9 +49,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def ensure_standard_streams() -> None:
     if sys.stdout is None:
-        sys.stdout = open(os.devnull, "w")
+        stream = open(os.devnull, "w")
+        _fallback_streams.append(stream)
+        sys.stdout = stream
     if sys.stderr is None:
-        sys.stderr = open(os.devnull, "w")
+        stream = open(os.devnull, "w")
+        _fallback_streams.append(stream)
+        sys.stderr = stream
+
+
+def close_fallback_streams() -> None:
+    for stream in _fallback_streams:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
+    _fallback_streams.clear()
+
+
+atexit.register(close_fallback_streams)
 
 
 def main(argv: list[str] | None = None) -> None:

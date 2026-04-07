@@ -111,10 +111,21 @@ func (w *WatcherService) handleEvent(event fsnotify.Event) error {
 func (w *WatcherService) scheduleImport(path, root string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.closed {
+		return
+	}
 	if timer, ok := w.timers[path]; ok {
 		timer.Stop()
 	}
 	w.timers[path] = time.AfterFunc(w.debounceTime, func() {
+		w.mu.Lock()
+		if w.closed {
+			delete(w.timers, path)
+			w.mu.Unlock()
+			return
+		}
+		w.mu.Unlock()
+
 		_, _ = w.scannerSvc.importFile(path, root)
 		w.mu.Lock()
 		delete(w.timers, path)

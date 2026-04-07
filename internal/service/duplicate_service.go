@@ -182,14 +182,14 @@ func (s *DuplicateService) GetDuplicateGroups(limit, offset int) ([]domain.Dupli
 	for i, group := range groups {
 		_, relations, err := s.duplicateRepo.FindDuplicateGroupByID(group.ID)
 		if err != nil {
-			continue
+			return nil, 0, fmt.Errorf("load duplicate group %d relations: %w", group.ID, err)
 		}
 
 		images := make([]domain.DuplicateImage, len(relations))
 		for j, rel := range relations {
 			img, findErr := s.imageRepo.FindByID(rel.ImageID)
 			if findErr != nil {
-				continue
+				return nil, 0, fmt.Errorf("load image %d for duplicate group %d: %w", rel.ImageID, group.ID, findErr)
 			}
 			images[j] = domain.DuplicateImage{
 				ID:                      img.ID,

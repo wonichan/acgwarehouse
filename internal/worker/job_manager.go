@@ -42,6 +42,7 @@ type Manager struct {
 	poolMu      sync.RWMutex
 	stopCh      chan struct{}
 	dispatchWg  sync.WaitGroup
+	taskWg      sync.WaitGroup
 	running     bool
 	runningMu   sync.Mutex
 	paused      bool
@@ -149,6 +150,7 @@ func (m *Manager) Stop() {
 	// 释放 ants 池
 	m.poolMu.Lock()
 	if m.pool != nil {
+		m.taskWg.Wait()
 		m.pool.Release()
 		m.pool = nil
 	}
@@ -225,10 +227,13 @@ func (m *Manager) submitJob(ctx context.Context, job *domain.AsyncJob) error {
 		return errors.New("worker pool is not running")
 	}
 
+	m.taskWg.Add(1)
 	err := pool.Submit(func() {
+		defer m.taskWg.Done()
 		m.processJob(ctx, job)
 	})
 	if err != nil {
+		m.taskWg.Done()
 		return err
 	}
 

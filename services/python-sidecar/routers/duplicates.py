@@ -35,11 +35,14 @@ def _task_response(task_id: str) -> TaskResponse:
     state = get_task_state(task_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    message = state.message or (state.error or "")
+    if state.status == TaskStatus.FAILED:
+        message = state.error or state.message or ""
     return TaskResponse(
         task_id=task_id,
         status=state.status.value,
         progress=state.progress,
-        message=state.message or (state.error or ""),
+        message=message,
     )
 
 

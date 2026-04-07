@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
@@ -65,7 +66,7 @@ func (h *ThumbnailHandler) Handle(ctx context.Context, jobID int64, payload stri
 	largeURL, err := h.cosSvc.Upload(ctx, uploadName, "large", large.Data)
 	if err != nil {
 		if rollbackErr := h.cosSvc.DeleteByURL(ctx, smallURL); rollbackErr != nil {
-			return fmt.Errorf("upload large thumbnail: %w (rollback small thumbnail failed: %v)", err, rollbackErr)
+			return fmt.Errorf("upload large thumbnail: %w", errors.Join(err, fmt.Errorf("rollback small thumbnail failed: %w", rollbackErr)))
 		}
 		return fmt.Errorf("upload large thumbnail: %w", err)
 	}
