@@ -3,11 +3,13 @@
 # pyright: reportMissingImports=false, reportAttributeAccessIssue=false
 
 import time
+import logging
 
 import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+from models.duplicates import DetectRequest
 
 
 @pytest.fixture(autouse=True)
@@ -237,3 +239,92 @@ def test_detection_with_test_images_returns_group_structure(test_images_dir):
     payload = result.json()
     assert payload["total_groups"] >= 1
     assert payload["groups"][0]["recommended_id"] in [1, 2]
+
+
+def test_run_detection_logs_lifecycle_and_progress(
+    monkeypatch, sample_image_inputs, caplog
+):
+    from routers import duplicates as duplicates_router
+
+    task_id = duplicates_router.create_task()
+    with duplicates_router._active_lock:
+        duplicates_router._active_task_id = task_id
+
+    def fake_batch_compute_hashes(image_paths, progress_callback=None, max_workers=4):
+        assert progress_callback is not None
+        progress_callback(20.0)
+        progress_callback(50.0)
+        progress_callback(100.0)
+        return [
+            {
+                "path": sample_image_inputs[0].path,
+                "sha256": "sha-a",
+                "phash": "0123456789abcdef",
+                "error": None,
+            },
+            {
+                "path": sample_image_inputs[1].path,
+                "sha256": None,
+                "phash": None,
+                "error": "broken image",
+            },
+        ]
+
+    monkeypatch.setattr(
+        duplicates_router, "batch_compute_hashes", fake_batch_compute_hashes
+    )
+    monkeypatch.setattr(
+        duplicates_router,
+        "group_duplicates",
+        lambda hash_inputs, threshold: [{"group_id": 1, "member_indices": [0]}],
+    )
+    monkeypatch.setattr(
+        duplicates_router, "select_recommended", lambda members_source: (0, None, None)
+    )
+    monkeypatch.setattr(
+        duplicates_router,
+        "compute_recommendation_score",
+        lambda **kwargs: (88.0, []),
+    )
+
+    request = DetectRequest(threshold=40, images=sample_image_inputs[:2])
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        duplicates_router.run_detection(task_id, request)
+
+    text = caplog.text
+    for want in [
+        f"duplicate detection task started: task_id={task_id} image_count=2 threshold=40",
+        f"duplicate detection hashing progress: task_id={task_id}",
+        f"duplicate detection stage: task_id={task_id} stage=grouping progress=70.0",
+        f"duplicate detection stage: task_id={task_id} stage=scoring progress=90.0",
+        f"duplicate detection completed: task_id={task_id} total_images=2 total_groups=1 skipped_images=1",
+    ]:
+        assert want in text
+
+
+def test_run_detection_logs_failures(monkeypatch, sample_image_inputs, caplog):
+    from routers import duplicates as duplicates_router
+
+    task_id = duplicates_router.create_task()
+    with duplicates_router._active_lock:
+        duplicates_router._active_task_id = task_id
+
+    def fake_batch_compute_hashes(image_paths, progress_callback=None, max_workers=4):
+        raise RuntimeError("hashing exploded")
+
+    monkeypatch.setattr(
+        duplicates_router, "batch_compute_hashes", fake_batch_compute_hashes
+    )
+
+    request = DetectRequest(threshold=40, images=sample_image_inputs[:1])
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        duplicates_router.run_detection(task_id, request)
+
+    text = caplog.text
+    assert (
+        f"duplicate detection task started: task_id={task_id} image_count=1 threshold=40"
+        in text
+    )
+    assert (
+        f"duplicate detection failed: task_id={task_id} error=hashing exploded" in text
+    )

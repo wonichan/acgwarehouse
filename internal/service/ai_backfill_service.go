@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
@@ -96,10 +97,13 @@ func (s *AIBackfillService) PreviewBackfill(ctx context.Context, filter reposito
 // ExecuteBackfill creates a manual_batch for eligible candidates and returns structured results.
 // Returns an explicit no-op result when zero tasks are created per D-13.
 func (s *AIBackfillService) ExecuteBackfill(ctx context.Context, filter repository.BackfillCandidateFilter, prompt string) (*BackfillExecuteResult, error) {
+	log.Printf("AI 标签补跑开始: has_tag_ids=%t has_has_tags=%t custom_prompt=%t", len(filter.TagIDs) > 0, filter.HasTags != nil, prompt != "")
 	preview, err := s.PreviewBackfill(ctx, filter)
 	if err != nil {
+		log.Printf("AI 标签补跑预览失败: error=%v", err)
 		return nil, err
 	}
+	log.Printf("AI 标签补跑预览完成: hit_count=%d enqueueable_count=%d skipped_with_ai_tag=%d skipped_with_active_task=%d", preview.HitCount, preview.EnqueueableCount, preview.SkippedWithAITag, preview.SkippedWithActiveTask)
 
 	// D-13: Explicit no-op when no eligible candidates
 	if preview.EnqueueableCount == 0 {
@@ -124,10 +128,13 @@ func (s *AIBackfillService) ExecuteBackfill(ctx context.Context, filter reposito
 	// Fetch eligible candidate images
 	candidates, err := s.imageRepo.FindBackfillCandidates(ctx, filter)
 	if err != nil {
+		log.Printf("AI 标签补跑拉取候选图片失败: error=%v", err)
 		return nil, fmt.Errorf("fetching backfill candidates: %w", err)
 	}
+	log.Printf("AI 标签补跑候选图片已加载: candidate_count=%d", len(candidates))
 
 	if len(candidates) == 0 {
+		log.Printf("AI 标签补跑无候选图片: enqueueable_count=%d", preview.EnqueueableCount)
 		return &BackfillExecuteResult{
 			Success:           false,
 			CreatedTasks:      0,
@@ -163,8 +170,10 @@ func (s *AIBackfillService) ExecuteBackfill(ctx context.Context, filter reposito
 		Items:        items,
 	})
 	if err != nil {
+		log.Printf("AI 标签补跑批次规划失败: item_count=%d error=%v", len(items), err)
 		return nil, fmt.Errorf("planning backfill batch: %w", err)
 	}
+	log.Printf("AI 标签补跑批次规划完成: batch_id=%d created_tasks=%d", plan.Batch.ID, len(plan.CreatedTasks))
 
 	// Queue each created task with AI tag payload
 	queuedTasks := make([]domain.PlatformTask, 0, len(plan.CreatedTasks))
@@ -179,6 +188,7 @@ func (s *AIBackfillService) ExecuteBackfill(ctx context.Context, filter reposito
 			}
 		}
 		if matchImg == nil {
+			log.Printf("AI 标签补跑任务缺少图片映射: task_id=%d image_id=%d", task.ID, task.ImageID)
 			return nil, fmt.Errorf("image not found for task %d", task.ID)
 		}
 		payload, err := json.Marshal(map[string]interface{}{
@@ -187,17 +197,21 @@ func (s *AIBackfillService) ExecuteBackfill(ctx context.Context, filter reposito
 			"prompt":   prompt,
 		})
 		if err != nil {
+			log.Printf("AI 标签补跑任务 payload 序列化失败: task_id=%d image_id=%d error=%v", task.ID, task.ImageID, err)
 			return nil, fmt.Errorf("marshalling task payload: %w", err)
 		}
 		job, err := s.taskPlatformSvc.QueueTask(ctx, &task, domain.PlatformTaskTypeAITagGeneration, string(payload))
 		if err != nil {
+			log.Printf("AI 标签补跑任务入队失败: batch_id=%d task_id=%d image_id=%d error=%v", plan.Batch.ID, task.ID, task.ImageID, err)
 			return nil, fmt.Errorf("queueing task %d: %w", task.ID, err)
 		}
+		log.Printf("AI 标签补跑任务已入队: batch_id=%d task_id=%d image_id=%d job_id=%d", plan.Batch.ID, task.ID, task.ImageID, job.ID)
 		if s.jobLoader != nil && s.jobLoader.QueuedByType(domain.PlatformTaskTypeAITagGeneration) < ResolveAITagQueueLimit(s.currentConfig()) {
 			s.jobLoader.LoadExistingJob(job)
 		}
 		queuedTasks = append(queuedTasks, task)
 	}
+	log.Printf("AI 标签补跑完成: batch_id=%d created_tasks=%d skipped_total=%d", plan.Batch.ID, len(queuedTasks), preview.SkippedTotal)
 
 	return &BackfillExecuteResult{
 		Success:           true,

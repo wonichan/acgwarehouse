@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"time"
 
@@ -56,11 +57,15 @@ func (s *DuplicateService) DetectDuplicates(ctx context.Context, opts DetectOpti
 
 	images, err := s.imageRepo.FindAll(1000000, 0, "id", "asc")
 	if err != nil {
+		log.Printf("duplicate detection image load failed: threshold=%d error=%v", threshold, err)
 		return 0, err
 	}
 	if len(images) == 0 {
+		log.Printf("duplicate detection skipped: threshold=%d image_count=0", threshold)
 		return 0, nil
 	}
+
+	log.Printf("duplicate detection started: threshold=%d image_count=%d", threshold, len(images))
 
 	inputs := make([]sidecar.DetectionImageInput, len(images))
 	for i, img := range images {
@@ -73,25 +78,48 @@ func (s *DuplicateService) DetectDuplicates(ctx context.Context, opts DetectOpti
 			Format:   img.Format,
 		}
 	}
+	log.Printf("duplicate detection inputs prepared: threshold=%d image_count=%d", threshold, len(inputs))
 
 	taskID, err := s.sidecarClient.SubmitDetection(ctx, sidecar.DetectionRequest{
 		Threshold: threshold,
 		Images:    inputs,
 	})
 	if err != nil {
+		log.Printf("duplicate detection submit failed: threshold=%d image_count=%d error=%v", threshold, len(images), err)
 		return 0, fmt.Errorf("submit sidecar detection: %w", err)
 	}
+	log.Printf("duplicate detection task submitted: task_id=%s threshold=%d image_count=%d", taskID, threshold, len(images))
+
+	lastStatus := ""
+	lastMessage := ""
+	lastProgressBucket := -1
 
 	for {
 		status, pollErr := s.sidecarClient.PollProgress(ctx, taskID)
 		if pollErr != nil {
+			log.Printf("duplicate detection poll failed: task_id=%s error=%v", taskID, pollErr)
 			return 0, fmt.Errorf("poll sidecar detection task %s: %w", taskID, pollErr)
+		}
+
+		progressBucket := int(status.Progress / 10)
+		if status.Status != lastStatus || status.Message != lastMessage || progressBucket != lastProgressBucket {
+			log.Printf(
+				"duplicate detection status: task_id=%s status=%s progress=%.1f message=%s",
+				taskID,
+				status.Status,
+				status.Progress,
+				status.Message,
+			)
+			lastStatus = status.Status
+			lastMessage = status.Message
+			lastProgressBucket = progressBucket
 		}
 
 		switch status.Status {
 		case "completed":
 			goto fetchResults
 		case "failed":
+			log.Printf("duplicate detection failed: task_id=%s message=%s", taskID, status.Message)
 			if status.Message == "" {
 				return 0, fmt.Errorf("sidecar detection task %s failed", taskID)
 			}
@@ -106,19 +134,37 @@ func (s *DuplicateService) DetectDuplicates(ctx context.Context, opts DetectOpti
 	}
 
 fetchResults:
+	log.Printf("duplicate detection fetching results: task_id=%s", taskID)
 	result, err := s.sidecarClient.FetchResults(ctx, taskID)
 	if err != nil {
+		log.Printf("duplicate detection result fetch failed: task_id=%s error=%v", taskID, err)
 		return 0, fmt.Errorf("fetch sidecar detection result %s: %w", taskID, err)
 	}
+	log.Printf(
+		"duplicate detection result fetched: task_id=%s total_images=%d total_groups=%d skipped_images=%d computation_time_ms=%d",
+		taskID,
+		result.TotalImages,
+		result.TotalGroups,
+		len(result.SkippedImages),
+		result.ComputationTimeMs,
+	)
 
 	if err := s.persistDetectionResults(threshold, result); err != nil {
+		log.Printf("duplicate detection persist failed: task_id=%s error=%v", taskID, err)
 		return 0, err
 	}
+	log.Printf("duplicate detection persisted: task_id=%s total_groups=%d", taskID, result.TotalGroups)
 
 	return result.TotalGroups, nil
 }
 
 func (s *DuplicateService) persistDetectionResults(threshold int, result *sidecar.DetectionResult) error {
+	memberCount := 0
+	for _, group := range result.Groups {
+		memberCount += len(group.Members)
+	}
+	log.Printf("duplicate detection persist started: threshold=%d total_groups=%d total_members=%d skipped_images=%d", threshold, len(result.Groups), memberCount, len(result.SkippedImages))
+
 	for _, group := range result.Groups {
 		for _, member := range group.Members {
 			if member.PHash == "" {
@@ -162,6 +208,7 @@ func (s *DuplicateService) persistDetectionResults(threshold int, result *sideca
 			return err
 		}
 	}
+	log.Printf("duplicate detection persist completed: threshold=%d total_groups=%d total_members=%d", threshold, len(result.Groups), memberCount)
 
 	return nil
 }

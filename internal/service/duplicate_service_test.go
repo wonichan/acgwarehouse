@@ -1,12 +1,15 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +18,24 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 )
+
+func captureStandardLogs(t *testing.T) (*bytes.Buffer, func()) {
+	t.Helper()
+
+	buf := &bytes.Buffer{}
+	originalWriter := log.Writer()
+	originalFlags := log.Flags()
+	originalPrefix := log.Prefix()
+	log.SetOutput(buf)
+	log.SetFlags(0)
+	log.SetPrefix("")
+
+	return buf, func() {
+		log.SetOutput(originalWriter)
+		log.SetFlags(originalFlags)
+		log.SetPrefix(originalPrefix)
+	}
+}
 
 func setupDuplicateTestDB(t *testing.T) *sql.DB {
 	t.Helper()
@@ -139,6 +160,108 @@ func TestDuplicateService_DetectDuplicates_SidecarFlowSuccess(t *testing.T) {
 	}
 	if string(groups[0].Images[0].RecommendationRationale) == "" {
 		t.Fatal("recommendation_rationale should be structured json")
+	}
+}
+
+func TestDuplicateService_DetectDuplicates_LogsLifecycle(t *testing.T) {
+	db := setupDuplicateTestDB(t)
+	ids := insertTestImages(t, db)
+
+	pollCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/duplicates/detect":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-log", "status": "pending", "progress": 0})
+		case "/compute/duplicates/tasks/task-log":
+			pollCount++
+			if pollCount == 1 {
+				_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-log", "status": "running", "progress": 25, "message": "hashing"})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-log", "status": "completed", "progress": 100, "message": "completed"})
+		case "/compute/duplicates/tasks/task-log/result":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"groups": []map[string]any{{
+					"group_id":       0,
+					"recommended_id": ids[1],
+					"members": []map[string]any{{
+						"image_id":               ids[1],
+						"sha256":                 "sha-b",
+						"phash":                  "phash-b",
+						"distance":               0,
+						"is_recommended":         true,
+						"recommendation_score":   90.0,
+						"recommendation_reasons": []map[string]any{},
+					}},
+				}},
+				"total_images":        3,
+				"total_groups":        1,
+				"skipped_images":      []map[string]any{{"path": "/test/c.jpg", "error": "broken"}},
+				"computation_time_ms": 123,
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	buf, restoreLogs := captureStandardLogs(t)
+	defer restoreLogs()
+
+	svc := NewDuplicateService(repository.NewImageRepository(db), repository.NewDuplicateRepository(db), sidecar.NewSidecarClient(server.URL), nil)
+	if _, err := svc.DetectDuplicates(context.Background(), DetectOptions{Threshold: 40}); err != nil {
+		t.Fatalf("DetectDuplicates() error = %v", err)
+	}
+
+	output := buf.String()
+	t.Logf("captured duplicate detection logs:\n%s", output)
+	for _, want := range []string{
+		"duplicate detection started: threshold=40 image_count=3",
+		"duplicate detection task submitted: task_id=task-log",
+		"duplicate detection status: task_id=task-log status=running progress=25.0 message=hashing",
+		"duplicate detection status: task_id=task-log status=completed progress=100.0 message=completed",
+		"duplicate detection result fetched: task_id=task-log total_images=3 total_groups=1 skipped_images=1 computation_time_ms=123",
+		"duplicate detection persisted: task_id=task-log total_groups=1",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("log output = %q, want contains %q", output, want)
+		}
+	}
+}
+
+func TestDuplicateService_DetectDuplicates_LogsFailure(t *testing.T) {
+	db := setupDuplicateTestDB(t)
+	_ = insertTestImages(t, db)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/duplicates/detect":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-fail", "status": "pending", "progress": 0})
+		case "/compute/duplicates/tasks/task-fail":
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-fail", "status": "failed", "progress": 60, "message": "python error"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	buf, restoreLogs := captureStandardLogs(t)
+	defer restoreLogs()
+
+	svc := NewDuplicateService(repository.NewImageRepository(db), repository.NewDuplicateRepository(db), sidecar.NewSidecarClient(server.URL), nil)
+	if _, err := svc.DetectDuplicates(context.Background(), DetectOptions{Threshold: 40}); err == nil {
+		t.Fatal("DetectDuplicates() error = nil, want error")
+	}
+
+	output := buf.String()
+	for _, want := range []string{
+		"duplicate detection task submitted: task_id=task-fail",
+		"duplicate detection status: task_id=task-fail status=failed progress=60.0 message=python error",
+		"duplicate detection failed: task_id=task-fail message=python error",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("log output = %q, want contains %q", output, want)
+		}
 	}
 }
 

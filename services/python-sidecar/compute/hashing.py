@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Callable
 
 from imagededup.methods import PHash
+from PIL import Image
+
+
+Image.MAX_IMAGE_PIXELS = None
 
 
 _PHASHER = PHash(verbose=False)

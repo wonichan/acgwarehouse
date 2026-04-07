@@ -1,5 +1,6 @@
 # pyright: reportMissingImports=false
 
+import logging
 import threading
 import time
 
@@ -26,6 +27,7 @@ from models.duplicates import (
 )
 
 router = APIRouter(prefix="/compute/duplicates")
+logger = logging.getLogger("uvicorn.error")
 
 _active_task_id: str | None = None
 _active_lock = threading.Lock()
@@ -114,14 +116,34 @@ def run_detection(task_id: str, request: DetectRequest) -> None:
     global _active_task_id
 
     try:
+        logger.info(
+            "duplicate detection task started: task_id=%s image_count=%d threshold=%d",
+            task_id,
+            len(request.images),
+            request.threshold,
+        )
         start_task(task_id, "hashing")
         started_at = time.time()
+        logger.info(
+            "duplicate detection stage: task_id=%s stage=hashing progress=0.0",
+            task_id,
+        )
 
         path_to_input = {image.path: image for image in request.images}
+        last_logged_hashing_bucket = -1
 
         def progress_callback(percent: float) -> None:
+            nonlocal last_logged_hashing_bucket
             mapped = round((percent / 100.0) * 60.0, 1)
             update_progress(task_id, mapped, "hashing")
+            progress_bucket = int(mapped / 10)
+            if mapped > 0 and progress_bucket > last_logged_hashing_bucket:
+                last_logged_hashing_bucket = progress_bucket
+                logger.info(
+                    "duplicate detection hashing progress: task_id=%s progress=%.1f",
+                    task_id,
+                    mapped,
+                )
 
         hash_results = batch_compute_hashes(
             [image.path for image in request.images],
@@ -155,9 +177,17 @@ def run_detection(task_id: str, request: DetectRequest) -> None:
             )
 
         update_progress(task_id, 70.0, "grouping")
+        logger.info(
+            "duplicate detection stage: task_id=%s stage=grouping progress=70.0",
+            task_id,
+        )
         grouped = group_duplicates(hash_inputs, request.threshold)
 
         update_progress(task_id, 90.0, "scoring")
+        logger.info(
+            "duplicate detection stage: task_id=%s stage=scoring progress=90.0",
+            task_id,
+        )
         output_groups: list[DuplicateGroup] = []
         for group in grouped:
             member_indices: list[int] = group["member_indices"]
@@ -209,8 +239,21 @@ def run_detection(task_id: str, request: DetectRequest) -> None:
             computation_time_ms=int((time.time() - started_at) * 1000),
         )
         complete_task(task_id, result.model_dump())
+        logger.info(
+            "duplicate detection completed: task_id=%s total_images=%d total_groups=%d skipped_images=%d computation_time_ms=%d",
+            task_id,
+            result.total_images,
+            result.total_groups,
+            len(skipped_images),
+            result.computation_time_ms,
+        )
     except Exception as error:
         fail_task(task_id, str(error))
+        logger.exception(
+            "duplicate detection failed: task_id=%s error=%s",
+            task_id,
+            error,
+        )
     finally:
         with _active_lock:
             if _active_task_id == task_id:

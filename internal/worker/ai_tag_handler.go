@@ -142,9 +142,12 @@ func NewAITagRegenerationJobHandler(client ai.AIProvider, obsRepo repository.Tag
 		if err := json.Unmarshal([]byte(payload), &p); err != nil {
 			return fmt.Errorf("parse payload: %w", err)
 		}
+		log.Printf("AI 标签重生成任务开始清理旧标签: job_id=%d image_id=%d", id, p.ImageID)
 		if err := governance.RemovePendingAITags(ctx, p.ImageID); err != nil {
+			log.Printf("AI 标签重生成任务清理旧标签失败: job_id=%d image_id=%d error=%v", id, p.ImageID, err)
 			return fmt.Errorf("remove pending ai tags: %w", err)
 		}
+		log.Printf("AI 标签重生成任务清理旧标签完成: job_id=%d image_id=%d", id, p.ImageID)
 		return handleAITagGenerationWithPayload(ctx, id, p, client, obsRepo, governance, nil)
 	}
 }
@@ -163,23 +166,32 @@ func handleAITagGenerationWithPayload(ctx context.Context, id int64, p AITagPayl
 	if governance == nil {
 		return fmt.Errorf("merge tags: governance service is nil")
 	}
+	startedAt := time.Now()
+	providerName := ""
+	if client != nil {
+		providerName = client.Name()
+	}
+	log.Printf("AI 标签任务开始: job_id=%d image_id=%d path=%s provider=%s custom_prompt=%t", id, p.ImageID, p.Path, providerName, p.Prompt != "")
 
 	// 如果设置了并发控制器，先获取槽位
 	if limiter := aiTagConcurrencyLimiter.Load(); limiter != nil {
 		release, err := limiter.Acquire(ctx)
 		if err != nil {
+			log.Printf("AI 标签任务获取并发槽位失败: job_id=%d image_id=%d error=%v", id, p.ImageID, err)
 			return fmt.Errorf("acquire concurrency slot: %w", err)
 		}
+		log.Printf("AI 标签任务获取并发槽位成功: job_id=%d image_id=%d", id, p.ImageID)
 		defer release()
 	}
 
 	if aiTagChecker != nil {
 		hasAITags, err := aiTagChecker.HasAITags(ctx, p.ImageID)
 		if err != nil {
+			log.Printf("AI 标签任务检查现有标签失败: job_id=%d image_id=%d error=%v", id, p.ImageID, err)
 			return fmt.Errorf("check existing ai tags: %w", err)
 		}
 		if hasAITags {
-			log.Printf("AI 标签任务跳过: image_id=%d 已存在 AI 标签", p.ImageID)
+			log.Printf("AI 标签任务跳过: job_id=%d image_id=%d 已存在 AI 标签", id, p.ImageID)
 			return nil
 		}
 	}
@@ -189,13 +201,17 @@ func handleAITagGenerationWithPayload(ctx context.Context, id int64, p AITagPayl
 	if prompt == "" {
 		prompt = DefaultTagPrompt
 	}
+	log.Printf("AI 标签任务调用模型: job_id=%d image_id=%d provider=%s prompt_length=%d", id, p.ImageID, providerName, len(prompt))
 	result, err := client.GenerateTags(ctx, p.Path, prompt)
 	if err != nil {
+		log.Printf("AI 标签任务调用模型失败: job_id=%d image_id=%d provider=%s error=%v", id, p.ImageID, providerName, err)
 		return fmt.Errorf("generate tags: %w", err)
 	}
 	if err := validateGeneratedTags(result.Tags); err != nil {
+		log.Printf("AI 标签任务结果校验失败: job_id=%d image_id=%d provider=%s raw_tag_count=%d error=%v", id, p.ImageID, providerName, len(result.Tags), err)
 		return fmt.Errorf("generate tags: %w", err)
 	}
+	log.Printf("AI 标签任务生成完成: job_id=%d image_id=%d provider=%s model=%s tag_count=%d confidence=%.4f", id, p.ImageID, providerName, result.ModelName, len(result.Tags), result.Confidence)
 
 	// 保存观测记录
 	obs := &domain.TagObservation{
@@ -210,12 +226,16 @@ func handleAITagGenerationWithPayload(ctx context.Context, id int64, p AITagPayl
 	}
 
 	if err := obsRepo.Save(ctx, obs); err != nil {
+		log.Printf("AI 标签任务保存观测失败: job_id=%d image_id=%d provider=%s error=%v", id, p.ImageID, providerName, err)
 		return fmt.Errorf("save observation: %w", err)
 	}
+	log.Printf("AI 标签任务保存观测完成: job_id=%d image_id=%d observation_id=%d provider=%s model=%s", id, p.ImageID, obs.ID, providerName, result.ModelName)
 
 	if err := governance.MergeTags(ctx, p.ImageID, result.Tags, obs.ID, result.Confidence); err != nil {
+		log.Printf("AI 标签任务合并标签失败: job_id=%d image_id=%d observation_id=%d error=%v", id, p.ImageID, obs.ID, err)
 		return fmt.Errorf("merge tags: %w", err)
 	}
+	log.Printf("AI 标签任务完成: job_id=%d image_id=%d observation_id=%d tag_count=%d duration=%s", id, p.ImageID, obs.ID, len(result.Tags), time.Since(startedAt))
 
 	return nil
 }

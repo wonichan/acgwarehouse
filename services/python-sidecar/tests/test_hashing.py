@@ -4,6 +4,8 @@
 
 from pathlib import Path
 
+from PIL import Image
+
 from compute.hashing import batch_compute_hashes, compute_image_hashes
 
 
@@ -79,3 +81,7 @@ def test_phash_is_exactly_16_hex_characters(test_images_dir: Path):
 
     assert result["phash"] is not None
     assert len(result["phash"]) == 16
+
+
+def test_hashing_module_disables_pillow_pixel_limit_for_trusted_images():
+    assert Image.MAX_IMAGE_PIXELS is None
