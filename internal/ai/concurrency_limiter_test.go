@@ -93,8 +93,7 @@ func TestConcurrencyLimiter_ConcurrentLimit(t *testing.T) {
 				}
 			}
 
-			// 模拟工作
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}()
 	}
 
@@ -113,7 +112,7 @@ func TestConcurrencyLimiter_ContextCancellation(t *testing.T) {
 	defer release()
 
 	// 创建一个会超时的 context
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 
 	// 尝试获取，应该超时
@@ -124,7 +123,7 @@ func TestConcurrencyLimiter_ContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Error("expected error from Acquire with cancelled context")
 	}
-	if elapsed < 80*time.Millisecond {
+	if elapsed < 20*time.Millisecond {
 		t.Errorf("expected to wait for timeout, but only waited %v", elapsed)
 	}
 }

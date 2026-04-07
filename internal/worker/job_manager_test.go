@@ -55,14 +55,14 @@ func TestManagerProcessesJobsSequentially(t *testing.T) {
 		t.Fatalf("AddJob() second error = %v", err)
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
 		j1, err1 := jobRepo.FindByID(id1)
 		j2, err2 := jobRepo.FindByID(id2)
 		if err1 == nil && err2 == nil && j1.Status == "finished" && j2.Status == "finished" {
 			break
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	j1, err := jobRepo.FindByID(id1)
@@ -120,8 +120,7 @@ func TestManagerProcessesJobsParallel(t *testing.T) {
 		order = append(order, id)
 		startTimes = append(startTimes, time.Now())
 		mu.Unlock()
-		// 模拟一些工作
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		return nil
 	})
 
@@ -139,13 +138,13 @@ func TestManagerProcessesJobsParallel(t *testing.T) {
 	}
 
 	// 等待所有任务完成
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
 		jobs, _ := jobRepo.FindByStatus("finished")
 		if len(jobs) >= 4 {
 			break
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// 验证所有任务完成
@@ -228,7 +227,7 @@ func TestManager_PausePreservesQueue(t *testing.T) {
 
 	// Register a slow handler
 	slowHandler := func(ctx context.Context, id int64, payload string) error {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		return nil
 	}
 	manager.RegisterHandler("slow_job", slowHandler)
@@ -248,7 +247,7 @@ func TestManager_PausePreservesQueue(t *testing.T) {
 	manager.Pause()
 
 	// Wait a bit for any in-flight job to complete
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 
 	// Verify the job still exists
 	job, err := jobRepo.FindByID(jobID)
@@ -363,9 +362,17 @@ func TestManager_AddJobWhilePaused(t *testing.T) {
 		t.Errorf("Expected job status 'ready' while paused, got '%s'", job.Status)
 	}
 
-	// Resume and wait for processing
 	manager.Resume()
-	time.Sleep(200 * time.Millisecond)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		procMu.Lock()
+		done := processed
+		procMu.Unlock()
+		if done {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// Job should now be processed
 	procMu.Lock()
