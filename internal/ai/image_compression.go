@@ -25,12 +25,15 @@ const (
 )
 
 func calculateResizeDimensions(width, height int, maxPixels int) (int, int) {
-	pixels := width * height
-	if pixels <= maxPixels {
+	if width <= 0 || height <= 0 || maxPixels <= 0 {
+		return 1, 1
+	}
+
+	if width <= maxPixels/height {
 		return width, height
 	}
 
-	scale := math.Sqrt(float64(maxPixels) / float64(pixels))
+	scale := math.Sqrt(float64(maxPixels) / (float64(width) * float64(height)))
 	newWidth := int(float64(width) * scale)
 	newHeight := int(float64(height) * scale)
 
@@ -41,10 +44,34 @@ func calculateResizeDimensions(width, height int, maxPixels int) (int, int) {
 		newHeight = 1
 	}
 
+	maxWidth := maxPixels / newHeight
+	if maxWidth < 1 {
+		maxWidth = 1
+	}
+	if newWidth > maxWidth {
+		newWidth = maxWidth
+	}
+
+	maxHeight := maxPixels / newWidth
+	if maxHeight < 1 {
+		maxHeight = 1
+	}
+	if newHeight > maxHeight {
+		newHeight = maxHeight
+	}
+
 	return newWidth, newHeight
 }
 
 func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
+	if strings.EqualFold(filepath.Ext(filePath), ".gif") {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, "", fmt.Errorf("read gif file: %w", err)
+		}
+		return data, "image/gif", nil
+	}
+
 	if err := imageruntime.EnsureStarted(); err != nil {
 		return nil, "", fmt.Errorf("start vips runtime: %w", err)
 	}
@@ -84,7 +111,6 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 			return nil, "", fmt.Errorf("resize image: %w", err)
 		}
 		width, height = newWidth, newHeight
-		_ = height
 	}
 
 	data, err := exportJPEG(img, 85)
@@ -143,6 +169,8 @@ func detectContentType(filePath string) string {
 	switch ext {
 	case ".png":
 		return "image/png"
+	case ".jpg":
+		return "image/jpeg"
 	case ".gif":
 		return "image/gif"
 	case ".webp":

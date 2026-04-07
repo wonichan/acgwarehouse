@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/tencentyun/cos-go-sdk-v5"
@@ -78,4 +79,31 @@ func (s *COSService) Upload(ctx context.Context, filename, size string, data []b
 	}
 
 	return fmt.Sprintf("%s/%s", uploadURL, key), nil
+}
+
+func (s *COSService) DeleteByURL(ctx context.Context, objectURL string) error {
+	if s == nil || s.client == nil {
+		return fmt.Errorf("cos service is not initialized")
+	}
+
+	if objectURL == "" {
+		return nil
+	}
+
+	u, err := url.Parse(objectURL)
+	if err != nil {
+		return fmt.Errorf("parse object url: %w", err)
+	}
+
+	key := strings.TrimPrefix(path.Clean(u.Path), "/")
+	if key == "" || key == "." {
+		return fmt.Errorf("invalid object key from url: %s", objectURL)
+	}
+
+	_, err = s.client.Object.Delete(ctx, key)
+	if err != nil {
+		return fmt.Errorf("delete object from cos: %w", err)
+	}
+
+	return nil
 }

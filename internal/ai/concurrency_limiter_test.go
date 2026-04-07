@@ -127,3 +127,54 @@ func TestConcurrencyLimiter_ContextCancellation(t *testing.T) {
 		t.Errorf("expected to wait for timeout, but only waited %v", elapsed)
 	}
 }
+
+func TestConcurrencyLimiter_SetLimitDecreaseDoesNotOrphanWaiters(t *testing.T) {
+	limiter := NewConcurrencyLimiter(2)
+
+	release1, err := limiter.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("acquire 1 failed: %v", err)
+	}
+	release2, err := limiter.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("acquire 2 failed: %v", err)
+	}
+
+	acquired := make(chan struct{})
+	acquireErr := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	go func() {
+		release3, acqErr := limiter.Acquire(ctx)
+		if acqErr != nil {
+			acquireErr <- acqErr
+			return
+		}
+		close(acquired)
+		release3()
+	}()
+
+	time.Sleep(30 * time.Millisecond)
+	limiter.SetLimit(1)
+
+	release1()
+
+	select {
+	case <-acquired:
+		t.Fatal("acquire should remain blocked while one slot is still occupied under new limit")
+	case err := <-acquireErr:
+		t.Fatalf("acquire returned unexpected error before final release: %v", err)
+	case <-time.After(80 * time.Millisecond):
+	}
+
+	release2()
+
+	select {
+	case <-acquired:
+	case err := <-acquireErr:
+		t.Fatalf("acquire failed after limit decrease and releases: %v", err)
+	case <-time.After(300 * time.Millisecond):
+		t.Fatal("acquire remained blocked after slots were released")
+	}
+}

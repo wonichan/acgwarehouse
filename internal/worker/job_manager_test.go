@@ -453,3 +453,99 @@ func TestManager_SetWorkerCount(t *testing.T) {
 		t.Fatalf("after decrease, worker count = %d, want 1", count)
 	}
 }
+
+func TestManager_QueueSizeIncludesDispatchPendingDuringSubmitRetry(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	mgr := NewManagerWithConfig(jobRepo, 1, 1)
+
+	mgr.poolMu.Lock()
+	mgr.pool = nil
+	mgr.runningMu.Lock()
+	mgr.running = true
+	mgr.runningMu.Unlock()
+	mgr.stopCh = make(chan struct{})
+	mgr.poolMu.Unlock()
+
+	job := &domain.AsyncJob{ID: 1, Type: "retry_job", Payload: "{}", Status: "ready", CreatedAt: time.Now()}
+	if err := mgr.enqueueJob(context.Background(), job); err != nil {
+		t.Fatalf("enqueueJob() error = %v", err)
+	}
+
+	mgr.dispatchWg.Add(1)
+	go mgr.dispatchLoop()
+	defer func() {
+		close(mgr.stopCh)
+		mgr.dispatchWg.Wait()
+	}()
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if mgr.QueueSize() == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if got := mgr.QueueSize(); got != 1 {
+		t.Fatalf("QueueSize() = %d, want 1 when dispatch has pending retry", got)
+	}
+
+	if got := mgr.QueuedByType("retry_job"); got != 1 {
+		t.Fatalf("QueuedByType(retry_job) = %d, want 1", got)
+	}
+}
+
+func TestManager_AddJobQueueFullStillReturnsCreatedJob(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	mgr := NewManagerWithConfig(jobRepo, 1, 1)
+
+	ctx := context.Background()
+	firstID, err := mgr.AddJob(ctx, "queue_full_test", `{"k":1}`)
+	if err != nil {
+		t.Fatalf("first AddJob() error = %v", err)
+	}
+
+	secondID, err := mgr.AddJob(ctx, "queue_full_test", `{"k":2}`)
+	if err != nil {
+		t.Fatalf("second AddJob() should still create job when queue full, got err = %v", err)
+	}
+	if secondID == 0 || secondID == firstID {
+		t.Fatalf("second job id invalid: first=%d second=%d", firstID, secondID)
+	}
+
+	readyJobs, err := jobRepo.FindByStatus("ready")
+	if err != nil {
+		t.Fatalf("FindByStatus(ready) error = %v", err)
+	}
+	if len(readyJobs) != 2 {
+		t.Fatalf("expected 2 ready jobs persisted, got %d", len(readyJobs))
+	}
+
+	if got := mgr.QueueSize(); got != 1 {
+		t.Fatalf("QueueSize() = %d, want 1 when buffer is full", got)
+	}
+}

@@ -6,9 +6,30 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"os"
+	"sync/atomic"
 	"testing"
+
+	"github.com/disintegration/imaging"
 )
+
+func TestCalculateResizeDimensions_HandlesIntOverflow(t *testing.T) {
+	newW, newH := calculateResizeDimensions(math.MaxInt, 2, maxAIPixelCount)
+
+	if newW == math.MaxInt && newH == 2 {
+		t.Fatalf("expected overflow path to trigger resize, got original dimensions %dx%d", newW, newH)
+	}
+
+	if newW < 1 || newH < 1 {
+		t.Fatalf("expected positive resized dimensions, got %dx%d", newW, newH)
+	}
+
+	pixels := int64(newW) * int64(newH)
+	if pixels > int64(maxAIPixelCount) {
+		t.Fatalf("resized pixel count exceeds max: got %d, max %d", pixels, maxAIPixelCount)
+	}
+}
 
 // TestCompressImageIfNeeded_SmallFileUnchanged tests that files under 10MB are returned unchanged
 func TestCompressImageIfNeeded_SmallFileUnchanged(t *testing.T) {
@@ -384,4 +405,36 @@ func TestCompressImageIfNeeded_UnderPixelLimit(t *testing.T) {
 // Helper function to encode PNG
 func encodePNG(w *os.File, img image.Image) error {
 	return png.Encode(w, img)
+}
+
+func TestCompressImageWithFilterAndLimit_ResizeCalledOnlyWhenScaleChanges(t *testing.T) {
+	var resizeCalls int32
+	var sourceWidths []int
+	originalResize := resizeImage
+	resizeImage = func(img image.Image, width, height int, filter imaging.ResampleFilter) *image.NRGBA {
+		atomic.AddInt32(&resizeCalls, 1)
+		sourceWidths = append(sourceWidths, img.Bounds().Dx())
+		return imaging.Resize(img, width, height, filter)
+	}
+	defer func() { resizeImage = originalResize }()
+
+	img := createTestImage(2000, 2000)
+	_, err := compressImageWithFilterAndLimit(img, imaging.Lanczos, 1024)
+	if err != nil {
+		t.Fatalf("compressImageWithFilterAndLimit() error = %v", err)
+	}
+
+	if got := atomic.LoadInt32(&resizeCalls); got == 0 {
+		t.Fatalf("resize invocation count = %d, expected > 0", got)
+	}
+
+	if len(sourceWidths) < 2 {
+		t.Fatalf("expected multiple resize invocations, got %d", len(sourceWidths))
+	}
+
+	for i := 1; i < len(sourceWidths); i++ {
+		if sourceWidths[i] >= sourceWidths[i-1] {
+			t.Fatalf("expected progressive downscale source widths, got sequence %v", sourceWidths)
+		}
+	}
 }

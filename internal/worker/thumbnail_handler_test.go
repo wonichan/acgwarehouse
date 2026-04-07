@@ -88,11 +88,18 @@ func (s *stubThumbnailGenerator) GenerateBoth(path string) (small, large *domain
 }
 
 type stubThumbnailUploader struct {
-	urls map[string]string
-	err  error
+	urls      map[string]string
+	err       error
+	errBySize map[string]error
+	deleted   []string
 }
 
 func (s *stubThumbnailUploader) Upload(ctx context.Context, filename, size string, data []byte) (string, error) {
+	if s.errBySize != nil {
+		if err, ok := s.errBySize[size]; ok && err != nil {
+			return "", err
+		}
+	}
 	if s.err != nil {
 		return "", s.err
 	}
@@ -102,6 +109,45 @@ func (s *stubThumbnailUploader) Upload(ctx context.Context, filename, size strin
 		}
 	}
 	return fmt.Sprintf("https://cos.local/thumbnails/%s-%s.jpg", filename, size), nil
+}
+
+func (s *stubThumbnailUploader) DeleteByURL(ctx context.Context, objectURL string) error {
+	s.deleted = append(s.deleted, objectURL)
+	return nil
+}
+
+func TestThumbnailHandlerHandle_RollbackSmallOnLargeUploadFailure(t *testing.T) {
+	t.Parallel()
+
+	thumbSvc := &stubThumbnailGenerator{
+		small: &domain.Thumbnail{Data: []byte("small-bytes"), Size: "small"},
+		large: &domain.Thumbnail{Data: []byte("large-bytes"), Size: "large"},
+	}
+	cosSvc := &stubThumbnailUploader{
+		urls: map[string]string{
+			"small": "https://cos.local/thumbnails/test-image-small.jpg",
+		},
+		errBySize: map[string]error{
+			"large": errors.New("upload large failed"),
+		},
+	}
+	repo := &stubThumbnailImageRepo{}
+
+	h := NewThumbnailHandler(thumbSvc, cosSvc, repo)
+	err := h.Handle(context.Background(), 99, `{"image_id":11,"path":"C:/tmp/a.png","filename":"test-image"}`)
+	if err == nil {
+		t.Fatal("Handle() expected error when large upload fails")
+	}
+
+	if len(cosSvc.deleted) != 1 {
+		t.Fatalf("expected 1 rollback delete call, got %d", len(cosSvc.deleted))
+	}
+	if cosSvc.deleted[0] != "https://cos.local/thumbnails/test-image-small.jpg" {
+		t.Fatalf("unexpected rollback url: %q", cosSvc.deleted[0])
+	}
+	if repo.updateCalls != 0 {
+		t.Fatalf("UpdateThumbnails() calls = %d, want 0", repo.updateCalls)
+	}
 }
 
 type stubThumbnailImageRepo struct {

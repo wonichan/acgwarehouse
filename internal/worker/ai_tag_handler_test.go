@@ -411,6 +411,38 @@ func TestAITagHandler_AIServiceError(t *testing.T) {
 	}
 }
 
+func TestAITagHandler_FailsFastWhenGovernanceNil(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{
+		result: &ai.TagResult{
+			Tags:       []string{"girl", "anime"},
+			Confidence: 0.88,
+			ModelName:  "qwen-vl-max",
+		},
+	}
+
+	manager := NewManager(mockJobRepo)
+	RegisterAITagHandler(manager, mockClient, mockObsRepo, nil, nil)
+
+	payload := AITagPayload{ImageID: 1, Path: "/test.jpg"}
+	payloadBytes, _ := json.Marshal(payload)
+
+	handler := manager.handlers["ai_tag_generation"]
+	err := handler(context.Background(), 1, string(payloadBytes))
+	if err == nil {
+		t.Fatal("expected error when governance is nil")
+	}
+
+	if mockClient.lastImageURL != "" {
+		t.Fatal("expected AI client not to be called when governance is nil")
+	}
+
+	if mockObsRepo.savedObservation != nil {
+		t.Fatal("expected observation not to be saved when governance is nil")
+	}
+}
+
 // ========== Mocks ==========
 
 type mockJobRepoForAI struct {
@@ -511,7 +543,7 @@ func (m *mockAIClient) Name() string {
 	return "mock"
 }
 
-func (m *mockAIClient) GenerateTags(ctx interface{}, imageURL, prompt string) (*ai.TagResult, error) {
+func (m *mockAIClient) GenerateTags(ctx context.Context, imageURL, prompt string) (*ai.TagResult, error) {
 	m.lastImageURL = imageURL
 	return m.result, m.err
 }

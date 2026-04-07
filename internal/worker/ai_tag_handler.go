@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/ai"
@@ -34,8 +35,7 @@ type AITagPresenceChecker interface {
 }
 
 // AITagConcurrencyLimiter AI 标签生成的并发控制器
-// 全局变量，在服务启动时初始化
-var AITagConcurrencyLimiter *ai.ConcurrencyLimiter
+var aiTagConcurrencyLimiter atomic.Pointer[ai.ConcurrencyLimiter]
 
 // DefaultTagPrompt 默认标签生成提示词
 const DefaultTagPrompt = `请分析这张动漫/二次元风格图片，并输出 最多 8 个中文标签，绝对不能超过 8 个。
@@ -107,14 +107,14 @@ func GetDefaultTagPrompt() string {
 
 // InitAITagConcurrencyLimiter 初始化 AI 标签生成的并发控制器
 func InitAITagConcurrencyLimiter(maxConcurrency int) {
-	AITagConcurrencyLimiter = ai.NewConcurrencyLimiter(maxConcurrency)
+	aiTagConcurrencyLimiter.Store(ai.NewConcurrencyLimiter(maxConcurrency))
 	log.Printf("AI 标签生成并发限制已设置: %d", maxConcurrency)
 }
 
 // SetAITagConcurrencyLimiter 动态调整 AI 标签生成的并发限制
 func SetAITagConcurrencyLimiter(maxConcurrency int) {
-	if AITagConcurrencyLimiter != nil {
-		AITagConcurrencyLimiter.SetLimit(maxConcurrency)
+	if limiter := aiTagConcurrencyLimiter.Load(); limiter != nil {
+		limiter.SetLimit(maxConcurrency)
 		log.Printf("AI 标签生成并发限制已调整为: %d", maxConcurrency)
 	}
 }
@@ -142,25 +142,32 @@ func NewAITagRegenerationJobHandler(client ai.AIProvider, obsRepo repository.Tag
 		if err := governance.RemovePendingAITags(ctx, p.ImageID); err != nil {
 			return fmt.Errorf("remove pending ai tags: %w", err)
 		}
-		return handleAITagGeneration(ctx, id, payload, client, obsRepo, governance, nil)
+		return handleAITagGenerationWithPayload(ctx, id, p, client, obsRepo, governance, nil)
 	}
 }
 
 // handleAITagGeneration 处理 AI 标签生成任务
 func handleAITagGeneration(ctx context.Context, id int64, payload string, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, aiTagChecker AITagPresenceChecker) error {
+	var p AITagPayload
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		return fmt.Errorf("parse payload: %w", err)
+	}
+
+	return handleAITagGenerationWithPayload(ctx, id, p, client, obsRepo, governance, aiTagChecker)
+}
+
+func handleAITagGenerationWithPayload(ctx context.Context, id int64, p AITagPayload, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, aiTagChecker AITagPresenceChecker) error {
+	if governance == nil {
+		return fmt.Errorf("merge tags: governance service is nil")
+	}
+
 	// 如果设置了并发控制器，先获取槽位
-	if AITagConcurrencyLimiter != nil {
-		release, err := AITagConcurrencyLimiter.Acquire(ctx)
+	if limiter := aiTagConcurrencyLimiter.Load(); limiter != nil {
+		release, err := limiter.Acquire(ctx)
 		if err != nil {
 			return fmt.Errorf("acquire concurrency slot: %w", err)
 		}
 		defer release()
-	}
-
-	// 解析 payload
-	var p AITagPayload
-	if err := json.Unmarshal([]byte(payload), &p); err != nil {
-		return fmt.Errorf("parse payload: %w", err)
 	}
 
 	if aiTagChecker != nil {
@@ -198,9 +205,6 @@ func handleAITagGeneration(ctx context.Context, id int64, payload string, client
 
 	if err := obsRepo.Save(ctx, obs); err != nil {
 		return fmt.Errorf("save observation: %w", err)
-	}
-	if governance == nil {
-		return fmt.Errorf("merge tags: governance service is nil")
 	}
 
 	if err := governance.MergeTags(ctx, p.ImageID, result.Tags, obs.ID, result.Confidence); err != nil {

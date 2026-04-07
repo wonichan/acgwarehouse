@@ -25,13 +25,18 @@ const (
 	mediumFileThreshold = 10 * 1024 * 1024
 )
 
+var resizeImage = imaging.Resize
+
 func calculateResizeDimensions(width, height int, maxPixels int) (int, int) {
-	pixels := width * height
-	if pixels <= maxPixels {
+	if width <= 0 || height <= 0 || maxPixels <= 0 {
+		return 1, 1
+	}
+
+	if width <= maxPixels/height {
 		return width, height
 	}
 
-	scale := math.Sqrt(float64(maxPixels) / float64(pixels))
+	scale := math.Sqrt(float64(maxPixels) / (float64(width) * float64(height)))
 	newWidth := int(float64(width) * scale)
 	newHeight := int(float64(height) * scale)
 
@@ -42,10 +47,34 @@ func calculateResizeDimensions(width, height int, maxPixels int) (int, int) {
 		newHeight = 1
 	}
 
+	maxWidth := maxPixels / newHeight
+	if maxWidth < 1 {
+		maxWidth = 1
+	}
+	if newWidth > maxWidth {
+		newWidth = maxWidth
+	}
+
+	maxHeight := maxPixels / newWidth
+	if maxHeight < 1 {
+		maxHeight = 1
+	}
+	if newHeight > maxHeight {
+		newHeight = maxHeight
+	}
+
 	return newWidth, newHeight
 }
 
 func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
+	if strings.EqualFold(filepath.Ext(filePath), ".gif") {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, "", fmt.Errorf("read gif file: %w", err)
+		}
+		return data, "image/gif", nil
+	}
+
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return nil, "", fmt.Errorf("stat file: %w", err)
@@ -72,10 +101,8 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 
 	if pixels > maxAIPixelCount {
 		newWidth, newHeight := calculateResizeDimensions(width, height, targetPixelCount)
-		img = imaging.Resize(img, newWidth, newHeight, imaging.Lanczos)
+		img = resizeImage(img, newWidth, newHeight, imaging.Lanczos)
 		width, height = newWidth, newHeight
-		_ = width
-		_ = height
 	}
 
 	var buf bytes.Buffer
@@ -130,6 +157,8 @@ func detectContentType(filePath string) string {
 	switch ext {
 	case ".png":
 		return "image/png"
+	case ".jpg":
+		return "image/jpeg"
 	case ".gif":
 		return "image/gif"
 	case ".webp":
@@ -156,24 +185,21 @@ func compressImageWithFilter(img image.Image, filter imaging.ResampleFilter) ([]
 
 func compressImageWithFilterAndLimit(img image.Image, filter imaging.ResampleFilter, maxSize int) ([]byte, error) {
 	quality := 85
-	scale := 1.0
 	maxIterations := 10
 	minQuality := 50
+	currentImg := img
+	currentScale := 1.0
+	var lastEncoded []byte
 
 	for i := 0; i < maxIterations; i++ {
-		currentImg := img
-		if scale < 1.0 {
-			newWidth := int(float64(img.Bounds().Dx()) * scale)
-			currentImg = imaging.Resize(img, newWidth, 0, filter)
-		}
-
 		var buf bytes.Buffer
 		if err := imaging.Encode(&buf, currentImg, imaging.JPEG, imaging.JPEGQuality(quality)); err != nil {
 			return nil, fmt.Errorf("encode image: %w", err)
 		}
+		lastEncoded = buf.Bytes()
 
-		if buf.Len() <= maxSize {
-			return buf.Bytes(), nil
+		if len(lastEncoded) <= maxSize {
+			return lastEncoded, nil
 		}
 
 		if quality > minQuality {
@@ -184,18 +210,26 @@ func compressImageWithFilterAndLimit(img image.Image, filter imaging.ResampleFil
 			continue
 		}
 
-		scale -= 0.15
-		if scale <= 0.1 {
-			return buf.Bytes(), nil
+		nextScale := currentScale - 0.15
+		if nextScale <= 0.1 {
+			return lastEncoded, nil
 		}
+
+		relativeScale := nextScale / currentScale
+		newWidth := int(float64(currentImg.Bounds().Dx()) * relativeScale)
+		if newWidth < 1 {
+			newWidth = 1
+		}
+
+		currentImg = resizeImage(currentImg, newWidth, 0, filter)
+		currentScale = nextScale
 	}
 
-	var buf bytes.Buffer
-	scaledImg := imaging.Resize(img, int(float64(img.Bounds().Dx())*scale), 0, filter)
-	if err := imaging.Encode(&buf, scaledImg, imaging.JPEG, imaging.JPEGQuality(quality)); err != nil {
-		return nil, fmt.Errorf("encode image: %w", err)
+	if len(lastEncoded) > 0 {
+		return lastEncoded, nil
 	}
-	return buf.Bytes(), nil
+
+	return nil, fmt.Errorf("failed to encode image")
 }
 
 func dataURLSize(contentType string, dataSize int) int {

@@ -14,6 +14,7 @@ type thumbnailGenerator interface {
 
 type thumbnailUploader interface {
 	Upload(ctx context.Context, filename, size string, data []byte) (string, error)
+	DeleteByURL(ctx context.Context, objectURL string) error
 }
 
 type thumbnailImageRepository interface {
@@ -63,6 +64,9 @@ func (h *ThumbnailHandler) Handle(ctx context.Context, jobID int64, payload stri
 	}
 	largeURL, err := h.cosSvc.Upload(ctx, uploadName, "large", large.Data)
 	if err != nil {
+		if rollbackErr := h.cosSvc.DeleteByURL(ctx, smallURL); rollbackErr != nil {
+			return fmt.Errorf("upload large thumbnail: %w (rollback small thumbnail failed: %v)", err, rollbackErr)
+		}
 		return fmt.Errorf("upload large thumbnail: %w", err)
 	}
 

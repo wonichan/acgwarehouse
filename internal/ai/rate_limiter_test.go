@@ -147,7 +147,7 @@ func (m *mockProvider) Name() string {
 	return "mock"
 }
 
-func (m *mockProvider) GenerateTags(ctx interface{}, imageURL, prompt string) (*TagResult, error) {
+func (m *mockProvider) GenerateTags(ctx context.Context, imageURL, prompt string) (*TagResult, error) {
 	m.callCount++
 	m.lastURL = imageURL
 	m.lastPrompt = prompt

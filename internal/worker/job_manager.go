@@ -2,8 +2,10 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/panjf2000/ants/v2"
@@ -12,6 +14,11 @@ import (
 )
 
 type JobFunc func(ctx context.Context, id int64, payload string) error
+
+type queuedJob struct {
+	ctx context.Context
+	job *domain.AsyncJob
+}
 
 // Stats holds runtime statistics about the job manager.
 type Stats struct {
@@ -25,22 +32,25 @@ type Stats struct {
 type Manager struct {
 	jobRepo     repository.JobRepository
 	handlers    map[string]JobFunc
-	queue       chan *domain.AsyncJob
+	queue       chan *queuedJob
 	queueSize   int
 	queueTypeMu sync.Mutex
 	queueTypes  map[string]int
 
 	// Worker pool (ants)
-	pool      *ants.Pool
-	poolMu    sync.RWMutex
-	stopCh    chan struct{}
-	running   bool
-	runningMu sync.Mutex
-	paused    bool
-	pausedMu  sync.Mutex
+	pool        *ants.Pool
+	poolMu      sync.RWMutex
+	stopCh      chan struct{}
+	dispatchWg  sync.WaitGroup
+	running     bool
+	runningMu   sync.Mutex
+	paused      bool
+	pausedMu    sync.Mutex
+	pauseNotify chan struct{}
+	pendingCnt  int32
 
 	// 配置：worker 数量
-	workerCount int
+	workerCount atomic.Int32
 }
 
 // DefaultWorkerCount is the default number of workers.
@@ -70,12 +80,13 @@ func NewManagerWithConfig(jobRepo repository.JobRepository, workerCount, queueSi
 	m := &Manager{
 		jobRepo:     jobRepo,
 		handlers:    make(map[string]JobFunc),
-		queue:       make(chan *domain.AsyncJob, queueSize),
+		queue:       make(chan *queuedJob, queueSize),
 		queueSize:   queueSize,
 		queueTypes:  make(map[string]int),
+		pauseNotify: make(chan struct{}),
 		stopCh:      make(chan struct{}),
-		workerCount: workerCount,
 	}
+	m.workerCount.Store(int32(workerCount))
 	return m
 }
 
@@ -91,11 +102,12 @@ func (m *Manager) Start(ctx context.Context) {
 		return
 	}
 	m.running = true
+	m.stopCh = make(chan struct{})
 	m.runningMu.Unlock()
 
 	// 创建 ants 协程池（带优化选项）
 	pool, err := ants.NewPool(
-		m.workerCount,
+		m.GetWorkerCount(),
 		// 预分配内存，提升高并发性能
 		ants.WithPreAlloc(true),
 		// 防止任务 panic 导致整个 pool 崩溃
@@ -117,7 +129,10 @@ func (m *Manager) Start(ctx context.Context) {
 	m.pool = pool
 	m.poolMu.Unlock()
 
-	log.Printf("启动 %d 个 worker 协程处理任务 (ants pool)", m.workerCount)
+	m.dispatchWg.Add(1)
+	go m.dispatchLoop()
+
+	log.Printf("启动 %d 个 worker 协程处理任务 (ants pool)", m.GetWorkerCount())
 }
 
 // Stop releases the ants pool and waits for running tasks to complete.
@@ -129,6 +144,7 @@ func (m *Manager) Stop() {
 	default:
 		close(m.stopCh)
 	}
+	m.dispatchWg.Wait()
 
 	// 释放 ants 池
 	m.poolMu.Lock()
@@ -154,12 +170,12 @@ func (m *Manager) SetWorkerCount(ctx context.Context, newCount int) {
 	m.poolMu.Unlock()
 
 	if pool == nil {
-		m.workerCount = newCount
+		m.workerCount.Store(int32(newCount))
 		log.Printf("Worker 数量已调整为 %d (pool 未启动)", newCount)
 		return
 	}
 
-	currentCount := m.workerCount
+	currentCount := m.GetWorkerCount()
 	if newCount == currentCount {
 		return
 	}
@@ -167,14 +183,14 @@ func (m *Manager) SetWorkerCount(ctx context.Context, newCount int) {
 	// 使用 ants.Tune 动态调整池大小
 	pool.Tune(newCount)
 
-	m.workerCount = newCount
+	m.workerCount.Store(int32(newCount))
 	log.Printf("Worker 数量已调整为 %d", newCount)
 }
 
 // GetWorkerCount returns the current number of workers.
 func (m *Manager) GetWorkerCount() int {
 	// 返回配置值（更准确，因为 ants.Tune 是异步的）
-	return m.workerCount
+	return int(m.workerCount.Load())
 }
 
 // workerWithCountCheck removed - using ants pool instead
@@ -191,67 +207,94 @@ func (m *Manager) AddJob(ctx context.Context, jobType, payload string) (int64, e
 		return 0, err
 	}
 
-	// 提交到 ants pool 执行
-	m.poolMu.RLock()
-	pool := m.pool
-	m.poolMu.RUnlock()
-
-	if pool != nil {
-		// 检查是否暂停
-		m.pausedMu.Lock()
-		isPaused := m.paused
-		m.pausedMu.Unlock()
-
-		if isPaused {
-			// 暂停时重新入队等待
-			go func() {
-				time.Sleep(100 * time.Millisecond)
-				m.submitJob(ctx, job)
-			}()
-		} else {
-			m.submitJob(ctx, job)
-		}
-	} else {
-		// pool 未启动时放入队列，等后续 LoadExistingJob 加载
-		select {
-		case m.queue <- job:
-			m.enqueueType(job.Type)
-		default:
-			log.Printf("队列已满，任务 #%d 已保存到数据库，等待后续处理", job.ID)
-		}
+	if err := m.enqueueJob(context.Background(), job); err != nil {
+		log.Printf("任务 #%d 已持久化，但当前未入队: %v", job.ID, err)
+		return job.ID, nil
 	}
 
 	return job.ID, nil
 }
 
 // submitJob 提交任务到 ants pool 执行
-func (m *Manager) submitJob(ctx context.Context, job *domain.AsyncJob) {
+func (m *Manager) submitJob(ctx context.Context, job *domain.AsyncJob) error {
 	m.poolMu.RLock()
 	pool := m.pool
 	m.poolMu.RUnlock()
 
 	if pool == nil {
-		return
+		return errors.New("worker pool is not running")
 	}
 
 	err := pool.Submit(func() {
 		m.processJob(ctx, job)
 	})
 	if err != nil {
-		log.Printf("提交任务到 pool 失败: %v", err)
-		// 任务已持久化到 DB，可以后续重试
+		return err
 	}
+
+	return nil
 }
 
 // LoadExistingJob 将已有的任务加载到队列中（不创建新记录）
 // 使用非阻塞方式，队列满时返回 false，调用方应跳过该任务
 func (m *Manager) LoadExistingJob(job *domain.AsyncJob) bool {
+	return m.enqueueJob(context.Background(), job) == nil
+}
+
+func (m *Manager) enqueueJob(ctx context.Context, job *domain.AsyncJob) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	select {
-	case m.queue <- job:
+	case m.queue <- &queuedJob{ctx: ctx, job: job}:
 		m.enqueueType(job.Type)
-		return true
+		return nil
 	default:
-		return false
+		return errors.New("job queue is full")
+	}
+}
+
+func (m *Manager) dispatchLoop() {
+	defer m.dispatchWg.Done()
+
+	var pending *queuedJob
+	for {
+		if pending == nil {
+			select {
+			case <-m.stopCh:
+				atomic.StoreInt32(&m.pendingCnt, 0)
+				return
+			case pending = <-m.queue:
+				atomic.StoreInt32(&m.pendingCnt, 1)
+			}
+		}
+
+		if m.IsPaused() {
+			pauseNotify := m.getPauseNotify()
+			select {
+			case <-m.stopCh:
+				atomic.StoreInt32(&m.pendingCnt, 0)
+				return
+			case <-pauseNotify:
+			}
+			continue
+		}
+
+		if err := m.submitJob(pending.ctx, pending.job); err != nil {
+			log.Printf("提交任务到 pool 失败，稍后重试: %v", err)
+			select {
+			case <-m.stopCh:
+				atomic.StoreInt32(&m.pendingCnt, 0)
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+			continue
+		}
+
+		m.dequeueType(pending.job.Type)
+		pending = nil
+		atomic.StoreInt32(&m.pendingCnt, 0)
 	}
 }
 
@@ -322,14 +365,24 @@ func (m *Manager) processJob(ctx context.Context, job *domain.AsyncJob) {
 // Pause stops the worker from processing new jobs while preserving the queue.
 func (m *Manager) Pause() {
 	m.pausedMu.Lock()
+	if m.paused {
+		m.pausedMu.Unlock()
+		return
+	}
 	m.paused = true
+	m.signalPauseLocked()
 	m.pausedMu.Unlock()
 }
 
 // Resume allows the worker to continue processing jobs.
 func (m *Manager) Resume() {
 	m.pausedMu.Lock()
+	if !m.paused {
+		m.pausedMu.Unlock()
+		return
+	}
 	m.paused = false
+	m.signalPauseLocked()
 	m.pausedMu.Unlock()
 }
 
@@ -347,9 +400,20 @@ func (m *Manager) IsPaused() bool {
 	return m.paused
 }
 
+func (m *Manager) getPauseNotify() <-chan struct{} {
+	m.pausedMu.Lock()
+	defer m.pausedMu.Unlock()
+	return m.pauseNotify
+}
+
+func (m *Manager) signalPauseLocked() {
+	close(m.pauseNotify)
+	m.pauseNotify = make(chan struct{})
+}
+
 // QueueSize returns the current number of jobs waiting in the queue.
 func (m *Manager) QueueSize() int {
-	return len(m.queue)
+	return len(m.queue) + int(atomic.LoadInt32(&m.pendingCnt))
 }
 
 // QueueCapacity returns the maximum queue size.
@@ -378,7 +442,7 @@ func (m *Manager) GetStats() Stats {
 	m.queueTypeMu.Unlock()
 
 	return Stats{
-		QueueSize:   len(m.queue),
+		QueueSize:   m.QueueSize(),
 		IsRunning:   running,
 		IsPaused:    paused,
 		WorkerCount: workerCount,
