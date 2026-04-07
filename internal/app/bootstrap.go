@@ -24,13 +24,14 @@ import (
 )
 
 const (
-	sidecarExecutableEnv = "ACG_SIDECAR_EXECUTABLE"
-	sidecarPortEnv       = "ACG_SIDECAR_PORT"
-	diagnosticsDirEnv    = "ACG_DIAGNOSTICS_DIR"
-	logsDirEnv           = "ACG_LOGS_DIR"
-	defaultSidecarHost   = "127.0.0.1"
-	defaultSidecarPort   = "8000"
-	sidecarShutdownPath  = "/shutdown"
+	sidecarExecutableEnv  = "ACG_SIDECAR_EXECUTABLE"
+	sidecarPortEnv        = "ACG_SIDECAR_PORT"
+	diagnosticsDirEnv     = "ACG_DIAGNOSTICS_DIR"
+	logsDirEnv            = "ACG_LOGS_DIR"
+	defaultSidecarHost    = "127.0.0.1"
+	defaultSidecarPort    = "8000"
+	sidecarShutdownPath   = "/shutdown"
+	sidecarStartupTimeout = 30 * time.Second
 )
 
 var (
@@ -111,7 +112,7 @@ func (a *App) initSidecarRuntime() {
 
 	a.sidecarBaseURL = settings.baseURL
 	a.sidecarRuntime = newSidecarRuntime(sidecar.RuntimeConfig{
-		StartupTimeout: 2 * time.Second,
+		StartupTimeout: sidecarStartupTimeout,
 		ProbeInterval:  100 * time.Millisecond,
 		CommandFactory: func(ctx context.Context) (sidecar.Process, error) {
 			proc, err := startSidecarProcess(ctx, settings.executable, settings.args, settings.sidecarLogPath)

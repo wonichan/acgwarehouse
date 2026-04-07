@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 )
@@ -67,6 +68,9 @@ func TestPackagedSidecarBootstrapUsesExplicitExecutableAndPort(t *testing.T) {
 
 	if app.sidecarBaseURL != "http://127.0.0.1:9311" {
 		t.Fatalf("sidecarBaseURL = %q, want %q", app.sidecarBaseURL, "http://127.0.0.1:9311")
+	}
+	if capture.cfg.StartupTimeout != 30*time.Second {
+		t.Fatalf("StartupTimeout = %s, want %s", capture.cfg.StartupTimeout, 30*time.Second)
 	}
 	if _, err := capture.cfg.CommandFactory(context.Background()); err != nil {
 		t.Fatalf("CommandFactory() error = %v", err)
