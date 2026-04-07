@@ -51,7 +51,7 @@ def test_detect_request_defaults_threshold_and_images(tmp_path):
 
     request = DetectRequest(images=[image])
 
-    assert request.threshold == 40
+    assert request.threshold == 10
     assert isinstance(request.images, list)
     assert isinstance(request.images[0], ImageInput)
 

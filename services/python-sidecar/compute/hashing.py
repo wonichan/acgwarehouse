@@ -30,6 +30,8 @@ def compute_image_hashes(image_path: str) -> HashResult:
         result["sha256"] = sha256.hexdigest()
 
         phash = _PHASHER.encode_image(image_file=str(path))
+        if not isinstance(phash, str) or not phash:
+            raise ValueError("failed to compute perceptual hash")
         result["phash"] = phash
     except Exception as error:
         result["sha256"] = None
