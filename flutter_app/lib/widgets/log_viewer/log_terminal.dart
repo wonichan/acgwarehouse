@@ -25,6 +25,11 @@ class _LogTerminalState extends State<LogTerminal> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+
+    // Initial scroll to bottom when widget loads with existing lines
+    if (widget.lines.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    }
   }
 
   @override

@@ -19,6 +19,7 @@ $GoBuildRoot = Join-Path $BuildArtifactsRoot 'go'
 $PythonBuildRoot = Join-Path $BuildArtifactsRoot 'python'
 $PyInstallerWorkDir = Join-Path $RepoRoot 'dist/.pyinstaller/work'
 $PyInstallerDistRoot = $PythonBuildRoot
+$PythonRequirementsPath = Join-Path $RepoRoot 'services/python-sidecar/requirements.txt'
 $FlutterProjectDir = Join-Path $RepoRoot 'flutter_app'
 $FlutterReleaseDir = Join-Path $FlutterProjectDir 'build/windows/x64/runner/Release'
 $FlutterOutputExecutable = Join-Path $FlutterReleaseDir 'gallery.exe'
@@ -262,79 +263,63 @@ function Install-Libvips {
         [string]$Destination,
         [string]$RepoRoot
     )
-    
+
     Write-Host "  libvips not found, downloading..."
-    
-    $libvipsVersion = "v8.17.2"
-    $downloadUrl = "https://github.com/libvips/build-win64-mxe/releases/download/$libvipsVersion/libvips-$libvipsVersion-windows-x64.zip"
-    $tempZip = Join-Path $env:TEMP "libvips-$libvipsVersion-windows-x64.zip"
+
+    $libvipsVersion = "8.18.2"
+    $downloadUrl = "https://github.com/libvips/build-win64-mxe/releases/download/v$libvipsVersion/vips-dev-x64-web-$libvipsVersion.zip"
+    $tempZip = Join-Path $env:TEMP "vips-dev-x64-web-$libvipsVersion.zip"
     $tempDir = Join-Path $env:TEMP "libvips-extract"
-    
+
     try {
         Write-Host "    Downloading from: $downloadUrl"
-        
-        # 下载文件
+
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -UseBasicParsing
-        
+
         if (-not (Test-Path $tempZip)) {
             throw "Download failed"
         }
-        
+
         Write-Host "    Extracting..."
-        
-        # 解压
+
         Ensure-Directory -Path $tempDir
         Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
-        
-        # 移动文件
+
         $extractedPath = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
         if ($extractedPath) {
-            $srcBin = Join-Path $extractedPath.FullName 'bin'
-            $srcInclude = Join-Path $extractedPath.FullName 'include'
+            Copy-Item -Path "$($extractedPath.FullName)\*" -Destination $Destination -Recurse -Force
+            Write-Host "    Extracted to: $Destination"
             
-            if (Test-Path $srcBin) {
-                Copy-Item -Path "$srcBin\*" -Destination $Destination -Force
-                Write-Host "    Copied DLLs to: $Destination"
-            }
-            
-            $includeDest = Join-Path $RepoRoot 'thirdparty\include'
-            Ensure-Directory -Path $includeDest
-            if (Test-Path $srcInclude) {
-                Copy-Item -Path "$srcInclude\*" -Destination $includeDest -Force -Recurse
-                Write-Host "    Copied headers to: $includeDest"
-            }
+            $batContent = "@echo off`nset `"BASEDIR=%~dp0`"`nset `"BASEDIR=%BASEDIR:\=/%`"`necho %* | findstr /c:`"--cflags`" >nul`nif not errorlevel 1 ( <nul set /p=`"-I%BASEDIR%include -I%BASEDIR%include/glib-2.0 -I%BASEDIR%lib/glib-2.0/include `"`n  exit /b 0 )`necho %* | findstr /c:`"--libs`" >nul`nif not errorlevel 1 ( <nul set /p=`"-L%BASEDIR%lib -lvips -lglib-2.0 -lgobject-2.0 `"`n  exit /b 0 )"
+            Set-Content -Path (Join-Path $Destination 'pkg-config.bat') -Value $batContent
         }
-        
+
         Write-Host "    libvips installed successfully!"
-        
+
     } catch {
         Write-Warning "    Failed to auto-download libvips: $_"
         Write-Host "    Please download manually from: https://github.com/libvips/build-win64-mxe/releases"
         return $false
     } finally {
-        # 清理临时文件
         if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
         if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
     }
-    
+
     return $true
 }
 
-if ($All -or $Go) {
-    Write-Host "Building Go server with libvips support..."
-    
-    # 检查 libvips 库是否存在
-    $libvipsPath = Join-Path $RepoRoot 'thirdparty\windows-x64'
-    Ensure-Directory -Path $libvipsPath
-    $libvipsExists = Test-Path (Join-Path $libvipsPath 'libvips.dll')
-    
-    if ($libvipsExists) {
-        # 使用 libvips (高性能)
+function Invoke-GoBuildWithOptionalLibvips {
+    param(
+        [Parameter(Mandatory = $true)][bool]$UseLibvips,
+        [Parameter(Mandatory = $true)][string]$LibvipsPath
+    )
+
+    if ($UseLibvips) {
         $env:CGO_ENABLED = '1'
-        $env:CGO_LDFLAGS = "-L `"$libvipsPath`" -lvips"
-        Write-Host "  Using libvips from: $libvipsPath"
-        
+        $env:PATH = "$LibvipsPath;" + $env:PATH
+        Write-Host "  Using libvips from: $LibvipsPath"
+
         Invoke-External -FilePath 'go' -Arguments @(
             'build',
             '-tags', 'libvips',
@@ -343,62 +328,48 @@ if ($All -or $Go) {
             '-o', $GoBuildExecutable,
             './cmd/server'
         )
-        $usingLibvips = $true
-    } else {
-        # 尝试自动下载 libvips
-        Write-Host "  libvips not found, attempting auto-download..."
-        $downloadSuccess = Install-Libvips -Destination $libvipsPath -RepoRoot $RepoRoot
-        
-        if ($downloadSuccess) {
-            # 重新检查
-            $libvipsExists = Test-Path (Join-Path $libvipsPath 'libvips.dll')
-            
-            if ($libvipsExists) {
-                $env:CGO_ENABLED = '1'
-                $env:CGO_LDFLAGS = "-L `"$libvipsPath`" -lvips"
-                Write-Host "  Using libvips from: $libvipsPath"
-                
-                Invoke-External -FilePath 'go' -Arguments @(
-                    'build',
-                    '-tags', 'libvips',
-                    '-ldflags', '-s -w',
-                    '-trimpath',
-                    '-o', $GoBuildExecutable,
-                    './cmd/server'
-                )
-                $usingLibvips = $true
-            } else {
-                Write-Host "  libvips installation failed, falling back to pure Go"
-                $env:CGO_ENABLED = '0'
-                
-                Invoke-External -FilePath 'go' -Arguments @(
-                    'build',
-                    '-ldflags', '-s -w',
-                    '-trimpath',
-                    '-o', $GoBuildExecutable,
-                    './cmd/server'
-                )
-                $usingLibvips = $false
-            }
-        } else {
-            # 回退到纯 Go 方案
-            Write-Host "  libvips not available, using pure Go imaging library"
-            $env:CGO_ENABLED = '0'
-            
-            Invoke-External -FilePath 'go' -Arguments @(
-                'build',
-                '-ldflags', '-s -w',
-                '-trimpath',
-                '-o', $GoBuildExecutable,
-                './cmd/server'
-            )
-            $usingLibvips = $false
-        }
+        return
     }
-    
-    # 复制 libvips DLL 到输出目录 (如果使用 libvips)
+
+    $env:CGO_ENABLED = '0'
+    Remove-Item Env:CGO_LDFLAGS -ErrorAction SilentlyContinue
+
+    Invoke-External -FilePath 'go' -Arguments @(
+        'build',
+        '-ldflags', '-s -w',
+        '-trimpath',
+        '-o', $GoBuildExecutable,
+        './cmd/server'
+    )
+}
+
+if ($All -or $Go) {
+    Write-Host "Building Go server with libvips support..."
+
+    $libvipsPath = Join-Path $RepoRoot 'thirdparty\windows-x64'
+    Ensure-Directory -Path $libvipsPath
+    $usingLibvips = $false
+
+    if (-not (Test-Path (Join-Path $libvipsPath 'bin\libvips-42.dll')) -and -not (Test-Path (Join-Path $libvipsPath 'libvips-42.dll'))) {
+        Write-Host "  libvips not found, attempting auto-download..."
+        [void](Install-Libvips -Destination $libvipsPath -RepoRoot $RepoRoot)
+    }
+
+    if (Test-Path (Join-Path $libvipsPath 'bin\libvips-42.dll')) {
+        Invoke-GoBuildWithOptionalLibvips -UseLibvips $true -LibvipsPath $libvipsPath
+        $usingLibvips = $true
+        $dllSourcePath = Join-Path $libvipsPath 'bin'
+    } elseif (Test-Path (Join-Path $libvipsPath 'libvips-42.dll')) {
+        Invoke-GoBuildWithOptionalLibvips -UseLibvips $true -LibvipsPath $libvipsPath
+        $usingLibvips = $true
+        $dllSourcePath = $libvipsPath
+    } else {
+        Write-Host "  libvips not available, using pure Go imaging library"
+        Invoke-GoBuildWithOptionalLibvips -UseLibvips $false -LibvipsPath $libvipsPath
+    }
+
     if ($usingLibvips) {
-        $dllFiles = Get-ChildItem -LiteralPath $libvipsPath -Filter '*.dll' -ErrorAction SilentlyContinue
+        $dllFiles = Get-ChildItem -LiteralPath $dllSourcePath -Filter '*.dll' -ErrorAction SilentlyContinue
         foreach ($dll in $dllFiles) {
             Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $PortableRoot 'runtime/bin/') -Force
             Write-Host "  Copied: $($dll.Name)"
@@ -410,6 +381,15 @@ Assert-SourceArtifactExists -Path $GoBuildExecutable -Label 'Go build artifact' 
 Copy-Item -LiteralPath $GoBuildExecutable -Destination (Join-Path $PortableRoot 'runtime/bin/acgwarehouse-server.exe') -Force
 
 if ($All -or $Python) {
+    Write-Host "Installing Python sidecar requirements..."
+    Invoke-External -FilePath 'python' -Arguments @(
+        '-m',
+        'pip',
+        'install',
+        '-r',
+        'services/python-sidecar/requirements.txt'
+    ) -WorkingDirectory $RepoRoot
+
     Write-Host "Building Python sidecar with PyInstaller..."
     Reset-Directory -Path $PyInstallerWorkDir
     Reset-Directory -Path $PyInstallerDistRoot
@@ -429,6 +409,7 @@ Copy-DirectoryContents -Source $PythonBuildDirectory -Destination (Join-Path $Po
 
 if ($All -or $Flutter) {
     Write-Host "Building Flutter Windows app..."
+    Reset-Directory -Path $FlutterReleaseDir
     Invoke-External -FilePath 'flutter' -Arguments @('build', 'windows', '--release') -WorkingDirectory $FlutterProjectDir
 }
 

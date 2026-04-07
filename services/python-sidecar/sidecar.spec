@@ -12,6 +12,8 @@ hiddenimports = [
     'uvicorn',
     'PIL',
     'imagehash',
+    'imagededup',
+    'imagededup.methods',
     *collect_submodules('routers'),
     *collect_submodules('compute'),
     *collect_submodules('models'),
