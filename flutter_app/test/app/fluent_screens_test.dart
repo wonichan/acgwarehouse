@@ -42,7 +42,7 @@ void main() {
 
       expect(find.byType(fluent.ScaffoldPage), findsOneWidget);
       expect(find.byType(fluent.PageHeader), findsOneWidget);
-      expect(find.text('Tag Governance'), findsOneWidget);
+      expect(find.text('标签治理'), findsOneWidget);
       expect(find.byType(TagManagementWorkspace), findsOneWidget);
     },
   );

@@ -18,7 +18,8 @@ class ImageCollectionPickerDialog extends StatefulWidget {
       _ImageCollectionPickerDialogState();
 }
 
-class _ImageCollectionPickerDialogState extends State<ImageCollectionPickerDialog> {
+class _ImageCollectionPickerDialogState
+    extends State<ImageCollectionPickerDialog> {
   List<Collection> _collections = const [];
   bool _loading = true;
   bool _adding = false;
@@ -48,11 +49,15 @@ class _ImageCollectionPickerDialogState extends State<ImageCollectionPickerDialo
       _error = null;
     });
     try {
-      final collections = await widget.collectionService.fetchCollections(limit: 200);
+      final collections = await widget.collectionService.fetchCollections(
+        limit: 200,
+      );
       if (!mounted) return;
       setState(() {
         _collections = collections;
-        _selectedCollectionId = collections.isNotEmpty ? collections.first.id : null;
+        _selectedCollectionId = collections.isNotEmpty
+            ? collections.first.id
+            : null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -82,7 +87,10 @@ class _ImageCollectionPickerDialogState extends State<ImageCollectionPickerDialo
     });
 
     try {
-      await widget.collectionService.addImageToCollection(collectionId, widget.imageId);
+      await widget.collectionService.addImageToCollection(
+        collectionId,
+        widget.imageId,
+      );
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -120,7 +128,10 @@ class _ImageCollectionPickerDialogState extends State<ImageCollectionPickerDialo
       );
 
       try {
-        await widget.collectionService.addImageToCollection(created.id, widget.imageId);
+        await widget.collectionService.addImageToCollection(
+          created.id,
+          widget.imageId,
+        );
       } catch (e) {
         if (!mounted) return;
         setState(() {
@@ -153,77 +164,95 @@ class _ImageCollectionPickerDialogState extends State<ImageCollectionPickerDialo
       constraints: const BoxConstraints(maxWidth: 480),
       content: SizedBox(
         width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_loading)
-              const Center(child: Padding(padding: EdgeInsets.all(16), child: ProgressRing()))
-            else ...[
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(color: theme.resources.systemFillColorCritical),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: ProgressRing(),
+                  ),
+                )
+              else ...[
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: theme.resources.systemFillColorCritical,
+                      ),
+                    ),
+                  ),
+                const Text('选择已有合集'),
+                const SizedBox(height: 8),
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 220),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: theme.resources.cardStrokeColorDefault,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: _collections.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Text('暂无合集'),
+                          ),
+                        )
+                      : RadioGroup<int>(
+                          groupValue: _selectedCollectionId,
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() {
+                              _selectedCollectionId = value;
+                            });
+                          },
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _collections.length,
+                            itemBuilder: (context, index) {
+                              final item = _collections[index];
+                              return RadioButton<int>(
+                                value: item.id,
+                                content: Text(
+                                  '${item.name} (${item.imageCount})',
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 16),
+                const Text('或新建合集并收藏'),
+                const SizedBox(height: 8),
+                TextBox(controller: _nameController, placeholder: '合集名称'),
+                const SizedBox(height: 8),
+                TextBox(controller: _descController, placeholder: '描述（可选）'),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Button(
+                    onPressed: _creating ? null : _createAndAdd,
+                    child: _creating
+                        ? const Text('创建中...')
+                        : const Text('新建并收藏'),
                   ),
                 ),
-              const Text('选择已有合集'),
-              const SizedBox(height: 8),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 220),
-                decoration: BoxDecoration(
-                  border: Border.all(color: theme.resources.cardStrokeColorDefault),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: _collections.isEmpty
-                    ? const Center(child: Padding(padding: EdgeInsets.all(12), child: Text('暂无合集')))
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _collections.length,
-                        itemBuilder: (context, index) {
-                          final item = _collections[index];
-                          return RadioButton(
-                            checked: _selectedCollectionId == item.id,
-                            onChanged: (checked) {
-                              if (checked == true) {
-                                setState(() {
-                                  _selectedCollectionId = item.id;
-                                });
-                              }
-                            },
-                            content: Text('${item.name} (${item.imageCount})'),
-                          );
-                        },
-                      ),
-              ),
-              const SizedBox(height: 16),
-              const Text('或新建合集并收藏'),
-              const SizedBox(height: 8),
-              TextBox(
-                controller: _nameController,
-                placeholder: '合集名称',
-              ),
-              const SizedBox(height: 8),
-              TextBox(
-                controller: _descController,
-                placeholder: '描述（可选）',
-              ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Button(
-                  onPressed: _creating ? null : _createAndAdd,
-                  child: _creating ? const Text('创建中...') : const Text('新建并收藏'),
-                ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
         Button(
-          onPressed: _adding || _creating ? null : () => Navigator.of(context).pop(false),
+          onPressed: _adding || _creating
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: const Text('取消'),
         ),
         FilledButton(

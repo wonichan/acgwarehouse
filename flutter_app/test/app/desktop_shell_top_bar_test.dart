@@ -126,9 +126,9 @@ void main() {
       await tester.pumpWidget(createShell());
       await tester.pumpAndSettle();
 
-      expect(find.text('Search images and tags'), findsOneWidget);
-      expect(find.text('Import Library'), findsOneWidget);
-      expect(find.text('Open Settings'), findsOneWidget);
+      expect(find.text('搜索图片和标签'), findsOneWidget);
+      expect(find.text('导入图库'), findsOneWidget);
+      expect(find.text('打开设置'), findsOneWidget);
     });
 
     testWidgets('submitting shell search navigates to search view', (
@@ -151,7 +151,7 @@ void main() {
       await tester.pumpWidget(createShell());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Open Settings'));
+      await tester.tap(find.text('打开设置'));
       await tester.pumpAndSettle();
 
       expect(navProvider.selectedIndex, NavigationProvider.settingsIndex);
@@ -168,10 +168,10 @@ void main() {
       await tester.pumpWidget(createShell(importService: importService));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Import Library'));
+      await tester.tap(find.text('导入图库'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Library import queued'), findsOneWidget);
+      expect(find.text('导入任务已排队'), findsOneWidget);
     });
 
     testWidgets('import action shows failure feedback on error', (
@@ -186,10 +186,10 @@ void main() {
       await tester.pumpWidget(createShell(importService: importService));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Import Library'));
+      await tester.tap(find.text('导入图库'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Library import could not start'), findsOneWidget);
+      expect(find.text('导入任务无法启动'), findsOneWidget);
     });
   });
 }

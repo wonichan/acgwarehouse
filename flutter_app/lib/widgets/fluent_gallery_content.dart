@@ -17,12 +17,16 @@ class FluentGalleryContent extends StatefulWidget {
   final void Function(ImageModel)? onImageTap;
   final void Function(ImageModel)? onImageDoubleTap;
   final ScrollController? scrollController;
+  final ApiService? apiService;
+  final CollectionService? collectionService;
 
   const FluentGalleryContent({
     super.key,
     this.onImageTap,
     this.onImageDoubleTap,
     this.scrollController,
+    this.apiService,
+    this.collectionService,
   });
 
   @override
@@ -33,6 +37,8 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
   late ScrollController _internalScrollController;
   late ApiService _apiService;
   late CollectionService _collectionService;
+  late bool _ownsApiService;
+  late bool _ownsCollectionService;
   bool _disposed = false;
 
   ScrollController get _scrollController =>
@@ -43,8 +49,10 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
     super.initState();
     _internalScrollController = ScrollController();
     _internalScrollController.addListener(_onScroll);
-    _apiService = ApiService();
-    _collectionService = CollectionService();
+    _ownsApiService = widget.apiService == null;
+    _ownsCollectionService = widget.collectionService == null;
+    _apiService = widget.apiService ?? ApiService();
+    _collectionService = widget.collectionService ?? CollectionService();
   }
 
   @override
@@ -66,8 +74,12 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
     _disposed = true;
     _internalScrollController.removeListener(_onScroll);
     _internalScrollController.dispose();
-    _apiService.dispose();
-    _collectionService.dispose();
+    if (_ownsApiService) {
+      _apiService.dispose();
+    }
+    if (_ownsCollectionService) {
+      _collectionService.dispose();
+    }
     super.dispose();
   }
 
@@ -107,10 +119,7 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
           value: 'open_source',
           child: Text('打开源文件'),
         ),
-        material.PopupMenuItem<String>(
-          value: 'favorite',
-          child: Text('收藏'),
-        ),
+        material.PopupMenuItem<String>(value: 'favorite', child: Text('收藏')),
         material.PopupMenuItem<String>(
           value: 'delete_permanent',
           child: Text('删除源文件及缩略图'),
