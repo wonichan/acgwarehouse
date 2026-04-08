@@ -42,6 +42,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDesktopLayout = MediaQuery.of(context).size.width >= 900;
+    final isDark = colorScheme.brightness == Brightness.dark;
     final pageSurface = _opaqueColor(
       Color.alphaBlend(
         colorScheme.outlineVariant.withValues(alpha: 0.08),
@@ -49,6 +50,8 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
       ),
     );
     final panelSurface = _opaqueColor(colorScheme.surfaceContainerHighest);
+    // Windows Photos style: near-black immersive background for image viewer
+    final viewerSurface = isDark ? const Color(0xFF0E0E10) : panelSurface;
 
     return ChangeNotifierProvider.value(
       value: _tagProvider,
@@ -60,8 +63,18 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
           title: const Text('图片详情'),
         ),
         body: isDesktopLayout
-            ? _buildDesktopLayout(context, pageSurface, panelSurface)
-            : _buildCompactLayout(context, pageSurface, panelSurface),
+            ? _buildDesktopLayout(
+                context,
+                pageSurface,
+                panelSurface,
+                viewerSurface,
+              )
+            : _buildCompactLayout(
+                context,
+                pageSurface,
+                panelSurface,
+                viewerSurface,
+              ),
       ),
     );
   }
@@ -70,6 +83,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
     BuildContext context,
     Color pageSurface,
     Color panelSurface,
+    Color viewerSurface,
   ) {
     final paneTheme = ImageMetadataPaneTheme.of(context);
 
@@ -101,11 +115,11 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: panelSurface,
+                color: viewerSurface,
                 borderRadius: BorderRadius.circular(20),
               ),
               padding: const EdgeInsets.all(16),
-              child: Center(child: _buildImageViewer(context, panelSurface)),
+              child: Center(child: _buildImageViewer(context, viewerSurface)),
             ),
           ),
         ],
@@ -117,6 +131,7 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
     BuildContext context,
     Color pageSurface,
     Color panelSurface,
+    Color viewerSurface,
   ) {
     final paneTheme = ImageMetadataPaneTheme.of(context);
 
@@ -129,11 +144,11 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
           children: [
             Container(
               decoration: BoxDecoration(
-                color: panelSurface,
+                color: viewerSurface,
                 borderRadius: BorderRadius.circular(20),
               ),
               padding: const EdgeInsets.all(16),
-              child: _buildImageViewer(context, panelSurface),
+              child: _buildImageViewer(context, viewerSurface),
             ),
             const SizedBox(height: 16),
             Container(
