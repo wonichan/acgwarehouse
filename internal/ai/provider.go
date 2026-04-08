@@ -77,6 +77,17 @@ func NewProvider(cfg *config.AIConfig) (AIProvider, error) {
 			endpoint:   "https://ark.cn-beijing.volces.com/api/v3",
 			httpClient: httpClient,
 		}, nil
+	case "zhipu":
+		model := cfg.Model
+		if model == "" {
+			model = "glm-4v-flash"
+		}
+		return &ZhipuProvider{
+			apiKey:     cfg.APIKey,
+			model:      model,
+			endpoint:   "https://open.bigmodel.cn/api/paas/v4",
+			httpClient: httpClient,
+		}, nil
 	default:
 		return nil, errors.New("unknown ai provider: " + cfg.Provider)
 	}

@@ -40,6 +40,7 @@ func TestAIProviderInterface(t *testing.T) {
 	// 这个测试通过编译就说明接口定义正确
 	var _ AIProvider = (*QwenProvider)(nil)
 	var _ AIProvider = (*DoubaoProvider)(nil)
+	var _ AIProvider = (*ZhipuProvider)(nil)
 }
 
 func TestNewProvider_Qwen(t *testing.T) {
@@ -108,6 +109,7 @@ func TestNewProvider_DefaultModel(t *testing.T) {
 	}{
 		{"qwen", "qwen-vl-max"},
 		{"doubao", "doubao-vision-pro"},
+		{"zhipu", "glm-4v-flash"},
 	}
 
 	for _, tt := range tests {
@@ -139,6 +141,7 @@ func TestNewProvider_UsesExtendedHTTPTimeout(t *testing.T) {
 	}{
 		{name: "qwen", provider: "qwen"},
 		{name: "doubao", provider: "doubao"},
+		{name: "zhipu", provider: "zhipu"},
 	}
 
 	for _, tt := range tests {
@@ -175,6 +178,20 @@ func TestNewProvider_UsesExtendedHTTPTimeout(t *testing.T) {
 				transport, ok := actual.httpClient.Transport.(*http.Transport)
 				if !ok || transport == nil {
 					t.Fatalf("expected doubao provider to configure *http.Transport")
+				}
+				if transport.TLSHandshakeTimeout <= 0 {
+					t.Fatalf("expected TLSHandshakeTimeout to be set, got %v", transport.TLSHandshakeTimeout)
+				}
+				if transport.ResponseHeaderTimeout <= 0 {
+					t.Fatalf("expected ResponseHeaderTimeout to be set, got %v", transport.ResponseHeaderTimeout)
+				}
+			case *ZhipuProvider:
+				if actual.httpClient.Timeout != expectedTimeout {
+					t.Fatalf("expected timeout %v, got %v", expectedTimeout, actual.httpClient.Timeout)
+				}
+				transport, ok := actual.httpClient.Transport.(*http.Transport)
+				if !ok || transport == nil {
+					t.Fatalf("expected zhipu provider to configure *http.Transport")
 				}
 				if transport.TLSHandshakeTimeout <= 0 {
 					t.Fatalf("expected TLSHandshakeTimeout to be set, got %v", transport.TLSHandshakeTimeout)
@@ -605,5 +622,178 @@ func TestEnsureDataURLFitsBudget_RejectsOversizedPayload(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "data url payload exceeds budget") {
 		t.Fatalf("expected budget error, got %v", err)
+	}
+}
+
+// ========== ZhipuProvider Tests ==========
+
+func TestNewProvider_Zhipu(t *testing.T) {
+	cfg := &config.AIConfig{
+		Provider: "zhipu",
+		APIKey:   "test-api-key",
+		Model:    "glm-4v-flash",
+	}
+
+	provider, err := NewProvider(cfg)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if provider.Name() != "zhipu" {
+		t.Errorf("expected provider name 'zhipu', got %s", provider.Name())
+	}
+
+	if _, ok := provider.(*ZhipuProvider); !ok {
+		t.Error("expected ZhipuProvider type")
+	}
+}
+
+func TestZhipuProvider_BuildRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("expected POST method, got %s", r.Method)
+		}
+		if !strings.HasSuffix(r.URL.Path, "/chat/completions") {
+			t.Errorf("expected /chat/completions path, got %s", r.URL.Path)
+		}
+
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		}
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") {
+			t.Errorf("expected Bearer token, got %s", auth)
+		}
+
+		var req zhipuRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Model != "glm-4v-flash" {
+			t.Errorf("expected model glm-4v-flash, got %s", req.Model)
+		}
+		if len(req.Messages) != 1 {
+			t.Errorf("expected 1 message, got %d", len(req.Messages))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(zhipuResponse{
+			Choices: []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			}{
+				{Message: struct {
+					Content string `json:"content"`
+				}{Content: "girl, outdoors, anime"}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &ZhipuProvider{
+		apiKey:     "test-api-key",
+		model:      "glm-4v-flash",
+		endpoint:   server.URL,
+		httpClient: server.Client(),
+	}
+
+	_, err := provider.GenerateTags(context.Background(), "https://example.com/image.jpg", "generate tags")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestZhipuProvider_ParseResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(zhipuResponse{
+			Choices: []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			}{
+				{Message: struct {
+					Content string `json:"content"`
+				}{Content: "anime, girl, blue hair, illustration"}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &ZhipuProvider{
+		apiKey:     "test-api-key",
+		model:      "glm-4v-flash",
+		endpoint:   server.URL,
+		httpClient: server.Client(),
+	}
+
+	result, err := provider.GenerateTags(context.Background(), "https://example.com/image.jpg", "generate tags")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(result.Tags) != 4 {
+		t.Errorf("expected 4 tags, got %d: %v", len(result.Tags), result.Tags)
+	}
+	expectedTags := []string{"anime", "girl", "blue hair", "illustration"}
+	for i, tag := range expectedTags {
+		if result.Tags[i] != tag {
+			t.Errorf("expected tag %s at position %d, got %s", tag, i, result.Tags[i])
+		}
+	}
+	if result.ModelName != "glm-4v-flash" {
+		t.Errorf("expected model name glm-4v-flash, got %s", result.ModelName)
+	}
+}
+
+func TestZhipuProvider_Endpoint(t *testing.T) {
+	provider := &ZhipuProvider{
+		apiKey:     "test-api-key",
+		model:      "glm-4v-flash",
+		endpoint:   "https://open.bigmodel.cn/api/paas/v4",
+		httpClient: &http.Client{},
+	}
+
+	if provider.endpoint != "https://open.bigmodel.cn/api/paas/v4" {
+		t.Errorf("expected zhipu endpoint, got %s", provider.endpoint)
+	}
+	if provider.Name() != "zhipu" {
+		t.Errorf("expected provider name 'zhipu', got %s", provider.Name())
+	}
+}
+
+func TestZhipuProvider_HandleErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		statusCode  int
+		expectError bool
+	}{
+		{"rate limit 429", http.StatusTooManyRequests, true},
+		{"server error 500", http.StatusInternalServerError, true},
+		{"server error 503", http.StatusServiceUnavailable, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.statusCode)
+			}))
+			defer server.Close()
+
+			provider := &ZhipuProvider{
+				apiKey:     "test-api-key",
+				model:      "glm-4v-flash",
+				endpoint:   server.URL,
+				httpClient: server.Client(),
+			}
+
+			_, err := provider.GenerateTags(context.Background(), "https://example.com/image.jpg", "generate tags")
+			if tt.expectError && err == nil {
+				t.Error("expected error, got nil")
+			}
+		})
 	}
 }
