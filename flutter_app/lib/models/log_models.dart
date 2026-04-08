@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 /// Log source enum
-enum LogSource { go, python }
+enum LogSource { go }
 
 /// Single log line from the backend
 class LogLine {
@@ -93,20 +93,9 @@ DateTime? _parseDateTime(dynamic value) {
 }
 
 LogSource _parseLogSource(dynamic value) {
-  switch (value) {
-    case 'python':
-      return LogSource.python;
-    case 'go':
-    default:
-      return LogSource.go;
-  }
+  return LogSource.go;
 }
 
 String _logSourceToJson(LogSource value) {
-  switch (value) {
-    case LogSource.python:
-      return 'python';
-    case LogSource.go:
-      return 'go';
-  }
+  return 'go';
 }

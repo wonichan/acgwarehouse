@@ -46,23 +46,6 @@ class _LogViewerWorkspaceState extends State<LogViewerWorkspace> {
                 // Connection status badge
                 _buildConnectionBadge(provider.wsConnected),
                 const CommandBarSeparator(),
-                // Source toggle
-                CommandBarButton(
-                  icon: Icon(
-                    provider.selectedSource == LogSource.go
-                        ? FluentIcons.server
-                        : FluentIcons.code,
-                  ),
-                  label: Text(
-                    provider.selectedSource == LogSource.go ? 'Go' : 'Python',
-                  ),
-                  onPressed: () => provider.switchSource(
-                    provider.selectedSource == LogSource.go
-                        ? LogSource.python
-                        : LogSource.go,
-                  ),
-                ),
-                const CommandBarSeparator(),
                 // Pause/resume
                 CommandBarButton(
                   icon: Icon(
@@ -132,17 +115,7 @@ class _LogViewerWorkspaceState extends State<LogViewerWorkspace> {
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Row(
         children: [
-          _buildTab(
-            label: 'Go (Core)',
-            isSelected: provider.selectedSource == LogSource.go,
-            onPressed: () => provider.switchSource(LogSource.go),
-          ),
-          const SizedBox(width: 8),
-          _buildTab(
-            label: 'Python (AI)',
-            isSelected: provider.selectedSource == LogSource.python,
-            onPressed: () => provider.switchSource(LogSource.python),
-          ),
+          _buildTab(label: 'Go (Core)', isSelected: true, onPressed: () {}),
         ],
       ),
     );

@@ -99,9 +99,6 @@ class ApiConfig {
     return url;
   }
 
-  static String get sidecarRestart =>
-      '$hostUrl/admin/api/actions/sidecar/restart';
-
   static String retryBatch(int batchId) =>
       '$hostUrl/admin/api/actions/task-batches/$batchId/retry-failed';
 

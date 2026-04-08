@@ -30,11 +30,6 @@ class LogStreamService {
   }
 
   String _sourceToQueryValue(LogSource source) {
-    switch (source) {
-      case LogSource.python:
-        return 'python';
-      case LogSource.go:
-        return 'go';
-    }
+    return 'go';
   }
 }

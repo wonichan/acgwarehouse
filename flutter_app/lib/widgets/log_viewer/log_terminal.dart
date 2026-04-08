@@ -154,10 +154,8 @@ class _LogTerminalState extends State<LogTerminal> {
   }
 
   Widget? _sourceTag(LogSource source) {
-    final (label, color) = switch (source) {
-      LogSource.go => ('GO', const Color(0xFF56B6C2)),
-      LogSource.python => ('PY', const Color(0xFFE5C07B)),
-    };
+    const label = 'GO';
+    const color = Color(0xFF56B6C2);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
