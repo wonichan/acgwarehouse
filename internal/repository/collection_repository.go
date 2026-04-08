@@ -206,7 +206,9 @@ func (r *sqliteCollectionRepository) RemoveImage(ctx context.Context, collection
 // FindImagesByCollection retrieves all images in a collection with pagination
 func (r *sqliteCollectionRepository) FindImagesByCollection(ctx context.Context, collectionID int64, limit, offset int) ([]domain.Image, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), i.created_at, i.updated_at
+		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format,
+		       COALESCE(i.phash, 0), COALESCE(i.phash_hex, ''), COALESCE(i.sha256, ''), COALESCE(i.source_mtime_unix, 0),
+		       i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
 		INNER JOIN collection_images ci ON ci.image_id = i.id
 		WHERE ci.collection_id = ?
@@ -221,6 +223,7 @@ func (r *sqliteCollectionRepository) FindImagesByCollection(ctx context.Context,
 	images := make([]domain.Image, 0)
 	for rows.Next() {
 		var img domain.Image
+		var thumbnailSmallUrl, thumbnailLargeUrl sql.NullString
 		if err := rows.Scan(
 			&img.ID,
 			&img.Path,
@@ -231,10 +234,22 @@ func (r *sqliteCollectionRepository) FindImagesByCollection(ctx context.Context,
 			&img.Height,
 			&img.Format,
 			&img.PHash,
+			&img.PHashHex,
+			&img.SHA256,
+			&img.SourceMTimeUnix,
+			&thumbnailSmallUrl,
+			&thumbnailLargeUrl,
 			&img.CreatedAt,
 			&img.UpdatedAt,
 		); err != nil {
 			return nil, err
+		}
+		// Convert NullString to string (empty if NULL)
+		if thumbnailSmallUrl.Valid {
+			img.ThumbnailSmallUrl = thumbnailSmallUrl.String
+		}
+		if thumbnailLargeUrl.Valid {
+			img.ThumbnailLargeUrl = thumbnailLargeUrl.String
 		}
 		images = append(images, img)
 	}

@@ -642,3 +642,46 @@ func TestCollectionRepositoryReconcileAfterImageDelete(t *testing.T) {
 		t.Fatalf("cover_image_id = %v, want %d", found.CoverImageID, image1.ID)
 	}
 }
+
+func TestCollectionRepositoryFindImagesByCollectionWithThumbnails(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newCollectionRepositoryForTest(t)
+	ctx := context.Background()
+
+	collection := &domain.Collection{Name: "Test"}
+	mustSaveCollection(t, repo, collection)
+
+	image := &domain.Image{
+		Path:              "/test.png",
+		Filename:          "test.png",
+		SourceRoot:        "/",
+		Format:            "png",
+		ThumbnailSmallUrl: "https://example.com/small.jpg",
+		ThumbnailLargeUrl: "https://example.com/large.jpg",
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
+	mustSaveImage(t, db, image)
+
+	err := repo.AddImage(ctx, collection.ID, image.ID)
+	if err != nil {
+		t.Fatalf("AddImage() error = %v", err)
+	}
+
+	images, err := repo.FindImagesByCollection(ctx, collection.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("FindImagesByCollection() error = %v", err)
+	}
+
+	if len(images) != 1 {
+		t.Fatalf("FindImagesByCollection() returned %d images, want 1", len(images))
+	}
+
+	if images[0].ThumbnailSmallUrl != "https://example.com/small.jpg" {
+		t.Errorf("ThumbnailSmallUrl = %q, want %q", images[0].ThumbnailSmallUrl, "https://example.com/small.jpg")
+	}
+	if images[0].ThumbnailLargeUrl != "https://example.com/large.jpg" {
+		t.Errorf("ThumbnailLargeUrl = %q, want %q", images[0].ThumbnailLargeUrl, "https://example.com/large.jpg")
+	}
+}
