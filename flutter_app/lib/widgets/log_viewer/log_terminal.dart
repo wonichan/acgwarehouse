@@ -106,7 +106,7 @@ class _LogTerminalState extends State<LogTerminal> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          SelectableText(
             timestampText,
             style: const TextStyle(
               color: Color(0xFF6A9955),
@@ -117,7 +117,7 @@ class _LogTerminalState extends State<LogTerminal> {
           const SizedBox(width: 8),
           if (sourceTag != null) ...[sourceTag, const SizedBox(width: 8)],
           Expanded(
-            child: Text(
+            child: SelectableText(
               line.text,
               style: TextStyle(
                 color: color,
@@ -164,7 +164,7 @@ class _LogTerminalState extends State<LogTerminal> {
         color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(2),
       ),
-      child: Text(
+      child: SelectableText(
         label,
         style: TextStyle(
           color: color,
