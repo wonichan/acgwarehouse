@@ -8,6 +8,7 @@ import '../providers/image_provider.dart';
 import '../providers/search_provider.dart';
 import '../providers/tag_provider.dart';
 import '../widgets/fluent_gallery_content.dart';
+import '../widgets/fluent_collections_content.dart';
 import '../widgets/gallery_filter_panel.dart';
 import '../widgets/fluent_search_content.dart';
 import '../widgets/monitoring/monitoring_workspace.dart';
@@ -15,6 +16,7 @@ import '../widgets/log_viewer/log_viewer_workspace.dart';
 import '../widgets/tag_management/tag_management_workspace.dart';
 import '../models/image.dart';
 import '../models/viewer_window_context.dart';
+import '../services/collection_service.dart';
 import '../services/viewer_window_service.dart';
 
 /// Fluent 风格图库页面
@@ -535,5 +537,28 @@ class FluentLogViewerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const LogViewerWorkspace();
+  }
+}
+
+class FluentCollectionsPage extends StatelessWidget {
+  final CollectionService? collectionService;
+
+  const FluentCollectionsPage({super.key, this.collectionService});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScaffoldPage(
+      header: const PageHeader(title: Text('收藏')),
+      content: FluentCollectionsContent(
+        collectionService: collectionService,
+        onImageDoubleTap: (image) => _showImageDetail(context, image),
+      ),
+    );
+  }
+
+  void _showImageDetail(BuildContext context, ImageModel image) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ImageDetailScreen(image: image)));
   }
 }
