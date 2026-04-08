@@ -4,8 +4,8 @@ milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
 status: executing
 stopped_at: Phase 21 context gathered
-last_updated: "2026-04-05T13:23:35.986Z"
-last_activity: 2026-04-05 -- Phase 21 execution started
+last_updated: "2026-04-08T12:00:00.000Z"
+last_activity: 2026-04-08 -- Quick Task 40 completed
 progress:
   total_phases: 8
   completed_phases: 6
@@ -120,4 +120,11 @@ Planning artifacts:
 - `.planning/phases/19-tag-management/19-VALIDATION.md`
 
 ---
-*State updated: 2026-04-05 after Phase 19 planning completion*
+## Quick Tasks Completed
+
+| ID | Date | Summary | Artifacts |
+|----|------|---------|-----------|
+| 40 | 2026-04-08 | Added a discoverable 收藏 entry and collections browser for Flutter Windows desktop | `.planning/quick/40-flutter-desktop-favorites-entry/40-PLAN.md`, `.planning/quick/40-flutter-desktop-favorites-entry/40-SUMMARY.md` |
+
+---
+*State updated: 2026-04-08 after Quick Task 40 completion*
