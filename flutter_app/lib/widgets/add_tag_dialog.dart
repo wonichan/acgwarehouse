@@ -23,11 +23,15 @@ class _AddTagDialogState extends State<AddTagDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AlertDialog(
+      backgroundColor: colorScheme.surfaceContainerHigh,
       title: const Text('添加标签'),
-      content: SizedBox(
+      content: Container(
         width: 400,
         height: 300,
+        color: colorScheme.surfaceContainerHigh,
         child: Column(
           children: [
             TextField(
@@ -42,20 +46,28 @@ class _AddTagDialogState extends State<AddTagDialog> {
               ),
             if (_suggestions.isNotEmpty)
               Expanded(
-                child: ListView.builder(
-                  itemCount: _suggestions.length,
-                  itemBuilder: (context, index) {
-                    final tag = _suggestions[index];
-                    return ListTile(
-                      dense: true,
-                      title: Text(tag.preferredLabel),
-                      subtitle: tag.primaryCategory != null
-                          ? Text(tag.primaryCategory!)
-                          : null,
-                      trailing: Text('${tag.usageCount}'),
-                      onTap: () => _selectTag(tag.id),
-                    );
-                  },
+                child: Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    border: Border.all(color: colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListView.builder(
+                    itemCount: _suggestions.length,
+                    itemBuilder: (context, index) {
+                      final tag = _suggestions[index];
+                      return ListTile(
+                        dense: true,
+                        title: Text(tag.preferredLabel),
+                        subtitle: tag.primaryCategory != null
+                            ? Text(tag.primaryCategory!)
+                            : null,
+                        trailing: Text('${tag.usageCount}'),
+                        onTap: () => _selectTag(tag.id),
+                      );
+                    },
+                  ),
                 ),
               ),
           ],

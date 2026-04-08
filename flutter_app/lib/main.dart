@@ -34,6 +34,7 @@ import 'config/api_config.dart';
 import 'providers/monitoring_provider.dart';
 import 'providers/log_viewer_provider.dart';
 import 'models/log_models.dart';
+import 'widgets/desktop_material_theme_bridge.dart';
 import 'widgets/startup/startup_failure_screen.dart';
 import 'widgets/startup/startup_progress_screen.dart';
 
@@ -393,9 +394,11 @@ Widget _buildFluentApp() {
         title: 'ACGWarehouse',
         theme: AppTheme.getFluentTheme(brightness),
         home: const FluentAppShell(),
-        // ScaffoldMessenger is needed for dialogs to show SnackBar feedback
         builder: (context, child) {
-          return ScaffoldMessenger(child: child ?? const SizedBox.shrink());
+          return DesktopMaterialThemeBridge(
+            brightness: brightness,
+            child: child ?? const SizedBox.shrink(),
+          );
         },
       );
     },

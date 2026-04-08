@@ -7,6 +7,7 @@ import '../services/viewer_window_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/window_manager.dart';
 import '../screens/viewer/viewer_workspace.dart';
+import '../widgets/desktop_material_theme_bridge.dart';
 
 class ViewerWindowApp extends StatefulWidget {
   final ViewerWindowBootstrapData bootstrapData;
@@ -62,6 +63,10 @@ class _ViewerWindowAppState extends State<ViewerWindowApp> {
             _closeWindow();
           },
         ),
+      ),
+      builder: (context, child) => DesktopMaterialThemeBridge(
+        brightness: Brightness.dark,
+        child: child ?? const SizedBox.shrink(),
       ),
     );
   }

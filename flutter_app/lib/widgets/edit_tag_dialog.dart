@@ -3,7 +3,7 @@ import '../models/tag.dart';
 import '../services/tag_service.dart';
 
 /// 编辑标签对话框
-/// 
+///
 /// 用于将图片上的现有标签更改为其他标签（现有或新建）
 /// 返回格式: {'tagId': int?, 'tagLabel': String?, 'label': String}
 class EditTagDialog extends StatefulWidget {
@@ -41,7 +41,10 @@ class _EditTagDialogState extends State<EditTagDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AlertDialog(
+      backgroundColor: colorScheme.surfaceContainerHigh,
       title: const Text('编辑标签'),
       content: SizedBox(
         width: double.maxFinite,
@@ -77,8 +80,9 @@ class _EditTagDialogState extends State<EditTagDialog> {
                 child: Container(
                   constraints: const BoxConstraints(maxHeight: 200),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(4),
+                    color: colorScheme.surfaceContainerHighest,
+                    border: Border.all(color: colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   margin: const EdgeInsets.only(top: 8),
                   child: ListView.builder(
@@ -157,10 +161,6 @@ class _EditTagDialogState extends State<EditTagDialog> {
   void _createNewTag(String label) {
     if (label.isEmpty) return;
     // 返回创建新标签的信息
-    Navigator.pop(context, {
-      'tagId': null,
-      'tagLabel': label,
-      'label': label,
-    });
+    Navigator.pop(context, {'tagId': null, 'tagLabel': label, 'label': label});
   }
 }

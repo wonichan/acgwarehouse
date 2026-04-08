@@ -41,7 +41,7 @@ type AITagPresenceChecker interface {
 var aiTagConcurrencyLimiter atomic.Pointer[ai.ConcurrencyLimiter]
 
 // DefaultTagPrompt 默认标签生成提示词
-const DefaultTagPrompt = `请分析这张动漫/二次元风格图片，并输出 最多 8 个中文标签，绝对不能超过 8 个。
+const DefaultTagPrompt = `请分析这张二次元风格图片，并输出 最多 8 个中文标签。
 【核心原则】
 1. 只输出“高置信度”标签，禁止猜测不确定角色名或IP名。
 2. 如果无法确认具体角色或IP，必须使用更稳妥的降级标签，不要乱猜。
