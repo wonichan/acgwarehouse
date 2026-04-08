@@ -4,6 +4,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../providers/navigation_provider.dart';
 import '../providers/search_provider.dart';
+import '../services/collection_service.dart';
 import '../services/import_service.dart';
 import '../widgets/fluent_settings_page.dart';
 import 'fluent_screens.dart';
@@ -11,8 +12,14 @@ import 'fluent_screens.dart';
 class FluentAppShell extends StatelessWidget {
   final VoidCallback? onImportLibrary;
   final ImportService? importService;
+  final CollectionService? collectionService;
 
-  const FluentAppShell({super.key, this.onImportLibrary, this.importService});
+  const FluentAppShell({
+    super.key,
+    this.onImportLibrary,
+    this.importService,
+    this.collectionService,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +100,17 @@ class FluentAppShell extends StatelessWidget {
                   onImportLibrary: onImportLibrary,
                   importService: importService,
                   child: const FluentLogViewerPage(),
+                ),
+              ),
+              PaneItem(
+                icon: const Icon(FluentIcons.favorite_star),
+                title: const Text('收藏'),
+                body: _ShellPage(
+                  onImportLibrary: onImportLibrary,
+                  importService: importService,
+                  child: FluentCollectionsPage(
+                    collectionService: collectionService,
+                  ),
                 ),
               ),
             ],

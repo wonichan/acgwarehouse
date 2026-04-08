@@ -11,8 +11,9 @@ class NavigationProvider extends ChangeNotifier {
   static const int settingsIndex = 4;
   static const int operationsMonitoringIndex = 5;
   static const int logViewerIndex = 6;
+  static const int collectionsIndex = 7;
 
-  static const int itemCount = 7;
+  static const int itemCount = 8;
 
   static const List<String> _pageTitles = [
     '图库',
@@ -22,6 +23,7 @@ class NavigationProvider extends ChangeNotifier {
     '设置',
     '运营监控',
     '日志终端',
+    '收藏',
   ];
 
   int _selectedIndex = 0;
