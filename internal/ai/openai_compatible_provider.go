@@ -13,8 +13,11 @@ import (
 )
 
 type openAICompatibleRequest struct {
-	Model    string                    `json:"model"`
-	Messages []openAICompatibleMessage `json:"messages"`
+	Model       string                    `json:"model"`
+	Messages    []openAICompatibleMessage `json:"messages"`
+	Temperature float64                   `json:"temperature,omitempty"`
+	TopP        float64                   `json:"top_p,omitempty"`
+	MaxTokens   int                       `json:"max_tokens,omitempty"`
 }
 
 type openAICompatibleMessage struct {
@@ -44,14 +47,16 @@ type openAICompatibleResponse struct {
 	} `json:"error,omitempty"`
 }
 
-func generateOpenAICompatibleTags(ctx context.Context, httpClient *http.Client, endpoint, apiKey, model, imageURL, prompt string, processImageURL func(string) (string, error)) (*TagResult, error) {
-	processedURL, err := processImageURL(imageURL)
+func generateOpenAICompatibleTags(ctx context.Context, httpClient *http.Client, endpoint, apiKey, model, imageURL, prompt string) (*TagResult, error) {
+	processedURL, err := processImageURLForProvider(imageURL)
 	if err != nil {
 		return nil, fmt.Errorf("process image url: %w", err)
 	}
 
 	req := openAICompatibleRequest{
-		Model: model,
+		Model:       model,
+		Temperature: 0.2,
+		MaxTokens:   1000,
 		Messages: []openAICompatibleMessage{
 			{
 				Role: "user",

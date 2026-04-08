@@ -26,19 +26,9 @@ func (p *DoubaoProvider) Name() string {
 
 // GenerateTags 为图片生成标签
 func (p *DoubaoProvider) GenerateTags(ctx context.Context, imageURL, prompt string) (*TagResult, error) {
-	result, err := generateOpenAICompatibleTags(ctx, p.httpClient, p.endpoint, p.apiKey, p.model, imageURL, prompt, p.processImageURL)
+	result, err := generateOpenAICompatibleTags(ctx, p.httpClient, p.endpoint, p.apiKey, p.model, imageURL, prompt)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
-}
-
-// processImageURL 处理图片 URL
-func (p *DoubaoProvider) processImageURL(imageURL string) (string, error) {
-	return processImageURLForProvider(imageURL)
-}
-
-// parseTags 从响应内容解析标签
-func (p *DoubaoProvider) parseTags(content string) []string {
-	return parseCommaSeparatedTags(content)
 }

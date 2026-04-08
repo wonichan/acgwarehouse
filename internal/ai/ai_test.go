@@ -365,8 +365,6 @@ func TestQwenProvider_HandleErrors(t *testing.T) {
 
 func TestQwenProvider_ParseTags(t *testing.T) {
 	// Test: parseTags 正确分割标签
-	provider := &QwenProvider{}
-
 	tests := []struct {
 		input    string
 		expected []string
@@ -380,7 +378,7 @@ func TestQwenProvider_ParseTags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := provider.parseTags(tt.input)
+			result := parseCommaSeparatedTags(tt.input)
 			if len(result) != len(tt.expected) {
 				t.Errorf("expected %d tags, got %d", len(tt.expected), len(result))
 				return
@@ -568,8 +566,7 @@ func TestDoubaoProvider_ProcessImageURL_RespectsPayloadBudget(t *testing.T) {
 		t.Fatalf("failed to encode test image: %v", err)
 	}
 
-	provider := &DoubaoProvider{}
-	processedURL, err := provider.processImageURL(tmpFile.Name())
+	processedURL, err := processImageURLForProvider(tmpFile.Name())
 	if err != nil {
 		t.Fatalf("processImageURL failed: %v", err)
 	}
