@@ -32,6 +32,8 @@ type DetectionImageInput struct {
 	Height   int    `json:"height"`
 	FileSize int64  `json:"file_size"`
 	Format   string `json:"format"`
+	SHA256   string `json:"sha256,omitempty"`
+	PHashHex string `json:"phash,omitempty"`
 }
 
 type DetectionRequest struct {

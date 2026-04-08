@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -51,6 +53,8 @@ func setupDuplicateTestServer(t *testing.T) (*gin.Engine, *sql.DB) {
 
 	duplicateHandler := handler.NewDuplicateHandler(duplicateSvc, nil)
 	api.POST("/duplicates/detect", duplicateHandler.DetectDuplicates)
+	api.GET("/duplicates/tasks/:task_id", duplicateHandler.GetDuplicateTaskStatus)
+	api.GET("/duplicates/tasks/:task_id/events", duplicateHandler.StreamDuplicateTaskEvents)
 	api.GET("/duplicates", duplicateHandler.ListDuplicates)
 	api.GET("/duplicates/:id", duplicateHandler.GetDuplicate)
 	api.DELETE("/duplicates/:id", duplicateHandler.DeleteDuplicate)
@@ -90,9 +94,23 @@ func TestE2E_DuplicateDetection(t *testing.T) {
 			t.Errorf("Failed to parse response: %v", err)
 		}
 
-		if resp["groups_found"] == nil {
-			t.Error("Expected groups_found in response")
+		if resp["task_id"] == nil {
+			t.Error("Expected task_id in response")
 		}
+
+		taskID, _ := resp["task_id"].(string)
+		if taskID == "" {
+			t.Fatal("empty task_id")
+		}
+
+		statusReq := httptest.NewRequest("GET", "/api/v1/duplicates/tasks/"+taskID, nil)
+		statusW := httptest.NewRecorder()
+		r.ServeHTTP(statusW, statusReq)
+		if statusW.Code != http.StatusOK {
+			t.Errorf("Expected status endpoint 200, got %d: %s", statusW.Code, statusW.Body.String())
+		}
+
+		waitForDuplicateTaskTerminalE2E(t, r, taskID)
 	})
 
 	// Test 2: List duplicate groups
@@ -143,6 +161,35 @@ func TestE2E_DuplicateDetection(t *testing.T) {
 			t.Errorf("Expected status 200 or 404, got %d: %s", w.Code, w.Body.String())
 		}
 	})
+}
+
+func waitForDuplicateTaskTerminalE2E(t *testing.T, router *gin.Engine, taskID string) {
+	t.Helper()
+
+	const maxAttempts = 40
+	for i := 0; i < maxAttempts; i++ {
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/duplicates/tasks/%s", taskID), nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("task status = %d, want 200, body=%s", w.Code, w.Body.String())
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("unmarshal task status: %v", err)
+		}
+		status, _ := payload["status"].(string)
+		if status == "completed" {
+			return
+		}
+		if status == "failed" {
+			t.Fatalf("duplicate task failed: %v", payload)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	t.Fatalf("duplicate task did not reach terminal status: task_id=%s", taskID)
 }
 
 func TestE2E_DuplicateThreshold(t *testing.T) {

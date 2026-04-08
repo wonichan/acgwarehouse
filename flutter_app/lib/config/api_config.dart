@@ -87,6 +87,10 @@ class ApiConfig {
   static String get duplicates => '$baseUrl/duplicates';
   static String duplicateDetail(int id) => '$baseUrl/duplicates/$id';
   static String get detectDuplicates => '$baseUrl/duplicates/detect';
+  static String duplicateTaskStatus(String taskId) =>
+      '$baseUrl/duplicates/tasks/$taskId';
+  static String duplicateTaskEvents(String taskId) =>
+      '$baseUrl/duplicates/tasks/$taskId/events';
 
   // Search endpoints
   static String get search => '$baseUrl/search';

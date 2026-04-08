@@ -45,6 +45,12 @@ func TestSidecarClient_SubmitDetectionSuccess(t *testing.T) {
 		if len(req.Images) != 1 || req.Images[0].ID != 1 {
 			t.Fatalf("images unexpected: %+v", req.Images)
 		}
+		if req.Images[0].SHA256 != "sha-a" {
+			t.Fatalf("sha256 = %q, want %q", req.Images[0].SHA256, "sha-a")
+		}
+		if req.Images[0].PHashHex != "0123456789abcdef" {
+			t.Fatalf("phash_hex = %q, want %q", req.Images[0].PHashHex, "0123456789abcdef")
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(DetectionTaskStatus{TaskID: "task-123", Status: "pending", Progress: 0})
@@ -61,6 +67,8 @@ func TestSidecarClient_SubmitDetectionSuccess(t *testing.T) {
 			Height:   200,
 			FileSize: 12345,
 			Format:   "jpg",
+			SHA256:   "sha-a",
+			PHashHex: "0123456789abcdef",
 		}},
 	})
 	if err != nil {
@@ -185,6 +193,98 @@ func TestSidecarClient_FetchResults(t *testing.T) {
 	}
 	if result.TotalGroups != 1 || len(result.Groups) != 1 {
 		t.Fatalf("result unexpected: %+v", result)
+	}
+}
+
+func TestSidecarClient_SubmitDetection_OmitsOptionalCacheFieldsWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+
+		imagesRaw, ok := req["images"].([]interface{})
+		if !ok || len(imagesRaw) != 1 {
+			t.Fatalf("images unexpected: %#v", req["images"])
+		}
+		img, ok := imagesRaw[0].(map[string]interface{})
+		if !ok {
+			t.Fatalf("image item unexpected: %#v", imagesRaw[0])
+		}
+
+		if _, exists := img["sha256"]; exists {
+			t.Fatalf("expected sha256 to be omitted when empty, got %v", img["sha256"])
+		}
+		if _, exists := img["phash"]; exists {
+			t.Fatalf("expected phash to be omitted when empty, got %v", img["phash"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(DetectionTaskStatus{TaskID: "task-omit", Status: "pending", Progress: 0})
+	}))
+	defer server.Close()
+
+	client := NewSidecarClient(server.URL)
+	_, err := client.SubmitDetection(context.Background(), DetectionRequest{
+		Threshold: 10,
+		Images: []DetectionImageInput{{
+			ID:       1,
+			Path:     "C:/img/no-cache.jpg",
+			Width:    100,
+			Height:   200,
+			FileSize: 12345,
+			Format:   "jpg",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SubmitDetection() error = %v", err)
+	}
+}
+
+func TestSidecarClient_FetchResults_AllowsMissingOptionalHashFields(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/compute/duplicates/tasks/task-done/result"; got != want {
+			t.Fatalf("path = %q, want %q", got, want)
+		}
+		_, _ = w.Write([]byte(`{
+			"groups": [{
+				"group_id": 0,
+				"recommended_id": 2,
+				"members": [{
+					"image_id": 2,
+					"distance": 0,
+					"is_recommended": true,
+					"recommendation_score": 99,
+					"recommendation_reasons": []
+				}]
+			}],
+			"total_images": 2,
+			"total_groups": 1,
+			"skipped_images": [],
+			"computation_time_ms": 120
+		}`))
+	}))
+	defer server.Close()
+
+	client := NewSidecarClient(server.URL)
+	result, err := client.FetchResults(context.Background(), "task-done")
+	if err != nil {
+		t.Fatalf("FetchResults() error = %v", err)
+	}
+
+	if len(result.Groups) != 1 || len(result.Groups[0].Members) != 1 {
+		t.Fatalf("result unexpected: %+v", result)
+	}
+	member := result.Groups[0].Members[0]
+	if member.SHA256 != "" {
+		t.Fatalf("SHA256 = %q, want empty string for missing field", member.SHA256)
+	}
+	if member.PHash != "" {
+		t.Fatalf("PHash = %q, want empty string for missing field", member.PHash)
 	}
 }
 

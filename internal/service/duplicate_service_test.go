@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,17 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 )
+
+type mockFileInfo struct {
+	modTime time.Time
+}
+
+func (m mockFileInfo) Name() string       { return "mock" }
+func (m mockFileInfo) Size() int64        { return 0 }
+func (m mockFileInfo) Mode() os.FileMode  { return 0 }
+func (m mockFileInfo) ModTime() time.Time { return m.modTime }
+func (m mockFileInfo) IsDir() bool        { return false }
+func (m mockFileInfo) Sys() interface{}   { return nil }
 
 func captureStandardLogs(t *testing.T) (*bytes.Buffer, func()) {
 	t.Helper()
@@ -221,7 +233,7 @@ func TestDuplicateService_DetectDuplicates_LogsLifecycle(t *testing.T) {
 		"duplicate detection status: task_id=task-log status=running progress=25.0 message=hashing",
 		"duplicate detection status: task_id=task-log status=completed progress=100.0 message=completed",
 		"duplicate detection result fetched: task_id=task-log total_images=3 total_groups=1 skipped_images=1 computation_time_ms=123",
-		"duplicate detection persisted: task_id=task-log total_groups=1",
+		"duplicate detection persisted: total_groups=1",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("log output = %q, want contains %q", output, want)
@@ -358,5 +370,115 @@ func TestDuplicateService_DeleteDuplicateGroup(t *testing.T) {
 
 	if err := svc.DeleteDuplicateGroup(groups[0].ID); err != nil {
 		t.Fatalf("DeleteDuplicateGroup() error = %v", err)
+	}
+}
+
+func TestDuplicateService_DetectDuplicates_UsesPagedBatchedSubmissionAndCacheFreshness(t *testing.T) {
+	os.Setenv("DUPLICATE_PAGE_SIZE", "2")
+	os.Setenv("DUPLICATE_BATCH_SIZE", "2")
+	t.Cleanup(func() {
+		os.Unsetenv("DUPLICATE_PAGE_SIZE")
+		os.Unsetenv("DUPLICATE_BATCH_SIZE")
+	})
+
+	db := setupDuplicateTestDB(t)
+	ids := insertTestImages(t, db)
+
+	knownMTime := time.Unix(1710000000, 123456789)
+
+	_, err := db.Exec(`UPDATE images SET sha256 = ?, phash_hex = ?, source_mtime_unix = ? WHERE id = ?`, "cached-sha", "cached-phash", knownMTime.UnixNano(), ids[0])
+	if err != nil {
+		t.Fatalf("seed cache image1: %v", err)
+	}
+	_, err = db.Exec(`UPDATE images SET sha256 = ?, phash_hex = ?, source_mtime_unix = ? WHERE id = ?`, "stale-sha", "stale-phash", knownMTime.Add(-time.Minute).UnixNano(), ids[1])
+	if err != nil {
+		t.Fatalf("seed cache image2: %v", err)
+	}
+
+	submitCalls := 0
+	batchSizes := make([]int, 0)
+	var firstBatchFirstImage map[string]any
+	var firstBatchSecondImage map[string]any
+	taskSeq := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/compute/duplicates/detect":
+			submitCalls++
+			var req map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode submit request: %v", err)
+			}
+			images := req["images"].([]any)
+			batchSizes = append(batchSizes, len(images))
+			if submitCalls == 1 {
+				firstBatchFirstImage = images[0].(map[string]any)
+				firstBatchSecondImage = images[1].(map[string]any)
+			}
+			taskSeq++
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-batch-" + strconv.Itoa(taskSeq), "status": "pending", "progress": 0})
+		case strings.HasPrefix(r.URL.Path, "/compute/duplicates/tasks/task-batch-") && !strings.HasSuffix(r.URL.Path, "/result"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "x", "status": "completed", "progress": 100})
+		case strings.HasSuffix(r.URL.Path, "/result"):
+			taskID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/compute/duplicates/tasks/"), "/result")
+			var memberImageID int64
+			if taskID == "task-batch-1" {
+				memberImageID = ids[0]
+			} else {
+				memberImageID = ids[1]
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"groups": []map[string]any{{
+					"group_id":       0,
+					"recommended_id": memberImageID,
+					"members":        []map[string]any{{"image_id": memberImageID, "sha256": "sha-updated", "phash": "phash-updated", "distance": 0, "is_recommended": true, "recommendation_score": 90.0, "recommendation_reasons": []map[string]any{}}},
+				}},
+				"total_images":        2,
+				"total_groups":        1,
+				"skipped_images":      []map[string]any{},
+				"computation_time_ms": 10,
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	svc := NewDuplicateService(repository.NewImageRepository(db), repository.NewDuplicateRepository(db), sidecar.NewSidecarClient(server.URL), nil)
+	svc.statPath = func(path string) (os.FileInfo, error) {
+		return mockFileInfo{modTime: knownMTime}, nil
+	}
+
+	if _, err := svc.DetectDuplicates(context.Background(), DetectOptions{Threshold: 40}); err != nil {
+		t.Fatalf("DetectDuplicates() error = %v", err)
+	}
+
+	if submitCalls != 1 {
+		t.Fatalf("submitCalls = %d, want 1 because submission remains single-task", submitCalls)
+	}
+	if len(batchSizes) != 1 || batchSizes[0] != 3 {
+		t.Fatalf("batchSizes = %+v, want [3]", batchSizes)
+	}
+
+	if firstBatchFirstImage["sha256"] != "cached-sha" {
+		t.Fatalf("first cached image sha256 = %v, want cached-sha", firstBatchFirstImage["sha256"])
+	}
+	if firstBatchFirstImage["phash"] != "cached-phash" {
+		t.Fatalf("first cached image phash = %v, want cached-phash", firstBatchFirstImage["phash"])
+	}
+
+	if _, ok := firstBatchSecondImage["sha256"]; ok {
+		t.Fatalf("stale image sha256 should be omitted in request, got %v", firstBatchSecondImage["sha256"])
+	}
+	if _, ok := firstBatchSecondImage["phash"]; ok {
+		t.Fatalf("stale image phash should be omitted in request, got %v", firstBatchSecondImage["phash"])
+	}
+
+	updatedCached, err := repository.NewImageRepository(db).FindByID(ids[0])
+	if err != nil {
+		t.Fatalf("FindByID cached image: %v", err)
+	}
+	if updatedCached.SHA256 != "sha-updated" {
+		t.Fatalf("cached image sha256 = %q, want sha-updated", updatedCached.SHA256)
 	}
 }

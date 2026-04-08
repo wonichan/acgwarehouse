@@ -1,9 +1,11 @@
 package handler
 
 import (
-	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
@@ -32,8 +34,23 @@ type DetectRequest struct {
 
 // DetectResponse 检测响应
 type DetectResponse struct {
-	Message     string `json:"message"`
-	GroupsFound int    `json:"groups_found"`
+	TaskID    string  `json:"task_id"`
+	Status    string  `json:"status"`
+	Progress  float64 `json:"progress"`
+	Processed int     `json:"processed"`
+	Total     int     `json:"total"`
+	Message   string  `json:"message"`
+}
+
+type DuplicateTaskStatusResponse struct {
+	TaskID      string  `json:"task_id"`
+	Status      string  `json:"status"`
+	Progress    float64 `json:"progress"`
+	Processed   int     `json:"processed"`
+	Total       int     `json:"total"`
+	Message     string  `json:"message"`
+	Error       string  `json:"error,omitempty"`
+	GroupsFound int     `json:"groups_found,omitempty"`
 }
 
 // ListResponse 列表响应
@@ -69,7 +86,7 @@ func (h *DuplicateHandler) DetectDuplicates(c *gin.Context) {
 		req.Threshold = 256 // 256-bit pHash 最大汉明距离
 	}
 
-	count, err := h.duplicateService.DetectDuplicates(context.Background(), service.DetectOptions{
+	task, err := h.duplicateService.StartDetectDuplicatesTask(service.DetectOptions{
 		Threshold: req.Threshold,
 	})
 	if err != nil {
@@ -80,9 +97,94 @@ func (h *DuplicateHandler) DetectDuplicates(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, DetectResponse{
-		Message:     "Detection completed",
-		GroupsFound: count,
+		TaskID:    task.TaskID,
+		Status:    task.Status,
+		Progress:  task.Progress,
+		Processed: task.Processed,
+		Total:     task.Total,
+		Message:   task.Message,
 	})
+}
+
+// GetDuplicateTaskStatus GET /api/v1/duplicates/tasks/:task_id
+func (h *DuplicateHandler) GetDuplicateTaskStatus(c *gin.Context) {
+	taskID := c.Param("task_id")
+	task, ok := h.duplicateService.GetDuplicateTask(taskID)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, DuplicateTaskStatusResponse{
+		TaskID:      task.TaskID,
+		Status:      task.Status,
+		Progress:    task.Progress,
+		Processed:   task.Processed,
+		Total:       task.Total,
+		Message:     task.Message,
+		Error:       task.Error,
+		GroupsFound: task.GroupsFound,
+	})
+}
+
+// StreamDuplicateTaskEvents GET /api/v1/duplicates/tasks/:task_id/events
+func (h *DuplicateHandler) StreamDuplicateTaskEvents(c *gin.Context) {
+	taskID := c.Param("task_id")
+	updates, unsubscribe, ok := h.duplicateService.SubscribeDuplicateTask(taskID)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		return
+	}
+	defer unsubscribe()
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming unsupported"})
+		return
+	}
+
+	heartbeat := time.NewTicker(10 * time.Second)
+	defer heartbeat.Stop()
+
+	writeEvent := func(event string, payload any) {
+		b, _ := json.Marshal(payload)
+		_, _ = fmt.Fprintf(c.Writer, "event: %s\n", event)
+		_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(b))
+		flusher.Flush()
+	}
+
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case <-heartbeat.C:
+			writeEvent("heartbeat", gin.H{"task_id": taskID, "ts": time.Now().UTC().Format(time.RFC3339Nano)})
+		case task, ok := <-updates:
+			if !ok {
+				return
+			}
+			payload := DuplicateTaskStatusResponse{
+				TaskID:      task.TaskID,
+				Status:      task.Status,
+				Progress:    task.Progress,
+				Processed:   task.Processed,
+				Total:       task.Total,
+				Message:     task.Message,
+				Error:       task.Error,
+				GroupsFound: task.GroupsFound,
+			}
+			writeEvent("progress", payload)
+			if task.Status == service.DuplicateTaskStatusCompleted || task.Status == service.DuplicateTaskStatusFailed {
+				writeEvent("terminal", payload)
+				return
+			}
+		}
+	}
 }
 
 // ListDuplicates GET /api/v1/duplicates

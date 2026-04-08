@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestThumbnailURLRewriteImageHandlerListAndGet(t *testing.T) {
@@ -159,6 +161,13 @@ func TestThumbnailURLRewriteDuplicateHandlerListAndGet(t *testing.T) {
 	if detectResp.Code != http.StatusOK {
 		t.Fatalf("detect status = %d, want %d, body=%s", detectResp.Code, http.StatusOK, detectResp.Body.String())
 	}
+	var detectBody map[string]any
+	decodeThumbnailRewriteJSON(t, detectResp, &detectBody)
+	taskID, _ := detectBody["task_id"].(string)
+	if taskID == "" {
+		t.Fatalf("detect response missing task_id: %v", detectBody)
+	}
+	waitForDuplicateTaskTerminal(t, router, taskID)
 
 	listResp := performRequest(t, router, http.MethodGet, "http://127.0.0.1:4321/api/v1/duplicates", nil)
 	if listResp.Code != http.StatusOK {
@@ -184,6 +193,38 @@ func TestThumbnailURLRewriteDuplicateHandlerListAndGet(t *testing.T) {
 		"http://127.0.0.1:4321/thumbs/dup-small.jpg",
 		"http://127.0.0.1:4321/thumbs/dup-large.jpg",
 	)
+}
+
+func waitForDuplicateTaskTerminal(t *testing.T, router http.Handler, taskID string) {
+	t.Helper()
+
+	const maxAttempts = 40
+	for i := 0; i < maxAttempts; i++ {
+		resp := performRequest(
+			t,
+			router,
+			http.MethodGet,
+			fmt.Sprintf("http://127.0.0.1:4321/api/v1/duplicates/tasks/%s", taskID),
+			nil,
+		)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("task status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+		}
+
+		var statusBody map[string]any
+		decodeThumbnailRewriteJSON(t, resp, &statusBody)
+		status, _ := statusBody["status"].(string)
+		if status == "completed" {
+			return
+		}
+		if status == "failed" {
+			t.Fatalf("duplicate task failed: %v", statusBody)
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	t.Fatalf("duplicate task did not reach terminal status in time: task_id=%s", taskID)
 }
 
 func performRequest(t *testing.T, router http.Handler, method, target string, body []byte) *httptest.ResponseRecorder {

@@ -12,8 +12,10 @@ class DuplicateScreen extends StatefulWidget {
 }
 
 class _DuplicateScreenState extends State<DuplicateScreen> {
-  final TextEditingController _thresholdController = TextEditingController(text: '10');
-  
+  final TextEditingController _thresholdController = TextEditingController(
+    text: '10',
+  );
+
   @override
   void initState() {
     super.initState();
@@ -66,13 +68,26 @@ class _DuplicateScreenState extends State<DuplicateScreen> {
           }
 
           if (provider.isDetecting) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('正在检测重复图片...'),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text('正在检测重复图片... 任务: ${provider.taskId ?? '-'}'),
+                  const SizedBox(height: 8),
+                  Text('阶段: ${provider.taskStatus}'),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: 320,
+                    child: LinearProgressIndicator(
+                      value: (provider.taskProgress / 100).clamp(0, 1),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '进度: ${provider.taskProgress.toStringAsFixed(1)}% (${provider.taskProcessed}/${provider.taskTotal})',
+                  ),
                 ],
               ),
             );
@@ -87,7 +102,11 @@ class _DuplicateScreenState extends State<DuplicateScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.check_circle_outline, size: 48, color: Colors.green),
+                  const Icon(
+                    Icons.check_circle_outline,
+                    size: 48,
+                    color: Colors.green,
+                  ),
                   const SizedBox(height: 16),
                   const Text('没有发现重复图片'),
                   const SizedBox(height: 24),
@@ -115,7 +134,8 @@ class _DuplicateScreenState extends State<DuplicateScreen> {
                 child: RefreshIndicator(
                   onRefresh: () => provider.loadGroups(refresh: true),
                   child: ListView.builder(
-                    itemCount: provider.groups.length + (provider.hasMore ? 1 : 0),
+                    itemCount:
+                        provider.groups.length + (provider.hasMore ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == provider.groups.length) {
                         // Load more indicator
@@ -131,7 +151,8 @@ class _DuplicateScreenState extends State<DuplicateScreen> {
                       final group = provider.groups[index];
                       return DuplicateGroupCard(
                         group: group,
-                        onDelete: () => _confirmDeleteGroup(context, provider, group.id),
+                        onDelete: () =>
+                            _confirmDeleteGroup(context, provider, group.id),
                       );
                     },
                   ),
@@ -196,7 +217,11 @@ class _DuplicateScreenState extends State<DuplicateScreen> {
     );
   }
 
-  void _confirmDeleteGroup(BuildContext context, DuplicateProvider provider, int groupId) {
+  void _confirmDeleteGroup(
+    BuildContext context,
+    DuplicateProvider provider,
+    int groupId,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from compute.hashing import batch_compute_hashes, compute_image_hashes
+from compute.hashing import batch_compute_hashes, compute_image_hashes, default_max_workers
 
 
 def test_compute_image_hashes_returns_sha256_and_phash_for_valid_image(
@@ -85,3 +85,51 @@ def test_phash_is_exactly_16_hex_characters(test_images_dir: Path):
 
 def test_hashing_module_disables_pillow_pixel_limit_for_trusted_images():
     assert Image.MAX_IMAGE_PIXELS is None
+
+
+def test_compute_image_hashes_uses_full_cache_without_recompute(test_images_dir: Path):
+    image_path = sorted(test_images_dir.glob("*.png"))[0]
+
+    result = compute_image_hashes(
+        str(image_path),
+        cached_sha256="cached-sha",
+        cached_phash="cached-phash",
+    )
+
+    assert result["error"] is None
+    assert result["sha256"] == "cached-sha"
+    assert result["phash"] == "cached-phash"
+
+
+def test_compute_image_hashes_recomputes_only_missing_value(test_images_dir: Path):
+    image_path = sorted(test_images_dir.glob("*.png"))[0]
+
+    result = compute_image_hashes(str(image_path), cached_sha256="cached-sha")
+
+    assert result["error"] is None
+    assert result["sha256"] == "cached-sha"
+    assert isinstance(result["phash"], str)
+    assert len(result["phash"]) == 16
+
+
+def test_batch_compute_hashes_accepts_input_dict_with_cache(test_images_dir: Path):
+    image_path = sorted(test_images_dir.glob("*.png"))[0]
+
+    results = batch_compute_hashes(
+        [
+            {
+                "path": str(image_path),
+                "sha256": "cached-sha",
+                "phash": "cached-phash",
+            }
+        ]
+    )
+
+    assert len(results) == 1
+    assert results[0]["sha256"] == "cached-sha"
+    assert results[0]["phash"] == "cached-phash"
+
+
+def test_default_max_workers_cpu_times_two(monkeypatch):
+    monkeypatch.setattr("compute.hashing.os.cpu_count", lambda: 6)
+    assert default_max_workers() == 12

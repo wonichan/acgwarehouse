@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/image.dart';
@@ -102,22 +104,82 @@ class DuplicateRelation {
 
 /// Detection result
 class DetectionResult {
+  final String taskId;
+  final String status;
+  final double progress;
+  final int processed;
+  final int total;
   final String message;
-  final int groupsFound;
 
-  const DetectionResult({required this.message, required this.groupsFound});
+  const DetectionResult({
+    required this.taskId,
+    required this.status,
+    required this.progress,
+    required this.processed,
+    required this.total,
+    required this.message,
+  });
 
   factory DetectionResult.fromJson(Map<String, dynamic> json) {
     return DetectionResult(
+      taskId: json['task_id'] as String? ?? '',
+      status: json['status'] as String? ?? 'queued',
+      progress: (json['progress'] as num?)?.toDouble() ?? 0,
+      processed: json['processed'] as int? ?? 0,
+      total: json['total'] as int? ?? 0,
       message: json['message'] as String? ?? '',
+    );
+  }
+}
+
+class DuplicateTaskStatus {
+  final String taskId;
+  final String status;
+  final double progress;
+  final int processed;
+  final int total;
+  final String message;
+  final String? error;
+  final int groupsFound;
+
+  const DuplicateTaskStatus({
+    required this.taskId,
+    required this.status,
+    required this.progress,
+    required this.processed,
+    required this.total,
+    required this.message,
+    required this.error,
+    required this.groupsFound,
+  });
+
+  bool get isTerminal => status == 'completed' || status == 'failed';
+
+  factory DuplicateTaskStatus.fromJson(Map<String, dynamic> json) {
+    return DuplicateTaskStatus(
+      taskId: json['task_id'] as String? ?? '',
+      status: json['status'] as String? ?? 'queued',
+      progress: (json['progress'] as num?)?.toDouble() ?? 0,
+      processed: json['processed'] as int? ?? 0,
+      total: json['total'] as int? ?? 0,
+      message: json['message'] as String? ?? '',
+      error: json['error'] as String?,
       groupsFound: json['groups_found'] as int? ?? 0,
     );
   }
 }
 
+class DuplicateTaskEvent {
+  final String event;
+  final DuplicateTaskStatus payload;
+
+  const DuplicateTaskEvent({required this.event, required this.payload});
+}
+
 /// Duplicate detection service
 class DuplicateService {
   final http.Client _client;
+  HttpClient? _streamHttpClient;
 
   DuplicateService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -139,6 +201,75 @@ class DuplicateService {
     return DetectionResult.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
     );
+  }
+
+  Future<DuplicateTaskStatus> getDuplicateTaskStatus(String taskId) async {
+    final response = await _client.get(
+      Uri.parse(ApiConfig.duplicateTaskStatus(taskId)),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        'Failed to get duplicate task status: ${response.statusCode}',
+        response.statusCode,
+      );
+    }
+
+    return DuplicateTaskStatus.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
+  Stream<DuplicateTaskEvent> streamDuplicateTaskEvents(String taskId) async* {
+    _streamHttpClient ??= HttpClient();
+    final client = _streamHttpClient!;
+
+    final uri = Uri.parse(ApiConfig.duplicateTaskEvents(taskId));
+    final request = await client.getUrl(uri);
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    final response = await request.close();
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        'Failed to stream duplicate task events: ${response.statusCode}',
+        response.statusCode,
+      );
+    }
+
+    final lines = response
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+
+    String currentEvent = 'message';
+    final dataLines = <String>[];
+
+    await for (final rawLine in lines) {
+      final line = rawLine.trimRight();
+      if (line.isEmpty) {
+        if (dataLines.isNotEmpty) {
+          final data = dataLines.join('\n');
+          dataLines.clear();
+          if (currentEvent != 'heartbeat') {
+            final json = jsonDecode(data) as Map<String, dynamic>;
+            yield DuplicateTaskEvent(
+              event: currentEvent,
+              payload: DuplicateTaskStatus.fromJson(json),
+            );
+          }
+        }
+        currentEvent = 'message';
+        continue;
+      }
+
+      if (line.startsWith('event:')) {
+        currentEvent = line.substring(6).trim();
+        continue;
+      }
+      if (line.startsWith('data:')) {
+        dataLines.add(line.substring(5).trimLeft());
+      }
+    }
   }
 
   /// Get list of duplicate groups
@@ -201,6 +332,8 @@ class DuplicateService {
 
   void dispose() {
     _client.close();
+    _streamHttpClient?.close(force: true);
+    _streamHttpClient = null;
   }
 }
 

@@ -255,14 +255,20 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	duplicateList := gin.HandlerFunc(placeholderHandler)
 	duplicateGet := gin.HandlerFunc(placeholderHandler)
 	duplicateDelete := gin.HandlerFunc(placeholderHandler)
+	duplicateTaskStatus := gin.HandlerFunc(placeholderHandler)
+	duplicateTaskEvents := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.DuplicateSvc != nil {
 		duplicateHandler := NewDuplicateHandler(deps.DuplicateSvc, deps.SidecarRuntime)
 		duplicateDetect = duplicateHandler.DetectDuplicates
 		duplicateList = duplicateHandler.ListDuplicates
 		duplicateGet = duplicateHandler.GetDuplicate
 		duplicateDelete = duplicateHandler.DeleteDuplicate
+		duplicateTaskStatus = duplicateHandler.GetDuplicateTaskStatus
+		duplicateTaskEvents = duplicateHandler.StreamDuplicateTaskEvents
 	}
 	api.POST("/duplicates/detect", duplicateDetect)
+	api.GET("/duplicates/tasks/:task_id", duplicateTaskStatus)
+	api.GET("/duplicates/tasks/:task_id/events", duplicateTaskEvents)
 	api.GET("/duplicates", duplicateList)
 	api.GET("/duplicates/:id", duplicateGet)
 	api.DELETE("/duplicates/:id", duplicateDelete)

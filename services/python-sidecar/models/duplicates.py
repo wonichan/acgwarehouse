@@ -8,6 +8,8 @@ class ImageInput(BaseModel):
     height: int
     file_size: int
     format: str
+    sha256: str | None = None
+    phash: str | None = None
 
 
 class DetectRequest(BaseModel):
@@ -29,7 +31,7 @@ class GroupMember(BaseModel):
     distance: int
     is_recommended: bool
     recommendation_score: float | None
-    recommendation_reasons: list[dict] | None
+    recommendation_reasons: list[dict[str, object]] | None
 
 
 class DuplicateGroup(BaseModel):
@@ -42,5 +44,5 @@ class DetectionResult(BaseModel):
     groups: list[DuplicateGroup]
     total_images: int
     total_groups: int
-    skipped_images: list[dict]
+    skipped_images: list[dict[str, object]]
     computation_time_ms: int

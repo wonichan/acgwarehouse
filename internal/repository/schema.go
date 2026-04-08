@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS images (
     height INTEGER,
     format TEXT,
     phash INTEGER,
+    phash_hex TEXT,
+    sha256 TEXT,
+    source_mtime_unix INTEGER,
     thumbnail_small_url TEXT,
     thumbnail_large_url TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -249,6 +252,12 @@ func EnsureScanSchema(db *sql.DB) error {
 		return err
 	}
 	if err := ensureColumnExists(db, "images", "phash_hex", "TEXT"); err != nil {
+		return err
+	}
+	if err := ensureColumnExists(db, "images", "sha256", "TEXT"); err != nil {
+		return err
+	}
+	if err := ensureColumnExists(db, "images", "source_mtime_unix", "INTEGER"); err != nil {
 		return err
 	}
 	if err := ensureColumnExists(db, "duplicate_relations", "recommendation_score", "REAL"); err != nil {

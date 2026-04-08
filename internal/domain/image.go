@@ -21,6 +21,8 @@ type Image struct {
 	Format            string    `json:"format"`
 	PHash             int64     `json:"phash"`
 	PHashHex          string    `json:"phash_hex"`
+	SHA256            string    `json:"sha256"`
+	SourceMTimeUnix   int64     `json:"source_mtime_unix"`
 	ThumbnailSmallUrl string    `json:"thumbnail_small_url"`
 	ThumbnailLargeUrl string    `json:"thumbnail_large_url"`
 	CreatedAt         time.Time `json:"created_at"`

@@ -387,6 +387,105 @@ func TestImage_PHashHexColumn(t *testing.T) {
 	}
 }
 
+func TestImage_HashCacheColumns(t *testing.T) {
+	t.Parallel()
+
+	db, _ := newImageRepositoryTestDB(t)
+	now := time.Now()
+	sha256 := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	phashHex := "bbbbbbbbbbbbbbbb"
+	sourceMTimeUnix := int64(1710000000123456789)
+
+	result, err := db.Exec(`
+		INSERT INTO images (
+			path, filename, source_root, file_size, width, height, format, phash, phash_hex, sha256, source_mtime_unix, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "/tmp/hash-cache-test.png", "hash-cache-test.png", "/tmp", 2048, 1920, 1080, "png", 12345, phashHex, sha256, sourceMTimeUnix, now, now)
+	if err != nil {
+		t.Fatalf("insert image with hash cache columns: %v", err)
+	}
+
+	imageID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("last insert id: %v", err)
+	}
+
+	var gotSHA256 string
+	var gotSourceMTime int64
+	if err := db.QueryRow(`SELECT sha256, source_mtime_unix FROM images WHERE id = ?`, imageID).Scan(&gotSHA256, &gotSourceMTime); err != nil {
+		t.Fatalf("select hash cache columns: %v", err)
+	}
+
+	if gotSHA256 != sha256 {
+		t.Fatalf("sha256 = %q, want %q", gotSHA256, sha256)
+	}
+	if gotSourceMTime != sourceMTimeUnix {
+		t.Fatalf("source_mtime_unix = %d, want %d", gotSourceMTime, sourceMTimeUnix)
+	}
+}
+
+func TestEnsureScanSchema_ImageHashCacheMigrationKeepsLegacyRowsReadable(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "legacy-image-repo.db")
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	_, err = db.Exec(`
+		CREATE TABLE images (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			path TEXT UNIQUE NOT NULL,
+			filename TEXT NOT NULL,
+			source_root TEXT NOT NULL,
+			file_size INTEGER,
+			width INTEGER,
+			height INTEGER,
+			format TEXT,
+			phash INTEGER,
+			phash_hex TEXT,
+			thumbnail_small_url TEXT,
+			thumbnail_large_url TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	if err != nil {
+		t.Fatalf("create legacy images table: %v", err)
+	}
+
+	legacyNow := time.Now()
+	_, err = db.Exec(`
+		INSERT INTO images(path, filename, source_root, file_size, width, height, format, phash, phash_hex, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "/legacy.png", "legacy.png", "/", 100, 10, 10, "png", 0, "", legacyNow, legacyNow)
+	if err != nil {
+		t.Fatalf("insert legacy row: %v", err)
+	}
+
+	if err := EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() migration error = %v", err)
+	}
+
+	repo := NewImageRepository(db)
+	found, err := repo.FindByPath("/legacy.png")
+	if err != nil {
+		t.Fatalf("FindByPath after migration: %v", err)
+	}
+
+	if found.SHA256 != "" {
+		t.Fatalf("SHA256 = %q, want empty default", found.SHA256)
+	}
+	if found.SourceMTimeUnix != 0 {
+		t.Fatalf("SourceMTimeUnix = %d, want 0 default", found.SourceMTimeUnix)
+	}
+	if found.PHashHex != "" {
+		t.Fatalf("PHashHex = %q, want empty string", found.PHashHex)
+	}
+}
+
 func saveImageForAITagSelectionTest(t *testing.T, repo ImageRepository, path, thumbnailSmallURL string) *domain.Image {
 	t.Helper()
 
@@ -498,6 +597,102 @@ func TestUpdateImagePHashHex(t *testing.T) {
 	}
 	if all[0].PHashHex != phashHex {
 		t.Fatalf("FindAll[0].PHashHex = %q, want %q", all[0].PHashHex, phashHex)
+	}
+}
+
+func TestUpdateImageDuplicateHashCache(t *testing.T) {
+	t.Parallel()
+
+	_, repo := newImageRepositoryTestDB(t)
+
+	image := &domain.Image{
+		Path:       "/tmp/update-hash-cache.png",
+		Filename:   "update-hash-cache.png",
+		SourceRoot: "/tmp",
+		Format:     "png",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	if _, err := repo.SaveImage(image); err != nil {
+		t.Fatalf("save image: %v", err)
+	}
+
+	sha256 := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	phashHex := "dddddddddddddddd"
+	sourceMTimeUnix := int64(1710000000765432100)
+
+	if err := repo.UpdateImageDuplicateHashCache(image.ID, sha256, phashHex, sourceMTimeUnix); err != nil {
+		t.Fatalf("UpdateImageDuplicateHashCache failed: %v", err)
+	}
+
+	found, err := repo.FindByID(image.ID)
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+
+	if found.SHA256 != sha256 {
+		t.Fatalf("SHA256 = %q, want %q", found.SHA256, sha256)
+	}
+	if found.PHashHex != phashHex {
+		t.Fatalf("PHashHex = %q, want %q", found.PHashHex, phashHex)
+	}
+	if found.SourceMTimeUnix != sourceMTimeUnix {
+		t.Fatalf("SourceMTimeUnix = %d, want %d", found.SourceMTimeUnix, sourceMTimeUnix)
+	}
+}
+
+func TestFindByIDRange_ReturnsPagedAscendingResults(t *testing.T) {
+	t.Parallel()
+
+	_, repo := newImageRepositoryTestDB(t)
+
+	inserted := make([]*domain.Image, 0, 5)
+	for i := 0; i < 5; i++ {
+		img := &domain.Image{
+			Path:       filepath.Join("/range", fmt.Sprintf("img-%d.png", i)),
+			Filename:   fmt.Sprintf("img-%d.png", i),
+			SourceRoot: "/range",
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("SaveImage(%d): %v", i, err)
+		}
+		inserted = append(inserted, img)
+	}
+
+	page1, err := repo.FindByIDRange(2, 0)
+	if err != nil {
+		t.Fatalf("FindByIDRange page1: %v", err)
+	}
+	if len(page1) != 2 {
+		t.Fatalf("len(page1) = %d, want 2", len(page1))
+	}
+	if page1[0].ID != inserted[0].ID || page1[1].ID != inserted[1].ID {
+		t.Fatalf("unexpected page1 IDs: got [%d,%d], want [%d,%d]", page1[0].ID, page1[1].ID, inserted[0].ID, inserted[1].ID)
+	}
+
+	page2, err := repo.FindByIDRange(2, page1[len(page1)-1].ID)
+	if err != nil {
+		t.Fatalf("FindByIDRange page2: %v", err)
+	}
+	if len(page2) != 2 {
+		t.Fatalf("len(page2) = %d, want 2", len(page2))
+	}
+	if page2[0].ID != inserted[2].ID || page2[1].ID != inserted[3].ID {
+		t.Fatalf("unexpected page2 IDs: got [%d,%d], want [%d,%d]", page2[0].ID, page2[1].ID, inserted[2].ID, inserted[3].ID)
+	}
+
+	page3, err := repo.FindByIDRange(2, page2[len(page2)-1].ID)
+	if err != nil {
+		t.Fatalf("FindByIDRange page3: %v", err)
+	}
+	if len(page3) != 1 {
+		t.Fatalf("len(page3) = %d, want 1", len(page3))
+	}
+	if page3[0].ID != inserted[4].ID {
+		t.Fatalf("page3[0].ID = %d, want %d", page3[0].ID, inserted[4].ID)
 	}
 }
 

@@ -146,7 +146,14 @@ def run_detection(task_id: str, request: DetectRequest) -> None:
                 )
 
         hash_results = batch_compute_hashes(
-            [image.path for image in request.images],
+            [
+                {
+                    "path": image.path,
+                    "sha256": image.sha256,
+                    "phash": image.phash,
+                }
+                for image in request.images
+            ],
             progress_callback=progress_callback,
         )
 

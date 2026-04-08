@@ -328,3 +328,57 @@ def test_run_detection_logs_failures(monkeypatch, sample_image_inputs, caplog):
     assert (
         f"duplicate detection failed: task_id={task_id} error=hashing exploded" in text
     )
+
+
+def test_run_detection_passes_cached_hash_fields_to_batch_compute(
+    monkeypatch, sample_image_inputs
+):
+    from routers import duplicates as duplicates_router
+
+    task_id = duplicates_router.create_task()
+    with duplicates_router._active_lock:
+        duplicates_router._active_task_id = task_id
+
+    sample_image_inputs[0].sha256 = "cached-sha"
+    sample_image_inputs[0].phash = "cached-phash"
+
+    captured_inputs = []
+
+    def fake_batch_compute_hashes(image_inputs, progress_callback=None, max_workers=None):
+        nonlocal captured_inputs
+        captured_inputs = image_inputs
+        if progress_callback is not None:
+            progress_callback(100.0)
+        return [
+            {
+                "path": sample_image_inputs[0].path,
+                "sha256": "computed-or-cached-sha",
+                "phash": "computed-or-cached-phash",
+                "error": None,
+            }
+        ]
+
+    monkeypatch.setattr(
+        duplicates_router, "batch_compute_hashes", fake_batch_compute_hashes
+    )
+    monkeypatch.setattr(
+        duplicates_router,
+        "group_duplicates",
+        lambda hash_inputs, threshold: [{"group_id": 1, "member_indices": [0]}],
+    )
+    monkeypatch.setattr(
+        duplicates_router, "select_recommended", lambda members_source: (0, None, None)
+    )
+    monkeypatch.setattr(
+        duplicates_router,
+        "compute_recommendation_score",
+        lambda **kwargs: (88.0, []),
+    )
+
+    request = DetectRequest(threshold=40, images=[sample_image_inputs[0]])
+    duplicates_router.run_detection(task_id, request)
+
+    assert len(captured_inputs) == 1
+    assert captured_inputs[0]["path"] == sample_image_inputs[0].path
+    assert captured_inputs[0]["sha256"] == "cached-sha"
+    assert captured_inputs[0]["phash"] == "cached-phash"

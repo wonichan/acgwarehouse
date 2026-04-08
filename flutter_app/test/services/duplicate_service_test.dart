@@ -21,6 +21,60 @@ void main() {
   });
 
   group('DuplicateService', () {
+    test('parses detect response as async task payload', () async {
+      const responseBody = '''
+      {
+        "task_id": "dup-123",
+        "status": "queued",
+        "progress": 0,
+        "processed": 0,
+        "total": 0,
+        "message": "queued"
+      }
+      ''';
+
+      when(
+        () => mockClient.post(
+          any(),
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) async => http.Response(responseBody, 200));
+
+      final result = await duplicateService.detectDuplicates(threshold: 10);
+      expect(result.taskId, 'dup-123');
+      expect(result.status, 'queued');
+      expect(result.progress, 0);
+      expect(result.processed, 0);
+      expect(result.total, 0);
+    });
+
+    test('parses duplicate task status response', () async {
+      const responseBody = '''
+      {
+        "task_id": "dup-123",
+        "status": "hashing",
+        "progress": 42.5,
+        "processed": 85,
+        "total": 200,
+        "message": "hashing",
+        "groups_found": 3
+      }
+      ''';
+
+      when(
+        () => mockClient.get(any(), headers: any(named: 'headers')),
+      ).thenAnswer((_) async => http.Response(responseBody, 200));
+
+      final status = await duplicateService.getDuplicateTaskStatus('dup-123');
+      expect(status.taskId, 'dup-123');
+      expect(status.status, 'hashing');
+      expect(status.progress, 42.5);
+      expect(status.processed, 85);
+      expect(status.total, 200);
+      expect(status.groupsFound, 3);
+    });
+
     test(
       'parses duplicate group list using backend group/images shape',
       () async {
@@ -83,7 +137,8 @@ void main() {
           () => mockClient.get(any(), headers: any(named: 'headers')),
         ).thenAnswer((_) async => http.Response(responseBody, 200));
 
-        final groups = await duplicateService.getDuplicateGroups();
+        final response = await duplicateService.getDuplicateGroups();
+        final groups = response.groups;
 
         expect(groups, hasLength(1));
         expect(groups.first.id, 7);
