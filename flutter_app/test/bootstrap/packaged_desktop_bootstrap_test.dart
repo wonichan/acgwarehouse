@@ -43,15 +43,6 @@ void main() {
         ),
       );
       expect(
-        layout.sidecarExecutablePath,
-        _join(
-          harness.bundleDir.path,
-          'runtime',
-          'python-sidecar',
-          'acgwarehouse-sidecar.exe',
-        ),
-      );
-      expect(
         layout.manifestPath,
         _join(harness.bundleDir.path, 'runtime', 'runtime-manifest.json'),
       );
@@ -108,17 +99,15 @@ void main() {
           _join(harness.runtimeDir.path, 'logs'),
         );
         expect(
-          started.environment['ACG_SIDECAR_EXECUTABLE'],
-          _join(
-            harness.runtimeDir.path,
-            'python-sidecar',
-            'acgwarehouse-sidecar.exe',
-          ),
-        );
-        expect(started.environment['ACG_SIDECAR_PORT'], isNotEmpty);
-        expect(
-          int.parse(started.environment['ACG_SIDECAR_PORT']!),
-          greaterThan(0),
+          started.environment.keys,
+          unorderedEquals(<String>[
+            'SERVER_HOST',
+            'SERVER_PORT',
+            'ACG_RUNTIME_ROOT',
+            'ACG_RUNTIME_MANIFEST_PATH',
+            'ACG_DIAGNOSTICS_DIR',
+            'ACG_LOGS_DIR',
+          ]),
         );
       },
     );
@@ -130,10 +119,6 @@ void main() {
           'go': (
             title: 'Go runtime failed to start',
             type: StartupFailureType.go,
-          ),
-          'python': (
-            title: 'Python sidecar failed to start',
-            type: StartupFailureType.python,
           ),
           'startup_chain': (
             title: 'Application startup did not complete',
@@ -163,7 +148,7 @@ void main() {
                       harness.bundleDir.path,
                       'runtime',
                       'logs',
-                      'python-sidecar.log',
+                      'flutter-bootstrap.log',
                     ),
                   ],
                   'timestamp': '2026-04-05T12:00:00Z',
@@ -197,7 +182,7 @@ void main() {
         expect(result.failure!.type, StartupFailureType.startupChain);
         expect(result.failure!.message, contains('runtime-manifest.json'));
         expect(result.failure!.message, contains('go.log'));
-        expect(result.failure!.message, contains('python-sidecar.log'));
+        expect(result.failure!.message, contains('flutter-bootstrap.log'));
       },
     );
 
@@ -258,21 +243,18 @@ void main() {
       tester,
     ) async {
       const failure = StartupFailure(
-        type: StartupFailureType.python,
-        title: 'Python sidecar failed to start',
-        message: 'python exploded',
-        logPaths: <String>['C:/bundle/runtime/logs/python-sidecar.log'],
+        type: StartupFailureType.go,
+        title: 'Go runtime failed to start',
+        message: 'go exploded',
+        logPaths: <String>['C:/bundle/runtime/logs/go.log'],
       );
 
       await tester.pumpWidget(const MyApp(startupFailure: failure));
 
       expect(find.byType(StartupFailureScreen), findsOneWidget);
-      expect(find.text('Python sidecar failed to start'), findsOneWidget);
-      expect(find.text('python exploded'), findsOneWidget);
-      expect(
-        find.text('C:/bundle/runtime/logs/python-sidecar.log'),
-        findsOneWidget,
-      );
+      expect(find.text('Go runtime failed to start'), findsOneWidget);
+      expect(find.text('go exploded'), findsOneWidget);
+      expect(find.text('C:/bundle/runtime/logs/go.log'), findsOneWidget);
     });
 
     test('shutdown requests /shutdown then force-kills after timeout', () async {
@@ -413,9 +395,6 @@ class _BootstrapHarness {
     final bundleDir = Directory(_join(tempDir.path, 'bundle'));
     final runtimeDir = Directory(_join(bundleDir.path, 'runtime'));
     await Directory(_join(runtimeDir.path, 'bin')).create(recursive: true);
-    await Directory(
-      _join(runtimeDir.path, 'python-sidecar'),
-    ).create(recursive: true);
     await Directory(_join(runtimeDir.path, 'logs')).create(recursive: true);
     await Directory(
       _join(runtimeDir.path, 'diagnostics'),
@@ -426,9 +405,6 @@ class _BootstrapHarness {
     await File(
       _join(runtimeDir.path, 'bin', 'acgwarehouse-server.exe'),
     ).writeAsString('go');
-    await File(
-      _join(runtimeDir.path, 'python-sidecar', 'acgwarehouse-sidecar.exe'),
-    ).writeAsString('python');
     return _BootstrapHarness(
       bundleDir: bundleDir,
       runtimeDir: runtimeDir,

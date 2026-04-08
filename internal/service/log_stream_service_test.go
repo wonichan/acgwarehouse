@@ -13,15 +13,12 @@ import (
 func TestLogStreamNewServiceCreatesExpectedState(t *testing.T) {
 	t.Parallel()
 
-	svc := NewLogStreamService("go.log", "python.log")
+	svc := NewLogStreamService("go.log")
 	if svc == nil {
 		t.Fatal("NewLogStreamService() returned nil")
 	}
 	if svc.goLogPath != "go.log" {
 		t.Fatalf("goLogPath = %q, want %q", svc.goLogPath, "go.log")
-	}
-	if svc.sidecarLogPath != "python.log" {
-		t.Fatalf("sidecarLogPath = %q, want %q", svc.sidecarLogPath, "python.log")
 	}
 	if svc.subscribers == nil {
 		t.Fatal("subscribers should be initialized")
@@ -32,9 +29,6 @@ func TestLogStreamNewServiceCreatesExpectedState(t *testing.T) {
 	if got := svc.buffers[LogSourceGo]; got == nil {
 		t.Fatal("go buffer should be initialized")
 	}
-	if got := svc.buffers[LogSourcePython]; got == nil {
-		t.Fatal("python buffer should be initialized")
-	}
 }
 
 func TestLogStreamSubscribeReturnsSnapshotThenLines(t *testing.T) {
@@ -43,7 +37,7 @@ func TestLogStreamSubscribeReturnsSnapshotThenLines(t *testing.T) {
 	goLog := filepath.Join(t.TempDir(), "go.log")
 	writeLogLines(t, goLog, []string{"boot", "ready"}, false)
 
-	svc := NewLogStreamService(goLog, filepath.Join(t.TempDir(), "python.log"))
+	svc := NewLogStreamService(goLog)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	svc.Start(ctx)
@@ -78,7 +72,7 @@ func TestLogStreamLineEventIncludesDetectedSeverity(t *testing.T) {
 	goLog := filepath.Join(t.TempDir(), "go.log")
 	writeLogLines(t, goLog, []string{"boot"}, false)
 
-	svc := NewLogStreamService(goLog, filepath.Join(t.TempDir(), "python.log"))
+	svc := NewLogStreamService(goLog)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	svc.Start(ctx)
@@ -100,7 +94,7 @@ func TestLogStreamSubscribeToMissingFileReturnsStatusEvent(t *testing.T) {
 	t.Parallel()
 
 	missing := filepath.Join(t.TempDir(), "missing.log")
-	svc := NewLogStreamService(missing, filepath.Join(t.TempDir(), "python.log"))
+	svc := NewLogStreamService(missing)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	svc.Start(ctx)
@@ -121,7 +115,7 @@ func TestLogStreamUnsubscribeStopsDelivery(t *testing.T) {
 	goLog := filepath.Join(t.TempDir(), "go.log")
 	writeLogLines(t, goLog, []string{"boot"}, false)
 
-	svc := NewLogStreamService(goLog, filepath.Join(t.TempDir(), "python.log"))
+	svc := NewLogStreamService(goLog)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	svc.Start(ctx)
@@ -150,7 +144,7 @@ func TestLogStreamFileTruncationHandledGracefully(t *testing.T) {
 	goLog := filepath.Join(t.TempDir(), "go.log")
 	writeLogLines(t, goLog, []string{"before truncate", "old tail"}, false)
 
-	svc := NewLogStreamService(goLog, filepath.Join(t.TempDir(), "python.log"))
+	svc := NewLogStreamService(goLog)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	svc.Start(ctx)
@@ -254,7 +248,7 @@ func TestLogStreamStopCleansUpGoroutines(t *testing.T) {
 	goLog := filepath.Join(t.TempDir(), "go.log")
 	writeLogLines(t, goLog, []string{"boot"}, false)
 
-	svc := NewLogStreamService(goLog, filepath.Join(t.TempDir(), "python.log"))
+	svc := NewLogStreamService(goLog)
 	ctx, cancel := context.WithCancel(t.Context())
 	svc.Start(ctx)
 	svc.Stop()
@@ -266,9 +260,6 @@ func TestLogStreamStopCleansUpGoroutines(t *testing.T) {
 	if svc.running[LogSourceGo] {
 		t.Fatal("go source should not be running after Stop")
 	}
-	if svc.running[LogSourcePython] {
-		t.Fatal("python source should not be running after Stop")
-	}
 }
 
 func TestLogStreamMultipleSubscribers(t *testing.T) {
@@ -277,7 +268,7 @@ func TestLogStreamMultipleSubscribers(t *testing.T) {
 	goLog := filepath.Join(t.TempDir(), "go.log")
 	writeLogLines(t, goLog, []string{"boot"}, false)
 
-	svc := NewLogStreamService(goLog, filepath.Join(t.TempDir(), "python.log"))
+	svc := NewLogStreamService(goLog)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	svc.Start(ctx)

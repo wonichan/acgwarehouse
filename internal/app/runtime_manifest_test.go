@@ -35,12 +35,8 @@ func TestBuildRuntimeManifestPayloadIncludesRequiredFields(t *testing.T) {
 		t.Fatalf("Go.AdminBasicAuth = %q, want %q", payload.Go.AdminBasicAuth, "Basic YWRtaW46c2VjcmV0")
 	}
 
-	raw, err := json.Marshal(payload)
-	if err != nil {
+	if _, err := json.Marshal(payload); err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
-	}
-	if strings.Contains(string(raw), "python") {
-		t.Fatalf("manifest payload leaked python endpoint field: %s", string(raw))
 	}
 }
 

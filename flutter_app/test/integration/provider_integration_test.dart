@@ -7,16 +7,13 @@ import 'package:gallery/providers/navigation_provider.dart';
 import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/providers/search_provider.dart';
-import 'package:gallery/providers/duplicate_provider.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/services/tag_service.dart';
 import 'package:gallery/services/search_service.dart';
-import 'package:gallery/services/duplicate_service.dart';
 
 void main() {
   group('Provider Integration Tests', () {
-    testWidgets('NavigationProvider 状态在 Material 导航中正常工作',
-        (tester) async {
+    testWidgets('NavigationProvider 状态在 Material 导航中正常工作', (tester) async {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -42,10 +39,6 @@ void main() {
                         icon: Icon(Icons.search_outlined),
                         label: '搜索',
                       ),
-                      NavigationDestination(
-                        icon: Icon(Icons.content_copy_outlined),
-                        label: '重复检测',
-                      ),
                     ],
                   ),
                 );
@@ -65,8 +58,7 @@ void main() {
       expect(find.text('Page 1'), findsOneWidget);
     });
 
-    testWidgets('NavigationProvider 状态在 Fluent 导航中正常工作',
-        (tester) async {
+    testWidgets('NavigationProvider 状态在 Fluent 导航中正常工作', (tester) async {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -92,11 +84,6 @@ void main() {
                       fluent.PaneItem(
                         icon: const Icon(fluent.FluentIcons.search),
                         title: const Text('搜索'),
-                        body: Text('Page ${navProvider.selectedIndex}'),
-                      ),
-                      fluent.PaneItem(
-                        icon: const Icon(fluent.FluentIcons.copy),
-                        title: const Text('重复检测'),
                         body: Text('Page ${navProvider.selectedIndex}'),
                       ),
                     ],
@@ -142,7 +129,6 @@ void main() {
           providers: [
             Provider(create: (_) => ApiService()),
             Provider(create: (_) => TagService()),
-            Provider(create: (_) => DuplicateService()),
             Provider(create: (_) => SearchService()),
             ChangeNotifierProvider(
               create: (context) =>
@@ -150,10 +136,6 @@ void main() {
             ),
             ChangeNotifierProvider(
               create: (context) => TagProvider(context.read<TagService>()),
-            ),
-            ChangeNotifierProvider(
-              create: (context) =>
-                  DuplicateProvider(service: context.read<DuplicateService>()),
             ),
             ChangeNotifierProvider(
               create: (context) =>

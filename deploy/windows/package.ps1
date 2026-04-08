@@ -3,7 +3,6 @@ param(
     [switch]$SkipTests,
     [switch]$All,
     [switch]$Go,
-    [switch]$Python,
     [switch]$Flutter
 )
 
@@ -16,18 +15,11 @@ $ZipOutputDir = Join-Path $RepoRoot 'dist/windows-zip'
 $ZipPath = Join-Path $ZipOutputDir 'ACGWarehouse-windows-x64-portable.zip'
 $BuildArtifactsRoot = Join-Path $RepoRoot 'dist/windows-build'
 $GoBuildRoot = Join-Path $BuildArtifactsRoot 'go'
-$PythonBuildRoot = Join-Path $BuildArtifactsRoot 'python'
-$PyInstallerWorkDir = Join-Path $RepoRoot 'dist/.pyinstaller/work'
-$PyInstallerDistRoot = $PythonBuildRoot
-$PythonRequirementsPath = Join-Path $RepoRoot 'services/python-sidecar/requirements.txt'
 $FlutterProjectDir = Join-Path $RepoRoot 'flutter_app'
 $FlutterReleaseDir = Join-Path $FlutterProjectDir 'build/windows/x64/runner/Release'
 $FlutterOutputExecutable = Join-Path $FlutterReleaseDir 'gallery.exe'
 $FlutterBuildCommand = 'flutter build windows --release'
 $GoBuildExecutable = Join-Path $GoBuildRoot 'acgwarehouse-server.exe'
-$PythonBuildDirectory = Join-Path $PythonBuildRoot 'python-sidecar'
-$PythonBuildExecutable = Join-Path $PythonBuildDirectory 'acgwarehouse-sidecar.exe'
-$SidecarSpecPath = Join-Path $RepoRoot 'services/python-sidecar/sidecar.spec'
 $ConfigSourceDir = Join-Path $RepoRoot 'deploy/config'
 $PackagedConfigPath = Join-Path $PortableRoot 'config.yaml'
 
@@ -51,21 +43,6 @@ function Assert-Command {
 
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
         throw "Required command not found: $Name"
-    }
-}
-
-function Ensure-PythonModule {
-    param([Parameter(Mandatory = $true)][string]$ModuleName)
-
-    & python -c "import $ModuleName"
-    if ($LASTEXITCODE -eq 0) {
-        return
-    }
-
-    Write-Host "Installing missing Python module: $ModuleName"
-    & python -m pip install --disable-pip-version-check $ModuleName
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install required Python module: $ModuleName"
     }
 }
 
@@ -101,14 +78,12 @@ function Copy-DirectoryContents {
 function Assert-PackagedRuntimeArtifacts {
     param(
         [Parameter(Mandatory = $true)][string]$BundleRoot,
-        [Parameter(Mandatory = $true)][bool]$BuiltGo,
-        [Parameter(Mandatory = $true)][bool]$BuiltPython
+        [Parameter(Mandatory = $true)][bool]$BuiltGo
     )
 
     $requiredPaths = @(
         @{ Path = Join-Path $BundleRoot 'ACGWarehouse.exe'; Label = 'Flutter executable' },
-        @{ Path = Join-Path $BundleRoot 'runtime/bin/acgwarehouse-server.exe'; Label = 'Go runtime executable' },
-        @{ Path = Join-Path $BundleRoot 'runtime/python-sidecar/acgwarehouse-sidecar.exe'; Label = 'Python sidecar executable' }
+        @{ Path = Join-Path $BundleRoot 'runtime/bin/acgwarehouse-server.exe'; Label = 'Go runtime executable' }
     )
 
     $missing = @()
@@ -122,8 +97,8 @@ function Assert-PackagedRuntimeArtifacts {
         return
     }
 
-    $selectionHint = if (-not $BuiltGo -or -not $BuiltPython) {
-        'package.ps1 resets dist/windows-portable before packaging, so selective runs like -Flutter alone cannot produce a launchable portable bundle. Rerun with the default command or include -Go -Python -Flutter together.'
+    $selectionHint = if (-not $BuiltGo) {
+        'package.ps1 resets dist/windows-portable before packaging, so selective runs like -Flutter alone cannot produce a launchable portable bundle. Rerun with the default command or include -Go -Flutter together.'
     } else {
         'Rebuild the portable package and verify the runtime artifacts exist before launch.'
     }
@@ -238,14 +213,12 @@ function Add-ZipEntry {
 }
 
 # Default behavior: compile all if no specific compile option specified
-if (-not ($All -or $Go -or $Python -or $Flutter)) {
+if (-not ($All -or $Go -or $Flutter)) {
     $All = $true
 }
 
 Assert-Command -Name 'go'
-Assert-Command -Name 'python'
 Assert-Command -Name 'flutter'
-Ensure-PythonModule -ModuleName 'PyInstaller'
 
 Reset-Directory -Path $PortableRoot
 Reset-Directory -Path $ZipOutputDir
@@ -380,33 +353,6 @@ if ($All -or $Go) {
 Assert-SourceArtifactExists -Path $GoBuildExecutable -Label 'Go build artifact' -RecoveryHint 'Run the default packaging command once, or include -Go in this packaging run.'
 Copy-Item -LiteralPath $GoBuildExecutable -Destination (Join-Path $PortableRoot 'runtime/bin/acgwarehouse-server.exe') -Force
 
-if ($All -or $Python) {
-    Write-Host "Installing Python sidecar requirements..."
-    Invoke-External -FilePath 'python' -Arguments @(
-        '-m',
-        'pip',
-        'install',
-        '-r',
-        'services/python-sidecar/requirements.txt'
-    ) -WorkingDirectory $RepoRoot
-
-    Write-Host "Building Python sidecar with PyInstaller..."
-    Reset-Directory -Path $PyInstallerWorkDir
-    Reset-Directory -Path $PyInstallerDistRoot
-    Invoke-External -FilePath 'python' -Arguments @(
-        '-m',
-        'PyInstaller',
-        '--noconfirm',
-        '--clean',
-        '--distpath', $PyInstallerDistRoot,
-        '--workpath', $PyInstallerWorkDir,
-        $SidecarSpecPath
-    ) -WorkingDirectory $RepoRoot
-}
-
-Assert-SourceArtifactExists -Path $PythonBuildExecutable -Label 'Python sidecar build artifact' -RecoveryHint 'Run the default packaging command once, or include -Python in this packaging run.'
-Copy-DirectoryContents -Source $PythonBuildDirectory -Destination (Join-Path $PortableRoot 'runtime/python-sidecar')
-
 if ($All -or $Flutter) {
     Write-Host "Building Flutter Windows app..."
     Reset-Directory -Path $FlutterReleaseDir
@@ -424,7 +370,7 @@ Move-Item -LiteralPath (Join-Path $PortableRoot 'gallery.exe') -Destination $Por
 
 Copy-DirectoryContents -Source $ConfigSourceDir -Destination (Join-Path $PortableRoot 'config')
 Write-PackagedConfig -Path $PackagedConfigPath
-Assert-PackagedRuntimeArtifacts -BundleRoot $PortableRoot -BuiltGo ([bool]($All -or $Go)) -BuiltPython ([bool]($All -or $Python))
+Assert-PackagedRuntimeArtifacts -BundleRoot $PortableRoot -BuiltGo ([bool]($All -or $Go))
 
 New-ZipFromDirectory -SourceDirectory $PortableRoot -DestinationZip $ZipPath
 

@@ -19,9 +19,6 @@ func TestResolveLogSourcePathsPrefersExplicitLogsDir(t *testing.T) {
 	if paths.GoLogPath != filepath.Join(wantDir, "go.log") {
 		t.Fatalf("GoLogPath = %q, want %q", paths.GoLogPath, filepath.Join(wantDir, "go.log"))
 	}
-	if paths.SidecarLogPath != filepath.Join(wantDir, "python-sidecar.log") {
-		t.Fatalf("SidecarLogPath = %q, want %q", paths.SidecarLogPath, filepath.Join(wantDir, "python-sidecar.log"))
-	}
 }
 
 func TestResolveLogSourcePathsFallsBackToPortableRuntimeRoot(t *testing.T) {
@@ -34,9 +31,6 @@ func TestResolveLogSourcePathsFallsBackToPortableRuntimeRoot(t *testing.T) {
 	if paths.GoLogPath != filepath.Join(wantDir, "go.log") {
 		t.Fatalf("GoLogPath = %q, want %q", paths.GoLogPath, filepath.Join(wantDir, "go.log"))
 	}
-	if paths.SidecarLogPath != filepath.Join(wantDir, "python-sidecar.log") {
-		t.Fatalf("SidecarLogPath = %q, want %q", paths.SidecarLogPath, filepath.Join(wantDir, "python-sidecar.log"))
-	}
 }
 
 func TestResolveLogSourcePathsFallsBackToDevRuntimeLogs(t *testing.T) {
@@ -48,9 +42,6 @@ func TestResolveLogSourcePathsFallsBackToDevRuntimeLogs(t *testing.T) {
 
 	if paths.GoLogPath != filepath.Join(wantDir, "go.log") {
 		t.Fatalf("GoLogPath = %q, want %q", paths.GoLogPath, filepath.Join(wantDir, "go.log"))
-	}
-	if paths.SidecarLogPath != filepath.Join(wantDir, "python-sidecar.log") {
-		t.Fatalf("SidecarLogPath = %q, want %q", paths.SidecarLogPath, filepath.Join(wantDir, "python-sidecar.log"))
 	}
 }
 

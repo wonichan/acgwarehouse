@@ -41,31 +41,6 @@ func rewriteViewerItemsForRequest(r *http.Request, items []any) []any {
 	return rewritten
 }
 
-func rewriteDuplicateGroupForRequest(r *http.Request, group domain.DuplicateGroupWithImages) domain.DuplicateGroupWithImages {
-	if len(group.Images) == 0 {
-		return group
-	}
-	rewrittenImages := make([]domain.DuplicateImage, len(group.Images))
-	for i, image := range group.Images {
-		image.ThumbnailSmallUrl = rewriteThumbnailURLForRequest(r, image.ThumbnailSmallUrl)
-		image.ThumbnailLargeUrl = rewriteThumbnailURLForRequest(r, image.ThumbnailLargeUrl)
-		rewrittenImages[i] = image
-	}
-	group.Images = rewrittenImages
-	return group
-}
-
-func rewriteDuplicateGroupsForRequest(r *http.Request, groups []domain.DuplicateGroupWithImages) []domain.DuplicateGroupWithImages {
-	if len(groups) == 0 {
-		return groups
-	}
-	rewritten := make([]domain.DuplicateGroupWithImages, len(groups))
-	for i, group := range groups {
-		rewritten[i] = rewriteDuplicateGroupForRequest(r, group)
-	}
-	return rewritten
-}
-
 func rewriteThumbnailURLForRequest(r *http.Request, rawURL string) string {
 	if r == nil || r.Host == "" || rawURL == "" {
 		return rawURL

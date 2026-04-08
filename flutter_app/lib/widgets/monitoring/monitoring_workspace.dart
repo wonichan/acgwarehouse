@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 
 import '../../providers/monitoring_provider.dart';
 import 'batch_list_section.dart';
-import 'sidecar_diagnostic_section.dart';
 
 class OperationsMonitoringWorkspace extends StatefulWidget {
   const OperationsMonitoringWorkspace({super.key});
@@ -64,10 +63,6 @@ class _OperationsMonitoringWorkspaceState
                           const SizedBox(height: 24),
                         ],
                         const BatchListSection(),
-                        const SizedBox(height: 24),
-                        const Divider(direction: Axis.horizontal),
-                        const SizedBox(height: 24),
-                        const SidecarDiagnosticSection(),
                       ],
                     ),
                   ),

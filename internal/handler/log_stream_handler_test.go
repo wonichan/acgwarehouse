@@ -87,7 +87,7 @@ func TestLogStreamHandler_AcceptsValidSource(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	svc := service.NewLogStreamService(goLogPath, filepath.Join(tempDir, "sidecar.log"))
+	svc := service.NewLogStreamService(goLogPath)
 	svc.Start(context.Background())
 	defer svc.Stop()
 

@@ -32,7 +32,7 @@ storage:
     - "/library"
 
 ai:
-  # AI provider: "doubao" (ByteDance), "qwen" (Alibaba), or "openai"
+  # AI provider: "doubao" (ByteDance), "qwen" (Alibaba), or "zhipu" (智谱)
   provider: "doubao"
   # Your AI API key - REPLACE WITH YOUR ACTUAL KEY
   api_key: "YOUR_API_KEY_HERE"

@@ -5,14 +5,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/app/fluent_app_shell.dart';
 import 'package:gallery/providers/config_provider.dart';
-import 'package:gallery/providers/duplicate_provider.dart';
 import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/providers/navigation_provider.dart';
 import 'package:gallery/providers/search_provider.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/providers/theme_provider.dart';
 import 'package:gallery/services/api_service.dart';
-import 'package:gallery/services/duplicate_service.dart';
 import 'package:gallery/services/import_service.dart';
 import 'package:gallery/services/search_service.dart';
 import 'package:gallery/services/tag_service.dart';
@@ -63,17 +61,6 @@ void main() {
           );
         }
 
-        if (path.endsWith('/api/v1/duplicates')) {
-          return http.Response(jsonEncode({'groups': []}), 200);
-        }
-
-        if (path.contains('/api/v1/duplicates/detect')) {
-          return http.Response(
-            jsonEncode({'message': 'ok', 'groups_found': 0}),
-            200,
-          );
-        }
-
         if (path.endsWith('/api/v1/tags/stats')) {
           return http.Response(jsonEncode({'stats': []}), 200);
         }
@@ -95,11 +82,6 @@ void main() {
             create: (_) => TagProvider(TagService(client: mockClient)),
           ),
           ChangeNotifierProvider<SearchProvider>.value(value: searchProvider),
-          ChangeNotifierProvider<DuplicateProvider>(
-            create: (_) => DuplicateProvider(
-              service: DuplicateService(client: mockClient),
-            ),
-          ),
           ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
           ChangeNotifierProvider<ConfigProvider>(
             create: (_) => ConfigProvider(),
@@ -129,6 +111,7 @@ void main() {
       expect(find.text('搜索图片和标签'), findsOneWidget);
       expect(find.text('导入图库'), findsOneWidget);
       expect(find.text('打开设置'), findsOneWidget);
+      expect(find.byIcon(fluent.FluentIcons.global_nav_button), findsOneWidget);
     });
 
     testWidgets('submitting shell search navigates to search view', (

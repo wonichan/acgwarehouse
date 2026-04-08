@@ -10,10 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
-	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
-	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 )
 
 // BackfillServiceInterface defines the interface for backfill operations.
@@ -42,13 +40,6 @@ type AdminServiceInterface interface {
 	IsBackgroundRunning() bool
 }
 
-type sidecarRuntimeLifecycle interface {
-	Start(ctx context.Context) error
-	Stop(ctx context.Context) error
-	State() sidecar.State
-	Status() sidecar.Status
-}
-
 // GetTaskPlatformOverview returns the Phase 13 platform overview contract.
 // GET /admin/api/task-platform/overview
 func (h *AdminHandler) GetTaskPlatformOverview(c *gin.Context) {
@@ -70,37 +61,26 @@ func (h *AdminHandler) GetTaskPlatformOverview(c *gin.Context) {
 
 // AdminHandler handles admin dashboard HTTP endpoints.
 type AdminHandler struct {
-	cfg            *config.Config
-	adminSvc       AdminServiceInterface
-	backfillSvc    BackfillServiceInterface
-	sidecarRuntime sidecarRuntimeLifecycle
+	cfg         *config.Config
+	adminSvc    AdminServiceInterface
+	backfillSvc BackfillServiceInterface
 }
 
 // NewAdminHandler creates a new AdminHandler.
 // Parameters: cfg - config for Basic Auth, adminSvc - the admin service interface
-func NewAdminHandler(cfg *config.Config, adminSvc AdminServiceInterface, sidecarRuntimeOpt ...sidecarRuntimeLifecycle) *AdminHandler {
-	var sidecarRuntime sidecarRuntimeLifecycle
-	if len(sidecarRuntimeOpt) > 0 {
-		sidecarRuntime = sidecarRuntimeOpt[0]
-	}
+func NewAdminHandler(cfg *config.Config, adminSvc AdminServiceInterface) *AdminHandler {
 	return &AdminHandler{
-		cfg:            cfg,
-		adminSvc:       adminSvc,
-		sidecarRuntime: sidecarRuntime,
+		cfg:      cfg,
+		adminSvc: adminSvc,
 	}
 }
 
 // NewAdminHandlerWithBackfill creates a new AdminHandler with backfill service.
-func NewAdminHandlerWithBackfill(cfg *config.Config, adminSvc AdminServiceInterface, backfillSvc BackfillServiceInterface, sidecarRuntimeOpt ...sidecarRuntimeLifecycle) *AdminHandler {
-	var sidecarRuntime sidecarRuntimeLifecycle
-	if len(sidecarRuntimeOpt) > 0 {
-		sidecarRuntime = sidecarRuntimeOpt[0]
-	}
+func NewAdminHandlerWithBackfill(cfg *config.Config, adminSvc AdminServiceInterface, backfillSvc BackfillServiceInterface) *AdminHandler {
 	return &AdminHandler{
-		cfg:            cfg,
-		adminSvc:       adminSvc,
-		backfillSvc:    backfillSvc,
-		sidecarRuntime: sidecarRuntime,
+		cfg:         cfg,
+		adminSvc:    adminSvc,
+		backfillSvc: backfillSvc,
 	}
 }
 
@@ -457,65 +437,6 @@ func (h *AdminHandler) ResumeBackgroundTasks(c *gin.Context) {
 		"success": true,
 		"message": "jobs resumed",
 	})
-}
-
-// HandleSidecarRestart restarts the configured sidecar runtime and reports impact.
-// POST /admin/api/actions/sidecar/restart
-func (h *AdminHandler) HandleSidecarRestart(c *gin.Context) {
-	if h.sidecarRuntime == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "sidecar runtime not configured"})
-		return
-	}
-	if h.adminSvc == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "admin service not configured"})
-		return
-	}
-
-	interruptedTaskCount, err := h.countRunningTasks(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to count running tasks: " + err.Error()})
-		return
-	}
-	if err := h.sidecarRuntime.Stop(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to stop sidecar runtime: " + err.Error()})
-		return
-	}
-	if err := h.sidecarRuntime.Start(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "failed to start sidecar runtime: " + err.Error(),
-			"data":    gin.H{"interrupted_task_count": interruptedTaskCount},
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"interrupted_task_count": interruptedTaskCount,
-		},
-	})
-}
-
-func (h *AdminHandler) countRunningTasks(ctx context.Context) (int, error) {
-	const pageSize = 200
-	total := 0
-	filter := service.TaskReadFilter{
-		Status: domain.PlatformTaskStatusRunning,
-		Limit:  pageSize,
-	}
-
-	for {
-		tasks, err := h.adminSvc.GetTasks(ctx, filter)
-		if err != nil {
-			return 0, err
-		}
-		total += len(tasks)
-		if len(tasks) < pageSize {
-			return total, nil
-		}
-		filter.Offset += pageSize
-	}
 }
 
 // ClearTaskQueue clears pending/queued platform tasks.

@@ -48,7 +48,6 @@ function Verify-BundleLayout {
         'ACGWarehouse.exe',
         'data',
         'runtime/bin',
-        'runtime/python-sidecar',
         'config',
         'storage',
         'library'
@@ -63,24 +62,6 @@ function New-TemporaryDirectory {
     $path = Join-Path ([System.IO.Path]::GetTempPath()) ("acgwarehouse-package-smoke-" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $path -Force | Out-Null
     return $path
-}
-
-function Get-ScrubbedPath {
-    $segments = @()
-    foreach ($segment in ($env:PATH -split ';')) {
-        $trimmed = $segment.Trim()
-        if ([string]::IsNullOrWhiteSpace($trimmed)) {
-            continue
-        }
-
-        if ($trimmed -match '(?i)python' -or $trimmed -match '(?i)pyenv') {
-            continue
-        }
-
-        $segments += $trimmed
-    }
-
-    return ($segments -join ';')
 }
 
 function Get-FreeTcpPort {
@@ -110,9 +91,6 @@ function Start-PackagedApplication {
         $startInfo.EnvironmentVariables[$entry.Name] = $entry.Value
     }
 
-    $startInfo.EnvironmentVariables['PATH'] = Get-ScrubbedPath
-    $startInfo.EnvironmentVariables.Remove('PYTHONHOME')
-    $startInfo.EnvironmentVariables.Remove('PYTHONPATH')
     foreach ($key in $EnvironmentOverrides.Keys) {
         $startInfo.EnvironmentVariables[[string]$key] = [string]$EnvironmentOverrides[$key]
     }
@@ -184,100 +162,6 @@ function Wait-ForHttpOk {
     throw (New-SmokeFailure "Health probe failed for $Url. Last error: $lastError")
 }
 
-function Get-FileStamp {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    if (-not (Test-Path -LiteralPath $Path)) {
-        return @{ Exists = $false; Length = -1; LastWriteTimeUtc = [datetime]::MinValue }
-    }
-
-    $item = Get-Item -LiteralPath $Path
-    return @{ Exists = $true; Length = $item.Length; LastWriteTimeUtc = $item.LastWriteTimeUtc }
-}
-
-function Wait-ForFileChange {
-    param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][hashtable]$Before,
-        [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
-        [Parameter(Mandatory = $true)][string]$FailureMessage
-    )
-
-    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-    while ((Get-Date) -lt $deadline) {
-        $after = Get-FileStamp -Path $Path
-        if (-not $Before.Exists -and $after.Exists) {
-            return
-        }
-
-        if ($after.Exists -and ($after.Length -ne $Before.Length -or $after.LastWriteTimeUtc -ne $Before.LastWriteTimeUtc)) {
-            return
-        }
-
-        Start-Sleep -Milliseconds 500
-    }
-
-    throw (New-SmokeFailure $FailureMessage)
-}
-
-function Seed-DuplicateFixture {
-    param(
-        [Parameter(Mandatory = $true)][string]$BundleRoot
-    )
-
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $python) {
-        throw (New-SmokeFailure 'python is required on the build machine to seed duplicate-smoke fixture data.')
-    }
-
-    $libraryDir = Join-Path $BundleRoot 'library'
-    $dataDir = Join-Path $BundleRoot 'data'
-    $dbPath = Join-Path $dataDir 'acgwarehouse.db'
-    New-Item -ItemType Directory -Path $libraryDir -Force | Out-Null
-    New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
-
-    $pngBytes = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF9sAAAAASUVORK5CYII=')
-    $firstImage = Join-Path $libraryDir 'smoke-duplicate-a.png'
-    $secondImage = Join-Path $libraryDir 'smoke-duplicate-b.png'
-    [System.IO.File]::WriteAllBytes($firstImage, $pngBytes)
-    [System.IO.File]::WriteAllBytes($secondImage, $pngBytes)
-
-    $seedScript = @"
-import os
-import sqlite3
-
-db_path = r'''$dbPath'''
-library_dir = r'''$libraryDir'''
-images = [
-    (r'''$firstImage''', 'smoke-duplicate-a.png'),
-    (r'''$secondImage''', 'smoke-duplicate-b.png'),
-]
-
-conn = sqlite3.connect(db_path)
-try:
-    for path, _ in images:
-        conn.execute('DELETE FROM images WHERE path = ?', (path,))
-    for path, filename in images:
-        stat = os.stat(path)
-        conn.execute(
-            '''
-            INSERT INTO images (
-                path, filename, source_root, file_size, width, height, format, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ''',
-            (path, filename, library_dir, stat.st_size, 1, 1, 'png'),
-        )
-    conn.commit()
-finally:
-    conn.close()
-"@
-
-    & python -c $seedScript
-    if ($LASTEXITCODE -ne 0) {
-        throw (New-SmokeFailure 'Failed to seed duplicate-smoke fixture rows into packaged SQLite database.')
-    }
-}
-
 function Stop-ProcessTree {
     param([Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process)
 
@@ -318,7 +202,6 @@ function Invoke-PackagedSmoke {
         $manifestPath = Join-Path $extractRoot 'runtime/runtime-manifest.json'
         $logsDir = Join-Path $extractRoot 'runtime/logs'
         $diagnosticsDir = Join-Path $extractRoot 'runtime/diagnostics'
-        $pythonSidecarLogPath = Join-Path $logsDir 'python-sidecar.log'
         $serverPort = Get-FreeTcpPort
 
         $process = Start-PackagedApplication -ExecutablePath $appPath -WorkingDirectory $extractRoot -EnvironmentOverrides @{
@@ -333,17 +216,6 @@ function Invoke-PackagedSmoke {
 
         Assert-PathExists -Path $logsDir -Message (New-SmokeFailure 'Packaged runtime/logs directory was not created.')
         Assert-PathExists -Path $diagnosticsDir -Message (New-SmokeFailure 'Packaged runtime/diagnostics directory was not created.')
-
-        Seed-DuplicateFixture -BundleRoot $extractRoot
-
-        $before = Get-FileStamp -Path $pythonSidecarLogPath
-
-        $duplicateResponse = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/v1/duplicates/detect" -ContentType 'application/json' -Body '{"threshold":40}' -TimeoutSec 30
-        if ($null -eq $duplicateResponse) {
-            throw (New-SmokeFailure 'POST /api/v1/duplicates/detect returned no response from the packaged app.')
-        }
-
-        Wait-ForFileChange -Path $pythonSidecarLogPath -Before $before -TimeoutSeconds 20 -FailureMessage 'runtime/logs/python-sidecar.log did not change after duplicate detection.'
     }
     finally {
         if ($null -ne $process) {
@@ -385,11 +257,9 @@ function Verify-Docs {
         'runtime compatibility',
         'user-data preservation',
         'go',
-        'python',
         'startup_chain',
         'runtime/diagnostics/startup-error.json',
         'runtime/logs/go.log',
-        'runtime/logs/python-sidecar.log',
         'runtime/logs/flutter-bootstrap.log'
     )
 

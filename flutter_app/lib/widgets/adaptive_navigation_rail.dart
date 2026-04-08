@@ -7,7 +7,7 @@ import '../providers/navigation_provider.dart';
 /// Features:
 /// - 72px icon-only mode (standard Material Rail width)
 /// - Shows label only for selected item
-/// - 5 navigation items: Gallery, Duplicate detection, Search, Tag Management, Settings
+/// - 4 navigation items: Gallery, Search, Tag Management, Settings
 /// - Smooth selection indicator animation
 ///
 /// Usage:
@@ -40,11 +40,6 @@ class AdaptiveNavigationRail extends StatelessWidget {
               icon: Icon(Icons.photo_library_outlined),
               selectedIcon: Icon(Icons.photo_library),
               label: Text('图库'),
-            ),
-            NavigationRailDestination(
-              icon: Icon(Icons.content_copy_outlined),
-              selectedIcon: Icon(Icons.content_copy),
-              label: Text('重复检测'),
             ),
             NavigationRailDestination(
               icon: Icon(Icons.search_outlined),

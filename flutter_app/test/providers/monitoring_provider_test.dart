@@ -89,7 +89,6 @@ class FakeWebSocketChannel implements WebSocketChannel {
 void main() {
   late MockMonitoringService mockService;
   late MonitoringOverview readyOverview;
-  late MonitoringOverview stoppedOverview;
   late List<BatchRow> batches;
   late List<TaskDetail> tasks;
 
@@ -103,31 +102,8 @@ void main() {
         'queue_size': 2,
         'worker_count': 4,
       },
-      'sidecar': {
-        'state': 'ready',
-        'last_probe_at': '2026-04-05T10:00:00Z',
-        'last_probe_result': 'ok',
-        'last_error_summary': '',
-      },
       'batches': {'running': 1},
       'tasks': {'queued': 3},
-    });
-    stoppedOverview = MonitoringOverview.fromJson({
-      'health': {'status': 'degraded', 'message': 'sidecar stopped'},
-      'queue': {
-        'is_running': true,
-        'is_paused': false,
-        'queue_size': 1,
-        'worker_count': 2,
-      },
-      'sidecar': {
-        'state': 'stopped',
-        'last_probe_at': '2026-04-05T10:05:00Z',
-        'last_probe_result': 'error',
-        'last_error_summary': 'sidecar unavailable',
-      },
-      'batches': {'pending': 2},
-      'tasks': {'queued': 5},
     });
     batches = [
       BatchRow.fromJson({
@@ -151,7 +127,7 @@ void main() {
         'image_filename': '301.png',
         'task_type': 'tagging',
         'status': 'failed',
-        'error_summary': 'sidecar unavailable',
+        'error_summary': 'worker unavailable',
       }),
     ];
   });
@@ -182,7 +158,6 @@ void main() {
 
         expect(provider.isLoading, isFalse);
         expect(provider.serviceUnavailable, isFalse);
-        expect(provider.overview?.sidecar.state, 'ready');
         expect(provider.batches, hasLength(1));
         expect(provider.wsConnected, isTrue);
       },
@@ -222,12 +197,6 @@ void main() {
               'is_paused': false,
               'queue_size': 9,
               'worker_count': 5,
-            },
-            'sidecar': {
-              'state': 'ready',
-              'last_probe_at': '2026-04-05T11:00:00Z',
-              'last_probe_result': 'ok',
-              'last_error_summary': '',
             },
             'batches': {'running': 2},
             'tasks': {'queued': 6},
@@ -310,36 +279,6 @@ void main() {
     );
 
     test(
-      'restartSidecar keeps websocket connected and stores impact count',
-      () async {
-        final channel = FakeWebSocketChannel();
-        when(
-          () => mockService.fetchOverview(),
-        ).thenAnswer((_) async => readyOverview);
-        when(
-          () => mockService.fetchBatches(limit: any(named: 'limit')),
-        ).thenAnswer((_) async => batches);
-        when(
-          () => mockService.restartSidecar(),
-        ).thenAnswer((_) async => const RestartImpact(interruptedTaskCount: 3));
-
-        final provider = MonitoringProvider(
-          service: mockService,
-          wsUriFactory: () =>
-              Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
-          channelFactory: (_, {headers}) => channel,
-        );
-
-        await provider.connect();
-        await provider.restartSidecar();
-
-        expect(provider.restartImpact?.interruptedTaskCount, 3);
-        expect(provider.isRestarting, isFalse);
-        expect(provider.wsConnected, isTrue);
-      },
-    );
-
-    test(
       'selectBatch stores selection and loads tasks for drilldown',
       () async {
         final channel = FakeWebSocketChannel();
@@ -404,29 +343,6 @@ void main() {
         expect(provider.overview?.health.status, 'ok');
       },
     );
-
-    test('loads batches even when sidecar state is stopped', () async {
-      final channel = FakeWebSocketChannel();
-      when(
-        () => mockService.fetchOverview(),
-      ).thenAnswer((_) async => stoppedOverview);
-      when(
-        () => mockService.fetchBatches(limit: any(named: 'limit')),
-      ).thenAnswer((_) async => batches);
-
-      final provider = MonitoringProvider(
-        service: mockService,
-        wsUriFactory: () =>
-            Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
-        channelFactory: (_, {headers}) => channel,
-      );
-
-      await provider.connect();
-
-      expect(provider.overview?.sidecar.state, 'stopped');
-      expect(provider.batches, hasLength(1));
-      expect(provider.serviceUnavailable, isFalse);
-    });
 
     test(
       'connect passes admin auth headers into websocket bootstrap',

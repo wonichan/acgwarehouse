@@ -112,7 +112,7 @@ void main() {
       imageFilename: 'cover.png',
       taskType: 'tagging',
       status: 'failed',
-      errorSummary: 'sidecar unavailable',
+      errorSummary: 'worker unavailable',
     ),
   ];
 

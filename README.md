@@ -4,7 +4,7 @@
 
 ## Overview
 
-ACGWarehouse is a Go + Flutter application for managing and searching anime-style image collections. It features AI-powered auto-tagging, duplicate detection, and a modern Flutter web interface.
+ACGWarehouse is a Go + Flutter application for managing and searching anime-style image collections. It features AI-powered auto-tagging and a modern Flutter web interface.
 
 ## Tech Stack
 
@@ -57,7 +57,6 @@ curl http://localhost:8080/health
 ## Key Features
 
 - **AI Auto-Tagging**: Automatic tag generation using AI models
-- **Duplicate Detection**: SHA256 + pHash for exact and similar duplicates
 - **Collections**: Organize images into collections
 - **Search**: Multi-tag filtering with AND semantics
 - **Pagination**: Infinite scroll for large galleries

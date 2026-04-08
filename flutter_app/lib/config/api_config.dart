@@ -83,15 +83,6 @@ class ApiConfig {
   static String get batchAITags => '$baseUrl/images/batch-ai-tags';
   static String get defaultAIPrompt => '$baseUrl/ai-tags/default-prompt';
 
-  // Duplicate detection endpoints
-  static String get duplicates => '$baseUrl/duplicates';
-  static String duplicateDetail(int id) => '$baseUrl/duplicates/$id';
-  static String get detectDuplicates => '$baseUrl/duplicates/detect';
-  static String duplicateTaskStatus(String taskId) =>
-      '$baseUrl/duplicates/tasks/$taskId';
-  static String duplicateTaskEvents(String taskId) =>
-      '$baseUrl/duplicates/tasks/$taskId/events';
-
   // Search endpoints
   static String get search => '$baseUrl/search';
   static String get searchByFilename => '$baseUrl/search/filename';

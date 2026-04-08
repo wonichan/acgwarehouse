@@ -7,7 +7,6 @@ import '../widgets/breakpoint_observer.dart';
 import '../widgets/adaptive_navigation_bar.dart';
 import '../widgets/adaptive_navigation_rail.dart';
 import '../screens/gallery_screen.dart';
-import '../screens/duplicate_screen.dart';
 import '../screens/search_screen.dart';
 import '../screens/tag_management_screen.dart';
 import '../screens/settings_screen.dart';
@@ -17,7 +16,7 @@ import '../screens/settings_screen.dart';
 /// Features:
 /// - NavigationBar on phones (< 600px)
 /// - NavigationRail on tablets (>= 600px)
-/// - 5-item navigation: Gallery, Duplicate Detection, Search, Tag Management, Settings
+/// - 4-item navigation: Gallery, Search, Tag Management, Settings
 /// - Responsive layout with smooth transitions
 /// - Fully driven by Material 3 theme colors
 ///
@@ -37,7 +36,6 @@ class MaterialAppShell extends StatelessWidget {
           builder: (context, navProvider, child) {
             const screens = <Widget>[
               GalleryScreen(),
-              DuplicateScreen(),
               SearchScreen(),
               TagManagementScreen(),
               SettingsScreen(),

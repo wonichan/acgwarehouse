@@ -4,14 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/ai"
@@ -19,59 +13,10 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
-	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
-const (
-	sidecarExecutableEnv  = "ACG_SIDECAR_EXECUTABLE"
-	sidecarPortEnv        = "ACG_SIDECAR_PORT"
-	diagnosticsDirEnv     = "ACG_DIAGNOSTICS_DIR"
-	logsDirEnv            = "ACG_LOGS_DIR"
-	defaultSidecarHost    = "127.0.0.1"
-	defaultSidecarPort    = "8000"
-	sidecarShutdownPath   = "/shutdown"
-	sidecarStartupTimeout = 30 * time.Second
-)
-
-var (
-	newSidecarRuntime = func(cfg sidecar.RuntimeConfig) sidecarRuntimeLifecycle {
-		return sidecar.NewRuntime(cfg)
-	}
-	sidecarHTTPDo = func(req *http.Request) (*http.Response, error) {
-		return http.DefaultClient.Do(req)
-	}
-	startSidecarProcess = func(ctx context.Context, executable string, args []string, logPath string) (sidecar.Process, error) {
-		cmd := exec.CommandContext(ctx, executable, args...)
-		if logPath != "" {
-			if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
-				return nil, fmt.Errorf("create sidecar log directory: %w", err)
-			}
-			file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-			if err != nil {
-				return nil, fmt.Errorf("open sidecar log file: %w", err)
-			}
-			cmd.Stdout = file
-			cmd.Stderr = file
-		}
-		if err := cmd.Start(); err != nil {
-			if file, ok := cmd.Stdout.(*os.File); ok {
-				_ = file.Close()
-			}
-			return nil, err
-		}
-		return &sidecarCmdProcess{cmd: cmd}, nil
-	}
-)
-
-type sidecarBootstrapSettings struct {
-	executable     string
-	args           []string
-	baseURL        string
-	diagnosticPath string
-	logPaths       []string
-	sidecarLogPath string
-}
+const logsDirEnv = "ACG_LOGS_DIR"
 
 type autoSchedulerLifecycle interface {
 	Start(ctx context.Context)
@@ -86,7 +31,6 @@ func (a *App) initRepositories() {
 	a.aliasRepo = repository.NewTagAliasRepository(a.db)
 	a.obsRepo = repository.NewTagObservationRepository(a.db)
 	a.imageTagRepo = repository.NewImageTagRepository(a.db)
-	a.duplicateRepo = repository.NewDuplicateRepository(a.db)
 	a.searchRepo = repository.NewSearchRepository(a.db)
 	a.collectionRepo = repository.NewCollectionRepository(a.db)
 }
@@ -94,164 +38,8 @@ func (a *App) initRepositories() {
 // initServices initializes all services.
 func (a *App) initServices() {
 	a.governanceSvc = service.NewTagGovernanceService(a.tagRepo, a.aliasRepo, a.obsRepo, a.imageTagRepo)
-	a.sidecarClient = sidecar.NewSidecarClient(a.sidecarBaseURL)
-	a.duplicateSvc = service.NewDuplicateService(a.imageRepo, a.duplicateRepo, a.sidecarClient, unwrapRuntime(a.sidecarRuntime))
 	a.searchSvc = service.NewSearchService(a.imageRepo, a.tagRepo, a.searchRepo)
 	a.collectionSvc = service.NewCollectionService(a.collectionRepo)
-}
-
-func (a *App) initSidecarRuntime() {
-	if a.sidecarRuntime != nil {
-		return
-	}
-	settings, err := resolveSidecarBootstrapSettings()
-	if err != nil {
-		log.Printf("sidecar bootstrap configuration invalid: %v", err)
-		settings = fallbackSidecarBootstrapSettings()
-	}
-
-	a.sidecarBaseURL = settings.baseURL
-	a.sidecarRuntime = newSidecarRuntime(sidecar.RuntimeConfig{
-		StartupTimeout: sidecarStartupTimeout,
-		ProbeInterval:  100 * time.Millisecond,
-		CommandFactory: func(ctx context.Context) (sidecar.Process, error) {
-			proc, err := startSidecarProcess(ctx, settings.executable, settings.args, settings.sidecarLogPath)
-			if err != nil {
-				if settings.diagnosticPath != "" {
-					if writeErr := WriteStartupDiagnostic(settings.diagnosticPath, "python", err.Error(), settings.logPaths); writeErr != nil {
-						log.Printf("write startup diagnostic failed: %v", writeErr)
-					}
-				}
-				return nil, err
-			}
-			return proc, nil
-		},
-		Probe: func(ctx context.Context) error {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.sidecarBaseURL+"/health", nil)
-			if err != nil {
-				return err
-			}
-			resp, err := sidecarHTTPDo(req)
-			if err != nil {
-				return err
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("sidecar probe status: %d", resp.StatusCode)
-			}
-			return nil
-		},
-		ShutdownProbe: func(ctx context.Context) error {
-			return requestSidecarShutdown(ctx, a.sidecarBaseURL)
-		},
-	})
-}
-
-func requestSidecarShutdown(parent context.Context, baseURL string) error {
-	shutdownCtx, cancel := context.WithTimeout(parent, 2*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(shutdownCtx, http.MethodPost, baseURL+sidecarShutdownPath, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := sidecarHTTPDo(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("sidecar shutdown status: %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-func fallbackSidecarBootstrapSettings() sidecarBootstrapSettings {
-	return sidecarBootstrapSettings{
-		executable: "python",
-		args:       []string{"services/python-sidecar/main.py", "--host", defaultSidecarHost, "--port", defaultSidecarPort},
-		baseURL:    fmt.Sprintf("http://%s:%s", defaultSidecarHost, defaultSidecarPort),
-	}
-}
-
-func resolveSidecarBootstrapSettings() (sidecarBootstrapSettings, error) {
-	settings := fallbackSidecarBootstrapSettings()
-	port := strings.TrimSpace(os.Getenv(sidecarPortEnv))
-	if port == "" {
-		port = defaultSidecarPort
-	}
-	settings.baseURL = fmt.Sprintf("http://%s:%s", defaultSidecarHost, port)
-
-	paths := ResolveLogSourcePaths()
-	runtimeRoot := strings.TrimSpace(os.Getenv(portableRuntimeRootEnv))
-	diagnosticsDir := strings.TrimSpace(os.Getenv(diagnosticsDirEnv))
-	if runtimeRoot != "" {
-		layout := resolvePortableRuntimeLayoutRoot(runtimeRoot)
-		if diagnosticsDir == "" {
-			diagnosticsDir = layout.DiagnosticsDir
-		}
-	}
-	if diagnosticsDir != "" {
-		settings.diagnosticPath = filepath.Join(diagnosticsDir, startupDiagnosticFileName)
-	}
-	if paths.GoLogPath != "" || paths.SidecarLogPath != "" {
-		settings.sidecarLogPath = paths.SidecarLogPath
-		settings.logPaths = []string{paths.GoLogPath, paths.SidecarLogPath}
-	}
-
-	configuredExecutable := strings.TrimSpace(os.Getenv(sidecarExecutableEnv))
-	if configuredExecutable == "" {
-		settings.args = []string{"services/python-sidecar/main.py", "--host", defaultSidecarHost, "--port", port}
-		return settings, nil
-	}
-
-	if !filepath.IsAbs(configuredExecutable) && runtimeRoot != "" {
-		configuredExecutable = filepath.Join(runtimeRoot, configuredExecutable)
-	}
-	configuredExecutable = filepath.Clean(configuredExecutable)
-	if _, err := os.Stat(configuredExecutable); err != nil {
-		return sidecarBootstrapSettings{}, fmt.Errorf("stat sidecar executable: %w", err)
-	}
-
-	settings.executable = configuredExecutable
-	settings.args = []string{"--host", defaultSidecarHost, "--port", port}
-	return settings, nil
-}
-
-type sidecarCmdProcess struct {
-	cmd *exec.Cmd
-}
-
-func (p *sidecarCmdProcess) Kill() error {
-	if p == nil || p.cmd == nil || p.cmd.Process == nil {
-		return nil
-	}
-	return p.cmd.Process.Kill()
-}
-
-func (p *sidecarCmdProcess) Wait() error {
-	if p == nil || p.cmd == nil {
-		return nil
-	}
-	if p.cmd.Stdout != nil {
-		defer closeSidecarLogWriter(p.cmd.Stdout)
-	}
-	if p.cmd.Stderr != nil && p.cmd.Stderr != p.cmd.Stdout {
-		defer closeSidecarLogWriter(p.cmd.Stderr)
-	}
-	return p.cmd.Wait()
-}
-
-func closeSidecarLogWriter(writer io.Writer) {
-	closer, ok := writer.(io.Closer)
-	if !ok {
-		return
-	}
-	_ = closer.Close()
 }
 
 func (a *App) initAutoScheduler(cfg *config.Config) {

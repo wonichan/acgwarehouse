@@ -11,7 +11,6 @@ ACGWarehouse.exe
 data/
 runtime/
 runtime/bin/acgwarehouse-server.exe
-runtime/python-sidecar/acgwarehouse-sidecar.exe
 runtime/logs/
 runtime/diagnostics/
 config/
@@ -35,7 +34,7 @@ Or use the matching Make target:
 make package-windows-portable
 ```
 
-The packaging pipeline builds the Go server, packages the Python sidecar through PyInstaller onedir mode via `services/python-sidecar/sidecar.spec`, runs `flutter build windows --release`, assembles the portable tree in `dist/windows-portable/`, and creates `dist/windows-zip/ACGWarehouse-windows-x64-portable.zip`.
+The packaging pipeline builds the Go server, runs `flutter build windows --release`, assembles the portable tree in `dist/windows-portable/`, and creates `dist/windows-zip/ACGWarehouse-windows-x64-portable.zip`.
 
 ## First Launch
 
@@ -44,7 +43,7 @@ The packaging pipeline builds the Go server, packages the Python sidecar through
 3. If you are migrating an existing installation, copy your populated `data/acgwarehouse.db` into the extracted `data/` directory before first use.
 4. Copy `deploy/config/config.example.yaml` values into `config/` as needed before first use.
 5. Start the app by running `ACGWarehouse.exe`.
-6. Keep `ACGWarehouse.exe`, `data/`, and `runtime/` in the same extracted root so the packaged startup chain can find the Go runtime, sidecar, logs, diagnostics, and SQLite database.
+6. Keep `ACGWarehouse.exe`, `data/`, and `runtime/` in the same extracted root so the packaged startup chain can find the Go runtime, logs, diagnostics, and SQLite database.
 
 ## In-Place Overwrite Upgrade
 
@@ -52,7 +51,7 @@ This package supports in-place overwrite upgrades.
 
 - Always close the running app before overwrite.
 - Preserve `config/`, `data/`, `storage/`, and `library/` during upgrades because those directories hold operator configuration and user data.
-- Replace the Flutter executable + data/ assets + runtime/ binaries as a unit so the packaged launcher, Go runtime, and Python sidecar stay on the same runtime compatibility level.
+- Replace the Flutter executable + data/ assets + runtime/ binaries as a unit so the packaged launcher and Go runtime stay on the same runtime compatibility level.
 - D-10 validation must explicitly consider stale runtime files, runtime compatibility, file locks, and user-data preservation.
 - If overwrite fails due to file locks, close the running app before overwrite and then delete only old runtime binaries after the app is closed.
 - Do not partially mix old and new runtime files. Partial replacement can leave stale runtime files behind and break startup.
@@ -67,25 +66,23 @@ Recommended overwrite flow:
 
 ## Troubleshooting
 
-If startup fails, classify the failure as `go`, `python`, or `startup_chain` and inspect the packaged diagnostics before changing files.
+If startup fails, classify the failure as `go` or `startup_chain` and inspect the packaged diagnostics before changing files.
 
 - `go`: the packaged Go runtime failed before the backend became ready.
-- `python`: the packaged Python sidecar failed to start or respond.
-- `startup_chain`: the Flutter → Go → Python startup chain did not reach a ready state.
+- `startup_chain`: the Flutter → Go startup chain did not reach a ready state.
 
-Use `runtime/diagnostics/startup-error.json` as the first source of truth. The failure details should point you to the packaged log files and help identify whether the fault is in `go`, `python`, or the wider `startup_chain`.
+Use `runtime/diagnostics/startup-error.json` as the first source of truth. The failure details should point you to the packaged log files and help identify whether the fault is in `go` or the wider `startup_chain`.
 
 Common checks:
 
-- Confirm `runtime/bin/acgwarehouse-server.exe` and `runtime/python-sidecar/acgwarehouse-sidecar.exe` both exist.
+- Confirm `runtime/bin/acgwarehouse-server.exe` exists.
 - Confirm `data/` stayed next to `ACGWarehouse.exe` after extraction or overwrite.
 - Remove only stale runtime files after the app is fully closed if an interrupted overwrite left mixed binaries behind.
-- Rebuild the package if runtime compatibility between the launcher, Go binary, and sidecar is uncertain.
+- Rebuild the package if runtime compatibility between the launcher and Go binary is uncertain.
 
 ## Log and Diagnostic Locations
 
 - Go log: `runtime/logs/go.log`
-- Python sidecar log: `runtime/logs/python-sidecar.log`
 - Flutter bootstrap log: `runtime/logs/flutter-bootstrap.log`
 - Startup diagnostic: `runtime/diagnostics/startup-error.json`
 

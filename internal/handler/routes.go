@@ -8,7 +8,6 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
-	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
 
@@ -19,13 +18,10 @@ type Dependencies struct {
 	AliasRepo        repository.TagAliasRepository
 	ObsRepo          repository.TagObservationRepository
 	ImageTagRepo     repository.ImageTagRepository
-	DuplicateRepo    repository.DuplicateRepository
 	SearchRepo       repository.SearchRepository
 	CollectionRepo   repository.CollectionRepository
 	GovernanceSvc    *service.TagGovernanceService
-	DuplicateSvc     *service.DuplicateService
 	SearchSvc        *service.SearchService
-	SidecarRuntime   *sidecar.Runtime
 	CollectionSvc    *service.CollectionService
 	BatchSvc         *service.BatchService
 	AdminSvc         AdminServiceInterface
@@ -69,9 +65,9 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 			batchRepo := repository.NewTaskBatchRepository(deps.DB)
 			taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, deps.JobRepo)
 			backfillSvc := service.NewAIBackfillService(deps.ImageRepo, taskPlatformSvc, deps.JobManager, configProvider)
-			adminHandler = NewAdminHandlerWithBackfill(deps.AdminCfg, deps.AdminSvc, backfillSvc, deps.SidecarRuntime)
+			adminHandler = NewAdminHandlerWithBackfill(deps.AdminCfg, deps.AdminSvc, backfillSvc)
 		} else {
-			adminHandler = NewAdminHandler(deps.AdminCfg, deps.AdminSvc, deps.SidecarRuntime)
+			adminHandler = NewAdminHandler(deps.AdminCfg, deps.AdminSvc)
 		}
 	}
 
@@ -94,7 +90,6 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 			admin.GET("/task-batches", adminHandler.GetTaskBatches)
 			admin.GET("/tasks", adminHandler.GetTasks)
 			admin.POST("/actions/scan", adminHandler.TriggerScan)
-			admin.POST("/actions/sidecar/restart", adminHandler.HandleSidecarRestart)
 			admin.POST("/actions/jobs/pause", adminHandler.PauseBackgroundTasks)
 			admin.POST("/actions/jobs/resume", adminHandler.ResumeBackgroundTasks)
 			admin.POST("/actions/jobs/clear-queue", adminHandler.ClearTaskQueue)
@@ -249,29 +244,6 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.POST("/images/batch-ai-tags", aiBatch)
 	api.POST("/images/batch-ai-tags/regenerate", aiBatchRegenerate)
 	api.GET("/ai-tags/default-prompt", aiDefaultPrompt)
-
-	// Duplicate detection routes
-	duplicateDetect := gin.HandlerFunc(placeholderHandler)
-	duplicateList := gin.HandlerFunc(placeholderHandler)
-	duplicateGet := gin.HandlerFunc(placeholderHandler)
-	duplicateDelete := gin.HandlerFunc(placeholderHandler)
-	duplicateTaskStatus := gin.HandlerFunc(placeholderHandler)
-	duplicateTaskEvents := gin.HandlerFunc(placeholderHandler)
-	if deps != nil && deps.DuplicateSvc != nil {
-		duplicateHandler := NewDuplicateHandler(deps.DuplicateSvc, deps.SidecarRuntime)
-		duplicateDetect = duplicateHandler.DetectDuplicates
-		duplicateList = duplicateHandler.ListDuplicates
-		duplicateGet = duplicateHandler.GetDuplicate
-		duplicateDelete = duplicateHandler.DeleteDuplicate
-		duplicateTaskStatus = duplicateHandler.GetDuplicateTaskStatus
-		duplicateTaskEvents = duplicateHandler.StreamDuplicateTaskEvents
-	}
-	api.POST("/duplicates/detect", duplicateDetect)
-	api.GET("/duplicates/tasks/:task_id", duplicateTaskStatus)
-	api.GET("/duplicates/tasks/:task_id/events", duplicateTaskEvents)
-	api.GET("/duplicates", duplicateList)
-	api.GET("/duplicates/:id", duplicateGet)
-	api.DELETE("/duplicates/:id", duplicateDelete)
 
 	// Search routes
 	searchHandler := gin.HandlerFunc(placeholderHandler)

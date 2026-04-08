@@ -10,18 +10,16 @@ void main() {
       return MaterialApp(
         home: ChangeNotifierProvider(
           create: (_) => NavigationProvider()..setSelectedIndex(selectedIndex),
-          child: const Scaffold(
-            body: AdaptiveNavigationBar(),
-          ),
+          child: const Scaffold(body: AdaptiveNavigationBar()),
         ),
       );
     }
 
-    testWidgets('displays 3 navigation destinations', (tester) async {
+    testWidgets('displays 4 navigation destinations', (tester) async {
       await tester.pumpWidget(createTestWidget());
 
       expect(find.byType(NavigationBar), findsOneWidget);
-      expect(find.byType(NavigationDestination), findsNWidgets(3));
+      expect(find.byType(NavigationDestination), findsNWidgets(4));
     });
 
     testWidgets('shows correct labels', (tester) async {
@@ -30,6 +28,7 @@ void main() {
       expect(find.text('图库'), findsOneWidget);
       expect(find.text('搜索'), findsOneWidget);
       expect(find.text('标签管理'), findsOneWidget);
+      expect(find.text('设置'), findsOneWidget);
     });
 
     testWidgets('highlights selected item', (tester) async {

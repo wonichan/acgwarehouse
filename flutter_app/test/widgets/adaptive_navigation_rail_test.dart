@@ -10,14 +10,12 @@ void main() {
       return MaterialApp(
         home: ChangeNotifierProvider(
           create: (_) => NavigationProvider()..setSelectedIndex(selectedIndex),
-          child: const Scaffold(
-            body: AdaptiveNavigationRail(),
-          ),
+          child: const Scaffold(body: AdaptiveNavigationRail()),
         ),
       );
     }
 
-    testWidgets('displays 3 navigation destinations', (tester) async {
+    testWidgets('displays 4 navigation destinations', (tester) async {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
 
@@ -27,6 +25,7 @@ void main() {
       expect(find.byIcon(Icons.photo_library), findsOneWidget); // Selected icon
       expect(find.byIcon(Icons.search_outlined), findsOneWidget);
       expect(find.byIcon(Icons.label_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
     });
 
     testWidgets('has 72px width in icon-only mode', (tester) async {

@@ -16,7 +16,6 @@ const (
 
 var startupDiagnosticAllowedComponents = map[string]struct{}{
 	"go":            {},
-	"python":        {},
 	"startup_chain": {},
 }
 
@@ -33,7 +32,6 @@ type PortableRuntimeLayout struct {
 	ManifestPath          string
 	StartupDiagnosticPath string
 	ServerExecutablePath  string
-	SidecarExecutablePath string
 	FlutterExecutablePath string
 }
 
@@ -107,7 +105,6 @@ func resolvePortableRuntimeLayoutRoot(rootDir string) PortableRuntimeLayout {
 		ManifestPath:          filepath.Join(runtimeDir, runtimeManifestFileName),
 		StartupDiagnosticPath: filepath.Join(diagnosticsDir, startupDiagnosticFileName),
 		ServerExecutablePath:  filepath.Join(runtimeDir, "bin", "acgwarehouse-server.exe"),
-		SidecarExecutablePath: filepath.Join(runtimeDir, "python-sidecar", "acgwarehouse-sidecar.exe"),
 		FlutterExecutablePath: filepath.Join(cleanRoot, "ACGWarehouse.exe"),
 	}
 }

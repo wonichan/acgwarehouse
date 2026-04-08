@@ -73,18 +73,6 @@ class MonitoringService {
         .toList();
   }
 
-  Future<RestartImpact> restartSidecar() async {
-    final response = await _client.post(
-      Uri.parse('${ApiConfig.hostUrl}/admin/api/actions/sidecar/restart'),
-      headers: _headers(),
-    );
-    _ensureSuccess(response, 'restart sidecar');
-
-    return RestartImpact.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    );
-  }
-
   Future<RetryResult> retryFailedBatchTasks(int batchId) async {
     final response = await _client.post(
       Uri.parse(ApiConfig.retryBatch(batchId)),

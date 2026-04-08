@@ -20,36 +20,9 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/imageruntime"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
-	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 	"github.com/wonichan/acgwarehouse-backend/internal/sqliteutil"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"
 )
-
-type sidecarRuntimeLifecycle interface {
-	Start(ctx context.Context) error
-	Stop(ctx context.Context) error
-	State() sidecar.State
-	Status() sidecar.Status
-}
-
-type appSidecarMode string
-
-const (
-	sidecarModeNotConfigured appSidecarMode = "not_configured"
-	sidecarModeReady         appSidecarMode = "ready"
-	sidecarModeDegraded      appSidecarMode = "degraded"
-)
-
-type appSidecarStatusProvider struct {
-	app *App
-}
-
-func (p appSidecarStatusProvider) SidecarStatus(context.Context) service.SidecarStatusSnapshot {
-	if p.app == nil {
-		return service.SidecarStatusSnapshot{}
-	}
-	return p.app.currentSidecarStatusSnapshot()
-}
 
 // App represents the application with all its dependencies and lifecycle management.
 type App struct {
@@ -66,14 +39,11 @@ type App struct {
 	aliasRepo      repository.TagAliasRepository
 	obsRepo        repository.TagObservationRepository
 	imageTagRepo   repository.ImageTagRepository
-	duplicateRepo  repository.DuplicateRepository
 	searchRepo     repository.SearchRepository
 	collectionRepo repository.CollectionRepository
 
 	// Services
 	governanceSvc       *service.TagGovernanceService
-	sidecarClient       *sidecar.SidecarClient
-	duplicateSvc        *service.DuplicateService
 	searchSvc           *service.SearchService
 	collectionSvc       *service.CollectionService
 	adminSvc            *service.AdminService
@@ -93,11 +63,7 @@ type App struct {
 	runtimeManifestPath  string
 	logSourcePaths       LogSourcePaths
 	logCleanup           func()
-	sidecarRuntime       sidecarRuntimeLifecycle
 	monitoringBusCancel  context.CancelFunc
-	sidecarBaseURL       string
-	sidecarMode          appSidecarMode
-	fullyReady           bool
 }
 
 // New creates a new App instance with all dependencies initialized.
@@ -105,7 +71,6 @@ func New(cfgPath string) (*App, error) {
 	app := &App{
 		refillStopCh:     make(chan struct{}),
 		newAutoScheduler: nil,
-		sidecarMode:      sidecarModeNotConfigured,
 	}
 
 	// Load configuration
@@ -117,7 +82,7 @@ func New(cfgPath string) (*App, error) {
 	app.config = cfgReloader.Get()
 	paths := ResolveLogSourcePaths()
 	app.logSourcePaths = paths
-	app.logStreamSvc = service.NewLogStreamService(paths.GoLogPath, paths.SidecarLogPath)
+	app.logStreamSvc = service.NewLogStreamService(paths.GoLogPath)
 	logCleanup, err := SetupGoLogging(paths)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup go logging: %w", err)
@@ -150,7 +115,6 @@ func New(cfgPath string) (*App, error) {
 	// Initialize repositories
 	app.initRepositories()
 
-	app.initSidecarRuntime()
 	// Initialize services
 	app.initServices()
 	app.initAutoScheduler(app.config)
@@ -174,7 +138,6 @@ func New(cfgPath string) (*App, error) {
 		service.NewTaskReadService(repository.NewTaskBatchReadRepository(app.db)),
 		repository.NewTaskBatchRepository(app.db),
 		repository.NewPlatformTaskRepository(app.db),
-		appSidecarStatusProvider{app: app},
 	)
 	app.monitoringBus = service.NewMonitoringEventBus(app.adminSvc)
 
@@ -204,9 +167,6 @@ func (a *App) Run() error {
 	// Start refill loop in background
 	go a.runRefillLoop()
 	a.startAutoScheduler()
-	if err := a.prepareSidecarStartup(context.Background()); err != nil {
-		return err
-	}
 	if a.monitoringBus != nil {
 		busCtx, cancel := context.WithCancel(context.Background())
 		a.monitoringBusCancel = cancel
@@ -236,14 +196,11 @@ func (a *App) Run() error {
 		AliasRepo:      a.aliasRepo,
 		ObsRepo:        a.obsRepo,
 		ImageTagRepo:   a.imageTagRepo,
-		DuplicateRepo:  a.duplicateRepo,
 		SearchRepo:     a.searchRepo,
 		CollectionRepo: a.collectionRepo,
 		GovernanceSvc:  a.governanceSvc,
-		DuplicateSvc:   a.duplicateSvc,
 		SearchSvc:      a.searchSvc,
 		CollectionSvc:  a.collectionSvc,
-		SidecarRuntime: unwrapRuntime(a.sidecarRuntime),
 		MonitoringBus:  a.monitoringBus,
 		LogStreamSvc:   a.logStreamSvc,
 		JobManager:     a.jobManager,
@@ -313,13 +270,6 @@ func (a *App) Shutdown(ctx context.Context) error {
 			a.jobManager.Stop()
 		}
 
-		if a.sidecarRuntime != nil {
-			if err := a.sidecarRuntime.Stop(ctx); err != nil {
-				shutdownErr = err
-				return
-			}
-		}
-
 		if a.monitoringBusCancel != nil {
 			a.monitoringBusCancel()
 			a.monitoringBusCancel = nil
@@ -356,73 +306,6 @@ func (a *App) Shutdown(ctx context.Context) error {
 		imageruntime.Shutdown()
 	})
 	return shutdownErr
-}
-
-func (a *App) prepareSidecarStartup(ctx context.Context) error {
-	if a.sidecarRuntime == nil {
-		a.sidecarMode = sidecarModeNotConfigured
-		a.fullyReady = true
-		return nil
-	}
-
-	if err := a.sidecarRuntime.Start(ctx); err != nil {
-		a.sidecarMode = sidecarModeDegraded
-		a.fullyReady = false
-		log.Printf("sidecar startup degraded: %v", err)
-		return nil
-	}
-
-	if a.sidecarRuntime.State() == sidecar.StateReady {
-		a.sidecarMode = sidecarModeReady
-		a.fullyReady = true
-		return nil
-	}
-
-	a.sidecarMode = sidecarModeDegraded
-	a.fullyReady = false
-	return nil
-}
-
-func (a *App) currentSidecarStatusSnapshot() service.SidecarStatusSnapshot {
-	now := time.Now().UTC()
-	if a.sidecarRuntime == nil {
-		return service.SidecarStatusSnapshot{
-			State:            string(sidecarModeNotConfigured),
-			LastProbeAt:      now,
-			LastProbeResult:  "unknown",
-			LastErrorSummary: "not configured",
-		}
-	}
-
-	status := a.sidecarRuntime.Status()
-	state := string(status.State)
-	if state == "" {
-		state = string(a.sidecarMode)
-	}
-
-	probeResult := "unknown"
-	switch status.State {
-	case sidecar.StateReady:
-		probeResult = "ok"
-	case sidecar.StateDegraded:
-		probeResult = "failed"
-	case sidecar.StateStopped:
-		probeResult = "failed"
-	case sidecar.StateStarting:
-		probeResult = "starting"
-	}
-
-	lastError := status.LastError
-	if probeResult == "failed" && lastError == "" {
-		lastError = "sidecar unavailable"
-	}
-
-	return service.SidecarStatusSnapshot{
-		State:            state,
-		LastProbeAt:      now,
-		LastProbeResult:  probeResult,
-		LastErrorSummary: lastError,
-	}
 }
 
 // runRefillLoop periodically checks for ready jobs and loads them into the queue.
@@ -515,14 +398,4 @@ func (a *App) recoverJobs() {
 
 func openDatabase(cfg *config.Config) (*sql.DB, error) {
 	return sqliteutil.Open(cfg)
-}
-
-func unwrapRuntime(runtime sidecarRuntimeLifecycle) *sidecar.Runtime {
-	if runtime == nil {
-		return nil
-	}
-	if r, ok := runtime.(*sidecar.Runtime); ok {
-		return r
-	}
-	return nil
 }

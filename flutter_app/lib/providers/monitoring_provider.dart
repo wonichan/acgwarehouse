@@ -34,10 +34,8 @@ class MonitoringProvider extends ChangeNotifier {
   List<TaskDetail> _tasks = const [];
   bool _wsConnected = false;
   bool _isLoading = false;
-  bool _isRestarting = false;
   bool _isRetrying = false;
   bool _serviceUnavailable = false;
-  RestartImpact? _restartImpact;
   int? _selectedBatchId;
 
   StreamSubscription<dynamic>? _wsSubscription;
@@ -54,10 +52,8 @@ class MonitoringProvider extends ChangeNotifier {
   List<TaskDetail> get tasks => _tasks;
   bool get wsConnected => _wsConnected;
   bool get isLoading => _isLoading;
-  bool get isRestarting => _isRestarting;
   bool get isRetrying => _isRetrying;
   bool get serviceUnavailable => _serviceUnavailable;
-  RestartImpact? get restartImpact => _restartImpact;
   int? get selectedBatchId => _selectedBatchId;
 
   Future<void> connect() async {
@@ -84,18 +80,6 @@ class MonitoringProvider extends ChangeNotifier {
     await _loadInitialData();
     if (!_serviceUnavailable && !_wsConnected) {
       await _openWebSocket();
-    }
-  }
-
-  Future<void> restartSidecar() async {
-    _isRestarting = true;
-    _notifySafely();
-    try {
-      _restartImpact = await _service.restartSidecar();
-      await _refreshData();
-    } finally {
-      _isRestarting = false;
-      _notifySafely();
     }
   }
 
@@ -215,18 +199,6 @@ class MonitoringProvider extends ChangeNotifier {
             .map((entry) => BatchRow.fromJson(entry as Map<String, dynamic>))
             .toList();
         _scheduleDetailRefresh(refreshBatches: false);
-        break;
-      case 'sidecar':
-        if (_overview != null) {
-          _overview = MonitoringOverview(
-            health: _overview!.health,
-            queue: _overview!.queue,
-            sidecar: MonitoringSidecarDiagnostics.fromJson(payload),
-            batches: _overview!.batches,
-            tasks: _overview!.tasks,
-          );
-        }
-        _scheduleDetailRefresh();
         break;
     }
 

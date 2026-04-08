@@ -37,6 +37,12 @@ class FluentAppShell extends StatelessWidget {
           pane: NavigationPane(
             selected: navProvider.selectedIndex,
             onChanged: navProvider.setSelectedIndex,
+            size: const NavigationPaneSize(
+              openWidth: 220,
+              openMinWidth: 220,
+              openMaxWidth: 220,
+              compactWidth: 56,
+            ),
             displayMode: PaneDisplayMode.auto,
             items: [
               PaneItem(
@@ -46,15 +52,6 @@ class FluentAppShell extends StatelessWidget {
                   onImportLibrary: onImportLibrary,
                   importService: importService,
                   child: const FluentGalleryPage(),
-                ),
-              ),
-              PaneItem(
-                icon: const Icon(FluentIcons.copy),
-                title: const Text('重复检测'),
-                body: _ShellPage(
-                  onImportLibrary: onImportLibrary,
-                  importService: importService,
-                  child: const FluentDuplicatePage(),
                 ),
               ),
               PaneItem(
@@ -213,6 +210,18 @@ class _DesktopShellTopBarState extends State<_DesktopShellTopBar> {
         children: [
           Row(
             children: [
+              Builder(
+                builder: (buttonContext) => Tooltip(
+                  message: '展开/收起菜单',
+                  child: IconButton(
+                    icon: const Icon(FluentIcons.global_nav_button),
+                    onPressed: () {
+                      NavigationView.of(buttonContext).togglePane();
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               SizedBox(
                 width: 260,
                 child: TextBox(

@@ -76,9 +76,9 @@ func TestWriteStartupDiagnosticWritesStructuredJSON(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "runtime", "diagnostics", "startup-error.json")
-	logPaths := []string{"runtime/logs/go.log", "runtime/logs/python-sidecar.log"}
+	logPaths := []string{"runtime/logs/go.log"}
 
-	if err := WriteStartupDiagnostic(path, "python", "startup failed", logPaths); err != nil {
+	if err := WriteStartupDiagnostic(path, "go", "startup failed", logPaths); err != nil {
 		t.Fatalf("WriteStartupDiagnostic() error = %v", err)
 	}
 
@@ -96,8 +96,8 @@ func TestWriteStartupDiagnosticWritesStructuredJSON(t *testing.T) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if payload.Component != "python" {
-		t.Fatalf("Component = %q, want %q", payload.Component, "python")
+	if payload.Component != "go" {
+		t.Fatalf("Component = %q, want %q", payload.Component, "go")
 	}
 	if payload.Message != "startup failed" {
 		t.Fatalf("Message = %q, want %q", payload.Message, "startup failed")

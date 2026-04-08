@@ -17,22 +17,22 @@ void main() {
       expect(provider.currentPageTitle, '图库');
 
       provider.setSelectedIndex(1);
-      expect(provider.currentPageTitle, '重复检测');
-
-      provider.setSelectedIndex(2);
       expect(provider.currentPageTitle, '搜索');
 
-      provider.setSelectedIndex(3);
+      provider.setSelectedIndex(2);
       expect(provider.currentPageTitle, '标签管理');
 
-      provider.setSelectedIndex(4);
+      provider.setSelectedIndex(3);
       expect(provider.currentPageTitle, '设置');
 
-      provider.setSelectedIndex(5);
+      provider.setSelectedIndex(4);
       expect(provider.currentPageTitle, '运营监控');
 
-      provider.setSelectedIndex(6);
+      provider.setSelectedIndex(5);
       expect(provider.currentPageTitle, '日志终端');
+
+      provider.setSelectedIndex(6);
+      expect(provider.currentPageTitle, '收藏');
     });
 
     test('throws error for invalid index', () {
@@ -42,12 +42,12 @@ void main() {
 
     test('navigation indices are correct', () {
       expect(NavigationProvider.galleryIndex, 0);
-      expect(NavigationProvider.duplicateIndex, 1);
-      expect(NavigationProvider.searchIndex, 2);
-      expect(NavigationProvider.tagManagementIndex, 3);
-      expect(NavigationProvider.settingsIndex, 4);
-      expect(NavigationProvider.operationsMonitoringIndex, 5);
-      expect(NavigationProvider.logViewerIndex, 6);
+      expect(NavigationProvider.searchIndex, 1);
+      expect(NavigationProvider.tagManagementIndex, 2);
+      expect(NavigationProvider.settingsIndex, 3);
+      expect(NavigationProvider.operationsMonitoringIndex, 4);
+      expect(NavigationProvider.logViewerIndex, 5);
+      expect(NavigationProvider.collectionsIndex, 6);
     });
 
     test('itemCount is 7', () {

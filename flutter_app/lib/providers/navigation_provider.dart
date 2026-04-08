@@ -5,19 +5,17 @@ import 'package:flutter/foundation.dart';
 class NavigationProvider extends ChangeNotifier {
   // Navigation indices for easy reference
   static const int galleryIndex = 0;
-  static const int duplicateIndex = 1;
-  static const int searchIndex = 2;
-  static const int tagManagementIndex = 3;
-  static const int settingsIndex = 4;
-  static const int operationsMonitoringIndex = 5;
-  static const int logViewerIndex = 6;
-  static const int collectionsIndex = 7;
+  static const int searchIndex = 1;
+  static const int tagManagementIndex = 2;
+  static const int settingsIndex = 3;
+  static const int operationsMonitoringIndex = 4;
+  static const int logViewerIndex = 5;
+  static const int collectionsIndex = 6;
 
-  static const int itemCount = 8;
+  static const int itemCount = 7;
 
   static const List<String> _pageTitles = [
     '图库',
-    '重复检测',
     '搜索',
     '标签管理',
     '设置',

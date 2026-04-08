@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +17,6 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
-	"github.com/wonichan/acgwarehouse-backend/internal/sidecar"
 )
 
 // mockAdminService implements AdminServiceInterface for testing
@@ -130,31 +128,6 @@ func (m *mockAdminService) IsBackgroundRunning() bool {
 	return m.isRunning
 }
 
-type mockSidecarRuntime struct {
-	startErr error
-	state    sidecar.State
-	status   sidecar.Status
-	calls    []string
-}
-
-func (m *mockSidecarRuntime) Start(ctx context.Context) error {
-	m.calls = append(m.calls, "start")
-	return m.startErr
-}
-
-func (m *mockSidecarRuntime) Stop(ctx context.Context) error {
-	m.calls = append(m.calls, "stop")
-	return nil
-}
-
-func (m *mockSidecarRuntime) State() sidecar.State {
-	return m.state
-}
-
-func (m *mockSidecarRuntime) Status() sidecar.Status {
-	return m.status
-}
-
 func TestAdminHandler_Summary_AuthRequired(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -258,12 +231,6 @@ func TestAdminHandler_GetTaskPlatformOverview(t *testing.T) {
 		overview: &service.TaskPlatformOverview{
 			Health: service.HealthStatus{Status: "healthy"},
 			Queue:  service.QueueOverview{IsRunning: true, IsPaused: false, QueueSize: 2, WorkerCount: 4},
-			Sidecar: service.SidecarDiagnosticsOverview{
-				State:            "degraded",
-				LastProbeAt:      "2026-04-04T10:00:00Z",
-				LastProbeResult:  "failed",
-				LastErrorSummary: "startup timeout",
-			},
 			Batches: map[string]int64{
 				"running": 1,
 			},
@@ -297,149 +264,6 @@ func TestAdminHandler_GetTaskPlatformOverview(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "\"tasks\"") {
 		t.Fatalf("Expected tasks field in overview response, got %s", w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "\"sidecar\"") {
-		t.Fatalf("Expected sidecar field in overview response, got %s", w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "\"last_probe_at\"") {
-		t.Fatalf("Expected sidecar.last_probe_at in overview response, got %s", w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "\"last_probe_result\"") {
-		t.Fatalf("Expected sidecar.last_probe_result in overview response, got %s", w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "\"last_error_summary\"") {
-		t.Fatalf("Expected sidecar.last_error_summary in overview response, got %s", w.Body.String())
-	}
-}
-
-func TestSidecarRestartReturnsInterruptedTaskCountAfterSuccessfulRestart(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
-	adminSvc := &mockAdminService{
-		tasks: []service.TaskReadModel{
-			{ID: 1, Status: "running"},
-			{ID: 2, Status: "completed"},
-			{ID: 3, Status: "running"},
-		},
-	}
-	runtime := &mockSidecarRuntime{}
-	handler := NewAdminHandler(cfg, adminSvc, runtime)
-
-	r := gin.New()
-	admin := r.Group("/admin/api")
-	admin.Use(handler.AuthMiddleware())
-	admin.POST("/actions/sidecar/restart", handler.HandleSidecarRestart)
-
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/actions/sidecar/restart", nil)
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("Expected 200, got %d with body %s", w.Code, w.Body.String())
-	}
-
-	var response struct {
-		Success bool `json:"success"`
-		Data    struct {
-			InterruptedTaskCount int `json:"interrupted_task_count"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
-	}
-	if !response.Success {
-		t.Fatal("expected success response")
-	}
-	if response.Data.InterruptedTaskCount != 2 {
-		t.Fatalf("interrupted_task_count = %d, want 2", response.Data.InterruptedTaskCount)
-	}
-	if got := strings.Join(runtime.calls, ","); got != "stop,start" {
-		t.Fatalf("runtime call order = %q, want %q", got, "stop,start")
-	}
-}
-
-func TestSidecarRestartReturnsServiceUnavailableWhenRuntimeMissing(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
-	handler := NewAdminHandler(cfg, &mockAdminService{}, nil)
-
-	r := gin.New()
-	admin := r.Group("/admin/api")
-	admin.Use(handler.AuthMiddleware())
-	admin.POST("/actions/sidecar/restart", handler.HandleSidecarRestart)
-
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/actions/sidecar/restart", nil)
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("Expected 503, got %d with body %s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "sidecar runtime not configured") {
-		t.Fatalf("expected sidecar runtime error, got %s", w.Body.String())
-	}
-}
-
-func TestSidecarRestartCountsOnlyRunningTasks(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
-	adminSvc := &mockAdminService{
-		tasks: []service.TaskReadModel{
-			{ID: 1, Status: "queued"},
-			{ID: 2, Status: "running"},
-			{ID: 3, Status: "failed"},
-		},
-	}
-	handler := NewAdminHandler(cfg, adminSvc, &mockSidecarRuntime{})
-
-	r := gin.New()
-	admin := r.Group("/admin/api")
-	admin.Use(handler.AuthMiddleware())
-	admin.POST("/actions/sidecar/restart", handler.HandleSidecarRestart)
-
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/actions/sidecar/restart", nil)
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("Expected 200, got %d with body %s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "\"interrupted_task_count\":1") {
-		t.Fatalf("expected interrupted_task_count=1, got %s", w.Body.String())
-	}
-}
-
-func TestSidecarRestartReturnsInternalServerErrorWhenStartFails(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	cfg := &config.Config{Admin: config.AdminConfig{Username: "admin", Password: "secret"}}
-	adminSvc := &mockAdminService{
-		tasks: []service.TaskReadModel{{ID: 1, Status: "running"}},
-	}
-	runtime := &mockSidecarRuntime{startErr: errors.New("boom")}
-	handler := NewAdminHandler(cfg, adminSvc, runtime)
-
-	r := gin.New()
-	admin := r.Group("/admin/api")
-	admin.Use(handler.AuthMiddleware())
-	admin.POST("/actions/sidecar/restart", handler.HandleSidecarRestart)
-
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/actions/sidecar/restart", nil)
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("admin:secret")))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("Expected 500, got %d with body %s", w.Code, w.Body.String())
-	}
-	if got := strings.Join(runtime.calls, ","); got != "stop,start" {
-		t.Fatalf("runtime call order = %q, want %q", got, "stop,start")
 	}
 }
 

@@ -4,9 +4,8 @@ import '../providers/navigation_provider.dart';
 
 /// Bottom navigation bar for phone screens (< 600px).
 ///
-/// Displays 5 navigation items:
+/// Displays 4 navigation items:
 /// - Gallery (图库)
-/// - Duplicate detection (重复检测)
 /// - Search (搜索)
 /// - Tag Management (标签管理)
 /// - Settings (设置)
@@ -35,11 +34,6 @@ class AdaptiveNavigationBar extends StatelessWidget {
               icon: Icon(Icons.photo_library_outlined),
               selectedIcon: Icon(Icons.photo_library),
               label: '图库',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.content_copy_outlined),
-              selectedIcon: Icon(Icons.content_copy),
-              label: '重复检测',
             ),
             NavigationDestination(
               icon: Icon(Icons.search_outlined),

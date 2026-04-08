@@ -5,9 +5,10 @@ import '../providers/image_provider.dart';
 import '../providers/tag_provider.dart';
 
 class GalleryFilterPanel extends StatefulWidget {
-  const GalleryFilterPanel({super.key, this.width = 320});
+  const GalleryFilterPanel({super.key, this.width = 320, this.onClose});
 
   final double width;
+  final VoidCallback? onClose;
 
   @override
   State<GalleryFilterPanel> createState() => _GalleryFilterPanelState();
@@ -42,7 +43,21 @@ class _GalleryFilterPanelState extends State<GalleryFilterPanel> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('按标签筛选', style: FluentTheme.of(context).typography.subtitle),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '按标签筛选',
+                      style: FluentTheme.of(context).typography.subtitle,
+                    ),
+                  ),
+                  if (widget.onClose != null)
+                    IconButton(
+                      icon: const Icon(FluentIcons.chrome_close),
+                      onPressed: widget.onClose,
+                    ),
+                ],
+              ),
               const SizedBox(height: 12),
               Row(
                 children: [

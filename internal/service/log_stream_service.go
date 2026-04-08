@@ -19,8 +19,7 @@ const (
 type LogSource string
 
 const (
-	LogSourceGo     LogSource = "go"
-	LogSourcePython LogSource = "python"
+	LogSourceGo LogSource = "go"
 )
 
 type LogEvent struct {
@@ -32,15 +31,14 @@ type LogEvent struct {
 }
 
 type LogStreamService struct {
-	mu             sync.Mutex
-	subscribers    map[LogSource]map[int]chan LogEvent
-	nextID         int
-	goLogPath      string
-	sidecarLogPath string
-	cancel         context.CancelFunc
-	buffers        map[LogSource]*ringBuffer
-	running        map[LogSource]bool
-	wg             sync.WaitGroup
+	mu          sync.Mutex
+	subscribers map[LogSource]map[int]chan LogEvent
+	nextID      int
+	goLogPath   string
+	cancel      context.CancelFunc
+	buffers     map[LogSource]*ringBuffer
+	running     map[LogSource]bool
+	wg          sync.WaitGroup
 }
 
 type ringBuffer struct {
@@ -50,21 +48,17 @@ type ringBuffer struct {
 	size  int
 }
 
-func NewLogStreamService(goLogPath, sidecarLogPath string) *LogStreamService {
+func NewLogStreamService(goLogPath string) *LogStreamService {
 	return &LogStreamService{
 		subscribers: map[LogSource]map[int]chan LogEvent{
-			LogSourceGo:     make(map[int]chan LogEvent),
-			LogSourcePython: make(map[int]chan LogEvent),
+			LogSourceGo: make(map[int]chan LogEvent),
 		},
-		goLogPath:      strings.TrimSpace(goLogPath),
-		sidecarLogPath: strings.TrimSpace(sidecarLogPath),
+		goLogPath: strings.TrimSpace(goLogPath),
 		buffers: map[LogSource]*ringBuffer{
-			LogSourceGo:     newRingBuffer(logStreamBufferLines),
-			LogSourcePython: newRingBuffer(logStreamBufferLines),
+			LogSourceGo: newRingBuffer(logStreamBufferLines),
 		},
 		running: map[LogSource]bool{
-			LogSourceGo:     false,
-			LogSourcePython: false,
+			LogSourceGo: false,
 		},
 	}
 }
@@ -79,7 +73,7 @@ func (s *LogStreamService) Start(ctx context.Context) {
 	s.cancel = cancel
 	s.mu.Unlock()
 
-	for _, source := range []LogSource{LogSourceGo, LogSourcePython} {
+	for _, source := range []LogSource{LogSourceGo} {
 		initialOffset := s.seedSource(source)
 		s.mu.Lock()
 		s.running[source] = true
@@ -334,8 +328,6 @@ func (s *LogStreamService) pathForSource(source LogSource) string {
 	switch source {
 	case LogSourceGo:
 		return s.goLogPath
-	case LogSourcePython:
-		return s.sidecarLogPath
 	default:
 		return ""
 	}

@@ -16,7 +16,7 @@ typedef PackagedProcessTerminator = Future<void> Function(Process process);
 
 const _packagedServerHost = '127.0.0.1';
 
-enum StartupFailureType { go, python, startupChain }
+enum StartupFailureType { go, startupChain }
 
 class StartupFailure {
   const StartupFailure({
@@ -41,7 +41,6 @@ class PackagedDesktopBootstrapLayout {
     required this.manifestPath,
     required this.startupDiagnosticPath,
     required this.serverExecutablePath,
-    required this.sidecarExecutablePath,
   });
 
   final String rootDir;
@@ -51,7 +50,6 @@ class PackagedDesktopBootstrapLayout {
   final String manifestPath;
   final String startupDiagnosticPath;
   final String serverExecutablePath;
-  final String sidecarExecutablePath;
 }
 
 class PackagedDesktopBootstrapResult {
@@ -132,11 +130,6 @@ class PackagedDesktopBootstrap {
       manifestPath: _join(runtimeDir, 'runtime-manifest.json'),
       startupDiagnosticPath: _join(diagnosticsDir, 'startup-error.json'),
       serverExecutablePath: _join(runtimeDir, 'bin', 'acgwarehouse-server.exe'),
-      sidecarExecutablePath: _join(
-        runtimeDir,
-        'python-sidecar',
-        'acgwarehouse-sidecar.exe',
-      ),
     );
   }
 
@@ -161,26 +154,12 @@ class PackagedDesktopBootstrap {
       );
     }
 
-    if (!await File(layout.sidecarExecutablePath).exists()) {
-      return PackagedDesktopBootstrapResult.failure(
-        isPackagedLaunch: true,
-        failure: StartupFailure(
-          type: StartupFailureType.python,
-          title: 'Python sidecar failed to start',
-          message:
-              'Missing packaged Python sidecar at ${layout.sidecarExecutablePath}. Check bundle integrity and logs: ${logPaths.join(', ')}',
-          logPaths: logPaths,
-        ),
-      );
-    }
-
     await Directory(layout.logsDir).create(recursive: true);
     await Directory(layout.diagnosticsDir).create(recursive: true);
 
     await _clearStartupArtifacts(layout);
 
     final serverPort = await _portAllocator();
-    final sidecarPort = await _portAllocator();
     _childProcess = await _processStarter(
       executable: layout.serverExecutablePath,
       arguments: const <String>[],
@@ -191,8 +170,6 @@ class PackagedDesktopBootstrap {
         'ACG_RUNTIME_MANIFEST_PATH': layout.manifestPath,
         'ACG_DIAGNOSTICS_DIR': layout.diagnosticsDir,
         'ACG_LOGS_DIR': layout.logsDir,
-        'ACG_SIDECAR_EXECUTABLE': layout.sidecarExecutablePath,
-        'ACG_SIDECAR_PORT': '$sidecarPort',
       },
       workingDirectory: layout.rootDir,
     );
@@ -306,12 +283,10 @@ class PackagedDesktopBootstrap {
 
       final type = switch (component) {
         'go' => StartupFailureType.go,
-        'python' => StartupFailureType.python,
         _ => StartupFailureType.startupChain,
       };
       final title = switch (type) {
         StartupFailureType.go => 'Go runtime failed to start',
-        StartupFailureType.python => 'Python sidecar failed to start',
         StartupFailureType.startupChain =>
           'Application startup did not complete',
       };
@@ -440,7 +415,6 @@ class PackagedDesktopBootstrap {
   static List<String> _defaultLogPaths(PackagedDesktopBootstrapLayout layout) {
     return <String>[
       _join(layout.logsDir, 'go.log'),
-      _join(layout.logsDir, 'python-sidecar.log'),
       _join(layout.logsDir, 'flutter-bootstrap.log'),
     ];
   }

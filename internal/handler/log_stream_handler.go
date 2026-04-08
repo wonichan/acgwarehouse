@@ -36,7 +36,7 @@ func (h *LogStreamHandler) HandleLogStream(c *gin.Context) {
 	}
 
 	source := service.LogSource(sourceValue)
-	if source != service.LogSourceGo && source != service.LogSourcePython {
+	if source != service.LogSourceGo {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid source"})
 		return
 	}

@@ -18,12 +18,6 @@ void main() {
           'queue_size': 4,
           'worker_count': 2,
         },
-        'sidecar': {
-          'state': 'ready',
-          'last_probe_at': '2026-04-05T10:00:00Z',
-          'last_probe_result': 'ok',
-          'last_error_summary': '',
-        },
         'batches': {'pending': 3, 'running': 1},
         'tasks': {'queued': 8, 'running': 2},
       });
@@ -31,7 +25,6 @@ void main() {
       expect(overview.health.status, 'ok');
       expect(overview.queue.isRunning, isTrue);
       expect(overview.queue.queueSize, 4);
-      expect(overview.sidecar.state, 'ready');
       expect(overview.batches['pending'], 3);
       expect(overview.tasks['running'], 2);
       expect(overview.toJson()['queue_size'], isNull);
@@ -51,11 +44,11 @@ void main() {
         'task_type_counts': {'tagging': 12, 'dedupe': 8},
         'failure_groups': [
           {
-            'reason_key': 'sidecar_timeout',
-            'reason_label': 'Sidecar timeout',
+            'reason_key': 'worker_timeout',
+            'reason_label': 'Worker timeout',
             'count': 2,
             'retry_recommended': true,
-            'retry_hint': 'Restart sidecar and retry',
+            'retry_hint': 'Retry after the worker recovers',
           },
         ],
       });
@@ -66,7 +59,10 @@ void main() {
       expect(batch.taskTypeCounts['tagging'], 12);
       expect(batch.failureGroups, hasLength(1));
       expect(batch.failureGroups.first.retryRecommended, isTrue);
-      expect(batch.failureGroups.first.retryHint, 'Restart sidecar and retry');
+      expect(
+        batch.failureGroups.first.retryHint,
+        'Retry after the worker recovers',
+      );
     });
   });
 
@@ -80,7 +76,7 @@ void main() {
         'image_filename': '301.png',
         'task_type': 'tagging',
         'status': 'failed',
-        'error_summary': 'sidecar unavailable',
+        'error_summary': 'worker unavailable',
       });
 
       expect(task.id, 99);
@@ -88,7 +84,7 @@ void main() {
       expect(task.imageId, 301);
       expect(task.imageFilename, '301.png');
       expect(task.status, 'failed');
-      expect(task.errorSummary, 'sidecar unavailable');
+      expect(task.errorSummary, 'worker unavailable');
     });
   });
 
@@ -112,12 +108,6 @@ void main() {
                   'is_paused': false,
                   'queue_size': 4,
                   'worker_count': 2,
-                },
-                'sidecar': {
-                  'state': 'ready',
-                  'last_probe_at': '2026-04-05T10:00:00Z',
-                  'last_probe_result': 'ok',
-                  'last_error_summary': '',
                 },
                 'batches': {'running': 1},
                 'tasks': {'queued': 8},
@@ -160,19 +150,9 @@ void main() {
                     'image_filename': '301.png',
                     'task_type': 'tagging',
                     'status': 'failed',
-                    'error_summary': 'sidecar unavailable',
+                    'error_summary': 'worker unavailable',
                   },
                 ],
-              }),
-              200,
-            );
-          }
-
-          if (request.url.path == '/admin/api/actions/sidecar/restart') {
-            return http.Response(
-              jsonEncode({
-                'success': true,
-                'data': {'interrupted_task_count': 3},
               }),
               200,
             );
@@ -222,19 +202,6 @@ void main() {
       expect(requests.single.url.queryParameters['batch_id'], '12');
       expect(requests.single.url.queryParameters['limit'], '50');
     });
-
-    test(
-      'restartSidecar posts restart action and parses impact count',
-      () async {
-        final impact = await service.restartSidecar();
-
-        expect(impact, isA<RestartImpact>());
-        expect(impact.interruptedTaskCount, 3);
-        expect(requests.single.method, 'POST');
-        expect(requests.single.url.path, '/admin/api/actions/sidecar/restart');
-        expect(requests.single.headers['Authorization'], 'Basic ZGVtbzpkZW1v');
-      },
-    );
 
     test(
       'webSocketHeaders exposes admin auth for desktop websocket bootstrap',

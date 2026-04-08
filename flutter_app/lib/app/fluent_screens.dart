@@ -2,7 +2,6 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show MaterialPageRoute;
 import 'package:provider/provider.dart';
 
-import '../screens/duplicate_screen.dart';
 import '../screens/image_detail_screen.dart';
 import '../providers/image_provider.dart';
 import '../providers/search_provider.dart';
@@ -21,8 +20,15 @@ import '../services/viewer_window_service.dart';
 
 /// Fluent 风格图库页面
 /// 包含 CommandBar 工具栏和图库内容
-class FluentGalleryPage extends StatelessWidget {
+class FluentGalleryPage extends StatefulWidget {
   const FluentGalleryPage({super.key});
+
+  @override
+  State<FluentGalleryPage> createState() => _FluentGalleryPageState();
+}
+
+class _FluentGalleryPageState extends State<FluentGalleryPage> {
+  bool _isFilterPanelOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +56,15 @@ class FluentGalleryPage extends StatelessWidget {
                           ? ViewMode.masonry
                           : ViewMode.grid,
                     );
+                  },
+                ),
+                CommandBarButton(
+                  icon: const Icon(FluentIcons.filter),
+                  label: const Text('筛选'),
+                  onPressed: () {
+                    setState(() {
+                      _isFilterPanelOpen = true;
+                    });
                   },
                 ),
                 CommandBarButton(
@@ -92,17 +107,48 @@ class FluentGalleryPage extends StatelessWidget {
   }
 
   Widget _buildGalleryWorkspace(BuildContext context) {
-    return Row(
+    return Stack(
       children: [
-        Expanded(
+        Positioned.fill(
           child: FluentGalleryContent(
             onImageTap: null, // Removed single click routing
             onImageDoubleTap: (image) =>
                 _showGalleryImageDetail(context, image),
           ),
         ),
-        const SizedBox(width: 1, child: ColoredBox(color: Color(0x22000000))),
-        const GalleryFilterPanel(),
+        if (_isFilterPanelOpen)
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isFilterPanelOpen = false;
+                });
+              },
+              child: const ColoredBox(color: Color(0x22000000)),
+            ),
+          ),
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          top: 0,
+          bottom: 0,
+          right: _isFilterPanelOpen ? 0 : -336,
+          child: Container(
+            width: 336,
+            decoration: BoxDecoration(
+              color: FluentTheme.of(context).micaBackgroundColor,
+              border: const Border(left: BorderSide(color: Color(0x22000000))),
+            ),
+            child: GalleryFilterPanel(
+              width: 336,
+              onClose: () {
+                setState(() {
+                  _isFilterPanelOpen = false;
+                });
+              },
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -499,15 +545,6 @@ class _FluentSearchPageState extends State<FluentSearchPage> {
         snapshot: provider.viewerWindowSnapshot,
       ),
     );
-  }
-}
-
-class FluentDuplicatePage extends StatelessWidget {
-  const FluentDuplicatePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const DuplicateScreen();
   }
 }
 

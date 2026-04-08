@@ -9,14 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestHealthEndpointRemainsGoScopedWhenSidecarDegraded(t *testing.T) {
+func TestHealthEndpointReportsGoScope(t *testing.T) {
 	t.Parallel()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	SetupRoutes(router)
 
-	req := httptest.NewRequest(http.MethodGet, "/health?sidecar_state=degraded", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -31,20 +31,17 @@ func TestHealthEndpointRemainsGoScopedWhenSidecarDegraded(t *testing.T) {
 
 	if got := body["scope"]; got != "go" {
 		t.Fatalf("scope = %v, want go", got)
-	}
-	if _, exists := body["sidecar"]; exists {
-		t.Fatal("health response should not include sidecar details")
 	}
 }
 
-func TestReadyEndpointRemainsGoScopedWhenSidecarDegraded(t *testing.T) {
+func TestReadyEndpointReportsGoScope(t *testing.T) {
 	t.Parallel()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	SetupRoutes(router)
 
-	req := httptest.NewRequest(http.MethodGet, "/ready?sidecar_state=degraded", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -59,8 +56,5 @@ func TestReadyEndpointRemainsGoScopedWhenSidecarDegraded(t *testing.T) {
 
 	if got := body["scope"]; got != "go" {
 		t.Fatalf("scope = %v, want go", got)
-	}
-	if _, exists := body["sidecar"]; exists {
-		t.Fatal("ready response should not include sidecar details")
 	}
 }

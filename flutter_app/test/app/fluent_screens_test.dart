@@ -48,7 +48,7 @@ void main() {
   );
 
   testWidgets(
-    'FluentGalleryPage keeps page content but not shell-owned command actions',
+    'FluentGalleryPage keeps page content and exposes top filter action',
     (tester) async {
       final mockClient = MockClient((request) async {
         if (request.url.path.endsWith('/api/v1/images')) {
@@ -82,7 +82,7 @@ void main() {
 
       expect(find.byType(fluent.ScaffoldPage), findsOneWidget);
       expect(find.text('图库'), findsWidgets);
-      expect(find.byIcon(fluent.FluentIcons.filter), findsNothing);
+      expect(find.byIcon(fluent.FluentIcons.filter), findsOneWidget);
 
       await tester.tap(find.text('排序').first);
       await tester.pumpAndSettle();
@@ -101,6 +101,45 @@ void main() {
       expect(imageProvider.sortAsc, isTrue);
     },
   );
+
+  testWidgets('FluentGalleryPage opens filter drawer from command bar', (
+    tester,
+  ) async {
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        return http.Response('{"images":[],"total":0,"has_more":false}', 200);
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response('{"tags":[]}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ImageListProvider>(
+            create: (_) => ImageListProvider(ApiService(client: mockClient)),
+          ),
+          ChangeNotifierProvider<TagProvider>(
+            create: (_) => TagProvider(TagService(client: mockClient)),
+          ),
+          ChangeNotifierProvider<NavigationProvider>(
+            create: (_) => NavigationProvider(),
+          ),
+        ],
+        child: const fluent.FluentApp(home: FluentGalleryPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('筛选'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('按标签筛选'), findsOneWidget);
+    expect(find.byIcon(fluent.FluentIcons.chrome_close), findsOneWidget);
+  });
 
   testWidgets(
     'FluentSearchPage still renders search body inside ScaffoldPage',

@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 )
 
 func TestThumbnailURLRewriteImageHandlerListAndGet(t *testing.T) {
@@ -118,113 +116,6 @@ func TestThumbnailURLRewriteViewerWindowItems(t *testing.T) {
 		"http://localhost:4321/thumbs/viewer-small.jpg",
 		"http://localhost:4321/thumbs/viewer-large.jpg",
 	)
-}
-
-func TestThumbnailURLRewriteDuplicateHandlerListAndGet(t *testing.T) {
-	t.Parallel()
-
-	mockSidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/compute/duplicates/detect":
-			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-rewrite", "status": "pending", "progress": 0})
-		case "/compute/duplicates/tasks/task-rewrite":
-			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-rewrite", "status": "completed", "progress": 100})
-		case "/compute/duplicates/tasks/task-rewrite/result":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"groups": []map[string]any{{
-					"group_id":       0,
-					"recommended_id": 1,
-					"members": []map[string]any{
-						{"image_id": 1, "sha256": "sha1", "phash": "phash1", "distance": 0, "is_recommended": true, "recommendation_score": 90.0, "recommendation_reasons": []map[string]any{{"factor": "resolution", "value": "100x120", "score": 10.0, "weight": 0.5}}},
-						{"image_id": 2, "sha256": "sha2", "phash": "phash2", "distance": 3, "is_recommended": false, "recommendation_score": 70.0, "recommendation_reasons": []map[string]any{{"factor": "size", "value": "1025", "score": 8.0, "weight": 0.3}}},
-					},
-				}},
-				"total_images":        3,
-				"total_groups":        1,
-				"skipped_images":      []any{},
-				"computation_time_ms": 10,
-			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer mockSidecar.Close()
-
-	runtime := createReadyRuntime(t)
-	router, db := setupDuplicateHandlerTest(t, runtime, mockSidecar.URL)
-	setImageThumbnailURLs(t, db, 1,
-		"http://localhost:6101/thumbs/dup-small.jpg",
-		"http://127.0.0.1:6102/thumbs/dup-large.jpg",
-	)
-
-	detectResp := performRequest(t, router, http.MethodPost, "http://127.0.0.1:4321/api/v1/duplicates/detect", []byte(`{"threshold":40}`))
-	if detectResp.Code != http.StatusOK {
-		t.Fatalf("detect status = %d, want %d, body=%s", detectResp.Code, http.StatusOK, detectResp.Body.String())
-	}
-	var detectBody map[string]any
-	decodeThumbnailRewriteJSON(t, detectResp, &detectBody)
-	taskID, _ := detectBody["task_id"].(string)
-	if taskID == "" {
-		t.Fatalf("detect response missing task_id: %v", detectBody)
-	}
-	waitForDuplicateTaskTerminal(t, router, taskID)
-
-	listResp := performRequest(t, router, http.MethodGet, "http://127.0.0.1:4321/api/v1/duplicates", nil)
-	if listResp.Code != http.StatusOK {
-		t.Fatalf("list status = %d, want %d, body=%s", listResp.Code, http.StatusOK, listResp.Body.String())
-	}
-	var listBody map[string]any
-	decodeThumbnailRewriteJSON(t, listResp, &listBody)
-	listGroup := listBody["groups"].([]any)[0].(map[string]any)
-	listImage := listGroup["images"].([]any)[0].(map[string]any)
-	assertThumbnailURLs(t, listImage,
-		"http://127.0.0.1:4321/thumbs/dup-small.jpg",
-		"http://127.0.0.1:4321/thumbs/dup-large.jpg",
-	)
-
-	getResp := performRequest(t, router, http.MethodGet, "http://127.0.0.1:4321/api/v1/duplicates/1", nil)
-	if getResp.Code != http.StatusOK {
-		t.Fatalf("get status = %d, want %d, body=%s", getResp.Code, http.StatusOK, getResp.Body.String())
-	}
-	var getBody map[string]any
-	decodeThumbnailRewriteJSON(t, getResp, &getBody)
-	getImage := getBody["images"].([]any)[0].(map[string]any)
-	assertThumbnailURLs(t, getImage,
-		"http://127.0.0.1:4321/thumbs/dup-small.jpg",
-		"http://127.0.0.1:4321/thumbs/dup-large.jpg",
-	)
-}
-
-func waitForDuplicateTaskTerminal(t *testing.T, router http.Handler, taskID string) {
-	t.Helper()
-
-	const maxAttempts = 40
-	for i := 0; i < maxAttempts; i++ {
-		resp := performRequest(
-			t,
-			router,
-			http.MethodGet,
-			fmt.Sprintf("http://127.0.0.1:4321/api/v1/duplicates/tasks/%s", taskID),
-			nil,
-		)
-		if resp.Code != http.StatusOK {
-			t.Fatalf("task status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
-		}
-
-		var statusBody map[string]any
-		decodeThumbnailRewriteJSON(t, resp, &statusBody)
-		status, _ := statusBody["status"].(string)
-		if status == "completed" {
-			return
-		}
-		if status == "failed" {
-			t.Fatalf("duplicate task failed: %v", statusBody)
-		}
-
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	t.Fatalf("duplicate task did not reach terminal status in time: task_id=%s", taskID)
 }
 
 func performRequest(t *testing.T, router http.Handler, method, target string, body []byte) *httptest.ResponseRecorder {

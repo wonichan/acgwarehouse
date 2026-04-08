@@ -49,7 +49,6 @@ class StartupFailureScreen extends StatelessWidget {
   String _labelFor(StartupFailureType type) {
     return switch (type) {
       StartupFailureType.go => '失败类型: go',
-      StartupFailureType.python => '失败类型: python',
       StartupFailureType.startupChain => '失败类型: startup_chain',
     };
   }

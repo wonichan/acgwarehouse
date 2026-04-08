@@ -12,15 +12,13 @@ import (
 var goLogStdout io.Writer = os.Stdout
 
 type LogSourcePaths struct {
-	GoLogPath      string
-	SidecarLogPath string
+	GoLogPath string
 }
 
 func ResolveLogSourcePaths() LogSourcePaths {
 	logsDir := resolveLogsDir()
 	return LogSourcePaths{
-		GoLogPath:      filepath.Join(logsDir, "go.log"),
-		SidecarLogPath: filepath.Join(logsDir, "python-sidecar.log"),
+		GoLogPath: filepath.Join(logsDir, "go.log"),
 	}
 }
 

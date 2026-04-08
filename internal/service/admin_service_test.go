@@ -172,7 +172,7 @@ func TestAdminService_GetJobs(t *testing.T) {
 	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
 
 	// Create some jobs
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		job := &domain.AsyncJob{
 			Type:      "test_job",
 			Status:    "finished",
@@ -955,38 +955,6 @@ func TestAdminService_GetTaskPlatformOverview_PreservesLegacySummaryFields(t *te
 
 	if overview.Library.TotalImages != 0 || overview.Library.TotalTags != 0 || overview.Library.TotalCollections != 0 {
 		t.Fatalf("Expected empty library stats in fresh DB, got %+v", overview.Library)
-	}
-}
-
-func TestAdminService_GetTaskPlatformOverview_IncludesSidecarDiagnostics(t *testing.T) {
-	db := newTestAdminDB(t)
-	defer db.Close()
-
-	jobRepo := repository.NewJobRepository(db)
-	imageRepo := repository.NewImageRepository(db)
-	tagRepo := repository.NewTagRepository(db)
-	collectionRepo := repository.NewCollectionRepository(db)
-	jobManager := worker.NewManager(jobRepo)
-
-	cfg := &config.Config{}
-	svc := service.NewAdminService(cfg, jobRepo, imageRepo, tagRepo, collectionRepo, jobManager)
-
-	overview, err := svc.GetTaskPlatformOverview(context.Background())
-	if err != nil {
-		t.Fatalf("GetTaskPlatformOverview() error = %v", err)
-	}
-
-	if overview.Sidecar.State == "" {
-		t.Fatalf("expected sidecar.state to be populated")
-	}
-	if overview.Sidecar.LastProbeAt == "" {
-		t.Fatalf("expected sidecar.last_probe_at to be populated")
-	}
-	if overview.Sidecar.LastProbeResult == "" {
-		t.Fatalf("expected sidecar.last_probe_result to be populated")
-	}
-	if overview.Sidecar.LastErrorSummary == "" {
-		t.Fatalf("expected sidecar.last_error_summary to be populated")
 	}
 }
 

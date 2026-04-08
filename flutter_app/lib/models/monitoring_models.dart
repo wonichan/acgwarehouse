@@ -50,49 +50,15 @@ class MonitoringQueue {
   }
 }
 
-class MonitoringSidecarDiagnostics {
-  final String state;
-  final DateTime? lastProbeAt;
-  final String? lastProbeResult;
-  final String? lastErrorSummary;
-
-  const MonitoringSidecarDiagnostics({
-    required this.state,
-    this.lastProbeAt,
-    this.lastProbeResult,
-    this.lastErrorSummary,
-  });
-
-  factory MonitoringSidecarDiagnostics.fromJson(Map<String, dynamic> json) {
-    return MonitoringSidecarDiagnostics(
-      state: json['state'] as String? ?? 'unknown',
-      lastProbeAt: _parseDateTime(json['last_probe_at']),
-      lastProbeResult: json['last_probe_result'] as String?,
-      lastErrorSummary: json['last_error_summary'] as String?,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'state': state,
-      'last_probe_at': lastProbeAt?.toIso8601String(),
-      'last_probe_result': lastProbeResult,
-      'last_error_summary': lastErrorSummary,
-    };
-  }
-}
-
 class MonitoringOverview {
   final MonitoringHealth health;
   final MonitoringQueue queue;
-  final MonitoringSidecarDiagnostics sidecar;
   final Map<String, int> batches;
   final Map<String, int> tasks;
 
   const MonitoringOverview({
     required this.health,
     required this.queue,
-    required this.sidecar,
     required this.batches,
     required this.tasks,
   });
@@ -105,9 +71,6 @@ class MonitoringOverview {
       queue: MonitoringQueue.fromJson(
         (json['queue'] as Map<String, dynamic>?) ?? const {},
       ),
-      sidecar: MonitoringSidecarDiagnostics.fromJson(
-        (json['sidecar'] as Map<String, dynamic>?) ?? const {},
-      ),
       batches: _parseCountMap(json['batches']),
       tasks: _parseCountMap(json['tasks']),
     );
@@ -117,7 +80,6 @@ class MonitoringOverview {
     return {
       'health': health.toJson(),
       'queue': queue.toJson(),
-      'sidecar': sidecar.toJson(),
       'batches': batches,
       'tasks': tasks,
     };
@@ -270,46 +232,6 @@ class TaskDetail {
   }
 }
 
-class SidecarStatusCard {
-  final String state;
-  final String semanticColor;
-  final String? uptime;
-  final DateTime? lastProbeTime;
-  final String? lastErrorSummary;
-  final bool canRestart;
-
-  const SidecarStatusCard({
-    required this.state,
-    required this.semanticColor,
-    this.uptime,
-    this.lastProbeTime,
-    this.lastErrorSummary,
-    required this.canRestart,
-  });
-
-  factory SidecarStatusCard.fromJson(Map<String, dynamic> json) {
-    return SidecarStatusCard(
-      state: json['state'] as String? ?? 'unknown',
-      semanticColor: json['semantic_color'] as String? ?? 'neutral',
-      uptime: json['uptime'] as String?,
-      lastProbeTime: _parseDateTime(json['last_probe_time']),
-      lastErrorSummary: json['last_error_summary'] as String?,
-      canRestart: json['can_restart'] as bool? ?? false,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'state': state,
-      'semantic_color': semanticColor,
-      'uptime': uptime,
-      'last_probe_time': lastProbeTime?.toIso8601String(),
-      'last_error_summary': lastErrorSummary,
-      'can_restart': canRestart,
-    };
-  }
-}
-
 class GoRuntimeMetrics {
   final int queueDepth;
   final int activeWorkers;
@@ -374,24 +296,6 @@ class MonitoringWsEvent {
       'payload': payload,
       'timestamp': timestamp.toIso8601String(),
     };
-  }
-}
-
-class RestartImpact {
-  final int interruptedTaskCount;
-
-  const RestartImpact({required this.interruptedTaskCount});
-
-  factory RestartImpact.fromJson(Map<String, dynamic> json) {
-    final payload = (json['data'] as Map<String, dynamic>?) ?? json;
-    return RestartImpact(
-      interruptedTaskCount:
-          (payload['interrupted_task_count'] as num?)?.toInt() ?? 0,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {'interrupted_task_count': interruptedTaskCount};
   }
 }
 

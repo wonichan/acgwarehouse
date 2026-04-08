@@ -38,14 +38,7 @@ func TestRoutesRegistersTagAndImageTagEndpoints(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/python/health", nil)
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("GET /python/health status = %d, want 404 (no direct python route)", w.Code)
-	}
-
-	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	router.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET /health status = %d, want %d", w.Code, http.StatusOK)
@@ -53,9 +46,6 @@ func TestRoutesRegistersTagAndImageTagEndpoints(t *testing.T) {
 	var healthBody map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &healthBody); err != nil {
 		t.Fatalf("json.Unmarshal(/health) error = %v", err)
-	}
-	if _, exists := healthBody["sidecar"]; exists {
-		t.Fatal("/health should not expose sidecar diagnostics")
 	}
 
 	w = httptest.NewRecorder()
@@ -67,8 +57,5 @@ func TestRoutesRegistersTagAndImageTagEndpoints(t *testing.T) {
 	var readyBody map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &readyBody); err != nil {
 		t.Fatalf("json.Unmarshal(/ready) error = %v", err)
-	}
-	if _, exists := readyBody["sidecar"]; exists {
-		t.Fatal("/ready should not expose sidecar diagnostics")
 	}
 }

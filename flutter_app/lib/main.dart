@@ -11,7 +11,6 @@ import 'package:window_manager/window_manager.dart';
 import 'providers/image_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/tag_provider.dart';
-import 'providers/duplicate_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/config_provider.dart';
@@ -21,7 +20,6 @@ import 'bootstrap/single_instance_guard.dart';
 import 'bootstrap/runtime_manifest_loader.dart';
 import 'services/api_service.dart';
 import 'services/tag_service.dart';
-import 'services/duplicate_service.dart';
 import 'services/search_service.dart';
 import 'services/monitoring_service.dart';
 import 'services/log_stream_service.dart';
@@ -179,7 +177,6 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ConfigProvider()),
         Provider(create: (_) => ApiService()),
         Provider(create: (_) => TagService()),
-        Provider(create: (_) => DuplicateService()),
         Provider(create: (_) => SearchService()),
         Provider(
           create: (_) => MonitoringService(
@@ -192,10 +189,6 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (context) => TagProvider(context.read<TagService>()),
-        ),
-        ChangeNotifierProvider(
-          create: (context) =>
-              DuplicateProvider(service: context.read<DuplicateService>()),
         ),
         ChangeNotifierProvider(
           create: (context) =>
