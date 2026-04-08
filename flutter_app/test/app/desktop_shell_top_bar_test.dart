@@ -114,6 +114,26 @@ void main() {
       expect(find.byIcon(fluent.FluentIcons.global_nav_button), findsOneWidget);
     });
 
+    testWidgets('menu toggle switches pane between expanded and compact', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createShell());
+      await tester.pumpAndSettle();
+
+      var navigationView = tester.widget<fluent.NavigationView>(
+        find.byType(fluent.NavigationView),
+      );
+      expect(navigationView.pane!.displayMode, fluent.PaneDisplayMode.expanded);
+
+      await tester.tap(find.byIcon(fluent.FluentIcons.global_nav_button));
+      await tester.pumpAndSettle();
+
+      navigationView = tester.widget<fluent.NavigationView>(
+        find.byType(fluent.NavigationView),
+      );
+      expect(navigationView.pane!.displayMode, fluent.PaneDisplayMode.compact);
+    });
+
     testWidgets('submitting shell search navigates to search view', (
       tester,
     ) async {

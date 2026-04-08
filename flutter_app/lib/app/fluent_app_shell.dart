@@ -9,7 +9,7 @@ import '../services/import_service.dart';
 import '../widgets/fluent_settings_page.dart';
 import 'fluent_screens.dart';
 
-class FluentAppShell extends StatelessWidget {
+class FluentAppShell extends StatefulWidget {
   final VoidCallback? onImportLibrary;
   final ImportService? importService;
   final CollectionService? collectionService;
@@ -20,6 +20,19 @@ class FluentAppShell extends StatelessWidget {
     this.importService,
     this.collectionService,
   });
+
+  @override
+  State<FluentAppShell> createState() => _FluentAppShellState();
+}
+
+class _FluentAppShellState extends State<FluentAppShell> {
+  bool _isPaneExpanded = true;
+
+  void _togglePaneMode() {
+    setState(() {
+      _isPaneExpanded = !_isPaneExpanded;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,14 +56,14 @@ class FluentAppShell extends StatelessWidget {
               openMaxWidth: 220,
               compactWidth: 56,
             ),
-            displayMode: PaneDisplayMode.auto,
             items: [
               PaneItem(
                 icon: const Icon(FluentIcons.photo2),
                 title: const Text('图库'),
                 body: _ShellPage(
-                  onImportLibrary: onImportLibrary,
-                  importService: importService,
+                  onImportLibrary: widget.onImportLibrary,
+                  importService: widget.importService,
+                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentGalleryPage(),
                 ),
               ),
@@ -58,8 +71,9 @@ class FluentAppShell extends StatelessWidget {
                 icon: const Icon(FluentIcons.search),
                 title: const Text('搜索'),
                 body: _ShellPage(
-                  onImportLibrary: onImportLibrary,
-                  importService: importService,
+                  onImportLibrary: widget.onImportLibrary,
+                  importService: widget.importService,
+                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentSearchPage(),
                 ),
               ),
@@ -67,8 +81,9 @@ class FluentAppShell extends StatelessWidget {
                 icon: const Icon(FluentIcons.tag),
                 title: const Text('标签管理'),
                 body: _ShellPage(
-                  onImportLibrary: onImportLibrary,
-                  importService: importService,
+                  onImportLibrary: widget.onImportLibrary,
+                  importService: widget.importService,
+                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentTagManagementPage(),
                 ),
               ),
@@ -76,8 +91,9 @@ class FluentAppShell extends StatelessWidget {
                 icon: const Icon(FluentIcons.settings),
                 title: const Text('设置'),
                 body: _ShellPage(
-                  onImportLibrary: onImportLibrary,
-                  importService: importService,
+                  onImportLibrary: widget.onImportLibrary,
+                  importService: widget.importService,
+                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentSettingsPage(),
                 ),
               ),
@@ -85,8 +101,9 @@ class FluentAppShell extends StatelessWidget {
                 icon: const Icon(FluentIcons.diagnostic),
                 title: const Text('运营监控'),
                 body: _ShellPage(
-                  onImportLibrary: onImportLibrary,
-                  importService: importService,
+                  onImportLibrary: widget.onImportLibrary,
+                  importService: widget.importService,
+                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentOperationsMonitoringPage(),
                 ),
               ),
@@ -94,8 +111,9 @@ class FluentAppShell extends StatelessWidget {
                 icon: const Icon(FluentIcons.command_prompt),
                 title: const Text('日志终端'),
                 body: _ShellPage(
-                  onImportLibrary: onImportLibrary,
-                  importService: importService,
+                  onImportLibrary: widget.onImportLibrary,
+                  importService: widget.importService,
+                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentLogViewerPage(),
                 ),
               ),
@@ -103,14 +121,18 @@ class FluentAppShell extends StatelessWidget {
                 icon: const Icon(FluentIcons.favorite_star),
                 title: const Text('收藏'),
                 body: _ShellPage(
-                  onImportLibrary: onImportLibrary,
-                  importService: importService,
+                  onImportLibrary: widget.onImportLibrary,
+                  importService: widget.importService,
+                  onToggleNavigationPane: _togglePaneMode,
                   child: FluentCollectionsPage(
-                    collectionService: collectionService,
+                    collectionService: widget.collectionService,
                   ),
                 ),
               ),
             ],
+            displayMode: _isPaneExpanded
+                ? PaneDisplayMode.expanded
+                : PaneDisplayMode.compact,
           ),
         );
       },
@@ -122,9 +144,11 @@ class _ShellPage extends StatelessWidget {
   final Widget child;
   final VoidCallback? onImportLibrary;
   final ImportService? importService;
+  final VoidCallback onToggleNavigationPane;
 
   const _ShellPage({
     required this.child,
+    required this.onToggleNavigationPane,
     this.onImportLibrary,
     this.importService,
   });
@@ -136,6 +160,7 @@ class _ShellPage extends StatelessWidget {
         _DesktopShellTopBar(
           onImportLibrary: onImportLibrary,
           importService: importService,
+          onToggleNavigationPane: onToggleNavigationPane,
         ),
         Expanded(child: child),
       ],
@@ -146,8 +171,13 @@ class _ShellPage extends StatelessWidget {
 class _DesktopShellTopBar extends StatefulWidget {
   final VoidCallback? onImportLibrary;
   final ImportService? importService;
+  final VoidCallback onToggleNavigationPane;
 
-  const _DesktopShellTopBar({this.onImportLibrary, this.importService});
+  const _DesktopShellTopBar({
+    required this.onToggleNavigationPane,
+    this.onImportLibrary,
+    this.importService,
+  });
 
   @override
   State<_DesktopShellTopBar> createState() => _DesktopShellTopBarState();
@@ -215,9 +245,7 @@ class _DesktopShellTopBarState extends State<_DesktopShellTopBar> {
                   message: '展开/收起菜单',
                   child: IconButton(
                     icon: const Icon(FluentIcons.global_nav_button),
-                    onPressed: () {
-                      NavigationView.of(buttonContext).togglePane();
-                    },
+                    onPressed: widget.onToggleNavigationPane,
                   ),
                 ),
               ),
