@@ -14,9 +14,7 @@ import '../widgets/monitoring/monitoring_workspace.dart';
 import '../widgets/log_viewer/log_viewer_workspace.dart';
 import '../widgets/tag_management/tag_management_workspace.dart';
 import '../models/image.dart';
-import '../models/viewer_window_context.dart';
 import '../services/collection_service.dart';
-import '../services/viewer_window_service.dart';
 import '../services/batch_service.dart';
 import '../providers/config_provider.dart';
 import '../providers/selection_provider.dart';
@@ -119,9 +117,24 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
   }
 
   Widget _buildGalleryWorkspace(BuildContext context) {
-    return FluentGalleryContent(
-      onImageTap: null, // Removed single click routing
-      onImageDoubleTap: (image) => _showGalleryImageDetail(context, image),
+    return Consumer<ImageListProvider>(
+      builder: (context, imageProvider, _) {
+        return FluentGalleryContent(
+          onImageTap: null,
+          onImageDoubleTap: (image) {
+            final index = imageProvider.indexOfImage(image.id);
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ImageDetailScreen(
+                  image: image,
+                  images: imageProvider.images,
+                  initialIndex: index,
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -367,12 +380,6 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
         ),
       ],
     );
-  }
-
-  void _showGalleryImageDetail(BuildContext context, ImageModel image) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => ImageDetailScreen(image: image)));
   }
 
   Future<void> _confirmAndTriggerBatchAITags(
@@ -701,14 +708,13 @@ class _FluentSearchPageState extends State<FluentSearchPage> {
       return;
     }
 
-    ViewerWindowService(
-      adapter: DesktopMultiWindowViewerWindowAdapter(),
-    ).openWindow(
-      selectedFilename: image.filename,
-      context: ViewerWindowContext.search(
-        selectedIndex: selectedIndex,
-        selectedImageId: image.id,
-        snapshot: provider.viewerWindowSnapshot,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ImageDetailScreen(
+          image: image,
+          images: provider.results,
+          initialIndex: selectedIndex,
+        ),
       ),
     );
   }

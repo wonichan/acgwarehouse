@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import '../models/image.dart';
-import '../models/viewer_window_context.dart';
 import '../services/api_service.dart';
 
 enum ViewMode { grid, masonry }
@@ -32,17 +31,6 @@ class ImageListProvider extends ChangeNotifier {
   bool get sortAsc => _sortAsc;
   List<int> get selectedTagIds => _selectedTagIds;
   bool? get hasTagsFilter => _hasTagsFilter;
-  ViewerWindowGallerySnapshot get viewerWindowSnapshot =>
-      ViewerWindowGallerySnapshot(
-        sortBy: _sortField.name == 'createdAt'
-            ? 'created_at'
-            : _sortField.name == 'fileSize'
-            ? 'file_size'
-            : 'filename',
-        sortDir: _sortAsc ? 'asc' : 'desc',
-        tagIds: List<int>.unmodifiable(_selectedTagIds),
-        hasTags: _hasTagsFilter,
-      );
 
   int indexOfImage(int imageId) =>
       _images.indexWhere((image) => image.id == imageId);

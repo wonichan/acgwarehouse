@@ -5,20 +5,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
-import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:fluent_ui/fluent_ui.dart' show WindowListener;
 import 'package:window_manager/window_manager.dart';
 
 import 'providers/provider_setup.dart';
 import 'providers/theme_provider.dart';
 import 'bootstrap/packaged_desktop_bootstrap.dart';
-import 'bootstrap/viewer_window_runtime_bootstrap.dart';
 import 'bootstrap/single_instance_guard.dart';
 import 'bootstrap/runtime_manifest_loader.dart';
 import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
 import 'app/material_app_shell.dart';
-import 'app/viewer_window_app.dart';
-import 'services/viewer_window_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/window_manager.dart';
 import 'widgets/desktop_material_theme_bridge.dart';
@@ -28,12 +25,10 @@ import 'widgets/startup/startup_progress_screen.dart';
 void main(List<String> args) async {
   // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
-  final viewerBootstrap = ViewerWindowBootstrapData.fromCommandLine(args);
+
   SingleInstanceGuard? singleInstanceGuard;
 
-  if (viewerBootstrap == null &&
-      !kIsWeb &&
-      defaultTargetPlatform == TargetPlatform.windows) {
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
     singleInstanceGuard = await SingleInstanceGuard.tryAcquire();
     if (singleInstanceGuard == null) {
       return;
@@ -42,18 +37,7 @@ void main(List<String> args) async {
 
   final packagedBootstrap = PackagedDesktopBootstrap();
 
-  if (viewerBootstrap != null) {
-    await configureViewerWindowRuntime(
-      isDevelopmentMode: !kReleaseMode,
-      isDesktopTarget: !kIsWeb,
-    );
-    runApp(ViewerWindowApp(bootstrapData: viewerBootstrap));
-    return;
-  }
-
   // Initialize window manager only for main window.
-  // Viewer windows are controlled by desktop_multi_window to avoid
-  // close-event routing conflicts across multi-window isolates.
   if (defaultTargetPlatform == TargetPlatform.windows) {
     await AppWindowManager.ensureInitialized();
   }
@@ -261,7 +245,6 @@ class _ThemeBootstrapperState extends State<_ThemeBootstrapper>
       _isClosing = true;
     });
     try {
-      await _closeViewerSubWindows();
       await widget.packagedBootstrap?.shutdown();
       await widget.singleInstanceGuard?.release();
     } finally {
@@ -269,24 +252,6 @@ class _ThemeBootstrapperState extends State<_ThemeBootstrapper>
       _closeHookAttached = false;
       await windowManager.setPreventClose(false);
       await windowManager.destroy();
-    }
-  }
-
-  Future<void> _closeViewerSubWindows() async {
-    try {
-      final subWindowIds = await DesktopMultiWindow.getAllSubWindowIds()
-          .timeout(const Duration(seconds: 2));
-      for (final id in subWindowIds) {
-        try {
-          await WindowController.fromWindowId(
-            id,
-          ).close().timeout(const Duration(milliseconds: 800));
-        } catch (_) {
-          // Best-effort close only. Main shutdown continues.
-        }
-      }
-    } catch (_) {
-      // Ignore and continue shutdown; some environments may not expose sub windows.
     }
   }
 

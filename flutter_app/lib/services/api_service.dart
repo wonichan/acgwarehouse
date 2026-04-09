@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/image.dart';
-import '../models/viewer_window_result.dart';
 
 /// Pagination response wrapper for list endpoints
 class PaginationResponse<T> {
@@ -97,30 +96,6 @@ class ApiService {
     );
   }
 
-  Future<ViewerWindowResult> fetchViewerWindow(
-    ViewerWindowRequest request,
-  ) async {
-    final response = await _client.post(
-      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/viewer/window'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(request.toJson()),
-    );
-
-    final json = response.body.isEmpty
-        ? const <String, dynamic>{}
-        : jsonDecode(response.body) as Map<String, dynamic>;
-
-    if (response.statusCode != 200) {
-      throw ViewerWindowApiException(
-        json['error'] as String? ?? 'viewer_window_failed',
-        json['message'] as String? ?? 'Failed to load viewer window',
-        response.statusCode,
-      );
-    }
-
-    return ViewerWindowResult.fromJson(json);
-  }
-
   Future<void> openImageSourceFile(int imageId) async {
     final response = await _client.post(
       Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/images/$imageId/open-source'),
@@ -163,11 +138,4 @@ class ApiException implements Exception {
 
   @override
   String toString() => 'ApiException: $message (status: $statusCode)';
-}
-
-class ViewerWindowApiException extends ApiException {
-  final String error;
-
-  ViewerWindowApiException(this.error, String message, int statusCode)
-    : super(message, statusCode);
 }

@@ -8,6 +8,7 @@ import '../providers/selection_provider.dart';
 import '../models/image.dart';
 import '../services/api_service.dart';
 import '../services/collection_service.dart';
+import '../utils/file_manager.dart';
 import 'fluent_image_card.dart';
 import 'image_collection_picker_dialog.dart';
 import 'justified_image_grid.dart';
@@ -124,6 +125,10 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
           value: 'open_source',
           child: Text('打开源文件'),
         ),
+        material.PopupMenuItem<String>(
+          value: 'open_folder',
+          child: Text('打开所在文件夹'),
+        ),
         material.PopupMenuItem<String>(value: 'favorite', child: Text('收藏')),
         material.PopupMenuItem<String>(
           value: 'delete_permanent',
@@ -137,6 +142,9 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
     switch (selected) {
       case 'open_source':
         await _openSource(image);
+        break;
+      case 'open_folder':
+        await openContainingFolder(image.path);
         break;
       case 'favorite':
         await _favoriteToCollection(image);

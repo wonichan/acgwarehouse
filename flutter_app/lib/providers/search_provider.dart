@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import '../models/viewer_window_context.dart';
 import '../services/search_service.dart';
 import '../models/image.dart';
 
@@ -31,13 +30,6 @@ class SearchProvider with ChangeNotifier {
   String get currentQuery => _currentQuery;
   String get sortBy => _sortBy;
   String get sortOrder => _sortOrder;
-  ViewerWindowSearchSnapshot get viewerWindowSnapshot =>
-      ViewerWindowSearchSnapshot(
-        query: _currentQuery,
-        tagIds: List<int>.unmodifiable(_currentTagIds),
-        sortBy: _sortBy,
-        sortOrder: _sortOrder,
-      );
 
   int indexOfResult(int imageId) =>
       _results.indexWhere((image) => image.id == imageId);
