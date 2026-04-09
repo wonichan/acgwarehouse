@@ -17,6 +17,9 @@ import '../models/image.dart';
 import '../models/viewer_window_context.dart';
 import '../services/collection_service.dart';
 import '../services/viewer_window_service.dart';
+import '../services/batch_service.dart';
+import '../providers/config_provider.dart';
+import '../providers/selection_provider.dart';
 
 /// Fluent 风格图库页面
 /// 包含 CommandBar 工具栏和图库内容
@@ -47,8 +50,8 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<ImageListProvider, TagProvider>(
-      builder: (context, imageProvider, tagProvider, child) {
+    return Consumer3<ImageListProvider, TagProvider, SelectionProvider>(
+      builder: (context, imageProvider, tagProvider, selection, child) {
         return ScaffoldPage(
           header: PageHeader(
             title: _buildTitle(context, imageProvider, tagProvider),
@@ -72,6 +75,27 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
                   },
                 ),
                 const CommandBarSeparator(),
+                // Batch add tags — only when images are selected
+                if (selection.hasSelection) ...[
+                  CommandBarButton(
+                    icon: const Icon(FluentIcons.tag),
+                    label: Text('批量添加标签 (${selection.selectedCount})'),
+                    onPressed: () {
+                      _showBatchAddTagDialog(
+                        context,
+                        selection,
+                        tagProvider,
+                        imageProvider,
+                      );
+                    },
+                  ),
+                  CommandBarButton(
+                    icon: const Icon(FluentIcons.clear),
+                    label: const Text('取消选择'),
+                    onPressed: selection.clearSelection,
+                  ),
+                  const CommandBarSeparator(),
+                ],
                 CommandBarButton(
                   icon: const Icon(FluentIcons.auto_enhance_on),
                   label: const Text('批量AI标签'),
@@ -443,6 +467,68 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
         return 'file_size';
     }
   }
+
+  /// Dialog for batch-adding tags to selected images
+  Future<void> _showBatchAddTagDialog(
+    BuildContext context,
+    SelectionProvider selection,
+    TagProvider tagProvider,
+    ImageListProvider imageProvider,
+  ) async {
+    final selectedIds = selection.selectedImageIds.toList();
+    if (selectedIds.isEmpty) return;
+
+    await tagProvider.loadTags();
+    if (!context.mounted) return;
+
+    final result = await showDialog<List<int>>(
+      context: context,
+      builder: (dialogContext) => _BatchAddTagDialog(
+        tagProvider: tagProvider,
+        selectedCount: selectedIds.length,
+      ),
+    );
+
+    if (result == null || !context.mounted) return;
+
+    try {
+      final batchService = BatchService(
+        baseUrl: context.read<ConfigProvider>().baseUrl,
+      );
+      final updated = await batchService.batchAddTags(selectedIds, result);
+      if (!context.mounted) return;
+      selection.clearSelection();
+      imageProvider.loadImages(refresh: true);
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => ContentDialog(
+          title: const Text('批量添加成功'),
+          content: Text('已为 $updated 张图片添加所选标签'),
+          actions: [
+            FilledButton(
+              child: const Text('知道了'),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => ContentDialog(
+          title: const Text('批量添加失败'),
+          content: Text('批量添加标签失败：$e'),
+          actions: [
+            FilledButton(
+              child: const Text('关闭'),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      );
+    }
+  }
 }
 
 /// Fluent 风格搜索页面
@@ -677,5 +763,129 @@ class FluentCollectionsPage extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => ImageDetailScreen(image: image)));
+  }
+}
+
+/// Dialog for selecting tags to batch-add to images
+class _BatchAddTagDialog extends StatefulWidget {
+  final TagProvider tagProvider;
+  final int selectedCount;
+
+  const _BatchAddTagDialog({
+    required this.tagProvider,
+    required this.selectedCount,
+  });
+
+  @override
+  State<_BatchAddTagDialog> createState() => _BatchAddTagDialogState();
+}
+
+class _BatchAddTagDialogState extends State<_BatchAddTagDialog> {
+  final Set<int> _selectedTagIds = {};
+  final TextEditingController _searchController = TextEditingController();
+  List<Tag> _filteredTags = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredTags = widget.tagProvider.allTags;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _filterTags(String query) {
+    if (query.isEmpty) {
+      setState(() => _filteredTags = widget.tagProvider.allTags);
+      return;
+    }
+    setState(() {
+      _filteredTags = widget.tagProvider.allTags
+          .where(
+            (t) => t.preferredLabel.toLowerCase().contains(query.toLowerCase()),
+          )
+          .toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ContentDialog(
+      title: const Text('批量添加标签'),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('将为 ${widget.selectedCount} 张图片添加以下标签：'),
+            const SizedBox(height: 12),
+            TextBox(
+              controller: _searchController,
+              placeholder: '搜索标签...',
+              prefix: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(FluentIcons.search, size: 14),
+              ),
+              onChanged: _filterTags,
+            ),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 250),
+              child: SingleChildScrollView(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _filteredTags.map((tag) {
+                    final isSelected = _selectedTagIds.contains(tag.id);
+                    return ToggleButton(
+                      checked: isSelected,
+                      onChanged: (v) {
+                        setState(() {
+                          if (v) {
+                            _selectedTagIds.add(tag.id);
+                          } else {
+                            _selectedTagIds.remove(tag.id);
+                          }
+                        });
+                      },
+                      child: Text(tag.preferredLabel),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            if (_selectedTagIds.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '请至少选择一个标签',
+                  style: TextStyle(
+                    color: FluentTheme.of(
+                      context,
+                    ).resources.textFillColorSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        Button(
+          child: const Text('取消'),
+          onPressed: () => Navigator.pop(context),
+        ),
+        FilledButton(
+          onPressed: _selectedTagIds.isEmpty
+              ? null
+              : () => Navigator.pop(context, _selectedTagIds.toList()),
+          child: const Text('确认添加'),
+        ),
+      ],
+    );
   }
 }

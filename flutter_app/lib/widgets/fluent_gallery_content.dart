@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/config_provider.dart';
 import '../providers/image_provider.dart';
+import '../providers/selection_provider.dart';
 import '../models/image.dart';
 import '../services/api_service.dart';
 import '../services/collection_service.dart';
@@ -295,18 +296,33 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
   Widget _buildImageList(ImageListProvider provider) {
     final images = provider.images;
 
-    return JustifiedImageGrid(
-      images: images,
-      controller: _scrollController,
-      targetRowHeight: 250.0,
-      spacing: 8.0,
-      itemBuilder: (context, index) {
-        return FluentImageCard(
-          image: images[index],
-          onTap: widget.onImageTap,
-          onDoubleClick: widget.onImageDoubleTap,
-          onSecondaryTapDown: (image, details) {
-            _showImageContextMenu(image, details.globalPosition);
+    return Consumer<SelectionProvider>(
+      builder: (context, selection, _) {
+        return JustifiedImageGrid(
+          images: images,
+          controller: _scrollController,
+          targetRowHeight: 250.0,
+          spacing: 8.0,
+          itemBuilder: (context, index) {
+            final image = images[index];
+            return FluentImageCard(
+              image: image,
+              isSelected: selection.isSelected(image.id),
+              onTap: widget.onImageTap,
+              onDoubleClick: widget.onImageDoubleTap,
+              onSelect: selection.isSelectionMode
+                  ? (img, selected) {
+                      if (selected) {
+                        selection.toggleSelection(img.id);
+                      } else {
+                        selection.toggleSelection(img.id);
+                      }
+                    }
+                  : null,
+              onSecondaryTapDown: (img, details) {
+                _showImageContextMenu(img, details.globalPosition);
+              },
+            );
           },
         );
       },

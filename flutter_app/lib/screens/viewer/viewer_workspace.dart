@@ -9,8 +9,9 @@ import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/screens/viewer/viewer_filmstrip.dart';
 import 'package:gallery/screens/viewer/viewer_keyboard_scope.dart';
 import 'package:gallery/screens/viewer/viewer_metadata_sidebar.dart';
-import 'package:gallery/screens/viewer/viewer_progress_indicator.dart';
-import 'package:gallery/screens/viewer/viewer_window_service.dart';
+import 'package:gallery/screens/viewer/viewer_stage.dart'
+    show ViewerStage, openContainingFolder;
+import 'package:gallery/services/viewer_window_service.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/services/tag_service.dart';
 import 'package:provider/provider.dart';
@@ -195,13 +196,18 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
     }
 
     final nextIndexInWindow = window.selectedIndexInWindow + 1;
-    final nextItem = nextIndexInWindow < window.items.length
-        ? window.items[nextIndexInWindow]
-        : null;
+
+    // 目标仍在当前 window 缓存内 → 本地切换，零延迟
+    if (nextIndexInWindow < window.items.length) {
+      _selectItemInCurrentWindow(nextIndexInWindow);
+      return;
+    }
+
+    // 超出当前 window 边界 → 请求后端返回新 window
     final nextContext = _copyContext(
       context,
       selectedIndex: window.selectedIndex + 1,
-      selectedImageId: nextItem?.id ?? currentItem.imageId,
+      selectedImageId: currentItem.imageId,
     );
     unawaited(_loadWindow(nextContext));
   }
@@ -219,13 +225,18 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
     }
 
     final previousIndexInWindow = window.selectedIndexInWindow - 1;
-    final previousItem = previousIndexInWindow >= 0
-        ? window.items[previousIndexInWindow]
-        : null;
+
+    // 目标仍在当前 window 缓存内 → 本地切换，零延迟
+    if (previousIndexInWindow >= 0) {
+      _selectItemInCurrentWindow(previousIndexInWindow);
+      return;
+    }
+
+    // 超出当前 window 边界 → 请求后端返回新 window
     final previousContext = _copyContext(
       context,
       selectedIndex: window.selectedIndex - 1,
-      selectedImageId: previousItem?.id ?? currentItem.imageId,
+      selectedImageId: currentItem.imageId,
     );
     unawaited(_loadWindow(previousContext));
   }
@@ -322,7 +333,12 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
                       Expanded(
                         child: Container(
                           color: Theme.of(context).colorScheme.surfaceContainer,
-                          child: ViewerStage(item: currentItem),
+                          child: ViewerStage(
+                            item: currentItem,
+                            onOpenContainingFolder: () {
+                              openContainingFolder(currentItem.path);
+                            },
+                          ),
                         ),
                       ),
                       ViewerMetadataSidebar(item: currentItem),

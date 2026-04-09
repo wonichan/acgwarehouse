@@ -5,7 +5,8 @@ import 'cached_image_widget.dart';
 typedef FluentImageTapCallback = void Function(ImageModel image);
 
 /// Fluent 风格图片卡片
-/// 简约设计：圆角矩形，悬停时显示阴影
+/// 简约设计：圆角矩形，悬停时显示阴影。
+/// 支持选择模式：选中时显示覆盖层和勾选标记。
 class FluentImageCard extends StatefulWidget {
   final ImageModel image;
   final FluentImageTapCallback? onTap;
@@ -14,6 +15,10 @@ class FluentImageCard extends StatefulWidget {
   onSecondaryTapDown;
   final double borderRadius;
 
+  /// Selection mode support
+  final bool isSelected;
+  final void Function(ImageModel image, bool selected)? onSelect;
+
   const FluentImageCard({
     super.key,
     required this.image,
@@ -21,6 +26,8 @@ class FluentImageCard extends StatefulWidget {
     this.onDoubleClick,
     this.onSecondaryTapDown,
     this.borderRadius = 8.0,
+    this.isSelected = false,
+    this.onSelect,
   });
 
   @override
@@ -39,7 +46,13 @@ class _FluentImageCardState extends State<FluentImageCard> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
-        onTap: widget.onTap != null ? () => widget.onTap!(widget.image) : null,
+        onTap: widget.onSelect != null
+            ? () {
+                widget.onSelect!(widget.image, !widget.isSelected);
+              }
+            : widget.onTap != null
+            ? () => widget.onTap!(widget.image)
+            : null,
         onDoubleTap: widget.onDoubleClick != null
             ? () => widget.onDoubleClick!(widget.image)
             : null,
@@ -53,16 +66,54 @@ class _FluentImageCardState extends State<FluentImageCard> {
             boxShadow: _isHovered
                 ? [
                     BoxShadow(
-                      color: theme.accentColor.withOpacity(0.3),
+                      color: theme.accentColor.withValues(alpha: 0.3),
                       blurRadius: 12,
                       spreadRadius: 2,
                     ),
                   ]
                 : [],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(widget.borderRadius),
-            child: _buildImage(thumbnailUrl, theme),
+          child: Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(widget.borderRadius),
+                child: _buildImage(thumbnailUrl, theme),
+              ),
+              // Selection overlay
+              if (widget.isSelected)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(widget.borderRadius),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: theme.accentColor.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(
+                          widget.borderRadius,
+                        ),
+                        border: Border.all(color: theme.accentColor, width: 2),
+                      ),
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              FluentIcons.check_mark,
+                              size: 12,
+                              color: theme.accentColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
