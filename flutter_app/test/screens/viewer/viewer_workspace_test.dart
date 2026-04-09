@@ -377,7 +377,8 @@ ViewerWindowContext _context({
 }
 
 class _RecordingTagService extends TagService {
-  _RecordingTagService(this.loads, this.imageTagsById);
+  _RecordingTagService(this.loads, this.imageTagsById)
+    : super(baseUrl: 'http://localhost:8080');
 
   final List<int> loads;
   final Map<int, Map<String, List<Tag>>> imageTagsById;
@@ -395,16 +396,19 @@ class _RecordingTagService extends TagService {
 
 class _FakeViewerApiService extends ApiService {
   _FakeViewerApiService(this.results, {this.error})
-    : _steps = results.map(_ViewerApiStep.result).toList(growable: false);
+    : _steps = results.map(_ViewerApiStep.result).toList(growable: false),
+      super(baseUrl: 'http://localhost:8080');
 
   _FakeViewerApiService.sequence(this.results)
     : error = null,
-      _steps = results.map(_ViewerApiStep.result).toList(growable: false);
+      _steps = results.map(_ViewerApiStep.result).toList(growable: false),
+      super(baseUrl: 'http://localhost:8080');
 
   _FakeViewerApiService.steps(List<_ViewerApiStep> steps)
     : results = const [],
       error = null,
-      _steps = steps;
+      _steps = steps,
+      super(baseUrl: 'http://localhost:8080');
 
   final List<ViewerWindowResult> results;
   final ViewerWindowApiException? error;

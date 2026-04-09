@@ -23,14 +23,11 @@ class PaginationResponse<T> {
 /// API service for communicating with the ACGWarehouse backend
 class ApiService {
   final http.Client _client;
-  final String? _baseUrlOverride;
+  final String _baseUrl;
 
-  /// Dynamic base URL - reads from ApiConfig unless override is set
-  String get baseUrl => _baseUrlOverride ?? ApiConfig.hostUrl;
-
-  ApiService({http.Client? client, String? baseUrl})
+  ApiService({http.Client? client, required String baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrlOverride = baseUrl;
+      _baseUrl = baseUrl;
 
   /// Fetches a paginated list of images with optional filtering
   ///
@@ -64,7 +61,7 @@ class ApiService {
     }
 
     final uri = Uri.parse(
-      '$baseUrl/api/v1/images',
+      ApiConfig.images(_baseUrl),
     ).replace(queryParameters: queryParams);
 
     debugPrint('API 请求: $uri');
@@ -104,7 +101,7 @@ class ApiService {
     ViewerWindowRequest request,
   ) async {
     final response = await _client.post(
-      Uri.parse('$baseUrl/api/v1/viewer/window'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/viewer/window'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(request.toJson()),
     );
@@ -126,7 +123,7 @@ class ApiService {
 
   Future<void> openImageSourceFile(int imageId) async {
     final response = await _client.post(
-      Uri.parse('$baseUrl/api/v1/images/$imageId/open-source'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/images/$imageId/open-source'),
       headers: {'Content-Type': 'application/json'},
     );
 
@@ -140,7 +137,7 @@ class ApiService {
 
   Future<void> permanentDeleteImage(int imageId) async {
     final response = await _client.delete(
-      Uri.parse('$baseUrl/api/v1/images/$imageId/permanent'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/images/$imageId/permanent'),
       headers: {'Content-Type': 'application/json'},
     );
 

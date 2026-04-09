@@ -15,7 +15,10 @@ void main() {
 
   setUp(() {
     mockClient = MockClient();
-    tagService = TagService(client: mockClient);
+    tagService = TagService(
+      baseUrl: 'http://localhost:8080',
+      client: mockClient,
+    );
   });
 
   group('TagService', () {
@@ -77,7 +80,10 @@ void main() {
         expect(jobId, 456);
         final captured =
             verify(mockClient.get(captureAny)).captured.single as Uri;
-        expect(captured.toString(), ApiConfig.aiTagStatus(123));
+        expect(
+          captured.toString(),
+          ApiConfig.aiTagStatus('http://localhost:8080', 123),
+        );
       });
     });
 
@@ -316,16 +322,22 @@ void main() {
         await tagService.deleteTagAlias(101, 2);
 
         expect(aliases, ['waifu']);
-        verify(mockClient.get(Uri.parse(ApiConfig.tagAliases(101)))).called(1);
+        verify(
+          mockClient.get(
+            Uri.parse(ApiConfig.tagAliases('http://localhost:8080', 101)),
+          ),
+        ).called(1);
         verify(
           mockClient.post(
-            Uri.parse(ApiConfig.tagAliases(101)),
+            Uri.parse(ApiConfig.tagAliases('http://localhost:8080', 101)),
             headers: {'Content-Type': 'application/json'},
             body: '{"label":"best-girl","alias_type":"synonym"}',
           ),
         ).called(1);
         verify(
-          mockClient.delete(Uri.parse(ApiConfig.tagAlias(101, 2))),
+          mockClient.delete(
+            Uri.parse(ApiConfig.tagAlias('http://localhost:8080', 101, 2)),
+          ),
         ).called(1);
       });
 

@@ -8,10 +8,15 @@ import '../models/monitoring_models.dart';
 class MonitoringService {
   final http.Client _client;
   final String? _basicAuthHeader;
+  final String _baseUrl;
 
-  MonitoringService({http.Client? client, String? basicAuthHeader})
-    : _client = client ?? http.Client(),
-      _basicAuthHeader = basicAuthHeader;
+  MonitoringService({
+    http.Client? client,
+    String? basicAuthHeader,
+    required String baseUrl,
+  }) : _client = client ?? http.Client(),
+       _basicAuthHeader = basicAuthHeader,
+       _baseUrl = baseUrl;
 
   Map<String, dynamic>? get webSocketHeaders {
     if (_basicAuthHeader == null || _basicAuthHeader!.isEmpty) {
@@ -22,7 +27,7 @@ class MonitoringService {
 
   Future<MonitoringOverview> fetchOverview() async {
     final response = await _client.get(
-      Uri.parse('${ApiConfig.hostUrl}/admin/api/task-platform/overview'),
+      Uri.parse('${_baseUrl}/admin/api/task-platform/overview'),
       headers: _headers(),
     );
     _ensureSuccess(response, 'fetch monitoring overview');
@@ -34,7 +39,7 @@ class MonitoringService {
 
   Future<List<BatchRow>> fetchBatches({int? limit}) async {
     final response = await _client.get(
-      Uri.parse('${ApiConfig.hostUrl}/admin/api/task-batches').replace(
+      Uri.parse('${_baseUrl}/admin/api/task-batches').replace(
         queryParameters: {if (limit != null) 'limit': limit.toString()},
       ),
       headers: _headers(),
@@ -54,7 +59,7 @@ class MonitoringService {
 
   Future<List<TaskDetail>> fetchTasks({int? batchId, int? limit}) async {
     final response = await _client.get(
-      Uri.parse('${ApiConfig.hostUrl}/admin/api/tasks').replace(
+      Uri.parse('${_baseUrl}/admin/api/tasks').replace(
         queryParameters: {
           if (batchId != null) 'batch_id': batchId.toString(),
           if (limit != null) 'limit': limit.toString(),
@@ -75,7 +80,7 @@ class MonitoringService {
 
   Future<RetryResult> retryFailedBatchTasks(int batchId) async {
     final response = await _client.post(
-      Uri.parse(ApiConfig.retryBatch(batchId)),
+      Uri.parse(ApiConfig.retryBatch(_baseUrl, batchId)),
       headers: _headers(),
     );
     _ensureSuccess(response, 'retry failed batch tasks');
@@ -87,7 +92,7 @@ class MonitoringService {
 
   Future<RetryResult> retryFailedTask(int taskId) async {
     final response = await _client.post(
-      Uri.parse(ApiConfig.retryTask(taskId)),
+      Uri.parse(ApiConfig.retryTask(_baseUrl, taskId)),
       headers: _headers(),
     );
     _ensureSuccess(response, 'retry failed task');

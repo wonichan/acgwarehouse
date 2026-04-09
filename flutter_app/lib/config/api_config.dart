@@ -1,117 +1,93 @@
-/// API configuration for backend endpoints
+/// API endpoint builder - no runtime state, pure functions.
 ///
-/// baseUrl can be updated at runtime via [updateBaseUrl].
-/// Default: 'http://localhost:8080/api/v1'
+/// All URL construction derives from [baseUrl] parameter.
+/// Configuration state lives exclusively in ConfigProvider.
+///
+/// Example usage:
+/// ```dart
+/// const baseUrl = 'http://localhost:8080';
+/// final url = ApiConfig.imageDetail(baseUrl, 42);
+/// // => 'http://localhost:8080/api/v1/images/42'
+/// ```
 class ApiConfig {
-  // Default base URL without /api/v1 suffix
+  ApiConfig._(); // prevent instantiation
+
   static const String developmentFallbackHostUrl = 'http://localhost:8080';
-  static const String _defaultHostUrl = developmentFallbackHostUrl;
-  static String _hostUrl = _defaultHostUrl;
-  static String? _adminBasicAuthHeader;
 
-  /// Current host URL (without /api/v1 suffix)
-  /// Example: 'http://localhost:8080'
-  static String get hostUrl => _hostUrl;
+  // ---- Core helpers ----
 
-  /// Current base URL (with /api/v1 suffix)
-  /// Example: 'http://localhost:8080/api/v1'
-  static String get baseUrl => '$hostUrl/api/v1';
+  /// Returns base API URL with /api/v1 suffix.
+  static String baseUrlOf(String baseUrl) => '$baseUrl/api/v1';
 
-  /// Updates the host URL
-  ///
-  /// [url] should be the base URL without /api/v1 suffix.
-  /// Example: 'http://localhost:8080'
-  static void updateBaseUrl(String url) {
-    // Normalize URL - remove trailing slash
-    final normalized = url.endsWith('/')
-        ? url.substring(0, url.length - 1)
-        : url;
-    _hostUrl = normalized;
-  }
+  // ---- Image endpoints ----
+  static String images(String baseUrl) => '${baseUrlOf(baseUrl)}/images';
+  static String imageDetail(String baseUrl, int id) =>
+      '${baseUrlOf(baseUrl)}/images/$id';
+  static String imageScan(String baseUrl) =>
+      '${baseUrlOf(baseUrl)}/images/scan';
+  static String importStatus(String baseUrl) =>
+      '${baseUrlOf(baseUrl)}/images/import-status';
 
-  /// Resets to default configuration
-  static void resetToDefault() {
-    _hostUrl = _defaultHostUrl;
-    _adminBasicAuthHeader = null;
-  }
+  // ---- Tag endpoints ----
+  static String tags(String baseUrl) => '${baseUrlOf(baseUrl)}/tags';
+  static String tagDetail(String baseUrl, int id) =>
+      '${baseUrlOf(baseUrl)}/tags/$id';
+  static String tagAliases(String baseUrl, int id) =>
+      '${baseUrlOf(baseUrl)}/tags/$id/aliases';
+  static String tagAlias(String baseUrl, int tagId, int aliasId) =>
+      '${baseUrlOf(baseUrl)}/tags/$tagId/aliases/$aliasId';
 
-  /// Applies the explicit development fallback host.
-  static void applyDevelopmentFallback() {
-    _hostUrl = developmentFallbackHostUrl;
-    _adminBasicAuthHeader = null;
-  }
+  // ---- Image tag endpoints ----
+  static String imageTags(String baseUrl, int imageId) =>
+      '${baseUrlOf(baseUrl)}/images/$imageId/tags';
+  static String imageTag(String baseUrl, int imageId, int tagId) =>
+      '${baseUrlOf(baseUrl)}/images/$imageId/tags/$tagId';
+  static String tagReview(String baseUrl, int imageId, int tagId) =>
+      '${baseUrlOf(baseUrl)}/images/$imageId/tags/$tagId/review';
+  static String batchTagReview(String baseUrl, int imageId) =>
+      '${baseUrlOf(baseUrl)}/images/$imageId/tags/batch-review';
 
-  static String? get adminBasicAuthHeader => _adminBasicAuthHeader;
+  // ---- AI tag endpoints ----
+  static String triggerAITags(String baseUrl, int imageId) =>
+      '${baseUrlOf(baseUrl)}/images/$imageId/ai-tags';
+  static String aiTagStatus(String baseUrl, int imageId) =>
+      '${baseUrlOf(baseUrl)}/images/$imageId/ai-tags/status';
+  static String batchAITags(String baseUrl) =>
+      '${baseUrlOf(baseUrl)}/images/batch-ai-tags';
+  static String defaultAIPrompt(String baseUrl) =>
+      '${baseUrlOf(baseUrl)}/ai-tags/default-prompt';
 
-  static void updateAdminBasicAuthHeader(String? value) {
-    final normalized = value?.trim();
-    _adminBasicAuthHeader = normalized == null || normalized.isEmpty
-        ? null
-        : normalized;
-  }
+  // ---- Search endpoints ----
+  static String search(String baseUrl) => '${baseUrlOf(baseUrl)}/search';
+  static String searchByFilename(String baseUrl) =>
+      '${baseUrlOf(baseUrl)}/search/filename';
 
-  /// Checks if current configuration matches default
-  static bool get isDefault => _hostUrl == _defaultHostUrl;
-
-  // Image endpoints
-  static String get images => '$baseUrl/images';
-  static String imageDetail(int id) => '$baseUrl/images/$id';
-  static String get imageScan => '$baseUrl/images/scan';
-  static String get importStatus => '$baseUrl/images/import-status';
-
-  // Tag endpoints
-  static String get tags => '$baseUrl/tags';
-  static String tagDetail(int id) => '$baseUrl/tags/$id';
-  static String tagAliases(int id) => '$baseUrl/tags/$id/aliases';
-  static String tagAlias(int tagId, int aliasId) =>
-      '$baseUrl/tags/$tagId/aliases/$aliasId';
-
-  // Image tag endpoints
-  static String imageTags(int imageId) => '$baseUrl/images/$imageId/tags';
-  static String imageTag(int imageId, int tagId) =>
-      '$baseUrl/images/$imageId/tags/$tagId';
-  static String tagReview(int imageId, int tagId) =>
-      '$baseUrl/images/$imageId/tags/$tagId/review';
-  static String batchTagReview(int imageId) =>
-      '$baseUrl/images/$imageId/tags/batch-review';
-
-  // AI tag endpoints
-  static String triggerAITags(int imageId) =>
-      '$baseUrl/images/$imageId/ai-tags';
-  static String aiTagStatus(int imageId) =>
-      '$baseUrl/images/$imageId/ai-tags/status';
-  static String get batchAITags => '$baseUrl/images/batch-ai-tags';
-  static String get defaultAIPrompt => '$baseUrl/ai-tags/default-prompt';
-
-  // Search endpoints
-  static String get search => '$baseUrl/search';
-  static String get searchByFilename => '$baseUrl/search/filename';
-
-  // Admin monitoring endpoints (under /admin/api, not /api/v1)
-  static String get adminOverview =>
-      '$hostUrl/admin/api/task-platform/overview';
-  static String get adminBatches => '$hostUrl/admin/api/task-batches';
-  static String adminTasks({int? batchId}) {
-    var url = '$hostUrl/admin/api/tasks';
-    if (batchId != null) {
-      url += '?batch_id=$batchId';
-    }
+  // ---- Admin monitoring endpoints (under /admin/api, not /api/v1) ----
+  static String adminOverview(String baseUrl) =>
+      '$baseUrl/admin/api/task-platform/overview';
+  static String adminBatches(String baseUrl) =>
+      '$baseUrl/admin/api/task-batches';
+  static String adminTasks(String baseUrl, {int? batchId}) {
+    var url = '$baseUrl/admin/api/tasks';
+    if (batchId != null) url += '?batch_id=$batchId';
     return url;
   }
 
-  static String retryBatch(int batchId) =>
-      '$hostUrl/admin/api/actions/task-batches/$batchId/retry-failed';
-
-  static String retryTask(int taskId) =>
-      '$hostUrl/admin/api/actions/tasks/$taskId/retry-failed';
-
-  static String get monitoringWs {
-    final wsHost = hostUrl.replaceFirst('http', 'ws');
+  static String retryBatch(String baseUrl, int batchId) =>
+      '$baseUrl/admin/api/actions/task-batches/$batchId/retry-failed';
+  static String retryTask(String baseUrl, int taskId) =>
+      '$baseUrl/admin/api/actions/tasks/$taskId/retry-failed';
+  static String monitoringWs(String baseUrl) {
+    final wsHost = baseUrl.replaceFirst('http', 'ws');
     return '$wsHost/admin/api/monitoring/ws';
   }
 
-  static String logStreamWs({required String source, int tail = 200}) {
-    final wsHost = hostUrl.replaceFirst('http', 'ws');
+  static String logStreamWs(
+    String baseUrl, {
+    required String source,
+    int tail = 200,
+  }) {
+    final wsHost = baseUrl.replaceFirst('http', 'ws');
     return '$wsHost/admin/api/logs/ws?source=$source&tail=$tail';
   }
 }

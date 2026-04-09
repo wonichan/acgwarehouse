@@ -13,7 +13,8 @@ import 'package:provider/provider.dart';
 
 /// Subclass that records setTagFilter calls without making real HTTP requests.
 class _TrackingImageListProvider extends ImageListProvider {
-  _TrackingImageListProvider() : super(ApiService());
+  _TrackingImageListProvider()
+    : super(ApiService(baseUrl: 'http://localhost:8080'));
 
   int setTagFilterCalls = 0;
   List<int> lastTagFilter = const [];
@@ -72,7 +73,7 @@ class _WorkspaceTagProvider extends TagProvider {
           canDelete: false,
         ),
       ],
-      super(TagService(client: client));
+      super(TagService(baseUrl: 'http://localhost:8080', client: client));
 
   final List<TagGovernanceRow> _rows;
   TagDeletePreview? _preview;

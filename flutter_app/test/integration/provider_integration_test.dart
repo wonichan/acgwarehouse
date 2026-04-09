@@ -103,7 +103,9 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
-            Provider(create: (_) => ApiService()),
+            Provider(
+              create: (_) => ApiService(baseUrl: 'http://localhost:8080'),
+            ),
             ChangeNotifierProvider(
               create: (context) =>
                   ImageListProvider(context.read<ApiService>()),
@@ -127,9 +129,15 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
-            Provider(create: (_) => ApiService()),
-            Provider(create: (_) => TagService()),
-            Provider(create: (_) => SearchService()),
+            Provider(
+              create: (_) => ApiService(baseUrl: 'http://localhost:8080'),
+            ),
+            Provider(
+              create: (_) => TagService(baseUrl: 'http://localhost:8080'),
+            ),
+            Provider(
+              create: (_) => SearchService(baseUrl: 'http://localhost:8080'),
+            ),
             ChangeNotifierProvider(
               create: (context) =>
                   ImageListProvider(context.read<ApiService>()),

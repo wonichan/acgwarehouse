@@ -8,7 +8,6 @@ import 'package:gallery/config/api_config.dart';
 void main() {
   group('RuntimeManifestLoader', () {
     setUp(() {
-      ApiConfig.resetToDefault();
       runtimeManifestEnvironmentProvider = () => Platform.environment;
       runtimeManifestExecutablePathProvider = () => Platform.resolvedExecutable;
     });
@@ -26,8 +25,7 @@ void main() {
 
       expect(result.source, RuntimeManifestSource.manifest);
       expect(result.appliedBaseUrl, 'http://127.0.0.1:51423');
-      expect(ApiConfig.hostUrl, 'http://127.0.0.1:51423');
-      expect(ApiConfig.adminBasicAuthHeader, 'Basic ZGVtbzpkZW1v');
+      expect(result.appliedAdminBasicAuth, 'Basic ZGVtbzpkZW1v');
     });
 
     test(
@@ -42,8 +40,7 @@ void main() {
 
         expect(result.source, RuntimeManifestSource.devFallback);
         expect(result.appliedBaseUrl, ApiConfig.developmentFallbackHostUrl);
-        expect(ApiConfig.hostUrl, ApiConfig.developmentFallbackHostUrl);
-        expect(ApiConfig.adminBasicAuthHeader, isNull);
+        expect(result.appliedAdminBasicAuth, isNull);
       },
     );
 
@@ -59,7 +56,6 @@ void main() {
 
         expect(result.source, RuntimeManifestSource.none);
         expect(result.appliedBaseUrl, isNull);
-        expect(ApiConfig.hostUrl, ApiConfig.developmentFallbackHostUrl);
       },
     );
 
@@ -76,8 +72,10 @@ void main() {
 
       expect(result.source, RuntimeManifestSource.manifest);
       expect(result.appliedBaseUrl, 'http://127.0.0.1:60001');
-      expect(ApiConfig.hostUrl, 'http://127.0.0.1:60001');
-      expect(ApiConfig.hostUrl, isNot(ApiConfig.developmentFallbackHostUrl));
+      expect(
+        result.appliedBaseUrl,
+        isNot(ApiConfig.developmentFallbackHostUrl),
+      );
     });
 
     test('resolveRuntimeManifestPath prefers ACG_RUNTIME_MANIFEST_PATH', () {

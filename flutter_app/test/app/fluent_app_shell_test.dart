@@ -25,7 +25,10 @@ import 'package:gallery/widgets/fluent_settings_page.dart';
 class _ShellMonitoringProvider extends MonitoringProvider {
   _ShellMonitoringProvider(http.Client client)
     : super(
-        service: MonitoringService(client: client),
+        service: MonitoringService(
+          baseUrl: 'http://localhost:8080',
+          client: client,
+        ),
         wsUriFactory: () =>
             Uri.parse('ws://localhost:8080/admin/api/monitoring/ws'),
       );
@@ -40,7 +43,10 @@ class _ShellMonitoringProvider extends MonitoringProvider {
 class _ShellLogViewerProvider extends LogViewerProvider {
   _ShellLogViewerProvider(http.Client client)
     : super(
-        service: LogStreamService(client: client),
+        service: LogStreamService(
+          baseUrl: 'http://localhost:8080',
+          client: client,
+        ),
         wsUriFactory: ({required source, tail = 200}) => Uri.parse(
           'ws://localhost:8080/admin/api/logs/stream?source=${source.name}&tail=$tail',
         ),
@@ -83,21 +89,32 @@ void main() {
       }
       return http.Response('{}', 200);
     });
-    final collectionService = CollectionService(client: mockClient);
+    final collectionService = CollectionService(
+      baseUrl: 'http://localhost:8080',
+      client: mockClient,
+    );
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<NavigationProvider>.value(value: navProvider),
           ChangeNotifierProvider<ImageListProvider>(
-            create: (_) => ImageListProvider(ApiService(client: mockClient)),
+            create: (_) => ImageListProvider(
+              ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+            ),
           ),
           ChangeNotifierProvider<TagProvider>(
-            create: (_) => TagProvider(TagService(client: mockClient)),
+            create: (_) => TagProvider(
+              TagService(baseUrl: 'http://localhost:8080', client: mockClient),
+            ),
           ),
           ChangeNotifierProvider<SearchProvider>(
-            create: (_) =>
-                SearchProvider(service: SearchService(client: mockClient)),
+            create: (_) => SearchProvider(
+              service: SearchService(
+                baseUrl: 'http://localhost:8080',
+                client: mockClient,
+              ),
+            ),
           ),
           ChangeNotifierProvider<MonitoringProvider>(
             create: (_) => _ShellMonitoringProvider(mockClient),

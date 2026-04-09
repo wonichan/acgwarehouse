@@ -93,9 +93,9 @@ void main() {
     late MonitoringService service;
 
     setUp(() {
-      ApiConfig.resetToDefault();
       requests = [];
       service = MonitoringService(
+        baseUrl: 'http://localhost:8080',
         client: MockClient((request) async {
           requests.add(request);
 
@@ -174,7 +174,7 @@ void main() {
         expect(requests.single.method, 'GET');
         expect(
           requests.single.url.toString(),
-          '${ApiConfig.hostUrl}/admin/api/task-platform/overview',
+          'http://localhost:8080/admin/api/task-platform/overview',
         );
         expect(requests.single.headers['Authorization'], 'Basic ZGVtbzpkZW1v');
       },

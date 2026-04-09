@@ -1,6 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/image.dart';
+import 'cached_image_widget.dart';
 
 typedef FluentImageTapCallback = void Function(ImageModel image);
 
@@ -10,7 +10,8 @@ class FluentImageCard extends StatefulWidget {
   final ImageModel image;
   final FluentImageTapCallback? onTap;
   final FluentImageTapCallback? onDoubleClick;
-  final void Function(ImageModel image, TapDownDetails details)? onSecondaryTapDown;
+  final void Function(ImageModel image, TapDownDetails details)?
+  onSecondaryTapDown;
   final double borderRadius;
 
   const FluentImageCard({
@@ -82,16 +83,16 @@ class _FluentImageCardState extends State<FluentImageCard> {
       );
     }
 
-    return CachedNetworkImage(
+    return CachedImageWidget(
       imageUrl: thumbnailUrl,
       fit: BoxFit.cover,
-      placeholder: (context, url) => Container(
+      placeholder: Container(
         color: theme.resources.cardBackgroundFillColorSecondary,
         child: Center(
           child: ProgressRing(strokeWidth: 2, activeColor: theme.accentColor),
         ),
       ),
-      errorWidget: (context, url, error) => Container(
+      errorBuilder: Container(
         color: theme.resources.cardBackgroundFillColorSecondary,
         child: Center(
           child: Icon(

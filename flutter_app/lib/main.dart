@@ -8,22 +8,12 @@ import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'providers/image_provider.dart';
+import 'providers/provider_setup.dart';
 import 'providers/theme_provider.dart';
-import 'providers/tag_provider.dart';
-import 'providers/search_provider.dart';
-import 'providers/navigation_provider.dart';
-import 'providers/config_provider.dart';
-import 'providers/selection_provider.dart';
 import 'bootstrap/packaged_desktop_bootstrap.dart';
 import 'bootstrap/viewer_window_runtime_bootstrap.dart';
 import 'bootstrap/single_instance_guard.dart';
 import 'bootstrap/runtime_manifest_loader.dart';
-import 'services/api_service.dart';
-import 'services/tag_service.dart';
-import 'services/search_service.dart';
-import 'services/monitoring_service.dart';
-import 'services/log_stream_service.dart';
 import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
 import 'app/material_app_shell.dart';
@@ -31,10 +21,6 @@ import 'app/viewer_window_app.dart';
 import 'services/viewer_window_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/window_manager.dart';
-import 'config/api_config.dart';
-import 'providers/monitoring_provider.dart';
-import 'providers/log_viewer_provider.dart';
-import 'models/log_models.dart';
 import 'widgets/desktop_material_theme_bridge.dart';
 import 'widgets/startup/startup_failure_screen.dart';
 import 'widgets/startup/startup_progress_screen.dart';
@@ -106,6 +92,7 @@ class PackagedDesktopLaunchApp extends StatefulWidget {
 class _PackagedDesktopLaunchAppState extends State<PackagedDesktopLaunchApp> {
   bool _isStarting = true;
   StartupFailure? _startupFailure;
+  RuntimeManifestLoadResult? _manifestResult;
 
   @override
   void initState() {
@@ -117,10 +104,11 @@ class _PackagedDesktopLaunchAppState extends State<PackagedDesktopLaunchApp> {
     final result = await widget.packagedBootstrap.startIfNeeded();
 
     if (result.isSuccess) {
-      await (widget.runtimeManifestLoader ?? RuntimeManifestLoader()).load(
-        isDevelopmentMode: widget.isDevelopmentMode,
-        isDesktopTarget: widget.isDesktopTarget,
-      );
+      _manifestResult =
+          await (widget.runtimeManifestLoader ?? RuntimeManifestLoader()).load(
+            isDevelopmentMode: widget.isDevelopmentMode,
+            isDesktopTarget: widget.isDesktopTarget,
+          );
     }
 
     if (!mounted) {
@@ -148,6 +136,7 @@ class _PackagedDesktopLaunchAppState extends State<PackagedDesktopLaunchApp> {
       startupFailure: _startupFailure,
       packagedBootstrap: widget.packagedBootstrap,
       singleInstanceGuard: widget.singleInstanceGuard,
+      manifestResult: _manifestResult,
       childOverride: widget.childOverride,
     );
   }
@@ -159,6 +148,7 @@ class MyApp extends StatelessWidget {
     this.startupFailure,
     this.packagedBootstrap,
     this.singleInstanceGuard,
+    this.manifestResult,
     this.childOverride,
   });
 
@@ -166,6 +156,7 @@ class MyApp extends StatelessWidget {
   final PackagedDesktopBootstrap? packagedBootstrap;
   final SingleInstanceGuard? singleInstanceGuard;
   final Widget? childOverride;
+  final RuntimeManifestLoadResult? manifestResult;
 
   @override
   Widget build(BuildContext context) {
@@ -174,50 +165,12 @@ class MyApp extends StatelessWidget {
     }
 
     return MultiProvider(
+      // ignore: invalid_use_of_visible_for_testing_member
       providers: [
-        // ConfigProvider must be first - other providers depend on it
-        ChangeNotifierProvider(create: (_) => ConfigProvider()),
-        Provider(create: (_) => ApiService()),
-        Provider(create: (_) => TagService()),
-        Provider(create: (_) => SearchService()),
-        Provider(
-          create: (_) => MonitoringService(
-            basicAuthHeader: ApiConfig.adminBasicAuthHeader,
-          ),
+        ...createAppProviders(
+          manifestBaseUrl: manifestResult?.appliedBaseUrl,
+          manifestAdminAuth: manifestResult?.appliedAdminBasicAuth,
         ),
-        ChangeNotifierProvider(
-          create: (context) =>
-              ImageListProvider(context.read<ApiService>())..loadImages(),
-        ),
-        ChangeNotifierProvider(
-          create: (context) => TagProvider(context.read<TagService>()),
-        ),
-        ChangeNotifierProvider(
-          create: (context) =>
-              SearchProvider(service: context.read<SearchService>()),
-        ),
-        ChangeNotifierProvider(
-          create: (context) => MonitoringProvider(
-            service: context.read<MonitoringService>(),
-            wsUriFactory: () => Uri.parse(ApiConfig.monitoringWs),
-          ),
-        ),
-        ChangeNotifierProvider(create: (_) => SelectionProvider()),
-        Provider(
-          create: (_) =>
-              LogStreamService(basicAuthHeader: ApiConfig.adminBasicAuthHeader),
-        ),
-        ChangeNotifierProvider(
-          create: (context) => LogViewerProvider(
-            service: context.read<LogStreamService>(),
-            wsUriFactory: ({required LogSource source, int tail = 200}) =>
-                Uri.parse(
-                  ApiConfig.logStreamWs(source: source.name, tail: tail),
-                ),
-          ),
-        ),
-        ChangeNotifierProvider(create: (_) => NavigationProvider()),
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: _ThemeBootstrapper(
         packagedBootstrap: packagedBootstrap,

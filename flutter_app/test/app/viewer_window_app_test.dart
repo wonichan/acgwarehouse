@@ -77,7 +77,8 @@ void main() {
 }
 
 class _FakeApiService extends ApiService {
-  _FakeApiService({required this.result});
+  _FakeApiService({required this.result})
+    : super(baseUrl: 'http://localhost:8080');
 
   final ViewerWindowResult result;
   final List<ViewerWindowRequest> requests = [];
@@ -92,6 +93,7 @@ class _FakeApiService extends ApiService {
 }
 
 class _FakeTagService extends TagService {
+  _FakeTagService() : super(baseUrl: 'http://localhost:8080');
   @override
   Future<Map<String, List<Tag>>> getImageTags(int imageId) async {
     return {'confirmed': const [], 'pending': const [], 'rejected': const []};

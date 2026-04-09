@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:gallery/models/viewer_session.dart';
 import 'package:gallery/models/viewer_window_context.dart';
 import 'package:gallery/models/viewer_window_result.dart';
+import 'package:gallery/providers/config_provider.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/screens/viewer/viewer_filmstrip.dart';
 import 'package:gallery/screens/viewer/viewer_keyboard_scope.dart';
 import 'package:gallery/screens/viewer/viewer_metadata_sidebar.dart';
-import 'package:gallery/screens/viewer/viewer_stage.dart';
+import 'package:gallery/screens/viewer/viewer_progress_indicator.dart';
+import 'package:gallery/screens/viewer/viewer_window_service.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/services/tag_service.dart';
 import 'package:provider/provider.dart';
@@ -45,7 +47,11 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
   void initState() {
     super.initState();
     _ownsTagProvider = widget.tagProvider == null;
-    _tagProvider = widget.tagProvider ?? TagProvider(TagService());
+    _tagProvider =
+        widget.tagProvider ??
+        TagProvider(
+          TagService(baseUrl: context.read<ConfigProvider>().baseUrl),
+        );
     _currentContext = widget.launchContext;
     unawaited(_loadWindow(widget.launchContext));
   }
@@ -59,7 +65,11 @@ class _ViewerWorkspaceState extends State<ViewerWorkspace> {
         _tagProvider.dispose();
       }
       _ownsTagProvider = widget.tagProvider == null;
-      _tagProvider = widget.tagProvider ?? TagProvider(TagService());
+      _tagProvider =
+          widget.tagProvider ??
+          TagProvider(
+            TagService(baseUrl: context.read<ConfigProvider>().baseUrl),
+          );
       if (_currentItem != null) {
         unawaited(_tagProvider.loadImageTags(_currentItem!.imageId));
       }

@@ -37,7 +37,12 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: ChangeNotifierProvider<TagProvider>(
-              create: (_) => TagProvider(TagService(client: mockClient)),
+              create: (_) => TagProvider(
+                TagService(
+                  baseUrl: 'http://localhost:8080',
+                  client: mockClient,
+                ),
+              ),
               child: const ImageMetadataPanel(
                 imageId: 1,
                 metadataSection: SizedBox.shrink(),

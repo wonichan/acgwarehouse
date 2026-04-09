@@ -23,12 +23,15 @@ class ImportTriggerException implements Exception {
 
 class ImportService {
   final http.Client _client;
+  final String _baseUrl;
 
-  ImportService({http.Client? client}) : _client = client ?? http.Client();
+  ImportService({http.Client? client, required String baseUrl})
+    : _client = client ?? http.Client(),
+      _baseUrl = baseUrl;
 
   Future<ImportTriggerResult> triggerImport() async {
     final response = await _client.post(
-      Uri.parse(ApiConfig.imageScan),
+      Uri.parse(ApiConfig.imageScan(_baseUrl)),
       headers: {'Content-Type': 'application/json'},
     );
 

@@ -19,7 +19,7 @@ class _TrackingImageListProvider extends ImageListProvider {
     required List<ImageModel> initialImages,
     required this.initialHasMore,
   }) : _initialImages = initialImages,
-       super(ApiService());
+       super(ApiService(baseUrl: 'http://localhost:8080'));
 
   final List<ImageModel> _initialImages;
   final bool initialHasMore;
@@ -47,7 +47,7 @@ class _TrackingImageListProvider extends ImageListProvider {
 class _MutableImageListProvider extends ImageListProvider {
   _MutableImageListProvider({required List<ImageModel> initialImages})
     : _images = List<ImageModel>.from(initialImages),
-      super(ApiService());
+      super(ApiService(baseUrl: 'http://localhost:8080'));
 
   List<ImageModel> _images;
 
@@ -178,9 +178,11 @@ void main() {
   ) async {
     final provider = _MutableImageListProvider(initialImages: [buildImage(1)]);
     final apiService = ApiService(
+      baseUrl: 'http://localhost:8080',
       client: MockClient((request) async => http.Response('{}', 200)),
     );
     final collectionService = CollectionService(
+      baseUrl: 'http://localhost:8080',
       client: MockClient((request) async {
         if (request.method == 'GET' &&
             request.url.path.endsWith('/api/v1/collections')) {
@@ -229,6 +231,7 @@ void main() {
       );
       Uri? deleteRequest;
       final apiService = ApiService(
+        baseUrl: 'http://localhost:8080',
         client: MockClient((request) async {
           if (request.method == 'DELETE' &&
               request.url.path.endsWith('/api/v1/images/1/permanent')) {
@@ -239,6 +242,7 @@ void main() {
         }),
       );
       final collectionService = CollectionService(
+        baseUrl: 'http://localhost:8080',
         client: MockClient(
           (request) async => http.Response('{"collections":[]}', 200),
         ),

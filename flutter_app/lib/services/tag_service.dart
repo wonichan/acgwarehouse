@@ -6,8 +6,11 @@ import '../models/tag_governance.dart';
 
 class TagService {
   final http.Client _client;
+  final String _baseUrl;
 
-  TagService({http.Client? client}) : _client = client ?? http.Client();
+  TagService({http.Client? client, required String baseUrl})
+    : _client = client ?? http.Client(),
+      _baseUrl = baseUrl;
 
   /// 获取标签列表
   Future<List<Tag>> fetchTags({
@@ -15,7 +18,7 @@ class TagService {
     int limit = 50,
     int offset = 0,
   }) async {
-    final uri = Uri.parse(ApiConfig.tags).replace(
+    final uri = Uri.parse(ApiConfig.tags(_baseUrl)).replace(
       queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
         'limit': limit.toString(),
@@ -42,7 +45,9 @@ class TagService {
 
   /// 获取图片的标签
   Future<Map<String, List<Tag>>> getImageTags(int imageId) async {
-    final response = await _client.get(Uri.parse(ApiConfig.imageTags(imageId)));
+    final response = await _client.get(
+      Uri.parse(ApiConfig.imageTags(_baseUrl, imageId)),
+    );
     if (response.statusCode != 200) {
       throw Exception('Failed to fetch image tags: ${response.statusCode}');
     }
@@ -68,7 +73,7 @@ class TagService {
     }
 
     final response = await _client.post(
-      Uri.parse(ApiConfig.imageTags(imageId)),
+      Uri.parse(ApiConfig.imageTags(_baseUrl, imageId)),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         if (tagId != null) 'tag_id': tagId,
@@ -88,7 +93,7 @@ class TagService {
   /// 移除图片标签
   Future<void> removeImageTag(int imageId, int tagId) async {
     final response = await _client.delete(
-      Uri.parse(ApiConfig.imageTag(imageId, tagId)),
+      Uri.parse(ApiConfig.imageTag(_baseUrl, imageId, tagId)),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to remove tag: ${response.statusCode}');
@@ -98,7 +103,7 @@ class TagService {
   /// 确认标签
   Future<void> confirmTag(int imageId, int tagId) async {
     final response = await _client.post(
-      Uri.parse(ApiConfig.tagReview(imageId, tagId)),
+      Uri.parse(ApiConfig.tagReview(_baseUrl, imageId, tagId)),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'action': 'confirm'}),
     );
@@ -110,7 +115,7 @@ class TagService {
   /// 拒绝标签
   Future<void> rejectTag(int imageId, int tagId) async {
     final response = await _client.post(
-      Uri.parse(ApiConfig.tagReview(imageId, tagId)),
+      Uri.parse(ApiConfig.tagReview(_baseUrl, imageId, tagId)),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'action': 'reject'}),
     );
@@ -122,7 +127,7 @@ class TagService {
   /// 批量确认标签
   Future<void> batchConfirmTags(int imageId, List<int> tagIds) async {
     final response = await _client.post(
-      Uri.parse(ApiConfig.batchTagReview(imageId)),
+      Uri.parse(ApiConfig.batchTagReview(_baseUrl, imageId)),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'tag_ids': tagIds, 'action': 'confirm'}),
     );
@@ -134,7 +139,7 @@ class TagService {
   /// 批量拒绝标签
   Future<void> batchRejectTags(int imageId, List<int> tagIds) async {
     final response = await _client.post(
-      Uri.parse(ApiConfig.batchTagReview(imageId)),
+      Uri.parse(ApiConfig.batchTagReview(_baseUrl, imageId)),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'tag_ids': tagIds, 'action': 'reject'}),
     );
@@ -146,7 +151,7 @@ class TagService {
   /// 触发 AI 标签生成
   Future<int> triggerAITags(int imageId, {String? prompt}) async {
     final response = await _client.post(
-      Uri.parse(ApiConfig.triggerAITags(imageId)),
+      Uri.parse(ApiConfig.triggerAITags(_baseUrl, imageId)),
       headers: {'Content-Type': 'application/json'},
       body: prompt != null && prompt.isNotEmpty
           ? jsonEncode({'prompt': prompt})
@@ -181,7 +186,9 @@ class TagService {
 
   /// 获取默认 AI 提示词
   Future<String> getDefaultAIPrompt() async {
-    final response = await _client.get(Uri.parse(ApiConfig.defaultAIPrompt));
+    final response = await _client.get(
+      Uri.parse(ApiConfig.defaultAIPrompt(_baseUrl)),
+    );
     if (response.statusCode != 200) {
       throw Exception('Failed to get default prompt: ${response.statusCode}');
     }
@@ -192,7 +199,7 @@ class TagService {
   /// 获取 AI 任务状态
   Future<Map<String, dynamic>> getAITagStatus(int imageId) async {
     final response = await _client.get(
-      Uri.parse(ApiConfig.aiTagStatus(imageId)),
+      Uri.parse(ApiConfig.aiTagStatus(_baseUrl, imageId)),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to get AI status: ${response.statusCode}');
@@ -221,7 +228,7 @@ class TagService {
     };
 
     final response = await _client.post(
-      Uri.parse(ApiConfig.batchAITags),
+      Uri.parse(ApiConfig.batchAITags(_baseUrl)),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(body),
     );
@@ -236,7 +243,7 @@ class TagService {
   /// 获取标签统计数据
   Future<List<TagStatistics>> getTagStatistics() async {
     final response = await _client.get(
-      Uri.parse('${ApiConfig.baseUrl}/tags/stats'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/stats'),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to get tag statistics: ${response.statusCode}');
@@ -254,13 +261,14 @@ class TagService {
     int limit = 50,
     int offset = 0,
   }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/tags/governance').replace(
-      queryParameters: {
-        if (search != null && search.isNotEmpty) 'search': search,
-        'limit': limit.toString(),
-        'offset': offset.toString(),
-      },
-    );
+    final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/governance')
+        .replace(
+          queryParameters: {
+            if (search != null && search.isNotEmpty) 'search': search,
+            'limit': limit.toString(),
+            'offset': offset.toString(),
+          },
+        );
 
     final response = await _client.get(uri);
     if (response.statusCode != 200) {
@@ -280,7 +288,7 @@ class TagService {
   /// 获取标签删除预览
   Future<TagDeletePreview> fetchDeletePreview(int tagId) async {
     final response = await _client.get(
-      Uri.parse('${ApiConfig.baseUrl}/tags/$tagId/delete-preview'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/$tagId/delete-preview'),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to fetch delete preview: ${response.statusCode}');
@@ -295,7 +303,7 @@ class TagService {
   Future<void> mergeTagInto(int sourceTagId, int targetTagId) async {
     final request = TagMergeRequest(targetTagId: targetTagId);
     final response = await _client.post(
-      Uri.parse('${ApiConfig.baseUrl}/tags/$sourceTagId/merge'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/$sourceTagId/merge'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(request.toJson()),
     );
@@ -308,7 +316,9 @@ class TagService {
 
   /// 获取标签别名列表
   Future<List<String>> getTagAliases(int tagId) async {
-    final response = await _client.get(Uri.parse(ApiConfig.tagAliases(tagId)));
+    final response = await _client.get(
+      Uri.parse(ApiConfig.tagAliases(_baseUrl, tagId)),
+    );
     if (response.statusCode != 200) {
       throw Exception('Failed to fetch tag aliases: ${response.statusCode}');
     }
@@ -329,7 +339,7 @@ class TagService {
   /// 添加标签别名
   Future<void> addTagAlias(int tagId, String label, String aliasType) async {
     final response = await _client.post(
-      Uri.parse(ApiConfig.tagAliases(tagId)),
+      Uri.parse(ApiConfig.tagAliases(_baseUrl, tagId)),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'label': label, 'alias_type': aliasType}),
     );
@@ -341,7 +351,7 @@ class TagService {
   /// 删除标签别名
   Future<void> deleteTagAlias(int tagId, int aliasId) async {
     final response = await _client.delete(
-      Uri.parse(ApiConfig.tagAlias(tagId, aliasId)),
+      Uri.parse(ApiConfig.tagAlias(_baseUrl, tagId, aliasId)),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to delete tag alias: ${response.statusCode}');
@@ -351,7 +361,7 @@ class TagService {
   /// 按选择批量清理标签
   Future<TagGovernanceBatchResult> batchCleanupTags(List<int> tagIds) async {
     final response = await _client.post(
-      Uri.parse('${ApiConfig.baseUrl}/tags/batch/cleanup'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/batch/cleanup'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'tag_ids': tagIds}),
     );
@@ -378,7 +388,9 @@ class TagService {
     }
 
     final response = await _client.post(
-      Uri.parse('${ApiConfig.baseUrl}/images/$imageId/tags/$tagId/merge'),
+      Uri.parse(
+        '${ApiConfig.baseUrlOf(_baseUrl)}/images/$imageId/tags/$tagId/merge',
+      ),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         if (targetTagId != null) 'target_tag_id': targetTagId,
@@ -393,7 +405,7 @@ class TagService {
   /// 清理无用标签（usage_count=0）
   Future<Map<String, dynamic>> cleanUnusedTags() async {
     final response = await _client.delete(
-      Uri.parse('${ApiConfig.baseUrl}/tags/cleanup'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/cleanup'),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to clean unused tags: ${response.statusCode}');
@@ -414,7 +426,7 @@ class TagService {
     if (reviewState != null) body['review_state'] = reviewState;
 
     final response = await _client.put(
-      Uri.parse('${ApiConfig.baseUrl}/tags/$tagId'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/$tagId'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(body),
     );
@@ -427,7 +439,7 @@ class TagService {
   /// 删除标签
   Future<void> deleteTag(int tagId) async {
     final response = await _client.delete(
-      Uri.parse('${ApiConfig.baseUrl}/tags/$tagId'),
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/$tagId'),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to delete tag: ${response.statusCode}');

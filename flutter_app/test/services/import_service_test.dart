@@ -20,7 +20,10 @@ void main() {
 
   setUp(() {
     mockClient = MockHttpClient();
-    importService = ImportService(client: mockClient);
+    importService = ImportService(
+      baseUrl: 'http://localhost:8080',
+      client: mockClient,
+    );
   });
 
   test('posts to product-facing image scan endpoint', () async {

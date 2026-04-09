@@ -25,6 +25,7 @@ class _WorkspaceMonitoringProvider extends MonitoringProvider {
        _selectedBatchId = selectedBatchId,
        super(
          service: MonitoringService(
+           baseUrl: 'http://localhost:8080',
            client: MockClient((_) async => http.Response('{}', 200)),
          ),
          wsUriFactory: () =>

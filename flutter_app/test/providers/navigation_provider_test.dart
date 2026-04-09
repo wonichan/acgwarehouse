@@ -56,17 +56,14 @@ void main() {
   });
 
   group('ApiConfig monitoring endpoints', () {
-    tearDown(ApiConfig.resetToDefault);
-
     test('builds admin overview and monitoring websocket endpoints', () {
-      ApiConfig.updateBaseUrl('http://127.0.0.1:8088');
-
+      const testBase = 'http://127.0.0.1:8088';
       expect(
-        ApiConfig.adminOverview,
+        ApiConfig.adminOverview(testBase),
         'http://127.0.0.1:8088/admin/api/task-platform/overview',
       );
       expect(
-        ApiConfig.monitoringWs,
+        ApiConfig.monitoringWs(testBase),
         'ws://127.0.0.1:8088/admin/api/monitoring/ws',
       );
     });

@@ -38,7 +38,8 @@ class _RecordingSearchProvider extends SearchProvider {
 class _FakeImportService extends ImportService {
   final Future<ImportTriggerResult> Function() trigger;
 
-  _FakeImportService({required this.trigger});
+  _FakeImportService({required this.trigger})
+    : super(baseUrl: 'http://localhost:8080');
 
   @override
   Future<ImportTriggerResult> triggerImport() {
@@ -76,10 +77,14 @@ void main() {
         providers: [
           ChangeNotifierProvider<NavigationProvider>.value(value: navProvider),
           ChangeNotifierProvider<ImageListProvider>(
-            create: (_) => ImageListProvider(ApiService(client: mockClient)),
+            create: (_) => ImageListProvider(
+              ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+            ),
           ),
           ChangeNotifierProvider<TagProvider>(
-            create: (_) => TagProvider(TagService(client: mockClient)),
+            create: (_) => TagProvider(
+              TagService(baseUrl: 'http://localhost:8080', client: mockClient),
+            ),
           ),
           ChangeNotifierProvider<SearchProvider>.value(value: searchProvider),
           ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
@@ -97,6 +102,7 @@ void main() {
       navProvider = NavigationProvider();
       searchProvider = _RecordingSearchProvider(
         service: SearchService(
+          baseUrl: 'http://localhost:8080',
           client: MockClient((_) async => http.Response('{}', 200)),
         ),
       );

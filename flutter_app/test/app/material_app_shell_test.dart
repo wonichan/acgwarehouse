@@ -19,9 +19,13 @@ void main() {
         providers: [
           ChangeNotifierProvider(create: (_) => NavigationProvider()),
           ChangeNotifierProvider(
-            create: (_) => ImageListProvider(ApiService()),
+            create: (_) =>
+                ImageListProvider(ApiService(baseUrl: 'http://localhost:8080')),
           ),
-          ChangeNotifierProvider(create: (_) => TagProvider(TagService())),
+          ChangeNotifierProvider(
+            create: (_) =>
+                TagProvider(TagService(baseUrl: 'http://localhost:8080')),
+          ),
           ChangeNotifierProvider(create: (_) => SelectionProvider()),
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
           ChangeNotifierProvider(create: (_) => ConfigProvider()),

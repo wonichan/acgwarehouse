@@ -12,8 +12,13 @@ enum RuntimeManifestSource { manifest, devFallback, none }
 class RuntimeManifestLoadResult {
   final RuntimeManifestSource source;
   final String? appliedBaseUrl;
+  final String? appliedAdminBasicAuth;
 
-  const RuntimeManifestLoadResult({required this.source, this.appliedBaseUrl});
+  const RuntimeManifestLoadResult({
+    required this.source,
+    this.appliedBaseUrl,
+    this.appliedAdminBasicAuth,
+  });
 }
 
 class RuntimeManifestLoader {
@@ -41,16 +46,14 @@ class RuntimeManifestLoader {
     final discoveredBaseUrl = _extractGoBaseUrl(text);
     final discoveredAdminBasicAuth = _extractAdminBasicAuth(text);
     if (discoveredBaseUrl != null) {
-      ApiConfig.updateBaseUrl(discoveredBaseUrl);
-      ApiConfig.updateAdminBasicAuthHeader(discoveredAdminBasicAuth);
       return RuntimeManifestLoadResult(
         source: RuntimeManifestSource.manifest,
         appliedBaseUrl: discoveredBaseUrl,
+        appliedAdminBasicAuth: discoveredAdminBasicAuth,
       );
     }
 
     if (isDevelopmentMode) {
-      ApiConfig.applyDevelopmentFallback();
       return RuntimeManifestLoadResult(
         source: RuntimeManifestSource.devFallback,
         appliedBaseUrl: ApiConfig.developmentFallbackHostUrl,

@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../providers/config_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/search_provider.dart';
 import '../services/collection_service.dart';
@@ -191,7 +192,9 @@ class _DesktopShellTopBarState extends State<_DesktopShellTopBar> {
   @override
   void initState() {
     super.initState();
-    _importService = widget.importService ?? ImportService();
+    _importService =
+        widget.importService ??
+        ImportService(baseUrl: context.read<ConfigProvider>().baseUrl);
   }
 
   @override

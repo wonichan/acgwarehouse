@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/config_provider.dart';
-import '../config/api_config.dart';
 
 /// Fluent 风格设置页面
 /// Phase 10 完整实现主题切换等配置
@@ -125,7 +124,6 @@ class _BackendUrlCardState extends State<_BackendUrlCard> {
     final newUrl = _controller.text.trim();
     if (newUrl.isNotEmpty) {
       widget.configProvider.setBaseUrl(newUrl);
-      ApiConfig.updateBaseUrl(newUrl);
 
       setState(() {
         _isEditing = false;
@@ -147,7 +145,6 @@ class _BackendUrlCardState extends State<_BackendUrlCard> {
 
   void _resetToDefault() {
     widget.configProvider.resetToDefault();
-    ApiConfig.resetToDefault();
     _controller.text = widget.configProvider.baseUrl;
     setState(() {
       _isEditing = false;

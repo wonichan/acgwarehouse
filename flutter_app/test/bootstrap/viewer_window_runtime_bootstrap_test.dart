@@ -5,8 +5,6 @@ import 'package:gallery/config/api_config.dart';
 
 void main() {
   group('configureViewerWindowRuntime', () {
-    setUp(ApiConfig.resetToDefault);
-
     test(
       'applies packaged runtime manifest for secondary viewer windows',
       () async {
@@ -22,7 +20,23 @@ void main() {
         );
 
         expect(result.source, RuntimeManifestSource.manifest);
-        expect(ApiConfig.hostUrl, 'http://127.0.0.1:51423');
+        expect(result.appliedBaseUrl, 'http://127.0.0.1:51423');
+      },
+    );
+
+    test(
+      'falls back to development default when manifest is missing',
+      () async {
+        final loader = RuntimeManifestLoader(readText: (_) async => null);
+
+        final result = await configureViewerWindowRuntime(
+          loader: loader,
+          isDevelopmentMode: true,
+          isDesktopTarget: true,
+        );
+
+        expect(result.source, RuntimeManifestSource.devFallback);
+        expect(result.appliedBaseUrl, ApiConfig.developmentFallbackHostUrl);
       },
     );
   });

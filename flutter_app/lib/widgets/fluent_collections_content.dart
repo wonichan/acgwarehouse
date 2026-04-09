@@ -1,7 +1,9 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:provider/provider.dart';
 
 import '../models/collection.dart';
 import '../models/image.dart';
+import '../providers/config_provider.dart';
 import '../services/collection_service.dart';
 import 'fluent_image_card.dart';
 
@@ -35,7 +37,9 @@ class _FluentCollectionsContentState extends State<FluentCollectionsContent> {
   void initState() {
     super.initState();
     _ownsCollectionService = widget.collectionService == null;
-    _collectionService = widget.collectionService ?? CollectionService();
+    _collectionService =
+        widget.collectionService ??
+        CollectionService(baseUrl: context.read<ConfigProvider>().baseUrl);
     _loadCollections();
   }
 

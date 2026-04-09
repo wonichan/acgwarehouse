@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/config_provider.dart';
-import '../config/api_config.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -103,13 +102,10 @@ class _BackendUrlTileState extends State<_BackendUrlTile> {
     });
   }
 
-  void _saveUrl() {
+  void _saveUrl() async {
     final newUrl = _controller.text.trim();
     if (newUrl.isNotEmpty) {
-      // Update ConfigProvider
-      widget.configProvider.setBaseUrl(newUrl);
-      // Sync ApiConfig for services that use static methods
-      ApiConfig.updateBaseUrl(newUrl);
+      await widget.configProvider.setBaseUrl(newUrl);
 
       setState(() {
         _isEditing = false;
@@ -143,7 +139,6 @@ class _BackendUrlTileState extends State<_BackendUrlTile> {
 
   void _resetToDefault() {
     widget.configProvider.resetToDefault();
-    ApiConfig.resetToDefault();
     _controller.text = widget.configProvider.baseUrl;
     setState(() {
       _isEditing = false;

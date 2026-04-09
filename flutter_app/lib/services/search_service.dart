@@ -31,10 +31,7 @@ class ImageSearchResult {
   final ImageModel image;
   final double similarity;
 
-  const ImageSearchResult({
-    required this.image,
-    required this.similarity,
-  });
+  const ImageSearchResult({required this.image, required this.similarity});
 
   factory ImageSearchResult.fromJson(Map<String, dynamic> json) {
     return ImageSearchResult(
@@ -47,8 +44,11 @@ class ImageSearchResult {
 /// Search service for keyword and image-based search
 class SearchService {
   final http.Client _client;
+  final String _baseUrl;
 
-  SearchService({http.Client? client}) : _client = client ?? http.Client();
+  SearchService({http.Client? client, required String baseUrl})
+    : _client = client ?? http.Client(),
+      _baseUrl = baseUrl;
 
   /// Search images by query
   Future<SearchResult> search({
@@ -74,9 +74,9 @@ class SearchService {
       queryParams['tag_ids'] = tagIds.join(',');
     }
 
-    final uri = Uri.parse(ApiConfig.search).replace(
-      queryParameters: queryParams,
-    );
+    final uri = Uri.parse(
+      ApiConfig.search(_baseUrl),
+    ).replace(queryParameters: queryParams);
 
     final response = await _client.get(
       uri,
@@ -91,7 +91,8 @@ class SearchService {
     }
 
     return SearchResult.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
   }
 
   /// Search images by filename pattern
@@ -100,7 +101,7 @@ class SearchService {
     int limit = 20,
     int offset = 0,
   }) async {
-    final uri = Uri.parse(ApiConfig.searchByFilename).replace(
+    final uri = Uri.parse(ApiConfig.searchByFilename(_baseUrl)).replace(
       queryParameters: {
         'pattern': pattern,
         'limit': limit.toString(),
@@ -121,7 +122,8 @@ class SearchService {
     }
 
     return SearchResult.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
   }
 
   /// Search images by image similarity (以图搜图)
@@ -137,7 +139,7 @@ class SearchService {
 
   /// Get search history
   Future<List<String>> getSearchHistory() async {
-    final uri = Uri.parse('${ApiConfig.search}/history');
+    final uri = Uri.parse('${ApiConfig.search(_baseUrl)}/history');
 
     final response = await _client.get(
       uri,
@@ -149,20 +151,14 @@ class SearchService {
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return (json['history'] as List?)
-            ?.map((h) => h as String)
-            .toList() ??
-        [];
+    return (json['history'] as List?)?.map((h) => h as String).toList() ?? [];
   }
 
   /// Clear search history
   Future<void> clearSearchHistory() async {
-    final uri = Uri.parse('${ApiConfig.search}/history');
+    final uri = Uri.parse('${ApiConfig.search(_baseUrl)}/history');
 
-    await _client.delete(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-    );
+    await _client.delete(uri, headers: {'Content-Type': 'application/json'});
   }
 
   void dispose() {

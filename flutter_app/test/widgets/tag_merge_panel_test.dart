@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 
 class _MergePanelTagProvider extends TagProvider {
   _MergePanelTagProvider({http.Client? client})
-    : super(TagService(client: client));
+    : super(TagService(baseUrl: 'http://localhost:8080', client: client));
 
   static final List<TagGovernanceRow> _allRows = [
     const TagGovernanceRow(

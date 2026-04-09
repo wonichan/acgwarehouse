@@ -6,10 +6,15 @@ import '../models/log_models.dart';
 class LogStreamService {
   final http.Client _client;
   final String? _basicAuthHeader;
+  final String _baseUrl;
 
-  LogStreamService({http.Client? client, String? basicAuthHeader})
-    : _client = client ?? http.Client(),
-      _basicAuthHeader = basicAuthHeader;
+  LogStreamService({
+    http.Client? client,
+    String? basicAuthHeader,
+    required String baseUrl,
+  }) : _client = client ?? http.Client(),
+       _basicAuthHeader = basicAuthHeader,
+       _baseUrl = baseUrl;
 
   Map<String, dynamic>? get webSocketHeaders {
     final basicAuthHeader = _basicAuthHeader;
@@ -21,7 +26,11 @@ class LogStreamService {
 
   Uri streamUri({required LogSource source, int tail = 200}) {
     return Uri.parse(
-      ApiConfig.logStreamWs(source: _sourceToQueryValue(source), tail: tail),
+      ApiConfig.logStreamWs(
+        _baseUrl,
+        source: _sourceToQueryValue(source),
+        tail: tail,
+      ),
     );
   }
 

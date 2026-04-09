@@ -5,18 +5,17 @@ import '../config/api_config.dart';
 /// Service for batch operations on images
 class BatchService {
   final http.Client _client;
-  final String? _baseUrlOverride;
+  final String _baseUrl;
 
-  /// Dynamic base URL - reads from ApiConfig unless override is set
-  String get baseUrl => _baseUrlOverride ?? ApiConfig.hostUrl;
-
-  BatchService({http.Client? client, String? baseUrl})
+  BatchService({http.Client? client, required String baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrlOverride = baseUrl;
+      _baseUrl = baseUrl;
+
+  String get _apiPrefix => ApiConfig.baseUrlOf(_baseUrl);
 
   /// Batch adds tags to multiple images
   Future<int> batchAddTags(List<int> imageIds, List<int> tagIds) async {
-    final uri = Uri.parse('$baseUrl/api/v1/batch/tags/add');
+    final uri = Uri.parse('$_apiPrefix/batch/tags/add');
 
     final response = await _client.post(
       uri,
@@ -34,7 +33,7 @@ class BatchService {
 
   /// Batch removes tags from multiple images
   Future<int> batchRemoveTags(List<int> imageIds, List<int> tagIds) async {
-    final uri = Uri.parse('$baseUrl/api/v1/batch/tags/remove');
+    final uri = Uri.parse('$_apiPrefix/batch/tags/remove');
 
     final response = await _client.post(
       uri,
@@ -55,7 +54,7 @@ class BatchService {
     List<int> imageIds,
     int collectionId,
   ) async {
-    final uri = Uri.parse('$baseUrl/api/v1/batch/collections/move');
+    final uri = Uri.parse('$_apiPrefix/batch/collections/move');
 
     final response = await _client.post(
       uri,
@@ -76,7 +75,7 @@ class BatchService {
     List<int> imageIds,
     int collectionId,
   ) async {
-    final uri = Uri.parse('$baseUrl/api/v1/batch/collections/remove');
+    final uri = Uri.parse('$_apiPrefix/batch/collections/remove');
 
     final response = await _client.post(
       uri,
@@ -96,7 +95,7 @@ class BatchService {
 
   /// Batch deletes images
   Future<int> batchDeleteImages(List<int> imageIds) async {
-    final uri = Uri.parse('$baseUrl/api/v1/batch/images/delete');
+    final uri = Uri.parse('$_apiPrefix/batch/images/delete');
 
     final response = await _client.post(
       uri,

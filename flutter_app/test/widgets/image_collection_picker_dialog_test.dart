@@ -6,7 +6,8 @@ import 'package:gallery/services/collection_service.dart';
 import 'package:gallery/widgets/image_collection_picker_dialog.dart';
 
 class _FakeCollectionService extends CollectionService {
-  _FakeCollectionService({this.collections = const [], this.createdCollection});
+  _FakeCollectionService({this.collections = const [], this.createdCollection})
+    : super(baseUrl: 'http://localhost:8080');
 
   final List<Collection> collections;
   final Collection? createdCollection;

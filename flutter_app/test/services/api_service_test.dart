@@ -13,7 +13,10 @@ void main() {
 
   setUp(() {
     mockClient = MockClient();
-    apiService = ApiService(client: mockClient);
+    apiService = ApiService(
+      baseUrl: 'http://localhost:8080',
+      client: mockClient,
+    );
   });
 
   group('ApiService', () {
@@ -42,9 +45,10 @@ void main() {
           "total": 100
         }
         ''';
-        
-        when(mockClient.get(any, headers: anyNamed('headers')))
-            .thenAnswer((_) async => http.Response(responseBody, 200));
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
 
         // Act
         final result = await apiService.fetchImages();
@@ -55,8 +59,12 @@ void main() {
         expect(result.nextCursor, '20');
         expect(result.hasMore, true);
         expect(result.total, 100);
-        
-        final captured = verify(mockClient.get(captureAny, headers: anyNamed('headers'))).captured.single as Uri;
+
+        final captured =
+            verify(
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
         expect(captured.path, contains('/api/v1/images'));
       });
 
@@ -84,9 +92,10 @@ void main() {
           "total": 3
         }
         ''';
-        
-        when(mockClient.get(any, headers: anyNamed('headers')))
-            .thenAnswer((_) async => http.Response(responseBody, 200));
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
 
         // Act
         final result = await apiService.fetchImages();
@@ -106,15 +115,20 @@ void main() {
           "total": 0
         }
         ''';
-        
-        when(mockClient.get(any, headers: anyNamed('headers')))
-            .thenAnswer((_) async => http.Response(responseBody, 200));
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
 
         // Act - use offset for next page
         await apiService.fetchImages(offset: 20);
 
         // Assert
-        final captured = verify(mockClient.get(captureAny, headers: anyNamed('headers'))).captured.single as Uri;
+        final captured =
+            verify(
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
         expect(captured.queryParameters['offset'], '20');
       });
 
@@ -128,15 +142,20 @@ void main() {
           "total": 0
         }
         ''';
-        
-        when(mockClient.get(any, headers: anyNamed('headers')))
-            .thenAnswer((_) async => http.Response(responseBody, 200));
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
 
         // Act
         await apiService.fetchImages(tagIds: [1, 2, 3]);
 
         // Assert
-        final captured = verify(mockClient.get(captureAny, headers: anyNamed('headers'))).captured.single as Uri;
+        final captured =
+            verify(
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
         expect(captured.queryParameters['tag_ids'], '1,2,3');
       });
 
@@ -150,9 +169,10 @@ void main() {
           "total": 0
         }
         ''';
-        
-        when(mockClient.get(any, headers: anyNamed('headers')))
-            .thenAnswer((_) async => http.Response(responseBody, 200));
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
 
         // Act
         await apiService.fetchImages(
@@ -164,7 +184,11 @@ void main() {
         );
 
         // Assert
-        final captured = verify(mockClient.get(captureAny, headers: anyNamed('headers'))).captured.single as Uri;
+        final captured =
+            verify(
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
         expect(captured.queryParameters['tag_ids'], '5,10');
         expect(captured.queryParameters['offset'], '40');
         expect(captured.queryParameters['limit'], '50');
@@ -181,9 +205,11 @@ void main() {
 
         await apiService.openImageSourceFile(42);
 
-        final captured = verify(
-          mockClient.post(captureAny, headers: anyNamed('headers')),
-        ).captured.single as Uri;
+        final captured =
+            verify(
+                  mockClient.post(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
         expect(captured.path, contains('/api/v1/images/42/open-source'));
       });
 
@@ -194,9 +220,11 @@ void main() {
 
         await apiService.permanentDeleteImage(7);
 
-        final captured = verify(
-          mockClient.delete(captureAny, headers: anyNamed('headers')),
-        ).captured.single as Uri;
+        final captured =
+            verify(
+                  mockClient.delete(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
         expect(captured.path, contains('/api/v1/images/7/permanent'));
       });
     });

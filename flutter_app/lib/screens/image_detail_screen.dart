@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:provider/provider.dart';
 import '../models/image.dart';
+import '../providers/config_provider.dart';
 import '../providers/tag_provider.dart';
 import '../services/tag_service.dart';
 import '../widgets/image_lightbox.dart';
@@ -24,7 +25,9 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _tagProvider = TagProvider(TagService());
+    _tagProvider = TagProvider(
+      TagService(baseUrl: context.read<ConfigProvider>().baseUrl),
+    );
     _loadImageTags();
   }
 

@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:provider/provider.dart';
 
+import '../providers/config_provider.dart';
 import '../providers/image_provider.dart';
 import '../models/image.dart';
 import '../services/api_service.dart';
@@ -50,8 +51,12 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
     _internalScrollController.addListener(_onScroll);
     _ownsApiService = widget.apiService == null;
     _ownsCollectionService = widget.collectionService == null;
-    _apiService = widget.apiService ?? ApiService();
-    _collectionService = widget.collectionService ?? CollectionService();
+    _apiService =
+        widget.apiService ??
+        ApiService(baseUrl: context.read<ConfigProvider>().baseUrl);
+    _collectionService =
+        widget.collectionService ??
+        CollectionService(baseUrl: context.read<ConfigProvider>().baseUrl);
   }
 
   @override

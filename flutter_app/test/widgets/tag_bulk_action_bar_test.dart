@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 class _BulkBarTagProvider extends TagProvider {
   _BulkBarTagProvider({http.Client? client})
     : _selectedIds = {10, 30},
-      super(TagService(client: client));
+      super(TagService(baseUrl: 'http://localhost:8080', client: client));
 
   final Set<int> _selectedIds;
 

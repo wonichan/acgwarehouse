@@ -54,7 +54,8 @@ class _ViewerWindowAppState extends State<ViewerWindowApp> {
       home: fluent.ScaffoldPage(
         content: ViewerWorkspace(
           launchContext: widget.bootstrapData.context,
-          apiService: widget.apiService ?? ApiService(),
+          apiService:
+              widget.apiService ?? ApiService(baseUrl: 'http://localhost:8080'),
           tagProvider: widget.tagProvider,
           onItemChanged: (item) {
             _setTitle(ViewerWindowService.buildWindowTitle(item.filename));

@@ -7,23 +7,25 @@ import '../models/image.dart';
 /// Service for collection-related API operations
 class CollectionService {
   final http.Client _client;
-  final String? _baseUrlOverride;
+  final String _baseUrl;
 
-  /// Dynamic base URL - reads from ApiConfig unless override is set
-  String get baseUrl => _baseUrlOverride ?? ApiConfig.hostUrl;
-
-  CollectionService({http.Client? client, String? baseUrl})
+  /// Creates a CollectionService. [baseUrl] is the root URL (e.g. 'http://localhost:8080').
+  CollectionService({http.Client? client, required String baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrlOverride = baseUrl;
+      _baseUrl = baseUrl;
 
   /// Fetches all collections
   Future<List<Collection>> fetchCollections({
     int limit = 20,
     int offset = 0,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/v1/collections').replace(
-      queryParameters: {'limit': limit.toString(), 'offset': offset.toString()},
-    );
+    final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/collections')
+        .replace(
+          queryParameters: {
+            'limit': limit.toString(),
+            'offset': offset.toString(),
+          },
+        );
 
     final response = await _client.get(
       uri,
@@ -44,7 +46,7 @@ class CollectionService {
 
   /// Fetches a single collection by ID
   Future<Collection> fetchCollection(int id) async {
-    final uri = Uri.parse('$baseUrl/api/v1/collections/$id');
+    final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/collections/$id');
 
     final response = await _client.get(
       uri,
@@ -64,7 +66,7 @@ class CollectionService {
     String name, {
     String? description,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/v1/collections');
+    final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/collections');
 
     final response = await _client.post(
       uri,
@@ -86,7 +88,7 @@ class CollectionService {
     String name, {
     String? description,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/v1/collections/$id');
+    final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/collections/$id');
 
     final response = await _client.put(
       uri,
@@ -104,7 +106,7 @@ class CollectionService {
 
   /// Deletes a collection
   Future<void> deleteCollection(int id) async {
-    final uri = Uri.parse('$baseUrl/api/v1/collections/$id');
+    final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/collections/$id');
 
     final response = await _client.delete(
       uri,
@@ -118,7 +120,9 @@ class CollectionService {
 
   /// Adds an image to a collection
   Future<void> addImageToCollection(int collectionId, int imageId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/collections/$collectionId/images');
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrlOf(_baseUrl)}/collections/$collectionId/images',
+    );
 
     final response = await _client.post(
       uri,
@@ -136,7 +140,7 @@ class CollectionService {
   /// Removes an image from a collection
   Future<void> removeImageFromCollection(int collectionId, int imageId) async {
     final uri = Uri.parse(
-      '$baseUrl/api/v1/collections/$collectionId/images/$imageId',
+      '${ApiConfig.baseUrlOf(_baseUrl)}/collections/$collectionId/images/$imageId',
     );
 
     final response = await _client.delete(
@@ -153,7 +157,9 @@ class CollectionService {
 
   /// Sets the cover image for a collection
   Future<void> setCoverImage(int collectionId, int imageId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/collections/$collectionId/cover');
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrlOf(_baseUrl)}/collections/$collectionId/cover',
+    );
 
     final response = await _client.put(
       uri,
@@ -172,8 +178,10 @@ class CollectionService {
     int limit = 20,
     int offset = 0,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/v1/collections/$collectionId/images')
-        .replace(
+    final uri =
+        Uri.parse(
+          '${ApiConfig.baseUrlOf(_baseUrl)}/collections/$collectionId/images',
+        ).replace(
           queryParameters: {
             'limit': limit.toString(),
             'offset': offset.toString(),

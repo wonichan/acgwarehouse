@@ -10,7 +10,7 @@ class _FakeCollectionService extends CollectionService {
   _FakeCollectionService({
     this.collections = const <Collection>[],
     this.imagesByCollectionId = const <int, List<ImageModel>>{},
-  });
+  }) : super(baseUrl: 'http://localhost:8080');
 
   final List<Collection> collections;
   final Map<int, List<ImageModel>> imagesByCollectionId;

@@ -1,55 +1,101 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
 
-/// Configuration provider for runtime-configurable settings
+/// Configuration provider - Single Source of Truth for all runtime configuration.
 ///
-/// Supports modifying backend API URL at runtime, useful for:
-/// - Development: switching between local/remote servers
-/// - Production: allowing users to configure custom backend
+/// Manages:
+/// - Backend base URL
+/// - Admin Basic Auth header
+///
+/// Persists settings via SharedPreferences so they survive app restarts.
 class ConfigProvider extends ChangeNotifier {
-  // Default values
+  static const String _baseUrlKey = 'config_baseUrl';
+  static const String _adminAuthKey = 'config_adminAuth';
   static const String _defaultBaseUrl = ApiConfig.developmentFallbackHostUrl;
 
-  ConfigProvider({String? initialBaseUrl})
-    : _baseUrl = initialBaseUrl ?? ApiConfig.hostUrl;
+  ConfigProvider({String? initialBaseUrl, String? initialAdminAuth})
+    : _baseUrl = initialBaseUrl ?? _defaultBaseUrl,
+      _adminBasicAuthHeader = initialAdminAuth?.trim().isEmpty == true
+          ? null
+          : initialAdminAuth;
 
   String _baseUrl;
+  String? _adminBasicAuthHeader;
 
-  /// Current backend API base URL (without /api/v1 suffix)
+  /// Current backend base URL (without /api/v1 suffix).
+  /// Example: 'http://localhost:8080'
   String get baseUrl => _baseUrl;
 
-  /// Full API base URL with /api/v1 suffix
+  /// Full API base URL with /api/v1 suffix.
+  /// Example: 'http://localhost:8080/api/v1'
   String get apiBaseUrl => '$baseUrl/api/v1';
 
-  /// Sets the backend base URL
+  /// Admin Basic Auth header for monitoring endpoints.
+  String? get adminBasicAuthHeader => _adminBasicAuthHeader;
+
+  /// Sets the backend base URL.
   ///
-  /// [url] should be the base URL without the /api/v1 path suffix
+  /// [url] should be the base URL without the /api/v1 path suffix.
   /// Example: 'http://localhost:8080' or 'https://api.example.com'
-  void setBaseUrl(String url) {
-    // Normalize URL - remove trailing slash
+  Future<void> setBaseUrl(String url) async {
     final normalized = url.endsWith('/')
         ? url.substring(0, url.length - 1)
         : url;
 
     if (_baseUrl != normalized) {
       _baseUrl = normalized;
-      ApiConfig.updateBaseUrl(normalized);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_baseUrlKey, normalized);
       notifyListeners();
       debugPrint('ConfigProvider: baseUrl changed to $normalized');
     }
   }
 
-  /// Resets to default configuration
-  void resetToDefault() {
-    if (_baseUrl != _defaultBaseUrl) {
-      _baseUrl = _defaultBaseUrl;
-      ApiConfig.resetToDefault();
+  /// Sets the admin Basic Auth header.
+  Future<void> setAdminBasicAuthHeader(String? value) async {
+    final normalized = value?.trim();
+    final newAuth = (normalized == null || normalized.isEmpty)
+        ? null
+        : normalized;
+
+    if (_adminBasicAuthHeader != newAuth) {
+      _adminBasicAuthHeader = newAuth;
+      final prefs = await SharedPreferences.getInstance();
+      if (newAuth == null) {
+        await prefs.remove(_adminAuthKey);
+      } else {
+        await prefs.setString(_adminAuthKey, newAuth);
+      }
       notifyListeners();
-      debugPrint('ConfigProvider: baseUrl reset to default');
+      debugPrint('ConfigProvider: adminBasicAuthHeader updated');
     }
   }
 
-  /// Checks if current configuration matches default
-  bool get isDefault => _baseUrl == _defaultBaseUrl;
+  /// Loads persisted config from SharedPreferences.
+  static Future<ConfigProvider> loadPersisted() async {
+    final prefs = await SharedPreferences.getInstance();
+    return ConfigProvider(
+      initialBaseUrl: prefs.getString(_baseUrlKey),
+      initialAdminAuth: prefs.getString(_adminAuthKey),
+    );
+  }
+
+  /// Resets all configuration to defaults.
+  Future<void> resetToDefault() async {
+    if (_baseUrl != _defaultBaseUrl || _adminBasicAuthHeader != null) {
+      _baseUrl = _defaultBaseUrl;
+      _adminBasicAuthHeader = null;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_baseUrlKey);
+      await prefs.remove(_adminAuthKey);
+      notifyListeners();
+      debugPrint('ConfigProvider: reset to default');
+    }
+  }
+
+  /// Checks if current configuration matches default.
+  bool get isDefault =>
+      _baseUrl == _defaultBaseUrl && _adminBasicAuthHeader == null;
 }

@@ -23,7 +23,10 @@ void main() {
     });
 
     final searchProvider = SearchProvider(
-      service: SearchService(client: mockClient),
+      service: SearchService(
+        baseUrl: 'http://localhost:8080',
+        client: mockClient,
+      ),
     );
     searchProvider.results.add(
       ImageModel(

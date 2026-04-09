@@ -38,7 +38,12 @@ void main() {
         MultiProvider(
           providers: [
             ChangeNotifierProvider<TagProvider>(
-              create: (_) => TagProvider(TagService(client: mockClient)),
+              create: (_) => TagProvider(
+                TagService(
+                  baseUrl: 'http://localhost:8080',
+                  client: mockClient,
+                ),
+              ),
             ),
           ],
           child: const fluent.FluentApp(home: FluentTagManagementPage()),
@@ -65,7 +70,9 @@ void main() {
         return http.Response('{}', 200);
       });
 
-      final imageProvider = ImageListProvider(ApiService(client: mockClient));
+      final imageProvider = ImageListProvider(
+        ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+      );
 
       await tester.pumpWidget(
         MultiProvider(
@@ -74,7 +81,12 @@ void main() {
               create: (_) => imageProvider,
             ),
             ChangeNotifierProvider<TagProvider>(
-              create: (_) => TagProvider(TagService(client: mockClient)),
+              create: (_) => TagProvider(
+                TagService(
+                  baseUrl: 'http://localhost:8080',
+                  client: mockClient,
+                ),
+              ),
             ),
             ChangeNotifierProvider<NavigationProvider>(
               create: (_) => NavigationProvider(),
@@ -128,10 +140,14 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<ImageListProvider>(
-            create: (_) => ImageListProvider(ApiService(client: mockClient)),
+            create: (_) => ImageListProvider(
+              ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+            ),
           ),
           ChangeNotifierProvider<TagProvider>(
-            create: (_) => TagProvider(TagService(client: mockClient)),
+            create: (_) => TagProvider(
+              TagService(baseUrl: 'http://localhost:8080', client: mockClient),
+            ),
           ),
           ChangeNotifierProvider<NavigationProvider>(
             create: (_) => NavigationProvider(),
@@ -165,10 +181,20 @@ void main() {
         MultiProvider(
           providers: [
             ChangeNotifierProvider<ImageListProvider>(
-              create: (_) => ImageListProvider(ApiService(client: mockClient)),
+              create: (_) => ImageListProvider(
+                ApiService(
+                  baseUrl: 'http://localhost:8080',
+                  client: mockClient,
+                ),
+              ),
             ),
             ChangeNotifierProvider<TagProvider>(
-              create: (_) => TagProvider(TagService(client: mockClient)),
+              create: (_) => TagProvider(
+                TagService(
+                  baseUrl: 'http://localhost:8080',
+                  client: mockClient,
+                ),
+              ),
             ),
             ChangeNotifierProvider<NavigationProvider>(
               create: (_) => NavigationProvider(),
@@ -202,6 +228,7 @@ void main() {
             ChangeNotifierProvider<SearchProvider>(
               create: (_) => SearchProvider(
                 service: SearchService(
+                  baseUrl: 'http://localhost:8080',
                   client: MockClient((_) async => http.Response('{}', 200)),
                 ),
               ),
@@ -241,7 +268,9 @@ void main() {
       return http.Response('{}', 200);
     });
 
-    final imageProvider = ImageListProvider(ApiService(client: mockClient));
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
     await imageProvider.loadImages(refresh: true);
 
     await tester.pumpWidget(
@@ -251,7 +280,9 @@ void main() {
             create: (_) => imageProvider,
           ),
           ChangeNotifierProvider<TagProvider>(
-            create: (_) => TagProvider(TagService(client: mockClient)),
+            create: (_) => TagProvider(
+              TagService(baseUrl: 'http://localhost:8080', client: mockClient),
+            ),
           ),
           ChangeNotifierProvider<NavigationProvider>(
             create: (_) => NavigationProvider(),
@@ -304,7 +335,9 @@ void main() {
       return http.Response('{}', 200);
     });
 
-    final imageProvider = ImageListProvider(ApiService(client: mockClient));
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
     await imageProvider.loadImages(refresh: true);
 
     await tester.pumpWidget(
@@ -314,7 +347,9 @@ void main() {
             create: (_) => imageProvider,
           ),
           ChangeNotifierProvider<TagProvider>(
-            create: (_) => TagProvider(TagService(client: mockClient)),
+            create: (_) => TagProvider(
+              TagService(baseUrl: 'http://localhost:8080', client: mockClient),
+            ),
           ),
           ChangeNotifierProvider<NavigationProvider>(
             create: (_) => NavigationProvider(),
@@ -353,14 +388,18 @@ void main() {
       return http.Response('{}', 200);
     });
 
-    final imageProvider = ImageListProvider(ApiService(client: mockClient));
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<ImageListProvider>.value(value: imageProvider),
           ChangeNotifierProvider<TagProvider>(
-            create: (_) => TagProvider(TagService(client: mockClient)),
+            create: (_) => TagProvider(
+              TagService(baseUrl: 'http://localhost:8080', client: mockClient),
+            ),
           ),
           ChangeNotifierProvider<SelectionProvider>(
             create: (_) => SelectionProvider(),
