@@ -9,12 +9,12 @@ import 'fluent_image_card.dart';
 
 class FluentCollectionsContent extends StatefulWidget {
   final CollectionService? collectionService;
-  final void Function(ImageModel image)? onImageDoubleTap;
+  final void Function(ImageModel image)? onImageTap;
 
   const FluentCollectionsContent({
     super.key,
     this.collectionService,
-    this.onImageDoubleTap,
+    this.onImageTap,
   });
 
   @override
@@ -239,10 +239,7 @@ class _FluentCollectionsContentState extends State<FluentCollectionsContent> {
       ),
       itemCount: _images.length,
       itemBuilder: (context, index) {
-        return FluentImageCard(
-          image: _images[index],
-          onDoubleClick: widget.onImageDoubleTap,
-        );
+        return FluentImageCard(image: _images[index], onTap: widget.onImageTap);
       },
     );
   }

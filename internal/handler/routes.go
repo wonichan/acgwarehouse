@@ -134,7 +134,6 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	imageGet := gin.HandlerFunc(placeholderHandler)
 	imageScan := gin.HandlerFunc(placeholderHandler)
 	imageViewerWindow := gin.HandlerFunc(placeholderHandler)
-	imageOpenSource := gin.HandlerFunc(placeholderHandler)
 	imagePermanentDelete := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.ImageRepo != nil && deps.TagRepo != nil && deps.ImageTagRepo != nil {
 		imageHandler := NewImageHandler(
@@ -150,13 +149,11 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		imageGet = imageHandler.GetImage
 		imageScan = imageHandler.TriggerImport
 		imageViewerWindow = imageHandler.ViewerWindow
-		imageOpenSource = imageHandler.OpenSourceFile
 		imagePermanentDelete = imageHandler.PermanentDeleteImage
 	}
 	images.GET("", imageList)
 	images.GET("/:id", imageGet)
 	images.POST("/scan", imageScan)
-	images.POST("/:id/open-source", imageOpenSource)
 	images.DELETE("/:id/permanent", imagePermanentDelete)
 	api.POST("/viewer/window", imageViewerWindow)
 

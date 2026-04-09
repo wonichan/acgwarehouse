@@ -25,8 +25,10 @@ class NavigationProvider extends ChangeNotifier {
   ];
 
   int _selectedIndex = 0;
+  bool _sidebarCollapsed = false;
 
   int get selectedIndex => _selectedIndex;
+  bool get sidebarCollapsed => _sidebarCollapsed;
 
   String get currentPageTitle => _pageTitles[_selectedIndex];
 
@@ -38,5 +40,10 @@ class NavigationProvider extends ChangeNotifier {
       _selectedIndex = index;
       notifyListeners();
     }
+  }
+
+  void toggleSidebar() {
+    _sidebarCollapsed = !_sidebarCollapsed;
+    notifyListeners();
   }
 }

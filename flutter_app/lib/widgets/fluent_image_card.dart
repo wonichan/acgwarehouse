@@ -10,7 +10,6 @@ typedef FluentImageTapCallback = void Function(ImageModel image);
 class FluentImageCard extends StatefulWidget {
   final ImageModel image;
   final FluentImageTapCallback? onTap;
-  final FluentImageTapCallback? onDoubleClick;
   final void Function(ImageModel image, TapDownDetails details)?
   onSecondaryTapDown;
   final double borderRadius;
@@ -23,7 +22,6 @@ class FluentImageCard extends StatefulWidget {
     super.key,
     required this.image,
     this.onTap,
-    this.onDoubleClick,
     this.onSecondaryTapDown,
     this.borderRadius = 8.0,
     this.isSelected = false,
@@ -52,9 +50,6 @@ class _FluentImageCardState extends State<FluentImageCard> {
               }
             : widget.onTap != null
             ? () => widget.onTap!(widget.image)
-            : null,
-        onDoubleTap: widget.onDoubleClick != null
-            ? () => widget.onDoubleClick!(widget.image)
             : null,
         onSecondaryTapDown: widget.onSecondaryTapDown != null
             ? (details) => widget.onSecondaryTapDown!(widget.image, details)

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -218,34 +217,6 @@ func (h *ImageHandler) GetImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, rewriteImageForRequest(c.Request, *image))
-}
-
-func (h *ImageHandler) OpenSourceFile(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
-	if !ok {
-		return
-	}
-
-	image, err := h.imageRepo.FindByID(id)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	if err := h.fileActions.OpenSource(image.Path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "source file missing or inaccessible"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open source file"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 func (h *ImageHandler) PermanentDeleteImage(c *gin.Context) {

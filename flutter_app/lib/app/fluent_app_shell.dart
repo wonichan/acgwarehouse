@@ -27,14 +27,6 @@ class FluentAppShell extends StatefulWidget {
 }
 
 class _FluentAppShellState extends State<FluentAppShell> {
-  bool _isPaneExpanded = true;
-
-  void _togglePaneMode() {
-    setState(() {
-      _isPaneExpanded = !_isPaneExpanded;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<NavigationProvider>(
@@ -44,7 +36,22 @@ class _FluentAppShellState extends State<FluentAppShell> {
             title: DragToMoveArea(
               child: Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: Text('ACGWarehouse - ${navProvider.currentPageTitle}'),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        navProvider.sidebarCollapsed
+                            ? FluentIcons.chevron_right
+                            : FluentIcons.chevron_left,
+                        size: 16,
+                      ),
+                      onPressed: navProvider.toggleSidebar,
+                    ),
+                    const SizedBox(width: 8),
+                    Text('ACGWarehouse - ${navProvider.currentPageTitle}'),
+                  ],
+                ),
               ),
             ),
           ),
@@ -64,7 +71,6 @@ class _FluentAppShellState extends State<FluentAppShell> {
                 body: _ShellPage(
                   onImportLibrary: widget.onImportLibrary,
                   importService: widget.importService,
-                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentGalleryPage(),
                 ),
               ),
@@ -74,7 +80,6 @@ class _FluentAppShellState extends State<FluentAppShell> {
                 body: _ShellPage(
                   onImportLibrary: widget.onImportLibrary,
                   importService: widget.importService,
-                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentSearchPage(),
                 ),
               ),
@@ -84,7 +89,6 @@ class _FluentAppShellState extends State<FluentAppShell> {
                 body: _ShellPage(
                   onImportLibrary: widget.onImportLibrary,
                   importService: widget.importService,
-                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentTagManagementPage(),
                 ),
               ),
@@ -94,7 +98,6 @@ class _FluentAppShellState extends State<FluentAppShell> {
                 body: _ShellPage(
                   onImportLibrary: widget.onImportLibrary,
                   importService: widget.importService,
-                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentSettingsPage(),
                 ),
               ),
@@ -104,7 +107,6 @@ class _FluentAppShellState extends State<FluentAppShell> {
                 body: _ShellPage(
                   onImportLibrary: widget.onImportLibrary,
                   importService: widget.importService,
-                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentOperationsMonitoringPage(),
                 ),
               ),
@@ -114,7 +116,6 @@ class _FluentAppShellState extends State<FluentAppShell> {
                 body: _ShellPage(
                   onImportLibrary: widget.onImportLibrary,
                   importService: widget.importService,
-                  onToggleNavigationPane: _togglePaneMode,
                   child: const FluentLogViewerPage(),
                 ),
               ),
@@ -124,16 +125,15 @@ class _FluentAppShellState extends State<FluentAppShell> {
                 body: _ShellPage(
                   onImportLibrary: widget.onImportLibrary,
                   importService: widget.importService,
-                  onToggleNavigationPane: _togglePaneMode,
                   child: FluentCollectionsPage(
                     collectionService: widget.collectionService,
                   ),
                 ),
               ),
             ],
-            displayMode: _isPaneExpanded
-                ? PaneDisplayMode.expanded
-                : PaneDisplayMode.compact,
+            displayMode: navProvider.sidebarCollapsed
+                ? PaneDisplayMode.compact
+                : PaneDisplayMode.auto,
           ),
         );
       },
@@ -145,11 +145,9 @@ class _ShellPage extends StatelessWidget {
   final Widget child;
   final VoidCallback? onImportLibrary;
   final ImportService? importService;
-  final VoidCallback onToggleNavigationPane;
 
   const _ShellPage({
     required this.child,
-    required this.onToggleNavigationPane,
     this.onImportLibrary,
     this.importService,
   });
@@ -161,7 +159,6 @@ class _ShellPage extends StatelessWidget {
         _DesktopShellTopBar(
           onImportLibrary: onImportLibrary,
           importService: importService,
-          onToggleNavigationPane: onToggleNavigationPane,
         ),
         Expanded(child: child),
       ],
@@ -172,13 +169,8 @@ class _ShellPage extends StatelessWidget {
 class _DesktopShellTopBar extends StatefulWidget {
   final VoidCallback? onImportLibrary;
   final ImportService? importService;
-  final VoidCallback onToggleNavigationPane;
 
-  const _DesktopShellTopBar({
-    required this.onToggleNavigationPane,
-    this.onImportLibrary,
-    this.importService,
-  });
+  const _DesktopShellTopBar({this.onImportLibrary, this.importService});
 
   @override
   State<_DesktopShellTopBar> createState() => _DesktopShellTopBarState();
@@ -243,16 +235,6 @@ class _DesktopShellTopBarState extends State<_DesktopShellTopBar> {
         children: [
           Row(
             children: [
-              Builder(
-                builder: (buttonContext) => Tooltip(
-                  message: '展开/收起菜单',
-                  child: IconButton(
-                    icon: const Icon(FluentIcons.global_nav_button),
-                    onPressed: widget.onToggleNavigationPane,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
               SizedBox(
                 width: 260,
                 child: TextBox(

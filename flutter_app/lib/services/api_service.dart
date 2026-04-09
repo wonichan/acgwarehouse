@@ -96,20 +96,6 @@ class ApiService {
     );
   }
 
-  Future<void> openImageSourceFile(int imageId) async {
-    final response = await _client.post(
-      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/images/$imageId/open-source'),
-      headers: {'Content-Type': 'application/json'},
-    );
-
-    if (response.statusCode != 200) {
-      throw ApiException(
-        'Failed to open image source file: ${response.statusCode}',
-        response.statusCode,
-      );
-    }
-  }
-
   Future<void> permanentDeleteImage(int imageId) async {
     final response = await _client.delete(
       Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/images/$imageId/permanent'),

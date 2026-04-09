@@ -17,7 +17,6 @@ import 'justified_image_grid.dart';
 /// 支持滚动分页加载和下拉刷新
 class FluentGalleryContent extends StatefulWidget {
   final void Function(ImageModel)? onImageTap;
-  final void Function(ImageModel)? onImageDoubleTap;
   final ScrollController? scrollController;
   final ApiService? apiService;
   final CollectionService? collectionService;
@@ -25,7 +24,6 @@ class FluentGalleryContent extends StatefulWidget {
   const FluentGalleryContent({
     super.key,
     this.onImageTap,
-    this.onImageDoubleTap,
     this.scrollController,
     this.apiService,
     this.collectionService,
@@ -157,9 +155,9 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
 
   Future<void> _openSource(ImageModel image) async {
     try {
-      await _apiService.openImageSourceFile(image.id);
+      await openFile(image.path);
     } catch (e) {
-      await _showMessageDialog('打开失败', '$e');
+      await _showMessageDialog('打开失败', '无法打开文件: $e');
     }
   }
 
@@ -317,7 +315,6 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
               image: image,
               isSelected: selection.isSelected(image.id),
               onTap: widget.onImageTap,
-              onDoubleClick: widget.onImageDoubleTap,
               onSelect: selection.isSelectionMode
                   ? (img, selected) {
                       if (selected) {

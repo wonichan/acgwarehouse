@@ -414,22 +414,14 @@ func newImageHandlerTestRouter(t *testing.T) (*gin.Engine, *imageHandlerTestRepo
 	api := router.Group("/api/v1")
 	api.GET("/images", h.ListImages)
 	api.GET("/images/:id", h.GetImage)
-	api.POST("/images/:id/open-source", h.OpenSourceFile)
 	api.DELETE("/images/:id/permanent", h.PermanentDeleteImage)
 
 	return router, repos
 }
 
 type imageFileActionStub struct {
-	openErr        error
 	deleteErr      error
-	openedPath     string
 	deletedImageID int64
-}
-
-func (s *imageFileActionStub) OpenSource(path string) error {
-	s.openedPath = path
-	return s.openErr
 }
 
 func (s *imageFileActionStub) DeleteSourceAndThumbnails(image domain.Image) error {
@@ -444,27 +436,8 @@ func newImageActionTestRouter(t *testing.T, actions imageFileActionExecutor) (*g
 	h := NewImageHandler(repos.imageRepo, repos.tagRepo, repos.imageTagRepo, repos.collectionRepo, actions)
 	router := gin.New()
 	api := router.Group("/api/v1")
-	api.POST("/images/:id/open-source", h.OpenSourceFile)
 	api.DELETE("/images/:id/permanent", h.PermanentDeleteImage)
 	return router, repos
-}
-
-func TestImageHandlerOpenSourceFileReturnsOK(t *testing.T) {
-	t.Parallel()
-
-	stub := &imageFileActionStub{}
-	router, _ := newImageActionTestRouter(t, stub)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/1/open-source", nil)
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-	if stub.openedPath == "" {
-		t.Fatal("openedPath is empty")
-	}
 }
 
 func TestImageHandlerPermanentDeleteRemovesImageRecord(t *testing.T) {

@@ -10,6 +10,7 @@ import '../providers/tag_provider.dart';
 import '../widgets/fluent_gallery_content.dart';
 import '../widgets/fluent_collections_content.dart';
 import '../widgets/fluent_search_content.dart';
+import '../widgets/fluent_tag_filter_pane.dart';
 import '../widgets/monitoring/monitoring_workspace.dart';
 import '../widgets/log_viewer/log_viewer_workspace.dart';
 import '../widgets/tag_management/tag_management_workspace.dart';
@@ -29,7 +30,13 @@ class FluentGalleryPage extends StatefulWidget {
 }
 
 class _FluentGalleryPageState extends State<FluentGalleryPage> {
-  final TextEditingController _tagSearchController = TextEditingController();
+  bool _isTagFilterPaneOpen = false;
+
+  void _toggleTagFilterPane() {
+    setState(() {
+      _isTagFilterPaneOpen = !_isTagFilterPaneOpen;
+    });
+  }
 
   @override
   void initState() {
@@ -42,7 +49,6 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
 
   @override
   void dispose() {
-    _tagSearchController.dispose();
     super.dispose();
   }
 
@@ -110,7 +116,31 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
               ],
             ),
           ),
-          content: _buildGalleryWorkspace(context),
+          content: Row(
+            children: [
+              Expanded(child: _buildGalleryWorkspace(context)),
+              if (_isTagFilterPaneOpen)
+                Container(
+                  width: 280,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: FluentTheme.of(
+                          context,
+                        ).resources.cardStrokeColorDefault,
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: FluentTagFilterPane(
+                    hasTagsFilter: imageProvider.hasTagsFilter,
+                    onHasTagsChanged: (value) {
+                      imageProvider.setHasTagsFilter(value);
+                    },
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
@@ -120,8 +150,7 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
     return Consumer<ImageListProvider>(
       builder: (context, imageProvider, _) {
         return FluentGalleryContent(
-          onImageTap: null,
-          onImageDoubleTap: (image) {
+          onImageTap: (image) {
             final index = imageProvider.indexOfImage(image.id);
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -213,171 +242,142 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
 
     final theme = FluentTheme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final borderColor = isDark
-        ? const Color(0x3DFFFFFF)
-        : const Color(0x1F000000);
     final textColor = theme.resources.textFillColorPrimary;
     final hintColor = theme.resources.textFillColorSecondary;
 
     return Row(
       children: [
         const Text('图库'),
-        const SizedBox(width: 24),
-        Expanded(
-          child: Container(
-            height: 40,
-            decoration: BoxDecoration(
-              border: Border.all(color: borderColor),
-              borderRadius: BorderRadius.circular(4),
-              color: theme.resources.controlFillColorDefault,
-            ),
+        const SizedBox(width: 16),
+        // 标签筛选按钮
+        Tooltip(
+          message: '标签筛选',
+          child: Button(
+            onPressed: _toggleTagFilterPane,
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(width: 8),
-                Icon(FluentIcons.search, size: 16, color: hintColor),
-                const SizedBox(width: 8),
-                if (selectedTags.isNotEmpty)
-                  ...selectedTags.map(
-                    (tag) => Padding(
-                      padding: const EdgeInsets.only(right: 6.0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: borderColor),
-                          borderRadius: BorderRadius.circular(4),
-                          color: isDark
-                              ? const Color(0x3DFFFFFF)
-                              : const Color(0x0F000000),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              tag.preferredLabel,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: textColor,
-                                height: 1.0,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            GestureDetector(
-                              onTap: () {
-                                tagProvider.toggleTag(tag.id);
-                                imageProvider.setTagFilter(
-                                  tagProvider.selectedTagIds.toList(),
-                                );
-                              },
-                              child: Icon(
-                                FluentIcons.clear,
-                                size: 12,
-                                color: hintColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                Expanded(
-                  child: AutoSuggestBox<Tag>(
-                    controller: _tagSearchController,
-                    items: tagProvider.allTags
-                        .map(
-                          (tag) => AutoSuggestBoxItem<Tag>(
-                            value: tag,
-                            label: tag.preferredLabel,
-                          ),
-                        )
-                        .toList(),
-                    placeholder: '搜索标签...',
-                    style: TextStyle(fontSize: 14, color: textColor),
-                    decoration: WidgetStateProperty.all(
-                      const BoxDecoration(color: Colors.transparent),
-                    ),
-                    clearButtonEnabled: false,
-                    onSelected: (item) {
-                      if (item.value != null &&
-                          !tagProvider.selectedTagIds.contains(
-                            item.value!.id,
-                          )) {
-                        tagProvider.toggleTag(item.value!.id);
-                        imageProvider.setTagFilter(
-                          tagProvider.selectedTagIds.toList(),
-                        );
-                        Future.delayed(const Duration(milliseconds: 50), () {
-                          _tagSearchController.clear();
-                        });
-                      }
-                    },
-                  ),
+                Icon(
+                  _isTagFilterPaneOpen
+                      ? FluentIcons.filter_solid
+                      : FluentIcons.filter,
+                  size: 14,
                 ),
-                if (selectedTags.isNotEmpty)
-                  GestureDetector(
-                    onTap: () {
-                      tagProvider.clearSelection();
-                      imageProvider.setTagFilter([]);
-                      imageProvider.setHasTagsFilter(null);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Icon(
-                        FluentIcons.clear,
-                        size: 16,
-                        color: hintColor,
-                      ),
-                    ),
-                  ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () {
-                    final isUntagged = imageProvider.hasTagsFilter == false;
-                    imageProvider.setHasTagsFilter(isUntagged ? null : false);
-                  },
-                  child: Container(
+                const SizedBox(width: 6),
+                const Text('标签筛选'),
+                if (selectedTags.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 5,
+                      vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: hasUntaggedFilter
-                          ? (isDark
-                                ? const Color(0x3DFFFFFF)
-                                : const Color(0x1F000000))
-                          : Colors.transparent,
-                      border: Border.all(color: borderColor),
-                      borderRadius: BorderRadius.circular(4),
+                      color: theme.accentColor.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          hasUntaggedFilter
-                              ? FluentIcons.tag
-                              : FluentIcons.tag_unknown,
-                          size: 14,
-                          color: textColor,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '未打标签',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: textColor,
-                            height: 1.0,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      '${selectedTags.length}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.accentColor,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
+                ],
               ],
             ),
           ),
         ),
+        const SizedBox(width: 12),
+        SizedBox(width: 1, child: Container(color: hintColor.withOpacity(0.3))),
+        const SizedBox(width: 12),
+        // 已选标签 chips
+        if (selectedTags.isNotEmpty)
+          ...selectedTags.map(
+            (tag) => Padding(
+              padding: const EdgeInsets.only(right: 6.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0x3DFFFFFF)
+                        : const Color(0x1F000000),
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  color: isDark
+                      ? const Color(0x3DFFFFFF)
+                      : const Color(0x0F000000),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      tag.preferredLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: textColor,
+                        height: 1.0,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: () {
+                        tagProvider.toggleTag(tag.id);
+                        imageProvider.setTagFilter(
+                          tagProvider.selectedTagIds.toList(),
+                        );
+                      },
+                      child: Icon(
+                        FluentIcons.clear,
+                        size: 12,
+                        color: hintColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        const Spacer(),
+        // 未打标签按钮
+        GestureDetector(
+          onTap: () {
+            final isUntagged = imageProvider.hasTagsFilter == false;
+            imageProvider.setHasTagsFilter(isUntagged ? null : false);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: hasUntaggedFilter
+                  ? (isDark ? const Color(0x3DFFFFFF) : const Color(0x1F000000))
+                  : Colors.transparent,
+              border: Border.all(
+                color: isDark
+                    ? const Color(0x3DFFFFFF)
+                    : const Color(0x1F000000),
+              ),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  hasUntaggedFilter ? FluentIcons.tag : FluentIcons.tag_unknown,
+                  size: 14,
+                  color: textColor,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '未打标签',
+                  style: TextStyle(fontSize: 13, color: textColor, height: 1.0),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
       ],
     );
   }
@@ -594,8 +594,7 @@ class _FluentSearchPageState extends State<FluentSearchPage> {
               // Content
               Expanded(
                 child: FluentSearchContent(
-                  onImageTap: null, // Removed single click routing
-                  onImageDoubleTap: (image) =>
+                  onImageTap: (image) =>
                       _showSearchImageDetail(context, image, provider),
                 ),
               ),
@@ -760,7 +759,7 @@ class FluentCollectionsPage extends StatelessWidget {
       header: const PageHeader(title: Text('收藏')),
       content: FluentCollectionsContent(
         collectionService: collectionService,
-        onImageDoubleTap: (image) => _showImageDetail(context, image),
+        onImageTap: (image) => _showImageDetail(context, image),
       ),
     );
   }

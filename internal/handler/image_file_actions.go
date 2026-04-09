@@ -2,19 +2,15 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 )
 
 type imageFileActionExecutor interface {
-	OpenSource(path string) error
 	DeleteSourceAndThumbnails(image domain.Image) error
 }
 
@@ -22,33 +18,6 @@ type defaultImageFileActionExecutor struct{}
 
 func newDefaultImageFileActionExecutor() imageFileActionExecutor {
 	return defaultImageFileActionExecutor{}
-}
-
-func (defaultImageFileActionExecutor) OpenSource(path string) error {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return fmt.Errorf("source file path is empty")
-	}
-
-	if _, err := os.Stat(trimmed); err != nil {
-		return err
-	}
-
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("cmd", "/C", "start", "", trimmed)
-	case "darwin":
-		cmd = exec.Command("open", trimmed)
-	default:
-		cmd = exec.Command("xdg-open", trimmed)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (defaultImageFileActionExecutor) DeleteSourceAndThumbnails(image domain.Image) error {

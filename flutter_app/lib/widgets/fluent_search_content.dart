@@ -9,13 +9,11 @@ import 'fluent_image_card.dart';
 /// Shows search results in grid layout with infinite scroll
 class FluentSearchContent extends StatefulWidget {
   final void Function(ImageModel)? onImageTap;
-  final void Function(ImageModel)? onImageDoubleTap;
   final ScrollController? scrollController;
 
   const FluentSearchContent({
     super.key,
     this.onImageTap,
-    this.onImageDoubleTap,
     this.scrollController,
   });
 
@@ -144,7 +142,6 @@ class _FluentSearchContentState extends State<FluentSearchContent> {
                 return FluentImageCard(
                   image: provider.results[index],
                   onTap: widget.onImageTap,
-                  onDoubleClick: widget.onImageDoubleTap,
                 );
               },
             ),

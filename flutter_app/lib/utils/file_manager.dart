@@ -25,3 +25,22 @@ Future<void> openContainingFolder(String filePath) async {
     debugPrint('Failed to open containing folder: $e');
   }
 }
+
+/// Opens [filePath] with the system default application.
+/// Delegates to the OS file association handler.
+Future<void> openFile(String filePath) async {
+  if (filePath.isEmpty) return;
+
+  try {
+    if (Platform.isWindows) {
+      await Process.start('cmd', ['/C', 'start', '', filePath]);
+    } else if (Platform.isMacOS) {
+      await Process.start('open', [filePath]);
+    } else if (Platform.isLinux) {
+      await Process.start('xdg-open', [filePath]);
+    }
+  } catch (e) {
+    debugPrint('Failed to open file: $e');
+    rethrow;
+  }
+}
