@@ -3,12 +3,12 @@ import 'package:flutter/material.dart' show MaterialPageRoute;
 import 'package:provider/provider.dart';
 
 import '../screens/image_detail_screen.dart';
+import '../models/tag.dart';
 import '../providers/image_provider.dart';
 import '../providers/search_provider.dart';
 import '../providers/tag_provider.dart';
 import '../widgets/fluent_gallery_content.dart';
 import '../widgets/fluent_collections_content.dart';
-import '../widgets/gallery_filter_panel.dart';
 import '../widgets/fluent_search_content.dart';
 import '../widgets/monitoring/monitoring_workspace.dart';
 import '../widgets/log_viewer/log_viewer_workspace.dart';
@@ -28,7 +28,22 @@ class FluentGalleryPage extends StatefulWidget {
 }
 
 class _FluentGalleryPageState extends State<FluentGalleryPage> {
-  bool _isFilterPanelOpen = false;
+  final TextEditingController _tagSearchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Load tags once on initialization
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<TagProvider>().loadTags();
+    });
+  }
+
+  @override
+  void dispose() {
+    _tagSearchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,33 +55,6 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
             commandBar: CommandBar(
               mainAxisAlignment: MainAxisAlignment.end,
               primaryItems: [
-                // View toggle
-                CommandBarButton(
-                  icon: Icon(
-                    imageProvider.viewMode == ViewMode.grid
-                        ? FluentIcons.bulleted_list_text
-                        : FluentIcons.tiles,
-                  ),
-                  label: Text(
-                    imageProvider.viewMode == ViewMode.grid ? '网格' : '瀑布流',
-                  ),
-                  onPressed: () {
-                    imageProvider.setViewMode(
-                      imageProvider.viewMode == ViewMode.grid
-                          ? ViewMode.masonry
-                          : ViewMode.grid,
-                    );
-                  },
-                ),
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.filter),
-                  label: const Text('筛选'),
-                  onPressed: () {
-                    setState(() {
-                      _isFilterPanelOpen = true;
-                    });
-                  },
-                ),
                 CommandBarButton(
                   icon: const Icon(FluentIcons.sort),
                   label: const Text('排序'),
@@ -107,49 +95,9 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
   }
 
   Widget _buildGalleryWorkspace(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: FluentGalleryContent(
-            onImageTap: null, // Removed single click routing
-            onImageDoubleTap: (image) =>
-                _showGalleryImageDetail(context, image),
-          ),
-        ),
-        if (_isFilterPanelOpen)
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _isFilterPanelOpen = false;
-                });
-              },
-              child: const ColoredBox(color: Color(0x22000000)),
-            ),
-          ),
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          top: 0,
-          bottom: 0,
-          right: _isFilterPanelOpen ? 0 : -336,
-          child: Container(
-            width: 336,
-            decoration: BoxDecoration(
-              color: FluentTheme.of(context).micaBackgroundColor,
-              border: const Border(left: BorderSide(color: Color(0x22000000))),
-            ),
-            child: GalleryFilterPanel(
-              width: 336,
-              onClose: () {
-                setState(() {
-                  _isFilterPanelOpen = false;
-                });
-              },
-            ),
-          ),
-        ),
-      ],
+    return FluentGalleryContent(
+      onImageTap: null, // Removed single click routing
+      onImageDoubleTap: (image) => _showGalleryImageDetail(context, image),
     );
   }
 
@@ -226,40 +174,172 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
     final selectedTags = tagProvider.selectedTags;
     final hasUntaggedFilter = imageProvider.hasTagsFilter == false;
 
-    if (selectedTags.isEmpty && !hasUntaggedFilter) {
-      return const Text('图库');
-    }
+    final theme = FluentTheme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final borderColor = isDark
+        ? const Color(0x3DFFFFFF)
+        : const Color(0x1F000000);
+    final textColor = theme.resources.textFillColorPrimary;
+    final hintColor = theme.resources.textFillColorSecondary;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+    return Row(
       children: [
         const Text('图库'),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          children: [
-            if (hasUntaggedFilter)
-              Button(
-                child: const Text('未打标签 ×'),
-                onPressed: () {
-                  imageProvider.setHasTagsFilter(null);
-                  tagProvider.clearSelection();
-                },
-              ),
-            ...selectedTags.map(
-              (tag) => Button(
-                child: Text('${tag.preferredLabel} ×'),
-                onPressed: () {
-                  tagProvider.toggleTag(tag.id);
-                  imageProvider.setTagFilter(
-                    tagProvider.selectedTagIds.toList(),
-                  );
-                },
-              ),
+        const SizedBox(width: 24),
+        Expanded(
+          child: Container(
+            height: 40,
+            decoration: BoxDecoration(
+              border: Border.all(color: borderColor),
+              borderRadius: BorderRadius.circular(4),
+              color: theme.resources.controlFillColorDefault,
             ),
-          ],
+            child: Row(
+              children: [
+                const SizedBox(width: 8),
+                Icon(FluentIcons.search, size: 16, color: hintColor),
+                const SizedBox(width: 8),
+                if (selectedTags.isNotEmpty)
+                  ...selectedTags.map(
+                    (tag) => Padding(
+                      padding: const EdgeInsets.only(right: 6.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: borderColor),
+                          borderRadius: BorderRadius.circular(4),
+                          color: isDark
+                              ? const Color(0x3DFFFFFF)
+                              : const Color(0x0F000000),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              tag.preferredLabel,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: textColor,
+                                height: 1.0,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: () {
+                                tagProvider.toggleTag(tag.id);
+                                imageProvider.setTagFilter(
+                                  tagProvider.selectedTagIds.toList(),
+                                );
+                              },
+                              child: Icon(
+                                FluentIcons.clear,
+                                size: 12,
+                                color: hintColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: AutoSuggestBox<Tag>(
+                    controller: _tagSearchController,
+                    items: tagProvider.allTags
+                        .map(
+                          (tag) => AutoSuggestBoxItem<Tag>(
+                            value: tag,
+                            label: tag.preferredLabel,
+                          ),
+                        )
+                        .toList(),
+                    placeholder: '搜索标签...',
+                    style: TextStyle(fontSize: 14, color: textColor),
+                    decoration: WidgetStateProperty.all(
+                      const BoxDecoration(color: Colors.transparent),
+                    ),
+                    clearButtonEnabled: false,
+                    onSelected: (item) {
+                      if (item.value != null &&
+                          !tagProvider.selectedTagIds.contains(
+                            item.value!.id,
+                          )) {
+                        tagProvider.toggleTag(item.value!.id);
+                        imageProvider.setTagFilter(
+                          tagProvider.selectedTagIds.toList(),
+                        );
+                        Future.delayed(const Duration(milliseconds: 50), () {
+                          _tagSearchController.clear();
+                        });
+                      }
+                    },
+                  ),
+                ),
+                if (selectedTags.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      tagProvider.clearSelection();
+                      imageProvider.setTagFilter([]);
+                      imageProvider.setHasTagsFilter(null);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Icon(
+                        FluentIcons.clear,
+                        size: 16,
+                        color: hintColor,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    final isUntagged = imageProvider.hasTagsFilter == false;
+                    imageProvider.setHasTagsFilter(isUntagged ? null : false);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: hasUntaggedFilter
+                          ? (isDark
+                                ? const Color(0x3DFFFFFF)
+                                : const Color(0x1F000000))
+                          : Colors.transparent,
+                      border: Border.all(color: borderColor),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          hasUntaggedFilter
+                              ? FluentIcons.tag
+                              : FluentIcons.tag_unknown,
+                          size: 14,
+                          color: textColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '未打标签',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: textColor,
+                            height: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
         ),
       ],
     );

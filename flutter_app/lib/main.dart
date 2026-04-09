@@ -14,6 +14,7 @@ import 'providers/tag_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/config_provider.dart';
+import 'providers/selection_provider.dart';
 import 'bootstrap/packaged_desktop_bootstrap.dart';
 import 'bootstrap/viewer_window_runtime_bootstrap.dart';
 import 'bootstrap/single_instance_guard.dart';
@@ -201,6 +202,7 @@ class MyApp extends StatelessWidget {
             wsUriFactory: () => Uri.parse(ApiConfig.monitoringWs),
           ),
         ),
+        ChangeNotifierProvider(create: (_) => SelectionProvider()),
         Provider(
           create: (_) =>
               LogStreamService(basicAuthHeader: ApiConfig.adminBasicAuthHeader),

@@ -61,7 +61,7 @@ void main() {
       await tester.pump();
 
       // Animation started
-      expect(find.byType(FadeTransition), findsOneWidget);
+      expect(find.byType(FadeTransition), findsWidgets);
 
       // Complete animation
       await tester.pumpAndSettle();

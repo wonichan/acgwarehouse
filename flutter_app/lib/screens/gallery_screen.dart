@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/tag.dart';
 import '../providers/image_provider.dart';
 import '../providers/selection_provider.dart';
 import '../providers/tag_provider.dart';
@@ -7,7 +8,6 @@ import '../services/tag_service.dart';
 import '../widgets/batch_operation_sheet.dart';
 import '../widgets/batch_tag_dialog.dart';
 import '../widgets/responsive_image_grid.dart';
-import '../widgets/tag_filter_drawer.dart';
 import 'image_detail_screen.dart';
 import 'tag_management_screen.dart';
 
@@ -35,6 +35,10 @@ class _GalleryContentState extends State<_GalleryContent> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    // Load tags once on initialization
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<TagProvider>().loadTags();
+    });
   }
 
   @override
@@ -58,11 +62,9 @@ class _GalleryContentState extends State<_GalleryContent> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          inSelectionMode
-              ? '已选 ${selectionProvider.selectedCount} 张'
-              : 'ACGWarehouse',
-        ),
+        title: inSelectionMode
+            ? Text('已选 ${selectionProvider.selectedCount} 张')
+            : _buildSearchBar(context),
         actions: inSelectionMode
             ? [
                 TextButton(
@@ -70,27 +72,7 @@ class _GalleryContentState extends State<_GalleryContent> {
                   child: const Text('完成'),
                 ),
               ]
-            : [
-                _buildTagFilterButton(context),
-                _buildViewModeToggle(context),
-                _buildSortButton(context),
-                _buildManageTagsButton(context),
-              ],
-      ),
-      drawer: Drawer(
-        child: Consumer<ImageListProvider>(
-          builder: (context, provider, _) {
-            return TagFilterDrawer(
-              hasTagsFilter: provider.hasTagsFilter,
-              onFilterChanged: (tagIds) {
-                provider.setTagFilter(tagIds);
-              },
-              onHasTagsChanged: (hasTags) {
-                provider.setHasTagsFilter(hasTags);
-              },
-            );
-          },
-        ),
+            : [_buildSortButton(context), _buildManageTagsButton(context)],
       ),
       body: Consumer<ImageListProvider>(
         builder: (context, provider, child) {
@@ -183,39 +165,204 @@ class _GalleryContentState extends State<_GalleryContent> {
     );
   }
 
-  Widget _buildTagFilterButton(BuildContext context) {
-    return Builder(
-      builder: (buttonContext) {
-        return IconButton(
-          icon: const Icon(Icons.filter_list),
-          onPressed: () {
-            Scaffold.of(buttonContext).openDrawer();
-          },
-          tooltip: '标签筛选',
-        );
-      },
-    );
-  }
+  Widget _buildSearchBar(BuildContext context) {
+    final tagProvider = context.watch<TagProvider>();
+    final imageListProvider = context.watch<ImageListProvider>();
+    final selectedTags = tagProvider.selectedTags;
 
-  Widget _buildViewModeToggle(BuildContext context) {
-    return Consumer<ImageListProvider>(
-      builder: (context, provider, _) {
-        return IconButton(
-          icon: Icon(
-            provider.viewMode == ViewMode.grid
-                ? Icons.view_agenda
-                : Icons.grid_view,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? Colors.white24 : Colors.black12;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final hintColor = isDark ? Colors.white54 : Colors.black54;
+
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+          Icon(Icons.search, size: 20, color: hintColor),
+          const SizedBox(width: 8),
+          if (selectedTags.isNotEmpty)
+            ...selectedTags.map(
+              (tag) => Padding(
+                padding: const EdgeInsets.only(right: 6.0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: borderColor),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        tag.preferredLabel,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: textColor,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () {
+                          tagProvider.toggleTag(tag.id);
+                          imageListProvider.setTagFilter(
+                            tagProvider.selectedTagIds.toList(),
+                          );
+                        },
+                        child: Icon(Icons.close, size: 14, color: hintColor),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Expanded(
+            child: Autocomplete<Tag>(
+              optionsBuilder: (TextEditingValue textEditingValue) {
+                if (textEditingValue.text.isEmpty) {
+                  return const Iterable<Tag>.empty();
+                }
+                return tagProvider.allTags.where((Tag tag) {
+                  return tag.preferredLabel.toLowerCase().contains(
+                    textEditingValue.text.toLowerCase(),
+                  );
+                });
+              },
+              displayStringForOption: (Tag option) => option.preferredLabel,
+              onSelected: (Tag selection) {
+                if (!tagProvider.selectedTagIds.contains(selection.id)) {
+                  tagProvider.toggleTag(selection.id);
+                  imageListProvider.setTagFilter(
+                    tagProvider.selectedTagIds.toList(),
+                  );
+                }
+              },
+              fieldViewBuilder:
+                  (
+                    context,
+                    textEditingController,
+                    focusNode,
+                    onFieldSubmitted,
+                  ) {
+                    return TextField(
+                      controller: textEditingController,
+                      focusNode: focusNode,
+                      style: TextStyle(color: textColor, fontSize: 14),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: 'Search tags...',
+                        hintStyle: TextStyle(color: hintColor, fontSize: 14),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
+                      ),
+                      onSubmitted: (String value) {
+                        onFieldSubmitted();
+                      },
+                    );
+                  },
+              optionsViewBuilder: (context, onSelected, options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4.0,
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(4),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxHeight: 200,
+                        maxWidth: 300,
+                      ),
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        itemBuilder: (BuildContext context, int index) {
+                          final Tag option = options.elementAt(index);
+                          return InkWell(
+                            onTap: () => onSelected(option),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                                vertical: 12.0,
+                              ),
+                              child: Text(
+                                option.preferredLabel,
+                                style: TextStyle(color: textColor),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
-          onPressed: () {
-            provider.setViewMode(
-              provider.viewMode == ViewMode.grid
-                  ? ViewMode.masonry
-                  : ViewMode.grid,
-            );
-          },
-          tooltip: provider.viewMode == ViewMode.grid ? '切换到瀑布流' : '切换到网格',
-        );
-      },
+          if (selectedTags.isNotEmpty)
+            InkWell(
+              onTap: () {
+                tagProvider.clearSelection();
+                imageListProvider.setTagFilter([]);
+                imageListProvider.setHasTagsFilter(null);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Icon(Icons.clear_all, size: 20, color: hintColor),
+              ),
+            ),
+          const SizedBox(width: 8),
+          // Toggle for "Untagged Only"
+          InkWell(
+            onTap: () {
+              final isUntagged = imageListProvider.hasTagsFilter == false;
+              imageListProvider.setHasTagsFilter(isUntagged ? null : false);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: imageListProvider.hasTagsFilter == false
+                    ? (isDark ? Colors.white24 : Colors.black12)
+                    : Colors.transparent,
+                border: Border.all(color: borderColor),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    imageListProvider.hasTagsFilter == false
+                        ? Icons.label_off
+                        : Icons.label_outline,
+                    size: 14,
+                    color: textColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '未打标签',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: textColor,
+                      height: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
     );
   }
 

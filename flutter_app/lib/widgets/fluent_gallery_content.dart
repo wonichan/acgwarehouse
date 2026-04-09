@@ -1,7 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:provider/provider.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import '../providers/image_provider.dart';
 import '../models/image.dart';
@@ -9,9 +8,9 @@ import '../services/api_service.dart';
 import '../services/collection_service.dart';
 import 'fluent_image_card.dart';
 import 'image_collection_picker_dialog.dart';
+import 'justified_image_grid.dart';
 
 /// Fluent 风格图库内容区域
-/// 支持网格视图和瀑布流视图切换
 /// 支持滚动分页加载和下拉刷新
 class FluentGalleryContent extends StatefulWidget {
   final void Function(ImageModel)? onImageTap;
@@ -291,45 +290,11 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
   Widget _buildImageList(ImageListProvider provider) {
     final images = provider.images;
 
-    if (provider.viewMode == ViewMode.grid) {
-      return _buildGridView(images);
-    } else {
-      return _buildMasonryView(images);
-    }
-  }
-
-  Widget _buildGridView(List<ImageModel> images) {
-    return GridView.builder(
+    return JustifiedImageGrid(
+      images: images,
       controller: _scrollController,
-      padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 220,
-        childAspectRatio: 1,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-      ),
-      itemCount: images.length,
-      itemBuilder: (context, index) {
-        return FluentImageCard(
-          image: images[index],
-          onTap: widget.onImageTap,
-          onDoubleClick: widget.onImageDoubleTap,
-          onSecondaryTapDown: (image, details) {
-            _showImageContextMenu(image, details.globalPosition);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildMasonryView(List<ImageModel> images) {
-    return MasonryGridView.count(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(8),
-      crossAxisCount: 4,
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      itemCount: images.length,
+      targetRowHeight: 250.0,
+      spacing: 8.0,
       itemBuilder: (context, index) {
         return FluentImageCard(
           image: images[index],

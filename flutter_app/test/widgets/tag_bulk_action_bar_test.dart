@@ -112,12 +112,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Shows selected count
-      expect(find.textContaining('2 selected'), findsOneWidget);
+      expect(find.textContaining('2 已选中'), findsOneWidget);
 
       // Shows cleanup and merge controls
-      expect(find.text('Cleanup selected'), findsOneWidget);
-      expect(find.text('Merge into...'), findsOneWidget);
-      expect(find.text('Clear selection'), findsOneWidget);
+      expect(find.text('清理已选中'), findsOneWidget);
+      expect(find.text('合并到...'), findsOneWidget);
+      expect(find.text('清除选择'), findsOneWidget);
     },
   );
 
@@ -145,7 +145,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Cleanup selected'));
+    await tester.tap(find.text('清理已选中'));
     await tester.pumpAndSettle();
 
     expect(cleanupCalls, 1);

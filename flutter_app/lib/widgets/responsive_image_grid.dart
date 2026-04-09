@@ -1,33 +1,15 @@
-// lib/widgets/responsive_image_grid.dart
 import 'package:flutter/material.dart';
 import '../models/image.dart';
 import '../providers/selection_provider.dart';
 import '../providers/image_provider.dart' show ViewMode;
 import '../utils/responsive_breakpoint.dart';
-import 'image_grid.dart';
-import 'image_masonry.dart' hide ImageTapCallback;
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'image_grid.dart' show ImageTapCallback;
 
 /// Responsive image grid that adapts columns and spacing to screen size.
 ///
-/// Breakpoint behavior:
-/// - Compact (<= 600px): 2 columns, 4px spacing (phones)
-/// - Medium (600-840px): 3 columns, 8px spacing (tablets)
-/// - Expanded (> 840px): 4 columns, 12px spacing (large tablets)
-///
 /// Features:
-/// - AnimatedSwitcher for smooth transitions when column count changes
-/// - 200ms fade animation with easeInOut curve
-///
-/// Usage:
-/// ```dart
-/// ResponsiveImageGrid(
-///   images: imageList,
-///   viewMode: ViewMode.grid,
-///   onImageTap: (image) => navigateToDetail(image),
-///   selectionProvider: selectionProvider,
-/// )
-/// ```
+/// - Justified image layout algorithm (Simple ListView version)
+/// - Infinite scroll friendly
 class ResponsiveImageGrid extends StatelessWidget {
   final List<ImageModel> images;
   final ViewMode viewMode;
@@ -44,143 +26,160 @@ class ResponsiveImageGrid extends StatelessWidget {
     this.scrollController,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final breakpoint = ResponsiveBreakpoint.getBreakpoint(constraints.maxWidth);
-        final crossAxisCount = ResponsiveBreakpoint.getGridColumns(breakpoint);
-        final spacing = ResponsiveBreakpoint.getGridSpacing(breakpoint);
+  List<List<ImageModel>> _buildRows(
+    List<ImageModel> images,
+    double maxWidth,
+    double spacing,
+  ) {
+    final List<List<ImageModel>> rows = [];
+    List<ImageModel> currentRow = [];
+    double currentWidth = 0.0;
+    const double targetHeight = 250.0;
 
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          switchInCurve: Curves.easeInOut,
-          switchOutCurve: Curves.easeInOut,
-          transitionBuilder: (child, animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
-          },
-          child: KeyedSubtree(
-            key: ValueKey('$viewMode-$crossAxisCount'),
-            child: _buildGrid(crossAxisCount, spacing),
-          ),
-        );
-      },
-    );
-  }
+    for (final image in images) {
+      double aspect = (image.width > 0 && image.height > 0)
+          ? image.width / image.height
+          : 1.0;
 
-  Widget _buildGrid(int crossAxisCount, double spacing) {
-    if (viewMode == ViewMode.masonry) {
-      return MasonryGridView.count(
-        controller: scrollController,
-        crossAxisCount: crossAxisCount,
-        mainAxisSpacing: spacing,
-        crossAxisSpacing: spacing,
-        itemCount: images.length,
-        itemBuilder: (context, index) {
-          final image = images[index];
-          final inSelectionMode = selectionProvider?.isSelectionMode ?? false;
-          final isSelected = selectionProvider?.isSelected(image.id) ?? false;
+      currentRow.add(image);
+      currentWidth += aspect * targetHeight;
 
-          return GestureDetector(
-            key: ValueKey('image-${image.id}'),
-            onTap: () {
-              if (selectionProvider != null &&
-                  selectionProvider!.handleImageTap(image.id, index: index)) {
-                return;
-              }
-              if (onImageTap != null) {
-                onImageTap!(image);
-              }
-            },
-            onLongPress: selectionProvider == null
-                ? null
-                : () {
-                    selectionProvider!.handleImageTap(image.id, longPress: true, index: index);
-                  },
-            child: Stack(
-              children: [
-                _buildImageTile(image),
-                if (inSelectionMode)
-                  Positioned.fill(
-                    child: Container(
-                      color: isSelected ? Colors.black.withOpacity(0.25) : Colors.transparent,
-                    ),
-                  ),
-                if (inSelectionMode)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: IgnorePointer(
-                      child: Checkbox(
-                        value: isSelected,
-                        onChanged: (_) {},
-                        shape: const CircleBorder(),
-                        side: const BorderSide(color: Colors.white, width: 2),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          );
-        },
-      );
+      int spacingCount = currentRow.length > 1 ? currentRow.length - 1 : 0;
+      if (currentWidth + (spacingCount * spacing) >= maxWidth) {
+        rows.add(List.from(currentRow));
+        currentRow.clear();
+        currentWidth = 0.0;
+      }
     }
 
-    return GridView.builder(
-      controller: scrollController,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        mainAxisSpacing: spacing,
-        crossAxisSpacing: spacing,
-      ),
-      itemCount: images.length,
-      itemBuilder: (context, index) {
-        final image = images[index];
-        final inSelectionMode = selectionProvider?.isSelectionMode ?? false;
-        final isSelected = selectionProvider?.isSelected(image.id) ?? false;
+    if (currentRow.isNotEmpty) {
+      rows.add(currentRow);
+    }
+    return rows;
+  }
 
-        return GestureDetector(
-          key: ValueKey('image-${image.id}'),
-          onTap: () {
-            if (selectionProvider != null &&
-                selectionProvider!.handleImageTap(image.id, index: index)) {
-              return;
+  @override
+  Widget build(BuildContext context) {
+    if (images.isEmpty) {
+      return const Center(child: Text('No images to display.'));
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final breakpoint = ResponsiveBreakpoint.getBreakpoint(
+          constraints.maxWidth,
+        );
+        final spacing = ResponsiveBreakpoint.getGridSpacing(breakpoint);
+        final maxWidth = constraints.maxWidth;
+
+        final rows = _buildRows(images, maxWidth, spacing);
+
+        return ListView.builder(
+          controller: scrollController,
+          itemCount: rows.length,
+          itemBuilder: (context, index) {
+            final row = rows[index];
+            double totalAspect = 0.0;
+            for (final img in row) {
+              totalAspect += (img.width > 0 && img.height > 0)
+                  ? img.width / img.height
+                  : 1.0;
             }
-            if (onImageTap != null) {
-              onImageTap!(image);
+
+            int spacingCount = row.length > 1 ? row.length - 1 : 0;
+            double availableWidth = maxWidth - (spacingCount * spacing);
+
+            // If it's the last row, don't stretch it excessively.
+            bool isLastRow = index == rows.length - 1;
+            double newHeight;
+            if (isLastRow && (totalAspect * 250.0 < availableWidth * 0.75)) {
+              newHeight = 250.0;
+            } else {
+              newHeight = availableWidth / totalAspect;
             }
-          },
-          onLongPress: selectionProvider == null
-              ? null
-              : () {
-                  selectionProvider!.handleImageTap(image.id, longPress: true, index: index);
-                },
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _buildImageTile(image),
-              if (inSelectionMode)
-                Container(
-                  color: isSelected ? Colors.black.withOpacity(0.25) : Colors.transparent,
-                ),
-              if (inSelectionMode)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IgnorePointer(
-                    child: Checkbox(
-                      value: isSelected,
-                      onChanged: (_) {},
-                      shape: const CircleBorder(),
-                      side: const BorderSide(color: Colors.white, width: 2),
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: spacing),
+              child: Row(
+                children: row.map((image) {
+                  double aspect = (image.width > 0 && image.height > 0)
+                      ? image.width / image.height
+                      : 1.0;
+                  double width = aspect * newHeight;
+
+                  final imageIndex = images.indexOf(image);
+                  final inSelectionMode =
+                      selectionProvider?.isSelectionMode ?? false;
+                  final isSelected =
+                      selectionProvider?.isSelected(image.id) ?? false;
+
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      right: image != row.last ? spacing : 0,
                     ),
-                  ),
-                ),
-            ],
-          ),
+                    child: SizedBox(
+                      width: width,
+                      height: newHeight,
+                      child: GestureDetector(
+                        key: ValueKey('image-${image.id}'),
+                        onTap: () {
+                          if (selectionProvider != null &&
+                              selectionProvider!.handleImageTap(
+                                image.id,
+                                index: imageIndex,
+                              )) {
+                            return;
+                          }
+                          if (onImageTap != null) {
+                            onImageTap!(image);
+                          }
+                        },
+                        onLongPress: selectionProvider == null
+                            ? null
+                            : () {
+                                selectionProvider!.handleImageTap(
+                                  image.id,
+                                  longPress: true,
+                                  index: imageIndex,
+                                );
+                              },
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _buildImageTile(image),
+                            if (inSelectionMode)
+                              Positioned.fill(
+                                child: Container(
+                                  color: isSelected
+                                      ? Colors.black.withOpacity(0.25)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                            if (inSelectionMode)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: IgnorePointer(
+                                  child: Checkbox(
+                                    value: isSelected,
+                                    onChanged: (_) {},
+                                    shape: const CircleBorder(),
+                                    side: const BorderSide(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            );
+          },
         );
       },
     );
@@ -207,7 +206,8 @@ class ResponsiveImageGrid extends StatelessWidget {
             child: CircularProgressIndicator(
               strokeWidth: 2,
               value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                  ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
                   : null,
             ),
           ),

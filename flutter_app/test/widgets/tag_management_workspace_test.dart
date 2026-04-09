@@ -135,18 +135,18 @@ void main() {
       await tester.pumpAndSettle();
 
       // Summary stats visible
-      expect(find.text('Usage'), findsWidgets);
+      expect(find.text('使用量'), findsWidgets);
       expect(find.text('AI'), findsWidgets);
-      expect(find.text('Manual'), findsWidgets);
+      expect(find.text('手动'), findsWidgets);
 
       // Search box
       expect(find.byType(fluent.TextBox), findsOneWidget);
 
       // Row actions for each governance row
-      expect(find.text('Edit'), findsWidgets);
-      expect(find.text('Merge'), findsWidgets);
-      expect(find.text('Delete'), findsWidgets);
-      expect(find.text('View affected images'), findsWidgets);
+      expect(find.text('编辑'), findsWidgets);
+      expect(find.text('合并'), findsWidgets);
+      expect(find.text('删除'), findsWidgets);
+      expect(find.text('查看受影响图片'), findsWidgets);
 
       // Governance rows rendered
       expect(find.text('long_hair'), findsOneWidget);
@@ -180,7 +180,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap Delete on the first row (long_hair, canDelete=false, 42 affected images)
-      final deleteButtons = find.text('Delete');
+      final deleteButtons = find.text('删除');
       expect(deleteButtons, findsWidgets);
 
       await tester.tap(deleteButtons.first);
@@ -189,7 +189,7 @@ void main() {
       // Confirmation dialog should show the exact affected image count
       expect(find.textContaining('42'), findsWidgets);
       // And mention affected image context
-      expect(find.textContaining('affected image'), findsWidgets);
+      expect(find.textContaining('受影响的图片'), findsWidgets);
     },
   );
 
@@ -221,7 +221,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap "View affected images" on the first row
-      final viewButtons = find.text('View affected images');
+      final viewButtons = find.text('查看受影响图片');
       expect(viewButtons, findsWidgets);
 
       await tester.tap(viewButtons.first);

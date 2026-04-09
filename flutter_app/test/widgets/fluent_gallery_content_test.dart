@@ -8,9 +8,9 @@ import 'package:gallery/widgets/fluent_image_card.dart';
 import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/services/collection_service.dart';
+import 'package:gallery/widgets/justified_image_grid.dart';
 import 'package:gallery/widgets/fluent_gallery_content.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -134,14 +134,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(provider.viewMode, ViewMode.grid);
-    expect(find.byType(GridView), findsOneWidget);
-    expect(find.byType(MasonryGridView), findsNothing);
-
-    final gridView = tester.widget<GridView>(find.byType(GridView));
-    final gridDelegate =
-        gridView.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
-    expect(gridDelegate.maxCrossAxisExtent, 220);
-    expect(gridDelegate.childAspectRatio, 1);
+    // The UI now uses JustifiedImageGrid with ListView.builder
+    expect(find.byType(JustifiedImageGrid), findsOneWidget);
+    expect(find.byType(ListView), findsOneWidget);
   });
 
   testWidgets('triggers onImageDoubleTap on double click', (tester) async {

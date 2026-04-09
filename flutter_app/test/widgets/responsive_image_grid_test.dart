@@ -45,99 +45,72 @@ void main() {
         home: Scaffold(
           body: ChangeNotifierProvider(
             create: (_) => SelectionProvider(),
-            child: ResponsiveImageGrid(
-              images: testImages,
-              viewMode: viewMode,
-            ),
+            child: ResponsiveImageGrid(images: testImages, viewMode: viewMode),
           ),
         ),
       );
     }
 
-    testWidgets('shows 2 columns on compact screen', (tester) async {
-      // Set view size to compact (phone)
-      tester.view.physicalSize = const Size(400, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
+    testWidgets('uses ListView.builder with row layout', (tester) async {
       await tester.pumpWidget(createTestWidget());
-      
-      final gridView = tester.widget<GridView>(find.byType(GridView));
-      final delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.crossAxisCount, 2);
-    });
 
-    testWidgets('shows 3 columns on medium screen', (tester) async {
-      // Set view size to medium (tablet)
-      tester.view.physicalSize = const Size(700, 1000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(createTestWidget());
-      
-      final gridView = tester.widget<GridView>(find.byType(GridView));
-      final delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.crossAxisCount, 3);
-    });
-
-    testWidgets('shows 4 columns on expanded screen', (tester) async {
-      // Set view size to expanded (large tablet)
-      tester.view.physicalSize = const Size(900, 1200);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(createTestWidget());
-      
-      final gridView = tester.widget<GridView>(find.byType(GridView));
-      final delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.crossAxisCount, 4);
-    });
-
-    testWidgets('uses correct spacing for compact breakpoint', (tester) async {
-      tester.view.physicalSize = const Size(400, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(createTestWidget());
-      var gridView = tester.widget<GridView>(find.byType(GridView));
-      var delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.mainAxisSpacing, 4);
-      expect(delegate.crossAxisSpacing, 4);
-    });
-
-    testWidgets('uses correct spacing for medium breakpoint', (tester) async {
-      tester.view.physicalSize = const Size(700, 1000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(createTestWidget());
-      var gridView = tester.widget<GridView>(find.byType(GridView));
-      var delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.mainAxisSpacing, 8);
-      expect(delegate.crossAxisSpacing, 8);
-    });
-
-    testWidgets('uses correct spacing for expanded breakpoint', (tester) async {
-      tester.view.physicalSize = const Size(900, 1200);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(createTestWidget());
-      var gridView = tester.widget<GridView>(find.byType(GridView));
-      var delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.mainAxisSpacing, 12);
-      expect(delegate.crossAxisSpacing, 12);
-    });
-
-    testWidgets('uses MasonryGridView in masonry mode', (tester) async {
-      tester.view.physicalSize = const Size(400, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(createTestWidget(viewMode: ViewMode.masonry));
-      
-      // Should find MasonryGridView, not GridView
+      // Should find JustifiedImageGrid (the renamed widget)
+      expect(find.byType(ResponsiveImageGrid), findsOneWidget);
+      // Should use ListView.builder for row-based layout
+      expect(find.byType(ListView), findsWidgets);
+      // Should NOT use GridView (removed)
       expect(find.byType(GridView), findsNothing);
+    });
+
+    testWidgets('shows image tiles in rows', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+
+      // Find image tiles by their key pattern
+      expect(find.byKey(const ValueKey('image-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('image-2')), findsOneWidget);
+    });
+
+    testWidgets('renders empty state when no images', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChangeNotifierProvider(
+              create: (_) => SelectionProvider(),
+              child: ResponsiveImageGrid(
+                images: const [],
+                viewMode: ViewMode.grid,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('No images to display.'), findsOneWidget);
+    });
+
+    testWidgets('supports selection mode', (tester) async {
+      final selectionProvider = SelectionProvider();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChangeNotifierProvider.value(
+              value: selectionProvider,
+              child: ResponsiveImageGrid(
+                images: testImages,
+                viewMode: ViewMode.grid,
+                selectionProvider: selectionProvider,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Enter selection mode by long pressing an image
+      await tester.longPress(find.byKey(const ValueKey('image-1')));
+      await tester.pumpAndSettle();
+
+      // Should now be in selection mode
+      expect(selectionProvider.isSelectionMode, isTrue);
     });
   });
 }

@@ -123,7 +123,7 @@ void main() {
       expect(find.byType(fluent.TextBox), findsOneWidget);
 
       // Confirm button initially disabled (no target selected)
-      expect(find.text('Confirm Merge'), findsOneWidget);
+      expect(find.text('确认合并'), findsOneWidget);
     },
   );
 
@@ -158,7 +158,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Confirm button should be enabled now
-    await tester.tap(find.text('Confirm Merge'));
+    await tester.tap(find.text('确认合并'));
     await tester.pumpAndSettle();
 
     // Verify the merge was confirmed with the correct target

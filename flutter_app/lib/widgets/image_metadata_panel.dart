@@ -510,14 +510,16 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   ),
                   const SizedBox(height: 8),
                   Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                    spacing: 12,
+                    runSpacing: 10,
                     children: confirmed
                         .map(
                           (tag) => TagChip(
                             tag: tag,
                             style: TagChipStyle.confirmed,
                             onDelete: () => _removeTag(tag.id),
+                            onEdit: () => _showEditTagDialog(tag),
+                            onMerge: () => _showMergeDialog(tag),
                           ),
                         )
                         .toList(),
@@ -535,10 +537,19 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   ),
                   const SizedBox(height: 8),
                   Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                    spacing: 12,
+                    runSpacing: 10,
                     children: pending
-                        .map((tag) => _buildPendingTagChip(tag, theme))
+                        .map(
+                          (tag) => TagChip(
+                            tag: tag,
+                            style: TagChipStyle.pending,
+                            onConfirm: () => _confirmTag(tag.id),
+                            onReject: () => _rejectTag(tag.id),
+                            onMerge: () => _showMergeDialog(tag),
+                            onEdit: () => _showEditTagDialog(tag),
+                          ),
+                        )
                         .toList(),
                   ),
                   const SizedBox(height: 16),
@@ -554,12 +565,15 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   ),
                   const SizedBox(height: 8),
                   Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                    spacing: 12,
+                    runSpacing: 10,
                     children: rejected
                         .map(
-                          (tag) =>
-                              TagChip(tag: tag, style: TagChipStyle.rejected),
+                          (tag) => TagChip(
+                            tag: tag,
+                            style: TagChipStyle.rejected,
+                            onDelete: () => _removeTag(tag.id),
+                          ),
                         )
                         .toList(),
                   ),
@@ -574,56 +588,6 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildPendingTagChip(Tag tag, ImageMetadataPaneTheme theme) {
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.pendingTagBackground,
-        border: Border.all(color: theme.borderColor),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            tag.preferredLabel,
-            style: TextStyle(
-              color: theme.textForeground,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            height: 16,
-            width: 1,
-            color: theme.pendingTagDivider,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-          ),
-          InkWell(
-            onTap: () => _confirmTag(tag.id),
-            child: Icon(Icons.check, size: 16, color: theme.iconColor),
-          ),
-          const SizedBox(width: 6),
-          InkWell(
-            onTap: () => _rejectTag(tag.id),
-            child: Icon(Icons.close, size: 16, color: theme.iconColor),
-          ),
-          const SizedBox(width: 6),
-          InkWell(
-            onTap: () => _showMergeDialog(tag),
-            child: Icon(Icons.merge_type, size: 16, color: theme.iconColor),
-          ),
-          const SizedBox(width: 6),
-          InkWell(
-            onTap: () => _showEditTagDialog(tag),
-            child: Icon(Icons.edit, size: 16, color: theme.iconColor),
-          ),
-        ],
-      ),
     );
   }
 }
