@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/image.dart';
+import 'package:gallery/providers/config_provider.dart';
 import 'package:gallery/screens/image_detail_screen.dart';
+import 'package:gallery/services/tag_service.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   bool isForbiddenLegacyMetadataSurface(Widget widget) {
@@ -51,18 +56,23 @@ void main() {
     updatedAt: DateTime.utc(2023, 1, 1),
   );
 
+  Widget buildHarness() {
+    return ChangeNotifierProvider<ConfigProvider>(
+      create: (_) => ConfigProvider(initialBaseUrl: 'http://localhost:8080'),
+      child: MaterialApp(
+        theme: ThemeData.dark(),
+        home: ImageDetailScreen(image: image),
+      ),
+    );
+  }
+
   testWidgets(
     'renders the image details metadata area as a dark theme-aware pane',
     (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1400, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData.dark(),
-          home: ImageDetailScreen(image: image),
-        ),
-      );
+      await tester.pumpWidget(buildHarness());
       await tester.pump();
 
       expect(
@@ -75,6 +85,24 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('元数据'), findsOneWidget);
+      expect(find.text('文件名'), findsOneWidget);
+      expect(find.text('路径'), findsOneWidget);
+      expect(find.byKey(const Key('metadata-path-row')), findsOneWidget);
+      expect(find.byKey(const Key('metadata-path-value')), findsOneWidget);
+      expect(find.byTooltip('复制路径'), findsOneWidget);
+
+      final pathText = tester.widget<Text>(
+        find.byKey(const Key('metadata-path-value')),
+      );
+      expect(pathText.maxLines, 1);
+      expect(pathText.overflow, TextOverflow.ellipsis);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Tooltip && widget.message == image.path,
+          description: 'full path tooltip',
+        ),
+        findsOneWidget,
+      );
 
       expect(
         find.descendant(
@@ -96,6 +124,51 @@ void main() {
         reason:
             'Dark-mode details pane should not reuse legacy light metadata surfaces.',
       );
+    },
+  );
+
+  testWidgets(
+    'detail screen can render pending and rejected tags with injected tag service',
+    (WidgetTester tester) async {
+      final mockClient = MockClient((request) async {
+        if (request.url.path.endsWith('/api/v1/images/1/tags')) {
+          return http.Response(
+            '{"confirmed":[{"id":2,"preferred_label":"confirmed-tag","review_state":"confirmed"}],"pending":[{"id":1,"preferred_label":"pending-tag","review_state":"pending"}],"rejected":[{"id":3,"preferred_label":"rejected-tag","review_state":"rejected"}]}',
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/api/v1/ai-tags/default-prompt')) {
+          return http.Response('{"default_prompt":"default prompt"}', 200);
+        }
+        return http.Response('{}', 200);
+      });
+
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<ConfigProvider>(
+          create: (_) =>
+              ConfigProvider(initialBaseUrl: 'http://localhost:8080'),
+          child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: ImageDetailScreen(
+              image: image,
+              tagService: TagService(
+                baseUrl: 'http://localhost:8080',
+                client: mockClient,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('待确认'), findsOneWidget);
+      expect(find.text('已确认'), findsOneWidget);
+      expect(find.text('已拒绝'), findsOneWidget);
     },
   );
 }

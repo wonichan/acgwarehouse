@@ -21,6 +21,7 @@ import '../widgets/image_metadata_pane_theme.dart';
 /// filmstrip of thumbnails. Otherwise it displays a single image.
 class ImageDetailScreen extends StatefulWidget {
   final ImageModel image;
+  final TagService? tagService;
 
   /// Full list of images for navigation context.
   final List<ImageModel> images;
@@ -31,6 +32,7 @@ class ImageDetailScreen extends StatefulWidget {
   const ImageDetailScreen({
     super.key,
     required this.image,
+    this.tagService,
     this.images = const [],
     this.initialIndex = -1,
   });
@@ -59,7 +61,8 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
     _images = widget._canNavigate ? widget.images : [widget.image];
     _currentIndex = widget._canNavigate ? widget.initialIndex : 0;
     _tagProvider = TagProvider(
-      TagService(baseUrl: context.read<ConfigProvider>().baseUrl),
+      widget.tagService ??
+          TagService(baseUrl: context.read<ConfigProvider>().baseUrl),
     );
     _loadImageTags();
   }
@@ -571,21 +574,68 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
               ),
               _buildMetadataRow(
                 context,
-                '路径',
-                _currentImage.path,
+                '导入时间',
+                _currentImage.createdAt.toString(),
                 paneTheme.textForeground,
                 paneTheme.textMuted,
               ),
-              _buildMetadataRow(
+              _buildPathMetadataRow(
                 context,
-                '导入时间',
-                _currentImage.createdAt.toString(),
+                _currentImage.path,
                 paneTheme.textForeground,
                 paneTheme.textMuted,
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPathMetadataRow(
+    BuildContext context,
+    String value,
+    Color foreground,
+    Color mutedForeground,
+  ) {
+    return Padding(
+      key: const Key('metadata-path-row'),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(
+              '路径',
+              style: TextStyle(color: mutedForeground, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            child: Tooltip(
+              message: value,
+              child: Text(
+                value,
+                key: const Key('metadata-path-value'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: foreground,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: '复制路径',
+            onPressed: () => Clipboard.setData(ClipboardData(text: value)),
+            icon: const Icon(Icons.copy_outlined, size: 16),
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.only(left: 8),
+          ),
+        ],
       ),
     );
   }
