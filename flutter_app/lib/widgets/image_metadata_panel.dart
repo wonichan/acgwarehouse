@@ -325,6 +325,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Icon(Icons.auto_awesome, color: theme.iconColor, size: 20),
                 const SizedBox(width: 8),
@@ -336,30 +337,38 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   ),
                 ),
                 const Spacer(),
-                if (!_isAITriggered)
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      minimumSize: const Size(0, 32),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.blue.withValues(alpha: 0.6),
+                    disabledForegroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    onPressed: _triggerAITags,
-                    icon: const Icon(Icons.play_arrow, size: 16),
-                    label: const Text(
-                      '生成',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
+                    minimumSize: const Size(0, 32),
                   ),
+                  onPressed: _isAITriggered ? null : _triggerAITags,
+                  icon: _isAITriggered
+                      ? const SizedBox.square(
+                          dimension: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Icon(Icons.play_arrow, size: 16),
+                  label: const Text(
+                    '生成',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
                 if (_aiStatus != null) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -382,39 +391,64 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                 ],
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Text(
-                  '自定义提示词',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: theme.textMuted,
-                    fontWeight: FontWeight.w500,
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.inputFillColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: theme.borderColor),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '自定义提示词',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: theme.textForeground,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _useCustomPrompt
+                              ? '使用自定义提示词控制标签生成风格'
+                              : '默认使用系统提示词，可按需展开编辑',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Switch(
-                  value: _useCustomPrompt,
-                  onChanged: (value) {
-                    setState(() => _useCustomPrompt = value);
-                  },
-                  activeThumbColor: Colors.blue,
-                  activeTrackColor: Colors.blue.withValues(alpha: 0.2),
-                ),
-                if (_isLoadingPrompt)
-                  const SizedBox(
-                    width: 8,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                  const SizedBox(width: 12),
+                  Switch(
+                    value: _useCustomPrompt,
+                    onChanged: (value) {
+                      setState(() => _useCustomPrompt = value);
+                    },
+                    activeThumbColor: Colors.blue,
+                    activeTrackColor: Colors.blue.withValues(alpha: 0.2),
                   ),
-              ],
+                  if (_isLoadingPrompt)
+                    const SizedBox(
+                      width: 8,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
+              ),
             ),
             if (_useCustomPrompt) ...[
               const SizedBox(height: 12),
               TextField(
                 controller: _promptController,
-                maxLines: 6,
+                maxLines: 4,
                 style: TextStyle(fontSize: 13, color: theme.textForeground),
                 decoration: InputDecoration(
                   hintText: '输入自定义提示词...',
@@ -432,7 +466,10 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   ),
                   filled: true,
                   fillColor: theme.inputFillColor,
-                  contentPadding: const EdgeInsets.all(12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.refresh, size: 18),
                     tooltip: '恢复默认提示词',
@@ -445,14 +482,14 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
               ),
               const SizedBox(height: 8),
               Text(
-                '提示：可编辑提示词以自定义 AI 生成的标签类型和风格',
+                '提示：编辑后将用于下一次 AI 标签生成。',
                 style: TextStyle(fontSize: 12, color: theme.textMuted),
               ),
             ] else
               Padding(
-                padding: const EdgeInsets.only(top: 4.0),
+                padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
-                  '点击"生成"触发 AI 分析，标签将自动添加到待确认列表中',
+                  '点击“生成”触发 AI 分析，结果会进入待确认分组。',
                   style: TextStyle(fontSize: 12, color: theme.textMuted),
                 ),
               ),
@@ -468,6 +505,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
         final confirmed = provider.imageTags['confirmed'] ?? [];
         final pending = provider.imageTags['pending'] ?? [];
         final rejected = provider.imageTags['rejected'] ?? [];
+        final totalCount = confirmed.length + pending.length + rejected.length;
 
         return Container(
           key: const Key('metadata-section-tags'),
@@ -482,7 +520,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '标签',
+                      '标签${totalCount > 0 ? ' ($totalCount)' : ''}',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: theme.textForeground,
                         fontWeight: FontWeight.w600,
@@ -498,47 +536,14 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                if (confirmed.isNotEmpty) ...[
-                  Text(
-                    '已确认',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: theme.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    children: confirmed
-                        .map(
-                          (tag) => TagChip(
-                            tag: tag,
-                            style: TagChipStyle.confirmed,
-                            onDelete: () => _removeTag(tag.id),
-                            onEdit: () => _showEditTagDialog(tag),
-                            onMerge: () => _showMergeDialog(tag),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                const SizedBox(height: 14),
                 if (pending.isNotEmpty) ...[
-                  Text(
-                    '待确认',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: theme.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
+                  _buildTagGroup(
+                    context,
+                    theme,
+                    label: '待确认',
+                    count: pending.length,
+                    tone: _TagGroupTone.pending,
                     children: pending
                         .map(
                           (tag) => TagChip(
@@ -552,21 +557,36 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                         )
                         .toList(),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                ],
+                if (confirmed.isNotEmpty) ...[
+                  _buildTagGroup(
+                    context,
+                    theme,
+                    label: '已确认',
+                    count: confirmed.length,
+                    tone: _TagGroupTone.confirmed,
+                    children: confirmed
+                        .map(
+                          (tag) => TagChip(
+                            tag: tag,
+                            style: TagChipStyle.confirmed,
+                            onDelete: () => _removeTag(tag.id),
+                            onEdit: () => _showEditTagDialog(tag),
+                            onMerge: () => _showMergeDialog(tag),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 12),
                 ],
                 if (rejected.isNotEmpty) ...[
-                  Text(
-                    '已拒绝',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: theme.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
+                  _buildTagGroup(
+                    context,
+                    theme,
+                    label: '已拒绝',
+                    count: rejected.length,
+                    tone: _TagGroupTone.rejected,
                     children: rejected
                         .map(
                           (tag) => TagChip(
@@ -590,7 +610,89 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
       },
     );
   }
+
+  Widget _buildTagGroup(
+    BuildContext context,
+    ImageMetadataPaneTheme theme, {
+    required String label,
+    required int count,
+    required _TagGroupTone tone,
+    required List<Widget> children,
+  }) {
+    final isRejected = tone == _TagGroupTone.rejected;
+    final backgroundColor = switch (tone) {
+      _TagGroupTone.pending => theme.pendingTagBackground,
+      _TagGroupTone.confirmed => theme.inputFillColor.withValues(alpha: 0.55),
+      _TagGroupTone.rejected => theme.inputFillColor.withValues(alpha: 0.35),
+    };
+    final badgeColor = switch (tone) {
+      _TagGroupTone.pending => Colors.orange.withValues(alpha: 0.14),
+      _TagGroupTone.confirmed => Colors.green.withValues(alpha: 0.14),
+      _TagGroupTone.rejected => theme.statusBackground,
+    };
+    final badgeTextColor = switch (tone) {
+      _TagGroupTone.pending => Colors.orange.shade800,
+      _TagGroupTone.confirmed => Colors.green.shade700,
+      _TagGroupTone.rejected => theme.textMuted,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: theme.borderColor),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isRejected
+                          ? theme.textMuted
+                          : theme.textForeground,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: badgeTextColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(spacing: 10, runSpacing: 8, children: children),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
+
+enum _TagGroupTone { pending, confirmed, rejected }
 
 class _MergeTagDialog extends StatefulWidget {
   final TagProvider tagProvider;
