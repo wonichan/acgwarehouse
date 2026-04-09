@@ -67,6 +67,15 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
   @override
   void didUpdateWidget(covariant ImageDetailScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Resync navigation context if the images list or initial index changed
+    if (widget._canNavigate &&
+        (widget.images != oldWidget.images ||
+            widget.initialIndex != oldWidget.initialIndex)) {
+      _images = widget.images;
+      _currentIndex = widget.initialIndex;
+    }
+
     if (oldWidget.image != widget.image) {
       _tagProvider.loadImageTags(widget.image.id);
     }

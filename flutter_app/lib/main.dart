@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
-import 'package:fluent_ui/fluent_ui.dart' show WindowListener;
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/window_manager.dart'
+    show windowManager, WindowListener, WindowOptions, TitleBarStyle;
 
 import 'providers/provider_setup.dart';
 import 'providers/theme_provider.dart';
@@ -17,7 +17,7 @@ import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
 import 'app/material_app_shell.dart';
 import 'theme/app_theme.dart';
-import 'utils/window_manager.dart';
+import 'theme/app_theme.dart';
 import 'widgets/desktop_material_theme_bridge.dart';
 import 'widgets/startup/startup_failure_screen.dart';
 import 'widgets/startup/startup_progress_screen.dart';
@@ -39,7 +39,21 @@ void main(List<String> args) async {
 
   // Initialize window manager only for main window.
   if (defaultTargetPlatform == TargetPlatform.windows) {
-    await AppWindowManager.ensureInitialized();
+    await windowManager.ensureInitialized();
+    await windowManager.waitUntilReadyToShow(
+      const WindowOptions(
+        size: Size(1280, 720),
+        minimumSize: Size(800, 600),
+        center: true,
+        backgroundColor: Colors.transparent,
+        titleBarStyle: TitleBarStyle.normal,
+        title: 'ACGWarehouse',
+      ),
+      () async {
+        await windowManager.show();
+        await windowManager.focus();
+      },
+    );
   }
 
   runApp(
