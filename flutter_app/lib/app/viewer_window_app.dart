@@ -55,7 +55,8 @@ class _ViewerWindowAppState extends State<ViewerWindowApp> {
         content: ViewerWorkspace(
           launchContext: widget.bootstrapData.context,
           apiService:
-              widget.apiService ?? ApiService(baseUrl: 'http://localhost:8080'),
+              widget.apiService ??
+              ApiService(baseUrl: widget.bootstrapData.baseUrl),
           tagProvider: widget.tagProvider,
           onItemChanged: (item) {
             _setTitle(ViewerWindowService.buildWindowTitle(item.filename));

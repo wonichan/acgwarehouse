@@ -19,11 +19,13 @@ class ViewerWindowLaunchPayload {
   final String logicalWindowId;
   final String title;
   final ViewerWindowContext context;
+  final String baseUrl;
 
   const ViewerWindowLaunchPayload({
     required this.logicalWindowId,
     required this.title,
     required this.context,
+    this.baseUrl = 'http://localhost:8080',
   });
 
   factory ViewerWindowLaunchPayload.fromJson(Map<String, dynamic> json) {
@@ -38,6 +40,7 @@ class ViewerWindowLaunchPayload {
       logicalWindowId: json['logical_window_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       context: context,
+      baseUrl: json['base_url'] as String? ?? 'http://localhost:8080',
     );
   }
 
@@ -68,6 +71,7 @@ class ViewerWindowLaunchPayload {
       'logical_window_id': logicalWindowId,
       'title': title,
       'context': context.toJson(),
+      'base_url': baseUrl,
     };
   }
 }
@@ -77,12 +81,14 @@ class ViewerWindowLaunchRequest {
   final String title;
   final ViewerWindowContext context;
   final AppWindowPolicy policy;
+  final String baseUrl;
 
   const ViewerWindowLaunchRequest({
     required this.windowId,
     required this.title,
     required this.context,
     required this.policy,
+    this.baseUrl = 'http://localhost:8080',
   });
 
   Map<String, dynamic> get arguments {
@@ -90,6 +96,7 @@ class ViewerWindowLaunchRequest {
       logicalWindowId: windowId,
       title: title,
       context: context,
+      baseUrl: baseUrl,
     ).toJson();
   }
 }
@@ -99,6 +106,7 @@ class ViewerWindowBootstrapData {
   final ViewerWindowContext context;
   final ViewerSession session;
   final AppWindowPolicy policy;
+  final String baseUrl;
 
   const ViewerWindowBootstrapData({
     required this.windowId,
@@ -114,6 +122,7 @@ class ViewerWindowBootstrapData {
     ),
     required this.session,
     required this.policy,
+    this.baseUrl = 'http://localhost:8080',
   });
 
   static ViewerWindowBootstrapData? fromCommandLine(List<String> arguments) {
@@ -138,6 +147,7 @@ class ViewerWindowBootstrapData {
       context: payload.context,
       session: buildLegacyViewerSession(context: payload.context, title: title),
       policy: viewerWindowOptions(title),
+      baseUrl: payload.baseUrl,
     );
   }
 }
@@ -183,6 +193,7 @@ class ViewerWindowService {
   Future<void> openWindow({
     required String selectedFilename,
     required ViewerWindowContext context,
+    String baseUrl = 'http://localhost:8080',
   }) async {
     _windowCounter += 1;
     final title = buildWindowTitle(selectedFilename);
@@ -193,6 +204,7 @@ class ViewerWindowService {
         title: title,
         context: context,
         policy: viewerWindowOptions(title),
+        baseUrl: baseUrl,
       ),
     );
   }
