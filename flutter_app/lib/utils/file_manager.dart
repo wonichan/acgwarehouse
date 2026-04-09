@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -32,12 +33,20 @@ Future<void> openFile(String filePath) async {
   if (filePath.isEmpty) return;
 
   try {
+    Process? process;
     if (Platform.isWindows) {
-      await Process.start('cmd', ['/C', 'start', '', filePath]);
+      process = await Process.start('cmd', ['/C', 'start', '', filePath]);
     } else if (Platform.isMacOS) {
-      await Process.start('open', [filePath]);
+      process = await Process.start('open', [filePath]);
     } else if (Platform.isLinux) {
-      await Process.start('xdg-open', [filePath]);
+      process = await Process.start('xdg-open', [filePath]);
+    }
+
+    // IMPORTANT: Detach I/O streams to prevent blocking and handle leaks.
+    // We don't need to wait for the external app to finish.
+    if (process != null) {
+      process.stdout.drain();
+      process.stderr.drain();
     }
   } catch (e) {
     debugPrint('Failed to open file: $e');

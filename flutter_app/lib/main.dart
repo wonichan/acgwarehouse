@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 import 'dart:ui' as ui show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
@@ -258,14 +259,38 @@ class _ThemeBootstrapperState extends State<_ThemeBootstrapper>
     setState(() {
       _isClosing = true;
     });
+
     try {
-      await widget.packagedBootstrap?.shutdown();
-      await widget.singleInstanceGuard?.release();
+      // Run shutdown and release in parallel to avoid sequential delays
+      final shutdownFuture =
+          widget.packagedBootstrap?.shutdown() ?? Future.value();
+      final releaseFuture =
+          widget.singleInstanceGuard?.release() ?? Future.value();
+
+      // Wait for both with a hard timeout to prevent hanging indefinitely
+      // If Go server or other resources fail to shutdown cleanly,
+      // we must proceed to force close to avoid orphan processes.
+      await Future.wait<void>([shutdownFuture, releaseFuture]).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint('Shutdown timed out. Proceeding with forced exit.');
+          return <void>[];
+        },
+      );
+    } catch (e) {
+      debugPrint('Shutdown error: $e');
     } finally {
       windowManager.removeListener(this);
       _closeHookAttached = false;
       await windowManager.setPreventClose(false);
       await windowManager.destroy();
+
+      // Force exit if the Dart VM is still hanging after UI destruction.
+      // This ensures file handles are released and the process terminates
+      // even if the underlying engine is stuck waiting for a resource.
+      Future<void>.delayed(const Duration(seconds: 2), () {
+        io.exit(0);
+      });
     }
   }
 

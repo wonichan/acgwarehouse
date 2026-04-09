@@ -33,29 +33,16 @@ class _FluentAppShellState extends State<FluentAppShell> {
       builder: (context, navProvider, child) {
         return NavigationView(
           titleBar: TitleBar(
+            backButton: PaneToggleButton(onPressed: navProvider.toggleSidebar),
             title: DragToMoveArea(
               child: Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        navProvider.sidebarCollapsed
-                            ? FluentIcons.chevron_right
-                            : FluentIcons.chevron_left,
-                        size: 16,
-                      ),
-                      onPressed: navProvider.toggleSidebar,
-                    ),
-                    const SizedBox(width: 8),
-                    Text('ACGWarehouse - ${navProvider.currentPageTitle}'),
-                  ],
-                ),
+                child: Text('ACGWarehouse - ${navProvider.currentPageTitle}'),
               ),
             ),
           ),
           pane: NavigationPane(
+            toggleButton: const SizedBox.shrink(),
             selected: navProvider.selectedIndex,
             onChanged: navProvider.setSelectedIndex,
             size: const NavigationPaneSize(

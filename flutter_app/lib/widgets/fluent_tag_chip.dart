@@ -83,6 +83,7 @@ class _FluentTagChipState extends State<FluentTagChip> {
         widget.onEdit != null;
 
     final isRejected = widget.style == FluentTagChipStyle.rejected;
+    final showActionButtons = hasActions && (_isHovered || widget.showActions);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -115,30 +116,50 @@ class _FluentTagChipState extends State<FluentTagChip> {
                   decoration: isRejected ? TextDecoration.lineThrough : null,
                 ),
               ),
-              if (hasActions && (_isHovered || widget.showActions)) ...[
+              if (hasActions) ...[
                 const SizedBox(width: 4),
-                if (widget.onConfirm != null)
-                  _buildIcon(
-                    FluentIcons.check_mark,
-                    Colors.green,
-                    widget.onConfirm!,
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 150),
+                  opacity: showActionButtons ? 1.0 : 0.0,
+                  child: IgnorePointer(
+                    ignoring: !showActionButtons,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.onConfirm != null)
+                          _buildIcon(
+                            FluentIcons.check_mark,
+                            Colors.green,
+                            widget.onConfirm!,
+                          ),
+                        if (widget.onReject != null)
+                          _buildIcon(
+                            FluentIcons.clear,
+                            Colors.red,
+                            widget.onReject!,
+                          ),
+                        if (widget.onMerge != null)
+                          _buildIcon(
+                            FluentIcons.merge,
+                            Colors.blue,
+                            widget.onMerge!,
+                          ),
+                        if (widget.onEdit != null)
+                          _buildIcon(
+                            FluentIcons.edit,
+                            theme.resources.textFillColorTertiary,
+                            widget.onEdit!,
+                          ),
+                        if (widget.onDelete != null)
+                          _buildIcon(
+                            FluentIcons.delete,
+                            theme.resources.textFillColorSecondary,
+                            widget.onDelete!,
+                          ),
+                      ],
+                    ),
                   ),
-                if (widget.onReject != null)
-                  _buildIcon(FluentIcons.clear, Colors.red, widget.onReject!),
-                if (widget.onMerge != null)
-                  _buildIcon(FluentIcons.merge, Colors.blue, widget.onMerge!),
-                if (widget.onEdit != null)
-                  _buildIcon(
-                    FluentIcons.edit,
-                    theme.resources.textFillColorTertiary,
-                    widget.onEdit!,
-                  ),
-                if (widget.onDelete != null)
-                  _buildIcon(
-                    FluentIcons.delete,
-                    theme.resources.textFillColorSecondary,
-                    widget.onDelete!,
-                  ),
+                ),
               ],
             ],
           ),

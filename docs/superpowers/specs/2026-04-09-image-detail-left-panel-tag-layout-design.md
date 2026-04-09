@@ -133,7 +133,7 @@ Body structure:
 
 State rules:
 
-- default state: title + primary button + optional helper text only
+- default state: title + primary button in the header, plus a visible custom-prompt toggle row in the body and optional helper text below
 - when `_useCustomPrompt == true`: show the text field inline below the toggle row
 - when `_isAITriggered == true`: keep the status visible in the header area, but do not let it replace the card title or dominate the button area
 - the generate/regenerate action remains the strongest control in all non-error states

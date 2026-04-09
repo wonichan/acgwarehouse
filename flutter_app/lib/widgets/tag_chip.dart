@@ -83,6 +83,7 @@ class _TagChipState extends State<TagChip> {
         widget.onEdit != null;
 
     final isRejected = widget.style == TagChipStyle.rejected;
+    final showActionButtons = hasActions && (_isHovered || widget.showActions);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -116,38 +117,50 @@ class _TagChipState extends State<TagChip> {
                   decoration: isRejected ? TextDecoration.lineThrough : null,
                 ),
               ),
-              if (hasActions && (_isHovered || widget.showActions)) ...[
+              if (hasActions) ...[
                 const SizedBox(width: 4),
-                if (widget.onConfirm != null)
-                  _buildIcon(
-                    Icons.check,
-                    Colors.green.shade600,
-                    widget.onConfirm!,
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 150),
+                  opacity: showActionButtons ? 1.0 : 0.0,
+                  child: IgnorePointer(
+                    ignoring: !showActionButtons,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.onConfirm != null)
+                          _buildIcon(
+                            Icons.check,
+                            Colors.green.shade600,
+                            widget.onConfirm!,
+                          ),
+                        if (widget.onReject != null)
+                          _buildIcon(
+                            Icons.close,
+                            Colors.red.shade400,
+                            widget.onReject!,
+                          ),
+                        if (widget.onMerge != null)
+                          _buildIcon(
+                            Icons.merge_type,
+                            Colors.blue.shade400,
+                            widget.onMerge!,
+                          ),
+                        if (widget.onEdit != null)
+                          _buildIcon(
+                            Icons.edit,
+                            Colors.blueGrey.shade400,
+                            widget.onEdit!,
+                          ),
+                        if (widget.onDelete != null)
+                          _buildIcon(
+                            Icons.delete_outline,
+                            Colors.grey.shade600,
+                            widget.onDelete!,
+                          ),
+                      ],
+                    ),
                   ),
-                if (widget.onReject != null)
-                  _buildIcon(
-                    Icons.close,
-                    Colors.red.shade400,
-                    widget.onReject!,
-                  ),
-                if (widget.onMerge != null)
-                  _buildIcon(
-                    Icons.merge_type,
-                    Colors.blue.shade400,
-                    widget.onMerge!,
-                  ),
-                if (widget.onEdit != null)
-                  _buildIcon(
-                    Icons.edit,
-                    Colors.blueGrey.shade400,
-                    widget.onEdit!,
-                  ),
-                if (widget.onDelete != null)
-                  _buildIcon(
-                    Icons.delete_outline,
-                    Colors.grey.shade600,
-                    widget.onDelete!,
-                  ),
+                ),
               ],
             ],
           ),

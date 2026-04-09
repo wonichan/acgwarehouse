@@ -240,6 +240,37 @@ class TagService {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
+  /// 批量触发 AI 标签重新生成
+  ///
+  /// 与 batchTriggerAITags 的区别：会重新生成已有 AI 标签的图片的标签
+  Future<Map<String, dynamic>> batchRegenerateAITags({
+    List<int>? imageIds,
+    List<int>? tagIds,
+    bool? hasTags,
+    String? sortBy,
+    String? sortDir,
+  }) async {
+    final body = <String, dynamic>{
+      if (imageIds != null && imageIds.isNotEmpty) 'image_ids': imageIds,
+      if (tagIds != null && tagIds.isNotEmpty) 'tag_ids': tagIds,
+      if (hasTags != null) 'has_tags': hasTags,
+      if (sortBy != null && sortBy.isNotEmpty) 'sort_by': sortBy,
+      if (sortDir != null && sortDir.isNotEmpty) 'sort_dir': sortDir,
+    };
+
+    final response = await _client.post(
+      Uri.parse(ApiConfig.batchRegenerateAITags(_baseUrl)),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      throw Exception(
+        'Failed to batch regenerate AI tags: ${response.statusCode}',
+      );
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   /// 获取标签统计数据
   Future<List<TagStatistics>> getTagStatistics() async {
     final response = await _client.get(

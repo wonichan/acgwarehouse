@@ -54,6 +54,8 @@ class ApiConfig {
       '${baseUrlOf(baseUrl)}/images/$imageId/ai-tags/status';
   static String batchAITags(String baseUrl) =>
       '${baseUrlOf(baseUrl)}/images/batch-ai-tags';
+  static String batchRegenerateAITags(String baseUrl) =>
+      '${baseUrlOf(baseUrl)}/images/batch-ai-tags/regenerate';
   static String defaultAIPrompt(String baseUrl) =>
       '${baseUrlOf(baseUrl)}/ai-tags/default-prompt';
 
