@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/tag.dart';
 import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/providers/navigation_provider.dart';
+import 'package:gallery/providers/config_provider.dart';
 import 'package:gallery/providers/search_provider.dart';
 import 'package:gallery/providers/selection_provider.dart';
 import 'package:gallery/providers/tag_provider.dart';
@@ -152,6 +153,13 @@ void main() {
           ChangeNotifierProvider<NavigationProvider>(
             create: (_) => NavigationProvider(),
           ),
+          ChangeNotifierProvider<ConfigProvider>(
+            create: (_) =>
+                ConfigProvider(initialBaseUrl: 'http://localhost:8080'),
+          ),
+          ChangeNotifierProvider<SelectionProvider>(
+            create: (_) => SelectionProvider(),
+          ),
         ],
         child: const fluent.FluentApp(home: FluentGalleryPage()),
       ),
@@ -251,6 +259,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     Map<String, dynamic>? batchRequestBody;
+    String? batchRequestPath;
     final mockClient = MockClient((request) async {
       if (request.url.path.endsWith('/api/v1/images')) {
         return http.Response(
@@ -258,7 +267,10 @@ void main() {
           200,
         );
       }
-      if (request.url.path.endsWith('/api/v1/images/batch-ai-tags')) {
+      if (request.url.path.endsWith(
+        '/api/v1/images/batch-ai-tags/regenerate',
+      )) {
+        batchRequestPath = request.url.path;
         batchRequestBody = jsonDecode(request.body) as Map<String, dynamic>?;
         return http.Response('{"job_ids":[101],"status":"queued"}', 202);
       }
@@ -287,6 +299,13 @@ void main() {
           ChangeNotifierProvider<NavigationProvider>(
             create: (_) => NavigationProvider(),
           ),
+          ChangeNotifierProvider<ConfigProvider>(
+            create: (_) =>
+                ConfigProvider(initialBaseUrl: 'http://localhost:8080'),
+          ),
+          ChangeNotifierProvider<SelectionProvider>(
+            create: (_) => SelectionProvider(),
+          ),
         ],
         child: const fluent.FluentApp(home: FluentGalleryPage()),
       ),
@@ -308,6 +327,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(batchRequestBody, isNotNull);
+    expect(batchRequestPath, equals('/api/v1/images/batch-ai-tags/regenerate'));
     expect(batchRequestBody!.containsKey('image_ids'), isFalse);
     expect(batchRequestBody!['sort_by'], equals('created_at'));
     expect(batchRequestBody!['sort_dir'], equals('desc'));

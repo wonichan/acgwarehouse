@@ -422,7 +422,7 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
     }
 
     try {
-      await tagProvider.tagService.batchTriggerAITags(
+      await tagProvider.tagService.batchRegenerateAITags(
         tagIds: selectedTagIDs,
         hasTags: imageProvider.hasTagsFilter,
         sortBy: sortBy,
