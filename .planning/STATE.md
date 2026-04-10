@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Windows Photos 风格重构与计算层拆分
-status: executing
-stopped_at: Phase 21 context gathered
-last_updated: "2026-04-08T12:00:00.000Z"
-last_activity: 2026-04-08 -- Quick Task 40 completed
+status: milestone_shipped
+stopped_at: v4.0 milestone shipped
+last_updated: "2026-04-10T16:17:43.711Z"
+last_activity: 2026-04-10 -- v4.0 milestone shipped (Phases 15-21 complete)
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 22
-  completed_plans: 18
-  percent: 82
+  completed_plans: 22
+  percent: 100
 ---
 
 # Project State
@@ -29,7 +29,7 @@ Milestone: `v4.0` in progress ◆
 Phase: 21 (windows-packaging) — EXECUTING
 Plan: 1 of 4
 Status: Executing Phase 21
-Last activity: 2026-04-05 -- Phase 21 execution started
+Last activity: 2026-04-10
 
 Progress: [████████░░] 10/12 plans (83%)
 
