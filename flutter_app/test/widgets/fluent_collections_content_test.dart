@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/collection.dart';
 import 'package:gallery/models/image.dart';
@@ -17,6 +18,8 @@ class _FakeCollectionService extends CollectionService {
   final Map<int, List<ImageModel>> imagesByCollectionId;
   final Object? collectionsError;
   final List<int> fetchedCollectionImageIds = <int>[];
+  final List<(int collectionId, int imageId)> removedImages =
+      <(int collectionId, int imageId)>[];
 
   @override
   Future<List<Collection>> fetchCollections({
@@ -37,6 +40,19 @@ class _FakeCollectionService extends CollectionService {
   }) async {
     fetchedCollectionImageIds.add(collectionId);
     return imagesByCollectionId[collectionId] ?? const <ImageModel>[];
+  }
+
+  @override
+  Future<void> removeImageFromCollection(int collectionId, int imageId) async {
+    removedImages.add((collectionId, imageId));
+    final images = imagesByCollectionId[collectionId];
+    if (images == null) {
+      return;
+    }
+
+    imagesByCollectionId[collectionId] = images
+        .where((image) => image.id != imageId)
+        .toList();
   }
 }
 
@@ -197,5 +213,44 @@ void main() {
       find.byIcon(fluent.FluentIcons.error),
     );
     expect(icon.color, const fluent.Color(0xFFCC0000));
+  });
+
+  testWidgets('removes image from collection through secondary-click menu', (
+    tester,
+  ) async {
+    final service = _FakeCollectionService(
+      collections: <Collection>[
+        _buildCollection(id: 1, name: '角色合集', imageCount: 1),
+      ],
+      imagesByCollectionId: <int, List<ImageModel>>{
+        1: <ImageModel>[_buildImage(1, 'alpha.png')],
+      },
+    );
+
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: FluentCollectionsContent(collectionService: service),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FluentImageCard), findsOneWidget);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(FluentImageCard)),
+      buttons: kSecondaryMouseButton,
+      kind: PointerDeviceKind.mouse,
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text('取消收藏'), findsOneWidget);
+
+    await tester.tap(find.text('取消收藏'));
+    await tester.pumpAndSettle();
+
+    expect(service.removedImages, <(int, int)>[(1, 1)]);
+    expect(find.byType(FluentImageCard), findsNothing);
+    expect(find.text('该合集暂无图片'), findsOneWidget);
   });
 }

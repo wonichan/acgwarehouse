@@ -130,6 +130,24 @@ class _FluentImageCardState extends State<FluentImageCard> {
                     ),
                   ),
                 ),
+              if (widget.image.isFavorited)
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: theme.resources.cardBackgroundFillColorSecondary
+                          .withValues(alpha: 0.9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      FluentIcons.favorite_star_fill,
+                      size: 14,
+                      color: theme.accentColor,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

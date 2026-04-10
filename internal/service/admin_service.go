@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"time"
 
@@ -171,18 +172,22 @@ func (s *AdminService) GetSummary(ctx context.Context) (*Summary, error) {
 	var err error
 	summary.Tasks.Ready, err = s.jobRepo.CountByStatus("ready")
 	if err != nil {
+		log.Printf("[service] GetSummary failed: status=ready error=%v", err)
 		summary.Tasks.Ready = 0
 	}
 	summary.Tasks.Running, err = s.jobRepo.CountByStatus("running")
 	if err != nil {
+		log.Printf("[service] GetSummary failed: status=running error=%v", err)
 		summary.Tasks.Running = 0
 	}
 	summary.Tasks.Finished, err = s.jobRepo.CountByStatus("finished")
 	if err != nil {
+		log.Printf("[service] GetSummary failed: status=finished error=%v", err)
 		summary.Tasks.Finished = 0
 	}
 	summary.Tasks.Failed, err = s.jobRepo.CountByStatus("failed")
 	if err != nil {
+		log.Printf("[service] GetSummary failed: status=failed error=%v", err)
 		summary.Tasks.Failed = 0
 	}
 	summary.Tasks.Total = summary.Tasks.Ready + summary.Tasks.Running + summary.Tasks.Finished + summary.Tasks.Failed
@@ -201,6 +206,7 @@ func (s *AdminService) GetSummary(ctx context.Context) (*Summary, error) {
 func (s *AdminService) GetTaskPlatformOverview(ctx context.Context) (*TaskPlatformOverview, error) {
 	summary, err := s.GetSummary(ctx)
 	if err != nil {
+		log.Printf("[service] GetTaskPlatformOverview failed: error=%v", err)
 		return nil, err
 	}
 
@@ -227,6 +233,7 @@ func (s *AdminService) GetTaskPlatformOverview(ctx context.Context) (*TaskPlatfo
 	for {
 		batches, err := s.taskReadSvc.ListBatches(ctx, TaskBatchReadFilter{Limit: pageSize, Offset: offset})
 		if err != nil {
+			log.Printf("[service] GetTaskPlatformOverview failed: error=%v", err)
 			return nil, err
 		}
 		if len(batches) == 0 {
@@ -250,48 +257,80 @@ func (s *AdminService) GetTaskPlatformOverview(ctx context.Context) (*TaskPlatfo
 }
 
 func (s *AdminService) ClearTaskQueue(ctx context.Context) (int, error) {
+	log.Printf("[service] ClearTaskQueue started")
 	if s.taskRepo == nil || s.taskBatchRepo == nil {
-		return 0, fmt.Errorf("task control repositories not configured")
+		err := fmt.Errorf("task control repositories not configured")
+		log.Printf("[service] ClearTaskQueue failed: error=%v", err)
+		return 0, err
 	}
 	tasks, err := s.taskRepo.List(ctx, repository.PlatformTaskListFilter{Limit: 1000})
 	if err != nil {
+		log.Printf("[service] ClearTaskQueue failed: error=%v", err)
 		return 0, err
 	}
-	return s.cancelTasks(ctx, tasks, false, true)
+	count, err := s.cancelTasks(ctx, tasks, false, true)
+	if err != nil {
+		log.Printf("[service] ClearTaskQueue failed: error=%v", err)
+		return 0, err
+	}
+	log.Printf("[service] ClearTaskQueue completed: cancelled_count=%d", count)
+	return count, nil
 }
 
 func (s *AdminService) CancelTaskBatch(ctx context.Context, batchID int64) (int, error) {
+	log.Printf("[service] CancelTaskBatch started: batch_id=%d", batchID)
 	if batchID <= 0 {
-		return 0, fmt.Errorf("invalid batch_id")
+		err := fmt.Errorf("invalid batch_id")
+		log.Printf("[service] CancelTaskBatch failed: error=%v", err)
+		return 0, err
 	}
 	if s.taskRepo == nil || s.taskBatchRepo == nil {
-		return 0, fmt.Errorf("task control repositories not configured")
+		err := fmt.Errorf("task control repositories not configured")
+		log.Printf("[service] CancelTaskBatch failed: error=%v", err)
+		return 0, err
 	}
 	tasks, err := s.taskRepo.List(ctx, repository.PlatformTaskListFilter{BatchID: &batchID, Limit: 1000})
 	if err != nil {
+		log.Printf("[service] CancelTaskBatch failed: error=%v", err)
 		return 0, err
 	}
-	return s.cancelTasks(ctx, tasks, true, false)
+	count, err := s.cancelTasks(ctx, tasks, true, false)
+	if err != nil {
+		log.Printf("[service] CancelTaskBatch failed: error=%v", err)
+		return 0, err
+	}
+	log.Printf("[service] CancelTaskBatch completed: cancelled_count=%d", count)
+	return count, nil
 }
 
 func (s *AdminService) CancelTask(ctx context.Context, taskID int64) (int, error) {
+	log.Printf("[service] CancelTask started: task_id=%d", taskID)
 	if taskID <= 0 {
-		return 0, fmt.Errorf("invalid task_id")
+		err := fmt.Errorf("invalid task_id")
+		log.Printf("[service] CancelTask failed: error=%v", err)
+		return 0, err
 	}
 	if s.taskRepo == nil || s.taskBatchRepo == nil {
-		return 0, fmt.Errorf("task control repositories not configured")
+		err := fmt.Errorf("task control repositories not configured")
+		log.Printf("[service] CancelTask failed: error=%v", err)
+		return 0, err
 	}
 	task, err := s.taskRepo.FindByID(ctx, taskID)
 	if err != nil {
+		log.Printf("[service] CancelTask failed: error=%v", err)
 		return 0, err
 	}
 	if task == nil {
-		return 0, fmt.Errorf("task not found")
+		err := fmt.Errorf("task not found")
+		log.Printf("[service] CancelTask failed: error=%v", err)
+		return 0, err
 	}
 	count, err := s.cancelTasks(ctx, []domain.PlatformTask{*task}, false, false)
 	if err != nil {
+		log.Printf("[service] CancelTask failed: error=%v", err)
 		return 0, err
 	}
+	log.Printf("[service] CancelTask completed: cancelled_count=%d", count)
 	return count, nil
 }
 
@@ -373,15 +412,25 @@ func (s *AdminService) GetTasks(ctx context.Context, filter TaskReadFilter) ([]T
 
 // TriggerScan creates a manual scan job.
 func (s *AdminService) TriggerScan(ctx context.Context) (int64, error) {
+	log.Printf("[service] TriggerScan started")
 	// The job manager will handle the scan via registered handler
-	return s.jobManager.AddJob(ctx, "manual_scan", "{}")
+	jobID, err := s.jobManager.AddJob(ctx, "manual_scan", "{}")
+	if err != nil {
+		log.Printf("[service] TriggerScan failed: error=%v", err)
+		return 0, err
+	}
+	log.Printf("[service] TriggerScan completed: job_id=%d", jobID)
+	return jobID, nil
 }
 
 // RetryFailedJobs retries eligible failed tasks across failed and partial_failed batches.
 func (s *AdminService) RetryFailedJobs(ctx context.Context) (int, error) {
+	log.Printf("[service] RetryFailedJobs started")
 	batches, err := s.listRetryableBatches(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("task retry service not configured")
+		err := fmt.Errorf("task retry service not configured")
+		log.Printf("[service] RetryFailedJobs failed: error=%v", err)
+		return 0, err
 	}
 
 	count := 0
@@ -392,55 +441,90 @@ func (s *AdminService) RetryFailedJobs(ctx context.Context) (int, error) {
 		}
 		count += result.RetryCount
 	}
+	log.Printf("[service] RetryFailedJobs completed: retried_count=%d", count)
 	return count, nil
 }
 
 func (s *AdminService) RetryFailedBatchTasks(ctx context.Context, batchID int64) (*RetryBatchResult, error) {
+	log.Printf("[service] RetryFailedBatchTasks started: batch_id=%d", batchID)
 	if batchID <= 0 {
-		return nil, fmt.Errorf("invalid batch_id")
+		err := fmt.Errorf("invalid batch_id")
+		log.Printf("[service] RetryFailedBatchTasks failed: error=%v", err)
+		return nil, err
 	}
 	if s.taskBatchRepo == nil || s.taskRepo == nil {
-		return nil, fmt.Errorf("task control repositories not configured")
+		err := fmt.Errorf("task control repositories not configured")
+		log.Printf("[service] RetryFailedBatchTasks failed: error=%v", err)
+		return nil, err
 	}
 	originalBatch, err := s.taskBatchRepo.FindByID(ctx, batchID)
 	if err != nil {
+		log.Printf("[service] RetryFailedBatchTasks failed: error=%v", err)
 		return nil, err
 	}
 	if originalBatch == nil {
-		return nil, fmt.Errorf("batch not found")
+		err := fmt.Errorf("batch not found")
+		log.Printf("[service] RetryFailedBatchTasks failed: error=%v", err)
+		return nil, err
 	}
 	tasks, err := s.taskRepo.List(ctx, repository.PlatformTaskListFilter{BatchID: &batchID, Limit: 1000})
 	if err != nil {
+		log.Printf("[service] RetryFailedBatchTasks failed: error=%v", err)
 		return nil, err
 	}
-	return s.retryFailedPlatformTasks(ctx, originalBatch, tasks)
+	result, err := s.retryFailedPlatformTasks(ctx, originalBatch, tasks)
+	if err != nil {
+		log.Printf("[service] RetryFailedBatchTasks failed: error=%v", err)
+		return nil, err
+	}
+	log.Printf("[service] RetryFailedBatchTasks completed: retried_count=%d", result.RetryCount)
+	return result, nil
 }
 
 func (s *AdminService) RetryFailedTask(ctx context.Context, taskID int64) (*RetryBatchResult, error) {
+	log.Printf("[service] RetryFailedTask started: task_id=%d", taskID)
 	if taskID <= 0 {
-		return nil, fmt.Errorf("invalid task_id")
+		err := fmt.Errorf("invalid task_id")
+		log.Printf("[service] RetryFailedTask failed: error=%v", err)
+		return nil, err
 	}
 	if s.taskBatchRepo == nil || s.taskRepo == nil {
-		return nil, fmt.Errorf("task control repositories not configured")
+		err := fmt.Errorf("task control repositories not configured")
+		log.Printf("[service] RetryFailedTask failed: error=%v", err)
+		return nil, err
 	}
 	task, err := s.taskRepo.FindByID(ctx, taskID)
 	if err != nil {
+		log.Printf("[service] RetryFailedTask failed: error=%v", err)
 		return nil, err
 	}
 	if task == nil {
-		return nil, fmt.Errorf("task not found")
+		err := fmt.Errorf("task not found")
+		log.Printf("[service] RetryFailedTask failed: error=%v", err)
+		return nil, err
 	}
 	if task.Status != domain.PlatformTaskStatusFailed {
-		return nil, fmt.Errorf("only failed tasks can be retried")
+		err := fmt.Errorf("only failed tasks can be retried")
+		log.Printf("[service] RetryFailedTask failed: error=%v", err)
+		return nil, err
 	}
 	originalBatch, err := s.taskBatchRepo.FindByID(ctx, task.BatchID)
 	if err != nil {
+		log.Printf("[service] RetryFailedTask failed: error=%v", err)
 		return nil, err
 	}
 	if originalBatch == nil {
-		return nil, fmt.Errorf("batch not found")
+		err := fmt.Errorf("batch not found")
+		log.Printf("[service] RetryFailedTask failed: error=%v", err)
+		return nil, err
 	}
-	return s.retryFailedPlatformTasks(ctx, originalBatch, []domain.PlatformTask{*task})
+	result, err := s.retryFailedPlatformTasks(ctx, originalBatch, []domain.PlatformTask{*task})
+	if err != nil {
+		log.Printf("[service] RetryFailedTask failed: error=%v", err)
+		return nil, err
+	}
+	log.Printf("[service] RetryFailedTask completed: retried_count=%d", result.RetryCount)
+	return result, nil
 }
 
 func (s *AdminService) retryFailedPlatformTasks(ctx context.Context, originalBatch *domain.TaskBatch, tasks []domain.PlatformTask) (*RetryBatchResult, error) {
@@ -620,12 +704,14 @@ func (s *AdminService) newTaskPlatformService() *TaskPlatformService {
 
 // PauseBackgroundTasks pauses the job manager from processing new jobs.
 func (s *AdminService) PauseBackgroundTasks(ctx context.Context) error {
+	log.Printf("[service] PauseBackgroundTasks started")
 	s.jobManager.Pause()
 	return nil
 }
 
 // ResumeBackgroundTasks allows the job manager to continue processing jobs.
 func (s *AdminService) ResumeBackgroundTasks(ctx context.Context) error {
+	log.Printf("[service] ResumeBackgroundTasks started")
 	s.jobManager.Resume()
 	return nil
 }

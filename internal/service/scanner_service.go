@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -66,6 +67,8 @@ func (s *ScannerService) Scan(ctx context.Context, roots []string) (*ScanResult,
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	log.Printf("[service] Scan started: roots=%d workers=%d", len(roots), s.workers)
 
 	start := time.Now()
 	result := &ScanResult{}
@@ -146,11 +149,13 @@ func (s *ScannerService) Scan(ctx context.Context, roots []string) (*ScanResult,
 		if walkErr != nil && !errors.Is(walkErr, context.Canceled) {
 			close(fileCh)
 			wg.Wait()
+			log.Printf("[service] Scan failed: root=%s error=%v", root, walkErr)
 			return nil, walkErr
 		}
 		if errors.Is(walkErr, context.Canceled) {
 			close(fileCh)
 			wg.Wait()
+			log.Printf("[service] Scan cancelled: total_files=%d imported=%d", result.TotalFiles, result.Imported)
 			return nil, ctx.Err()
 		}
 	}
@@ -171,6 +176,7 @@ func (s *ScannerService) Scan(ctx context.Context, roots []string) (*ScanResult,
 			Items:        items,
 		})
 		if err != nil {
+			log.Printf("[service] Scan failed: task planning error=%v", err)
 			return nil, err
 		}
 		result.BatchID = planResult.Batch.ID
@@ -207,16 +213,19 @@ func (s *ScannerService) Scan(ctx context.Context, roots []string) (*ScanResult,
 				"filename": filename,
 			})
 			if err != nil {
+				log.Printf("[service] Scan failed: payload marshal error=%v task_id=%d", err, task.ID)
 				return nil, fmt.Errorf("marshal thumbnail payload for task %d: %w", task.ID, err)
 			}
 
 			if _, err := s.taskSvc.QueueTask(ctx, task, domain.PlatformTaskTypeThumbnailGenerate, string(payload)); err != nil {
+				log.Printf("[service] Scan failed: queue task error=%v task_id=%d", err, task.ID)
 				return nil, fmt.Errorf("queue thumbnail task %d: %w", task.ID, err)
 			}
 		}
 	}
 
 	result.Duration = time.Since(start)
+	log.Printf("[service] Scan completed: total_files=%d imported=%d skipped=%d failed=%d duration=%v", result.TotalFiles, result.Imported, result.Skipped, result.Failed, result.Duration)
 	return result, nil
 }
 

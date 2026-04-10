@@ -572,16 +572,26 @@ func TestCollectionRepositoryFindCollectionIDsByImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindCollectionIDsByImage() error = %v", err)
 	}
-	if len(ids) != 2 {
-		t.Fatalf("len(ids) = %d, want 2", len(ids))
+	if len(ids) != 1 {
+		t.Fatalf("len(ids) = %d, want 1", len(ids))
+	}
+	if ids[0] != collectionB.ID {
+		t.Fatalf("ids[0] = %d, want %d", ids[0], collectionB.ID)
 	}
 
-	seen := map[int64]bool{}
-	for _, id := range ids {
-		seen[id] = true
+	firstCollection, err := repo.FindByID(ctx, collectionA.ID)
+	if err != nil {
+		t.Fatalf("FindByID(collectionA) error = %v", err)
 	}
-	if !seen[collectionA.ID] || !seen[collectionB.ID] {
-		t.Fatalf("ids = %v, want both %d and %d", ids, collectionA.ID, collectionB.ID)
+	secondCollection, err := repo.FindByID(ctx, collectionB.ID)
+	if err != nil {
+		t.Fatalf("FindByID(collectionB) error = %v", err)
+	}
+	if firstCollection.ImageCount != 0 {
+		t.Fatalf("collectionA image_count = %d, want 0", firstCollection.ImageCount)
+	}
+	if secondCollection.ImageCount != 1 {
+		t.Fatalf("collectionB image_count = %d, want 1", secondCollection.ImageCount)
 	}
 }
 

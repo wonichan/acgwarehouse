@@ -12,6 +12,7 @@ type Thumbnail struct {
 
 type Image struct {
 	ID                int64     `json:"id"`
+	CollectionID      *int64    `json:"collection_id"`
 	Path              string    `json:"path"`
 	Filename          string    `json:"filename"`
 	SourceRoot        string    `json:"source_root"`

@@ -212,7 +212,50 @@ CREATE TABLE IF NOT EXISTS collection_images (
 );
 
 CREATE INDEX IF NOT EXISTS idx_collection_images_image_id ON collection_images(image_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_images_image_id_unique ON collection_images(image_id);
 CREATE INDEX IF NOT EXISTS idx_collection_images_added_at ON collection_images(added_at);
+`
+
+const tagUsageMigrationSQL = `
+DROP TRIGGER IF EXISTS trg_image_tags_after_insert;
+DROP TRIGGER IF EXISTS trg_image_tags_after_delete;
+DROP TRIGGER IF EXISTS trg_image_tags_after_update;
+DROP TRIGGER IF EXISTS trg_image_tags_after_update_tagid;
+DROP TRIGGER IF EXISTS trg_image_tags_after_update_review;
+
+CREATE TRIGGER trg_image_tags_after_insert
+AFTER INSERT ON image_tags
+FOR EACH ROW
+WHEN NEW.review_state != 'rejected'
+BEGIN
+	UPDATE tags SET usage_count = usage_count + 1 WHERE id = NEW.tag_id;
+END;
+
+CREATE TRIGGER trg_image_tags_after_delete
+AFTER DELETE ON image_tags
+FOR EACH ROW
+WHEN OLD.review_state != 'rejected'
+BEGIN
+	UPDATE tags SET usage_count = MAX(usage_count - 1, 0) WHERE id = OLD.tag_id;
+END;
+
+CREATE TRIGGER trg_image_tags_after_update_tagid
+AFTER UPDATE ON image_tags
+FOR EACH ROW
+WHEN OLD.tag_id != NEW.tag_id
+BEGIN
+	UPDATE tags SET usage_count = MAX(usage_count - 1, 0) WHERE id = OLD.tag_id AND OLD.review_state != 'rejected';
+	UPDATE tags SET usage_count = usage_count + 1 WHERE id = NEW.tag_id AND NEW.review_state != 'rejected';
+END;
+
+CREATE TRIGGER trg_image_tags_after_update_review
+AFTER UPDATE ON image_tags
+FOR EACH ROW
+WHEN OLD.review_state != NEW.review_state
+BEGIN
+	UPDATE tags SET usage_count = MAX(usage_count - 1, 0) WHERE id = NEW.tag_id AND OLD.review_state != 'rejected' AND NEW.review_state = 'rejected';
+	UPDATE tags SET usage_count = usage_count + 1 WHERE id = NEW.tag_id AND OLD.review_state = 'rejected' AND NEW.review_state != 'rejected';
+END;
 `
 
 func EnsureScanSchema(db *sql.DB) error {
@@ -234,13 +277,43 @@ func EnsureScanSchema(db *sql.DB) error {
 	if err := ensureColumnExists(db, "images", "source_mtime_unix", "INTEGER"); err != nil {
 		return err
 	}
+	if _, err := db.Exec(`
+		DELETE FROM collection_images
+		WHERE rowid NOT IN (
+			SELECT MIN(rowid)
+			FROM collection_images
+			GROUP BY image_id
+		)
+	`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_images_image_id_unique ON collection_images(image_id)`); err != nil {
+		return err
+	}
 	_, err := db.Exec(`
 		UPDATE image_tags
 		SET source = 'ai'
 		WHERE source_observation_id IS NOT NULL
 		  AND (source IS NULL OR source = '' OR source != 'ai')
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(tagUsageMigrationSQL); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`
+		UPDATE tags
+		SET usage_count = (
+			SELECT COUNT(*) FROM image_tags WHERE tag_id = tags.id AND review_state != 'rejected'
+		)
+	`); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func ensureColumnExists(db *sql.DB, tableName, columnName, definition string) error {

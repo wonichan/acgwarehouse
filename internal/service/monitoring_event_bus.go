@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"sync"
 	"time"
 )
@@ -78,6 +79,7 @@ func (b *MonitoringEventBus) Start(ctx context.Context, interval time.Duration) 
 		return
 	}
 	b.running = true
+	log.Printf("[service] MonitoringEventBus started: interval=%v", interval)
 	b.stopCh = make(chan struct{})
 	stopCh := b.stopCh
 	b.mu.Unlock()
@@ -117,6 +119,7 @@ func (b *MonitoringEventBus) Start(ctx context.Context, interval time.Duration) 
 func (b *MonitoringEventBus) Stop() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	log.Printf("[service] MonitoringEventBus stopped")
 
 	if b.stopCh == nil {
 		return

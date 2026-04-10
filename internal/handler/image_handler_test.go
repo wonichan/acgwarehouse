@@ -156,6 +156,36 @@ func TestImageHandlerGetImageReturnsImage(t *testing.T) {
 	}
 }
 
+func TestImageHandlerGetImageReturnsCollectionID(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+	ctx := context.Background()
+
+	collection := &domain.Collection{Name: "fav"}
+	if err := repos.collectionRepo.Save(ctx, collection); err != nil {
+		t.Fatalf("Save collection error = %v", err)
+	}
+	if err := repos.collectionRepo.AddImage(ctx, collection.ID, 1); err != nil {
+		t.Fatalf("AddImage error = %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images/1", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp map[string]any
+	decodeJSONResponse(t, w, &resp)
+
+	if resp["collection_id"] != float64(collection.ID) {
+		t.Fatalf("collection_id = %v, want %d", resp["collection_id"], collection.ID)
+	}
+}
+
 func TestImageHandlerGetImageReturnsNotFoundForInvalidID(t *testing.T) {
 	t.Parallel()
 

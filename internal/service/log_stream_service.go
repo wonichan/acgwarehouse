@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -73,6 +74,8 @@ func (s *LogStreamService) Start(ctx context.Context) {
 	s.cancel = cancel
 	s.mu.Unlock()
 
+	log.Printf("[service] LogStreamService started: go_log_path=%s", s.goLogPath)
+
 	for _, source := range []LogSource{LogSourceGo} {
 		initialOffset := s.seedSource(source)
 		s.mu.Lock()
@@ -93,6 +96,7 @@ func (s *LogStreamService) Stop() {
 	s.mu.Unlock()
 
 	cancel()
+	log.Printf("[service] LogStreamService stopped")
 	s.wg.Wait()
 
 	s.mu.Lock()

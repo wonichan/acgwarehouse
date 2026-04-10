@@ -40,6 +40,7 @@ func (a *App) initServices() {
 	a.governanceSvc = service.NewTagGovernanceService(a.tagRepo, a.aliasRepo, a.obsRepo, a.imageTagRepo)
 	a.searchSvc = service.NewSearchService(a.imageRepo, a.tagRepo, a.searchRepo)
 	a.collectionSvc = service.NewCollectionService(a.collectionRepo)
+	a.batchSvc = service.NewBatchService(a.imageRepo, a.tagRepo, a.imageTagRepo, a.collectionRepo)
 }
 
 func (a *App) initAutoScheduler(cfg *config.Config) {

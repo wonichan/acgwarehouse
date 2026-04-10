@@ -86,6 +86,7 @@ void main() {
       height: 100,
       format: 'jpg',
       phash: id,
+      collectionId: null,
       createdAt: DateTime(2026),
       updatedAt: DateTime(2026),
     );
@@ -235,6 +236,79 @@ void main() {
 
     expect(find.text('收藏到合集'), findsOneWidget);
     expect(find.text('暂无合集'), findsOneWidget);
+  });
+
+  testWidgets('shows unfavorite action for images already in a collection', (
+    tester,
+  ) async {
+    final provider = _MutableImageListProvider(
+      initialImages: [
+        ImageModel(
+          id: 1,
+          path: '/test/1.jpg',
+          filename: '1.jpg',
+          sourceRoot: '/test',
+          fileSize: 1024,
+          width: 100,
+          height: 100,
+          format: 'jpg',
+          phash: 1,
+          collectionId: 7,
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      ],
+    );
+
+    Uri? deleteRequest;
+    final apiService = ApiService(
+      baseUrl: 'http://localhost:8080',
+      client: MockClient((request) async => http.Response('{}', 200)),
+    );
+    final collectionService = CollectionService(
+      baseUrl: 'http://localhost:8080',
+      client: MockClient((request) async {
+        if (request.method == 'DELETE' &&
+            request.url.path.endsWith('/api/v1/collections/7/images/1')) {
+          deleteRequest = request.url;
+          return http.Response('{}', 200);
+        }
+        return http.Response('{}', 200);
+      }),
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ImageListProvider>.value(value: provider),
+          ChangeNotifierProvider<SelectionProvider>(
+            create: (_) => SelectionProvider(),
+          ),
+        ],
+        child: fluent.FluentApp(
+          home: fluent.ScaffoldPage(
+            content: Material(
+              child: FluentGalleryContent(
+                apiService: apiService,
+                collectionService: collectionService,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FluentImageCard), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('取消收藏'), findsOneWidget);
+    expect(find.text('收藏'), findsNothing);
+
+    await tester.tap(find.text('取消收藏'));
+    await tester.pumpAndSettle();
+
+    expect(deleteRequest?.path, contains('/api/v1/collections/7/images/1'));
   });
 
   testWidgets(

@@ -16,6 +16,23 @@ void main() {
     height: 600,
     format: 'jpg',
     phash: 12345678,
+    collectionId: null,
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+    thumbnailSmallUrl: 'http://example.com/thumb.jpg',
+  );
+
+  final favoritedImage = ImageModel(
+    id: 2,
+    filename: 'fav.jpg',
+    path: '/path/to/fav.jpg',
+    sourceRoot: 'http://example.com/',
+    fileSize: 1024,
+    width: 800,
+    height: 600,
+    format: 'jpg',
+    phash: 87654321,
+    collectionId: 7,
     createdAt: DateTime.now(),
     updatedAt: DateTime.now(),
     thumbnailSmallUrl: 'http://example.com/thumb.jpg',
@@ -137,5 +154,19 @@ void main() {
     await tester.pump();
 
     expect(tappedImage?.id, testImage.id);
+  });
+
+  testWidgets('shows favorite indicator when image belongs to a collection', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: fluent.ScaffoldPage(
+          content: Material(child: FluentImageCard(image: favoritedImage)),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(fluent.FluentIcons.favorite_star_fill), findsOneWidget);
   });
 }

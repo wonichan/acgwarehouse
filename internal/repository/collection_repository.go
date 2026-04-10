@@ -167,21 +167,59 @@ func (r *sqliteCollectionRepository) Delete(ctx context.Context, id int64) error
 // AddImage adds an image to a collection
 func (r *sqliteCollectionRepository) AddImage(ctx context.Context, collectionID, imageID int64) error {
 	now := time.Now()
-	_, err := r.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO collection_images (collection_id, image_id, added_at)
-		VALUES (?, ?, ?)
-	`, collectionID, imageID, now)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
 
-	// Update image_count in collection
-	_, err = r.db.ExecContext(ctx, `
+	var existingCollectionID sql.NullInt64
+	err = tx.QueryRowContext(ctx, `
+		SELECT collection_id
+		FROM collection_images
+		WHERE image_id = ?
+		LIMIT 1
+	`, imageID).Scan(&existingCollectionID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if existingCollectionID.Valid && existingCollectionID.Int64 == collectionID {
+		return tx.Commit()
+	}
+
+	if _, err = tx.ExecContext(ctx, `DELETE FROM collection_images WHERE image_id = ?`, imageID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `
+		INSERT INTO collection_images (collection_id, image_id, added_at)
+		VALUES (?, ?, ?)
+	`, collectionID, imageID, now); err != nil {
+		return err
+	}
+
+	if existingCollectionID.Valid {
+		if _, err = tx.ExecContext(ctx, `
+			UPDATE collections SET image_count = (
+				SELECT COUNT(*) FROM collection_images WHERE collection_id = ?
+			), updated_at = ? WHERE id = ?
+		`, existingCollectionID.Int64, now, existingCollectionID.Int64); err != nil {
+			return err
+		}
+	}
+
+	if _, err = tx.ExecContext(ctx, `
 		UPDATE collections SET image_count = (
 			SELECT COUNT(*) FROM collection_images WHERE collection_id = ?
 		), updated_at = ? WHERE id = ?
-	`, collectionID, now, collectionID)
-	return err
+	`, collectionID, now, collectionID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // RemoveImage removes an image from a collection
@@ -206,7 +244,7 @@ func (r *sqliteCollectionRepository) RemoveImage(ctx context.Context, collection
 // FindImagesByCollection retrieves all images in a collection with pagination
 func (r *sqliteCollectionRepository) FindImagesByCollection(ctx context.Context, collectionID int64, limit, offset int) ([]domain.Image, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format,
+		SELECT i.id, ci.collection_id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format,
 		       COALESCE(i.phash, 0), COALESCE(i.phash_hex, ''), COALESCE(i.sha256, ''), COALESCE(i.source_mtime_unix, 0),
 		       i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
@@ -223,9 +261,11 @@ func (r *sqliteCollectionRepository) FindImagesByCollection(ctx context.Context,
 	images := make([]domain.Image, 0)
 	for rows.Next() {
 		var img domain.Image
+		var collectionID sql.NullInt64
 		var thumbnailSmallUrl, thumbnailLargeUrl sql.NullString
 		if err := rows.Scan(
 			&img.ID,
+			&collectionID,
 			&img.Path,
 			&img.Filename,
 			&img.SourceRoot,
@@ -250,6 +290,10 @@ func (r *sqliteCollectionRepository) FindImagesByCollection(ctx context.Context,
 		}
 		if thumbnailLargeUrl.Valid {
 			img.ThumbnailLargeUrl = thumbnailLargeUrl.String
+		}
+		if collectionID.Valid {
+			value := collectionID.Int64
+			img.CollectionID = &value
 		}
 		images = append(images, img)
 	}

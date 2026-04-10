@@ -127,10 +127,6 @@ func (h *ImageTagHandler) AddImageTag(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.tagRepo.IncrementUsageCount(c.Request.Context(), tagID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"image_id":        imageID,
@@ -154,14 +150,6 @@ func (h *ImageTagHandler) RemoveImageTag(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-
-	// Only decrement usage count if we actually deleted an association
-	if rowsAffected > 0 {
-		if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "deleted": rowsAffected > 0})
@@ -209,25 +197,6 @@ func (h *ImageTagHandler) ReviewTag(c *gin.Context) {
 		return
 	}
 
-	// Determine usage count change:
-	// - reject: only decrement if transitioning from non-rejected to rejected
-	// - confirm: only increment if transitioning from rejected to confirmed
-	needDecrement := state == "rejected" && currentState != "rejected"
-	needIncrement := state == "confirmed" && currentState == "rejected"
-
-	if needDecrement {
-		if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-	}
-	if needIncrement {
-		if err := h.tagRepo.IncrementUsageCount(c.Request.Context(), tagID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
 	if err := h.imageTagRepo.UpdateReviewState(c.Request.Context(), imageID, tagID, state); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -268,35 +237,7 @@ func (h *ImageTagHandler) BatchReview(c *gin.Context) {
 		currentStates[t.TagID] = t.ReviewState
 	}
 
-	// Determine which tags need usage count changes
-	var tagsToDecrement, tagsToIncrement []int64
-	for _, tagID := range req.TagIDs {
-		currentState := currentStates[tagID]
-		if currentState == "" {
-			continue // skip tags not associated with this image
-		}
-		if state == "rejected" && currentState != "rejected" {
-			tagsToDecrement = append(tagsToDecrement, tagID)
-		}
-		if state == "confirmed" && currentState == "rejected" {
-			tagsToIncrement = append(tagsToIncrement, tagID)
-		}
-	}
-
-	// Apply usage count changes
-	for _, tagID := range tagsToDecrement {
-		if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), tagID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-	}
-	for _, tagID := range tagsToIncrement {
-		if err := h.tagRepo.IncrementUsageCount(c.Request.Context(), tagID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
+	// Apply review state changes
 	if err := h.imageTagRepo.BatchUpdateReviewState(c.Request.Context(), imageID, req.TagIDs, state); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -367,36 +308,9 @@ func (h *ImageTagHandler) MergeImageTag(c *gin.Context) {
 		return
 	}
 
-	// Check if target tag already exists for this image
-	existingTags, err := h.imageTagRepo.FindByImageID(c.Request.Context(), imageID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	targetAlreadyExists := false
-	for _, et := range existingTags {
-		if et.TagID == targetTagID {
-			targetAlreadyExists = true
-			break
-		}
-	}
-
-	// Perform the merge
 	if err := h.imageTagRepo.MergeImageTag(c.Request.Context(), imageID, sourceTagID, targetTagID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-
-	// Update usage counts: decrement source tag, increment target tag only if it didn't exist
-	if err := h.tagRepo.DecrementUsageCount(c.Request.Context(), sourceTagID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if !targetAlreadyExists {
-		if err := h.tagRepo.IncrementUsageCount(c.Request.Context(), targetTagID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

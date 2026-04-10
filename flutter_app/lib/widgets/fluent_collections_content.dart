@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:provider/provider.dart';
 
 import '../models/collection.dart';
@@ -107,6 +108,74 @@ class _FluentCollectionsContentState extends State<FluentCollectionsContent> {
       setState(() {
         _errorMessage = '加载合集图片失败: $error';
         _isLoadingImages = false;
+      });
+    }
+  }
+
+  Future<void> _showImageContextMenu(
+    ImageModel image,
+    material.Offset globalPosition,
+  ) async {
+    final selected = await material.showMenu<String>(
+      context: context,
+      position: material.RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        globalPosition.dx,
+        globalPosition.dy,
+      ),
+      items: const [
+        material.PopupMenuItem<String>(
+          value: 'remove_favorite',
+          child: Text('取消收藏'),
+        ),
+      ],
+    );
+
+    if (!mounted || selected != 'remove_favorite') {
+      return;
+    }
+
+    await _removeImageFromCollection(image);
+  }
+
+  Future<void> _removeImageFromCollection(ImageModel image) async {
+    final collectionId = _selectedCollectionId;
+    if (collectionId == null) {
+      return;
+    }
+
+    try {
+      await _collectionService.removeImageFromCollection(
+        collectionId,
+        image.id,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _collections = _collections
+            .map(
+              (collection) => collection.id == collectionId
+                  ? collection.copyWith(
+                      imageCount: collection.imageCount > 0
+                          ? collection.imageCount - 1
+                          : 0,
+                    )
+                  : collection,
+            )
+            .toList(growable: false);
+      });
+
+      await _loadCollectionImages(collectionId);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = '取消收藏失败: $error';
       });
     }
   }
@@ -248,7 +317,14 @@ class _FluentCollectionsContentState extends State<FluentCollectionsContent> {
       ),
       itemCount: _images.length,
       itemBuilder: (context, index) {
-        return FluentImageCard(image: _images[index], onTap: widget.onImageTap);
+        final image = _images[index];
+        return FluentImageCard(
+          image: image,
+          onTap: widget.onImageTap,
+          onSecondaryTapDown: (image, details) {
+            _showImageContextMenu(image, details.globalPosition);
+          },
+        );
       },
     );
   }

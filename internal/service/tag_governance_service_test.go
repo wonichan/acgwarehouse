@@ -39,7 +39,7 @@ func TestTagGovernanceMergeTagsUsesAliasMatch(t *testing.T) {
 	t.Parallel()
 
 	service, tagRepo, aliasRepo, imageTagRepo := newTagGovernanceServiceForTest(t)
-	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "rainy night", Slug: "rainy-night", ReviewState: "confirmed", UsageCount: 4})
+	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "rainy night", Slug: "rainy-night", ReviewState: "confirmed", UsageCount: 0})
 	mustSaveGovernanceAlias(t, aliasRepo, &domain.TagAlias{TagID: existing.ID, Label: " Night Rain ", AliasType: "synonym"})
 
 	if err := service.MergeTags(context.Background(), 1, []string{"night rain"}, 1, 0.88); err != nil {
@@ -50,8 +50,8 @@ func TestTagGovernanceMergeTagsUsesAliasMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindByID() error = %v", err)
 	}
-	if tag.UsageCount != 5 {
-		t.Fatalf("UsageCount = %d, want 5", tag.UsageCount)
+	if tag.UsageCount != 1 {
+		t.Fatalf("UsageCount = %d, want 1", tag.UsageCount)
 	}
 
 	items, err := imageTagRepo.FindByImageID(context.Background(), 1)
@@ -176,7 +176,7 @@ func TestTagGovernanceMergeTagsIncrementsUsageCount(t *testing.T) {
 	t.Parallel()
 
 	service, tagRepo, _, _ := newTagGovernanceServiceForTest(t)
-	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "forest", Slug: "forest", ReviewState: "confirmed", UsageCount: 3})
+	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "forest", Slug: "forest", ReviewState: "confirmed", UsageCount: 0})
 
 	if err := service.MergeTags(context.Background(), 1, []string{"forest"}, 1, 0.9); err != nil {
 		t.Fatalf("MergeTags() error = %v", err)
@@ -186,8 +186,8 @@ func TestTagGovernanceMergeTagsIncrementsUsageCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindByID() error = %v", err)
 	}
-	if tag.UsageCount != 4 {
-		t.Fatalf("UsageCount = %d, want 4", tag.UsageCount)
+	if tag.UsageCount != 1 {
+		t.Fatalf("UsageCount = %d, want 1", tag.UsageCount)
 	}
 }
 
@@ -202,6 +202,25 @@ func newTagGovernanceServiceForTest(t *testing.T) (*TagGovernanceService, reposi
 
 	if err := repository.EnsureScanSchema(db); err != nil {
 		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	if _, err := db.Exec(`
+		CREATE TRIGGER IF NOT EXISTS trg_image_tags_after_insert
+		AFTER INSERT ON image_tags
+		FOR EACH ROW
+		WHEN NEW.review_state != 'rejected'
+		BEGIN
+			UPDATE tags SET usage_count = usage_count + 1 WHERE id = NEW.tag_id;
+		END;
+		CREATE TRIGGER IF NOT EXISTS trg_image_tags_after_delete
+		AFTER DELETE ON image_tags
+		FOR EACH ROW
+		WHEN OLD.review_state != 'rejected'
+		BEGIN
+			UPDATE tags SET usage_count = MAX(usage_count - 1, 0) WHERE id = OLD.tag_id;
+		END;
+	`); err != nil {
+		t.Fatalf("create triggers: %v", err)
 	}
 
 	mustSeedGovernanceData(t, db)
@@ -261,36 +280,35 @@ func TestTagGovernanceMergeTagsDoesNotIncrementCountWhenAssociationExists(t *tes
 	t.Parallel()
 
 	service, tagRepo, _, imageTagRepo := newTagGovernanceServiceForTest(t)
-	// Create a tag with initial usage count
-	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "sunset", Slug: "sunset", ReviewState: "confirmed", UsageCount: 5})
+	// Create a tag with initial usage count of 0 (triggers will manage it)
+	existing := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "sunset", Slug: "sunset", ReviewState: "confirmed", UsageCount: 0})
 
-	// First merge: create image-tag association and increment count
+	// First merge: create image-tag association, trigger increments count
 	if err := service.MergeTags(context.Background(), 1, []string{"sunset"}, 1, 0.9); err != nil {
 		t.Fatalf("first MergeTags() error = %v", err)
 	}
 
-	// Verify count incremented to 6
+	// Verify trigger incremented count to 1
 	tag, err := tagRepo.FindByID(context.Background(), existing.ID)
 	if err != nil {
 		t.Fatalf("FindByID() error = %v", err)
 	}
-	if tag.UsageCount != 6 {
-		t.Fatalf("after first merge: UsageCount = %d, want 6", tag.UsageCount)
+	if tag.UsageCount != 1 {
+		t.Fatalf("after first merge: UsageCount = %d, want 1", tag.UsageCount)
 	}
 
 	// Second merge (simulating retry): association already exists
-	// Use same observation ID=1 (retry scenario may reuse the same observation)
 	if err := service.MergeTags(context.Background(), 1, []string{"sunset"}, 1, 0.9); err != nil {
 		t.Fatalf("second MergeTags() error = %v", err)
 	}
 
-	// Verify count is still 6 (not incremented again)
+	// Verify count is still 1 (INSERT OR REPLACE doesn't fire INSERT trigger)
 	tag, err = tagRepo.FindByID(context.Background(), existing.ID)
 	if err != nil {
 		t.Fatalf("FindByID() error = %v", err)
 	}
-	if tag.UsageCount != 6 {
-		t.Fatalf("after second merge (retry): UsageCount = %d, want 6 (should not increment again)", tag.UsageCount)
+	if tag.UsageCount != 1 {
+		t.Fatalf("after second merge (retry): UsageCount = %d, want 1 (should not increment again)", tag.UsageCount)
 	}
 
 	// Verify the image-tag association exists

@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_collection_images_image_id_unique;

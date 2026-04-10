@@ -215,3 +215,57 @@ func TestCollectionHandler_ListIncludesImageCount(t *testing.T) {
 		t.Fatalf("expected image_count >= 1, got %+v", body.Collections)
 	}
 }
+
+func TestCollectionHandler_AddImageMovesImageToSingleCollection(t *testing.T) {
+	t.Parallel()
+	env := setupCollectionHandlerTest(t)
+	ctx := context.Background()
+
+	first := &domain.Collection{Name: "First"}
+	second := &domain.Collection{Name: "Second"}
+	if err := env.collectionRepo.Save(ctx, first); err != nil {
+		t.Fatalf("save first collection: %v", err)
+	}
+	if err := env.collectionRepo.Save(ctx, second); err != nil {
+		t.Fatalf("save second collection: %v", err)
+	}
+
+	image := saveCollectionHandlerImage(t, env.imageRepo, "move.png")
+
+	addToFirstReq := bytes.NewBufferString(`{"image_id":` + int64ToString(image.ID) + `}`)
+	addToFirstResp := httptest.NewRecorder()
+	env.router.ServeHTTP(addToFirstResp, httptest.NewRequest(http.MethodPost, "/api/v1/collections/"+int64ToString(first.ID)+"/images", addToFirstReq))
+	if addToFirstResp.Code != http.StatusOK {
+		t.Fatalf("add to first status = %d, body=%s", addToFirstResp.Code, addToFirstResp.Body.String())
+	}
+
+	addToSecondReq := bytes.NewBufferString(`{"image_id":` + int64ToString(image.ID) + `}`)
+	addToSecondResp := httptest.NewRecorder()
+	env.router.ServeHTTP(addToSecondResp, httptest.NewRequest(http.MethodPost, "/api/v1/collections/"+int64ToString(second.ID)+"/images", addToSecondReq))
+	if addToSecondResp.Code != http.StatusOK {
+		t.Fatalf("add to second status = %d, body=%s", addToSecondResp.Code, addToSecondResp.Body.String())
+	}
+
+	firstReloaded, err := env.collectionRepo.FindByID(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("reload first collection: %v", err)
+	}
+	secondReloaded, err := env.collectionRepo.FindByID(ctx, second.ID)
+	if err != nil {
+		t.Fatalf("reload second collection: %v", err)
+	}
+	if firstReloaded.ImageCount != 0 {
+		t.Fatalf("first collection image_count = %d, want 0", firstReloaded.ImageCount)
+	}
+	if secondReloaded.ImageCount != 1 {
+		t.Fatalf("second collection image_count = %d, want 1", secondReloaded.ImageCount)
+	}
+
+	reloadedImage, err := env.imageRepo.FindByID(image.ID)
+	if err != nil {
+		t.Fatalf("reload image: %v", err)
+	}
+	if reloadedImage.CollectionID == nil || *reloadedImage.CollectionID != second.ID {
+		t.Fatalf("image collection_id = %v, want %d", reloadedImage.CollectionID, second.ID)
+	}
+}

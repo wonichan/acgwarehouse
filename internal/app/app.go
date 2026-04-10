@@ -46,6 +46,7 @@ type App struct {
 	governanceSvc       *service.TagGovernanceService
 	searchSvc           *service.SearchService
 	collectionSvc       *service.CollectionService
+	batchSvc            *service.BatchService
 	adminSvc            *service.AdminService
 	monitoringBus       *service.MonitoringEventBus
 	logStreamSvc        *service.LogStreamService
@@ -201,6 +202,7 @@ func (a *App) Run() error {
 		GovernanceSvc:  a.governanceSvc,
 		SearchSvc:      a.searchSvc,
 		CollectionSvc:  a.collectionSvc,
+		BatchSvc:       a.batchSvc,
 		MonitoringBus:  a.monitoringBus,
 		LogStreamSvc:   a.logStreamSvc,
 		JobManager:     a.jobManager,

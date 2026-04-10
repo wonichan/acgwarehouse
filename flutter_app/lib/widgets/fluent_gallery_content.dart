@@ -110,6 +110,7 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
     ImageModel image,
     material.Offset globalPosition,
   ) async {
+    final isFavorited = image.isFavorited;
     final selected = await material.showMenu<String>(
       context: context,
       position: material.RelativeRect.fromLTRB(
@@ -118,17 +119,20 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
         globalPosition.dx,
         globalPosition.dy,
       ),
-      items: const [
-        material.PopupMenuItem<String>(
+      items: [
+        const material.PopupMenuItem<String>(
           value: 'open_source',
           child: Text('打开源文件'),
         ),
-        material.PopupMenuItem<String>(
+        const material.PopupMenuItem<String>(
           value: 'open_folder',
           child: Text('打开所在文件夹'),
         ),
-        material.PopupMenuItem<String>(value: 'favorite', child: Text('收藏')),
         material.PopupMenuItem<String>(
+          value: isFavorited ? 'unfavorite' : 'favorite',
+          child: Text(isFavorited ? '取消收藏' : '收藏'),
+        ),
+        const material.PopupMenuItem<String>(
           value: 'delete_permanent',
           child: Text('删除源文件及缩略图'),
         ),
@@ -147,10 +151,18 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
       case 'favorite':
         await _favoriteToCollection(image);
         break;
+      case 'unfavorite':
+        await _unfavoriteFromCollection(image);
+        break;
       case 'delete_permanent':
         await _permanentDelete(image);
         break;
     }
+  }
+
+  Future<void> _refreshGalleryImages() async {
+    if (!mounted) return;
+    await context.read<ImageListProvider>().loadImages(refresh: true);
   }
 
   Future<void> _openSource(ImageModel image) async {
@@ -173,7 +185,26 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
     );
 
     if (result == true) {
+      await _refreshGalleryImages();
       await _showMessageDialog('收藏成功', '已添加到合集');
+    }
+  }
+
+  Future<void> _unfavoriteFromCollection(ImageModel image) async {
+    final collectionId = image.collectionId;
+    if (collectionId == null || collectionId == 0) {
+      return;
+    }
+
+    try {
+      await _collectionService.removeImageFromCollection(
+        collectionId,
+        image.id,
+      );
+      await _refreshGalleryImages();
+      await _showMessageDialog('取消收藏成功', '已从收藏夹移除');
+    } catch (e) {
+      await _showMessageDialog('取消收藏失败', '$e');
     }
   }
 

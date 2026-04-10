@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
@@ -21,9 +22,11 @@ func NewCollectionService(repo repository.CollectionRepository) *CollectionServi
 
 // CreateCollection creates a new collection with the given name and description
 func (s *CollectionService) CreateCollection(ctx context.Context, name, description string) (*domain.Collection, error) {
+	log.Printf("[service] CreateCollection started: name=%s", name)
 	// Check if collection with same name already exists
 	existing, err := s.repo.FindByName(ctx, name)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		log.Printf("[service] CreateCollection failed: name=%s error=%v", name, err)
 		return nil, err
 	}
 	if existing != nil {
@@ -37,9 +40,11 @@ func (s *CollectionService) CreateCollection(ctx context.Context, name, descript
 	}
 
 	if err := s.repo.Save(ctx, collection); err != nil {
+		log.Printf("[service] CreateCollection failed: name=%s error=%v", name, err)
 		return nil, err
 	}
 
+	log.Printf("[service] CreateCollection completed: collection_id=%d", collection.ID)
 	return collection, nil
 }
 
@@ -58,8 +63,10 @@ func (s *CollectionService) ListCollections(ctx context.Context, limit, offset i
 
 // UpdateCollection updates a collection's name and description
 func (s *CollectionService) UpdateCollection(ctx context.Context, id int64, name, description string) (*domain.Collection, error) {
+	log.Printf("[service] UpdateCollection started: id=%d name=%s", id, name)
 	collection, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		log.Printf("[service] UpdateCollection failed: id=%d name=%s error=%v", id, name, err)
 		return nil, err
 	}
 
@@ -67,6 +74,7 @@ func (s *CollectionService) UpdateCollection(ctx context.Context, id int64, name
 	if name != collection.Name {
 		existing, err := s.repo.FindByName(ctx, name)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[service] UpdateCollection failed: id=%d name=%s error=%v", id, name, err)
 			return nil, err
 		}
 		if existing != nil && existing.ID != id {
@@ -78,44 +86,77 @@ func (s *CollectionService) UpdateCollection(ctx context.Context, id int64, name
 	collection.Description = description
 
 	if err := s.repo.Update(ctx, collection); err != nil {
+		log.Printf("[service] UpdateCollection failed: id=%d name=%s error=%v", id, name, err)
 		return nil, err
 	}
 
+	log.Printf("[service] UpdateCollection completed: id=%d", id)
 	return collection, nil
 }
 
 // DeleteCollection deletes a collection by ID
 func (s *CollectionService) DeleteCollection(ctx context.Context, id int64) error {
+	log.Printf("[service] DeleteCollection started: collection_id=%d", id)
 	// Verify collection exists
 	_, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		log.Printf("[service] DeleteCollection failed: collection_id=%d error=%v", id, err)
 		return err
 	}
 
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		log.Printf("[service] DeleteCollection failed: collection_id=%d error=%v", id, err)
+		return err
+	}
+
+	log.Printf("[service] DeleteCollection completed: id=%d", id)
+	return nil
 }
 
 // AddImageToCollection adds an image to a collection and updates the cover if needed
 func (s *CollectionService) AddImageToCollection(ctx context.Context, collectionID, imageID int64) error {
+	log.Printf("[service] AddImageToCollection started: collection_id=%d image_id=%d", collectionID, imageID)
 	// Verify collection exists
 	_, err := s.repo.FindByID(ctx, collectionID)
 	if err != nil {
+		log.Printf("[service] AddImageToCollection failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
+		return err
+	}
+
+	previousCollectionIDs, err := s.repo.FindCollectionIDsByImage(ctx, imageID)
+	if err != nil {
+		log.Printf("[service] AddImageToCollection failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
 		return err
 	}
 
 	// Add image to collection
 	if err := s.repo.AddImage(ctx, collectionID, imageID); err != nil {
+		log.Printf("[service] AddImageToCollection failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
 		return err
 	}
 
 	// Auto-update cover if this is the first image
 	count, err := s.repo.CountImages(ctx, collectionID)
 	if err != nil {
+		log.Printf("[service] AddImageToCollection failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
 		return err
 	}
 	if count == 1 {
 		// This is the first image, set it as cover
-		return s.repo.UpdateCover(ctx, collectionID, imageID)
+		if err := s.repo.UpdateCover(ctx, collectionID, imageID); err != nil {
+			log.Printf("[service] AddImageToCollection failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
+			return err
+		}
+	}
+
+	for _, previousCollectionID := range previousCollectionIDs {
+		if previousCollectionID == collectionID {
+			continue
+		}
+		if err := s.repo.ReconcileAfterImageDelete(ctx, previousCollectionID); err != nil {
+			log.Printf("[service] AddImageToCollection failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
+			return err
+		}
 	}
 
 	return nil
@@ -123,20 +164,26 @@ func (s *CollectionService) AddImageToCollection(ctx context.Context, collection
 
 // RemoveImageFromCollection removes an image from a collection and updates cover if needed
 func (s *CollectionService) RemoveImageFromCollection(ctx context.Context, collectionID, imageID int64) error {
+	log.Printf("[service] RemoveImageFromCollection started: collection_id=%d image_id=%d", collectionID, imageID)
 	// Verify collection exists
 	collection, err := s.repo.FindByID(ctx, collectionID)
 	if err != nil {
+		log.Printf("[service] RemoveImageFromCollection failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
 		return err
 	}
 
 	// Remove image from collection
 	if err := s.repo.RemoveImage(ctx, collectionID, imageID); err != nil {
+		log.Printf("[service] RemoveImageFromCollection failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
 		return err
 	}
 
 	// If removed image was the cover, auto-update cover
 	if collection.CoverImageID != nil && *collection.CoverImageID == imageID {
-		return s.AutoUpdateCover(ctx, collectionID)
+		if err := s.AutoUpdateCover(ctx, collectionID); err != nil {
+			log.Printf("[service] RemoveImageFromCollection failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
+			return err
+		}
 	}
 
 	return nil
@@ -144,19 +191,28 @@ func (s *CollectionService) RemoveImageFromCollection(ctx context.Context, colle
 
 // SetCoverImage sets the cover image for a collection
 func (s *CollectionService) SetCoverImage(ctx context.Context, collectionID, imageID int64) error {
+	log.Printf("[service] SetCoverImage started: collection_id=%d image_id=%d", collectionID, imageID)
 	// Verify collection exists
 	_, err := s.repo.FindByID(ctx, collectionID)
 	if err != nil {
+		log.Printf("[service] SetCoverImage failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
 		return err
 	}
 
-	return s.repo.UpdateCover(ctx, collectionID, imageID)
+	if err := s.repo.UpdateCover(ctx, collectionID, imageID); err != nil {
+		log.Printf("[service] SetCoverImage failed: collection_id=%d image_id=%d error=%v", collectionID, imageID, err)
+		return err
+	}
+
+	return nil
 }
 
 // AutoUpdateCover automatically sets the cover to the most recently added image
 func (s *CollectionService) AutoUpdateCover(ctx context.Context, collectionID int64) error {
+	log.Printf("[service] AutoUpdateCover started: collection_id=%d", collectionID)
 	latestImageID, err := s.repo.GetLatestImageID(ctx, collectionID)
 	if err != nil {
+		log.Printf("[service] AutoUpdateCover failed: collection_id=%d error=%v", collectionID, err)
 		return err
 	}
 
@@ -164,13 +220,25 @@ func (s *CollectionService) AutoUpdateCover(ctx context.Context, collectionID in
 		// No images in collection, clear cover
 		collection, err := s.repo.FindByID(ctx, collectionID)
 		if err != nil {
+			log.Printf("[service] AutoUpdateCover failed: collection_id=%d error=%v", collectionID, err)
 			return err
 		}
 		collection.CoverImageID = nil
-		return s.repo.Update(ctx, collection)
+		if err := s.repo.Update(ctx, collection); err != nil {
+			log.Printf("[service] AutoUpdateCover failed: collection_id=%d error=%v", collectionID, err)
+			return err
+		}
+		log.Printf("[service] AutoUpdateCover completed: collection_id=%d cover_cleared=%t", collectionID, latestImageID == nil)
+		return nil
 	}
 
-	return s.repo.UpdateCover(ctx, collectionID, *latestImageID)
+	if err := s.repo.UpdateCover(ctx, collectionID, *latestImageID); err != nil {
+		log.Printf("[service] AutoUpdateCover failed: collection_id=%d error=%v", collectionID, err)
+		return err
+	}
+
+	log.Printf("[service] AutoUpdateCover completed: collection_id=%d cover_cleared=%t", collectionID, latestImageID == nil)
+	return nil
 }
 
 // GetCollectionImages retrieves images in a collection with pagination
