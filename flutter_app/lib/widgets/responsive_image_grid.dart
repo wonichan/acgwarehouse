@@ -146,7 +146,7 @@ class ResponsiveImageGrid extends StatelessWidget {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            _buildImageTile(image),
+                            _buildImageTile(context, image),
                             if (inSelectionMode)
                               Positioned.fill(
                                 child: Container(
@@ -185,13 +185,14 @@ class ResponsiveImageGrid extends StatelessWidget {
     );
   }
 
-  Widget _buildImageTile(ImageModel image) {
+  Widget _buildImageTile(BuildContext context, ImageModel image) {
     final thumbnailUrl = image.thumbnailSmallUrl;
+    final colorScheme = Theme.of(context).colorScheme;
 
     if (thumbnailUrl == null || thumbnailUrl.isEmpty) {
       return Container(
-        color: Colors.grey[200],
-        child: const Icon(Icons.image, color: Colors.grey),
+        color: colorScheme.surfaceContainerHighest,
+        child: Icon(Icons.image, color: colorScheme.outlineVariant),
       );
     }
 
@@ -201,7 +202,7 @@ class ResponsiveImageGrid extends StatelessWidget {
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
         return Container(
-          color: Colors.grey[200],
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: Center(
             child: CircularProgressIndicator(
               strokeWidth: 2,
@@ -216,8 +217,8 @@ class ResponsiveImageGrid extends StatelessWidget {
       errorBuilder: (context, error, stackTrace) {
         debugPrint('Image load error: $error, URL: $thumbnailUrl');
         return Container(
-          color: Colors.grey[200],
-          child: const Icon(Icons.error, color: Colors.red),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: Icon(Icons.error, color: Theme.of(context).colorScheme.error),
         );
       },
     );

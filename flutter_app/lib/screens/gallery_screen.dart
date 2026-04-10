@@ -93,14 +93,14 @@ class _GalleryContentState extends State<_GalleryContent> {
                         ? Icons.filter_alt_off
                         : Icons.photo_library_outlined,
                     size: 64,
-                    color: Colors.grey[400],
+                    color: Theme.of(context).colorScheme.outlineVariant,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     hasFilters ? '筛选出 0 张图片' : '暂无图片',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleLarge?.copyWith(color: Colors.grey[600]),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                   ),
                   if (hasFilters) ...[
                     const SizedBox(height: 8),
@@ -170,10 +170,10 @@ class _GalleryContentState extends State<_GalleryContent> {
     final imageListProvider = context.watch<ImageListProvider>();
     final selectedTags = tagProvider.selectedTags;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isDark ? Colors.white24 : Colors.black12;
-    final textColor = isDark ? Colors.white : Colors.black87;
-    final hintColor = isDark ? Colors.white54 : Colors.black54;
+    final colorScheme = Theme.of(context).colorScheme;
+    final borderColor = colorScheme.outlineVariant;
+    final textColor = colorScheme.onSurface;
+    final hintColor = colorScheme.onSurfaceVariant;
 
     return Container(
       height: 40,
@@ -276,7 +276,7 @@ class _GalleryContentState extends State<_GalleryContent> {
                   alignment: Alignment.topLeft,
                   child: Material(
                     elevation: 4.0,
-                    color: Theme.of(context).cardColor,
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(4),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(
@@ -333,7 +333,7 @@ class _GalleryContentState extends State<_GalleryContent> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: imageListProvider.hasTagsFilter == false
-                    ? (isDark ? Colors.white24 : Colors.black12)
+                    ? colorScheme.surfaceContainerHighest
                     : Colors.transparent,
                 border: Border.all(color: borderColor),
                 borderRadius: BorderRadius.circular(4),

@@ -121,6 +121,8 @@ class _FluentCollectionsContentState extends State<FluentCollectionsContent> {
       return _buildCenteredMessage(
         context,
         title: _errorMessage!,
+        icon: FluentIcons.error,
+        iconColor: FluentTheme.of(context).resources.systemFillColorCritical,
         actionLabel: '重试',
         onPressed: _loadCollections,
       );
@@ -137,7 +139,12 @@ class _FluentCollectionsContentState extends State<FluentCollectionsContent> {
     return Row(
       children: [
         SizedBox(width: 280, child: _buildCollectionList(context)),
-        const SizedBox(width: 1, child: ColoredBox(color: Color(0x22000000))),
+        SizedBox(
+          width: 1,
+          child: ColoredBox(
+            color: FluentTheme.of(context).resources.dividerStrokeColorDefault,
+          ),
+        ),
         Expanded(child: _buildImagePanel(context)),
       ],
     );
@@ -160,7 +167,7 @@ class _FluentCollectionsContentState extends State<FluentCollectionsContent> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: isSelected
-                  ? theme.accentColor.withAlpha(31)
+                  ? theme.accentColor.withValues(alpha: 0.12)
                   : theme.resources.cardBackgroundFillColorSecondary,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
@@ -215,6 +222,8 @@ class _FluentCollectionsContentState extends State<FluentCollectionsContent> {
       return _buildCenteredMessage(
         context,
         title: _errorMessage!,
+        icon: FluentIcons.error,
+        iconColor: FluentTheme.of(context).resources.systemFillColorCritical,
         actionLabel: '重试',
         onPressed: () {
           final collectionId = _selectedCollectionId;
@@ -250,18 +259,21 @@ class _FluentCollectionsContentState extends State<FluentCollectionsContent> {
     String? subtitle,
     String? actionLabel,
     VoidCallback? onPressed,
+    IconData? icon,
+    Color? iconColor,
   }) {
+    final theme = FluentTheme.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            FluentIcons.favorite_star,
+            icon ?? FluentIcons.favorite_star,
             size: 56,
-            color: FluentTheme.of(context).resources.textFillColorSecondary,
+            color: iconColor ?? theme.resources.textFillColorSecondary,
           ),
           const SizedBox(height: 12),
-          Text(title, style: FluentTheme.of(context).typography.subtitle),
+          Text(title, style: theme.typography.subtitle),
           if (subtitle != null) ...[const SizedBox(height: 8), Text(subtitle)],
           if (actionLabel != null && onPressed != null) ...[
             const SizedBox(height: 12),

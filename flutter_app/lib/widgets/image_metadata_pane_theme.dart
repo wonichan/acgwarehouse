@@ -31,6 +31,16 @@ class ImageMetadataPaneTheme {
   Color get pendingTagBackground =>
       colorScheme.surfaceContainerHighest.withValues(alpha: 0.5);
 
+  Color get pendingBadgeBackground =>
+      colorScheme.secondaryContainer.withValues(alpha: 0.7);
+
+  Color get pendingBadgeForeground => colorScheme.onSecondaryContainer;
+
+  Color get confirmedBadgeBackground =>
+      colorScheme.primaryContainer.withValues(alpha: 0.7);
+
+  Color get confirmedBadgeForeground => colorScheme.onPrimaryContainer;
+
   // Divider color for pending tags replacing 0xFFD0D0D0
   Color get pendingTagDivider => colorScheme.outlineVariant;
 

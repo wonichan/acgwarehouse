@@ -50,7 +50,11 @@ class CachedImageWidget extends StatelessWidget {
           const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       errorWidget: (context, url, error) =>
           errorBuilder ??
-          const Icon(Icons.broken_image, size: 48, color: Colors.grey),
+          Icon(
+            Icons.broken_image,
+            size: 48,
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
     );
 
     if (borderRadius != null) {

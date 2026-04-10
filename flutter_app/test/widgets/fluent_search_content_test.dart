@@ -46,7 +46,6 @@ void main() {
     );
 
     bool tapped = false;
-    bool doubleTapped = false;
 
     await tester.pumpWidget(
       MultiProvider(
@@ -56,10 +55,7 @@ void main() {
         child: fluent.FluentApp(
           home: fluent.ScaffoldPage(
             content: Material(
-              child: FluentSearchContent(
-                onImageTap: (image) => tapped = true,
-                onImageDoubleTap: (image) => doubleTapped = true,
-              ),
+              child: FluentSearchContent(onImageTap: (image) => tapped = true),
             ),
           ),
         ),
@@ -68,22 +64,56 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 50));
 
-    // We already seeded it, so it should be length 1.
-    // The search provider might be loading if we call search,
-    // so let's just use the seeded provider and pump the widget.
-
     final card = find.byType(FluentImageCard).first;
-    // single tap is removed per plan, we shouldn't test it or we can test it does nothing
-    // await tester.tap(card);
-    // await tester.pumpAndSettle();
-    // expect(tapped, isTrue);
-
-    // double tap
-    await tester.tap(card);
-    await tester.pump(const Duration(milliseconds: 50));
     await tester.tap(card);
     await tester.pump(const Duration(milliseconds: 500));
-
-    expect(doubleTapped, isTrue);
+    expect(tapped, isTrue);
   });
+
+  testWidgets(
+    'FluentSearchContent uses systemFillColorCritical for error icon',
+    (tester) async {
+      final mockClient = MockClient((request) async {
+        return http.Response('', 500);
+      });
+
+      final searchProvider = SearchProvider(
+        service: SearchService(
+          baseUrl: 'http://localhost:8080',
+          client: mockClient,
+        ),
+      );
+
+      // Set error state
+      searchProvider.results.clear();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<SearchProvider>.value(value: searchProvider),
+          ],
+          child: fluent.FluentApp(
+            theme: fluent.FluentThemeData(
+              resources: const fluent.ResourceDictionary.light(
+                systemFillColorCritical: fluent.Color(0xFFCC0000),
+              ),
+            ),
+            home: const fluent.ScaffoldPage(
+              content: Material(child: FluentSearchContent()),
+            ),
+          ),
+        ),
+      );
+
+      // Inject error
+      await searchProvider.search(query: 'test');
+      await tester.pumpAndSettle();
+
+      // Verify error icon uses the theme color
+      final icon = tester.widget<fluent.Icon>(
+        find.byIcon(fluent.FluentIcons.error),
+      );
+      expect(icon.color, const fluent.Color(0xFFCC0000));
+    },
+  );
 }

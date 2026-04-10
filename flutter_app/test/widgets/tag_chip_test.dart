@@ -107,8 +107,10 @@ void main() {
     );
 
     // Icons should NOT be visible initially (not hovered, showActions=false)
-    expect(find.byIcon(Icons.check), findsNothing);
-    expect(find.byIcon(Icons.delete_outline), findsNothing);
+    final opacityWidget = tester.widget<AnimatedOpacity>(
+      find.byType(AnimatedOpacity),
+    );
+    expect(opacityWidget.opacity, 0.0);
 
     // Get the position of the TagChip and send a hover event
     final tagChipFinder = find.byType(TagChip);
@@ -134,8 +136,10 @@ void main() {
     await tester.pump();
 
     // Icons should disappear when no longer hovered
-    expect(find.byIcon(Icons.check), findsNothing);
-    expect(find.byIcon(Icons.delete_outline), findsNothing);
+    final opacityWidgetAfter = tester.widget<AnimatedOpacity>(
+      find.byType(AnimatedOpacity),
+    );
+    expect(opacityWidgetAfter.opacity, 0.0);
   });
 
   testWidgets('applies different styles for different review states', (
@@ -214,8 +218,10 @@ void main() {
     );
 
     // Icons should NOT be visible initially
-    expect(find.byIcon(Icons.merge_type), findsNothing);
-    expect(find.byIcon(Icons.edit), findsNothing);
+    final opacityWidget = tester.widget<AnimatedOpacity>(
+      find.byType(AnimatedOpacity),
+    );
+    expect(opacityWidget.opacity, 0.0);
 
     // Get the position of the TagChip and send a hover event
     final tagChipFinder = find.byType(TagChip);

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/monitoring_models.dart';
 import '../../providers/monitoring_provider.dart';
+import '../../theme/monitoring_theme.dart';
 
 class BatchListSection extends StatelessWidget {
   const BatchListSection({super.key});
@@ -55,12 +56,13 @@ class _BatchRowTile extends StatelessWidget {
     final provider = context.watch<MonitoringProvider>();
     final isSelected = provider.selectedBatchId == batch.id;
     final failedCount = batch.statusCounts['failed'] ?? 0;
+    final theme = MonitoringTheme.of(context);
 
     return Container(
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFE7ECF5) : Colors.white,
+        color: isSelected ? theme.selectedBackground : theme.cardBackground,
         border: Border.all(
-          color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFD9E2F2),
+          color: isSelected ? theme.selectedBorder : theme.cardBorder,
         ),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -103,8 +105,8 @@ class _BatchRowTile extends StatelessWidget {
                         Expanded(
                           child: ProgressBar(
                             value: _progressPercentage(batch) / 100,
-                            backgroundColor: const Color(0xFFE7ECF5),
-                            activeColor: const Color(0xFF2563EB),
+                            backgroundColor: theme.progressBackground,
+                            activeColor: theme.progressActive,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -120,10 +122,10 @@ class _BatchRowTile extends StatelessWidget {
                     const SizedBox(height: 12),
                     Text(
                       _formatTimestamp(batch.createdAt),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF52637A),
+                        color: theme.timestampText,
                       ),
                     ),
                   ],
@@ -194,6 +196,8 @@ class _TaskDetailList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tasks = context.watch<MonitoringProvider>().tasks;
+    final theme = MonitoringTheme.of(context);
+
     if (tasks.isEmpty) {
       return const Text(
         '暂无任务明细',
@@ -212,7 +216,7 @@ class _TaskDetailList extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F7FB),
+              color: theme.detailBackground,
               borderRadius: BorderRadius.circular(6),
             ),
             child: Column(
@@ -276,10 +280,10 @@ class _TaskDetailList extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     retryHint,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFFD97706),
+                      color: theme.statusPending,
                     ),
                   ),
                 ],
@@ -308,13 +312,14 @@ class _TaskDetailList extends StatelessWidget {
 class _BatchEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final theme = MonitoringTheme.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.emptyStateBackground,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD9E2F2)),
+        border: Border.all(color: theme.emptyStateBorder),
       ),
       child: const Column(
         mainAxisSize: MainAxisSize.min,
@@ -341,18 +346,19 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = MonitoringTheme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _statusColor(status),
+        color: _statusColor(status, theme),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         _statusLabel(status),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: Colors.white,
+          color: theme.statusBadgeText,
         ),
       ),
     );
@@ -366,31 +372,32 @@ class _ErrorCountBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = MonitoringTheme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFC42B1C),
+        color: theme.errorBadgeBackground,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         '$count 错误',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: Colors.white,
+          color: theme.errorBadgeText,
         ),
       ),
     );
   }
 }
 
-Color _statusColor(String status) {
+Color _statusColor(String status, MonitoringTheme theme) {
   return switch (status) {
-    'pending' => const Color(0xFFD97706),
-    'running' => const Color(0xFF2563EB),
-    'completed' => const Color(0xFF16A34A),
-    'failed' => const Color(0xFFC42B1C),
-    _ => const Color(0xFF52637A),
+    'pending' => theme.statusPending,
+    'running' => theme.statusRunning,
+    'completed' => theme.statusCompleted,
+    'failed' => theme.statusFailed,
+    _ => theme.statusUnknown,
   };
 }
 

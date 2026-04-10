@@ -35,22 +35,29 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
       children: [
         // 标题
         Container(
-          color: Theme.of(context).primaryColor,
+          color: Theme.of(context).colorScheme.primary,
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('标签筛选',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(color: Colors.white)),
+              Text(
+                '标签筛选',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                ),
+              ),
               const SizedBox(height: 8),
               Consumer<TagProvider>(
                 builder: (context, provider, _) {
                   final count = provider.selectedTagIds.length;
-                  return Text('已选择 $count 个标签',
-                      style: const TextStyle(color: Colors.white70));
+                  return Text(
+                    '已选择 $count 个标签',
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onPrimary.withValues(alpha: 0.7),
+                    ),
+                  );
                 },
               ),
             ],
@@ -65,8 +72,7 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
               hintText: '搜索标签...',
               prefixIcon: Icon(Icons.search),
               border: OutlineInputBorder(),
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             onChanged: (query) {
               context.read<TagProvider>().searchTags(query);
@@ -127,7 +133,9 @@ class _TagFilterDrawerState extends State<TagFilterDrawer> {
                     subtitle: Text('${tag.usageCount} 张图片'),
                     value: isSelected,
                     onChanged: (checked) {
-                      debugPrint('标签点击: ${tag.preferredLabel} (ID: ${tag.id}), 选中状态: $checked');
+                      debugPrint(
+                        '标签点击: ${tag.preferredLabel} (ID: ${tag.id}), 选中状态: $checked',
+                      );
                       provider.toggleTag(tag.id);
                       final selectedIds = provider.selectedTagIds.toList();
                       debugPrint('选中标签IDs: $selectedIds');

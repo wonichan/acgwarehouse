@@ -37,12 +37,14 @@ class SelectableImageTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   border: isSelected
                       ? Border.all(
-                          color: Theme.of(context).primaryColor,
+                          color: Theme.of(context).colorScheme.primary,
                           width: 3,
                         )
                       : null,
                   color: isSelected
-                      ? Theme.of(context).primaryColor.withOpacity(0.1)
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1)
                       : Colors.transparent,
                 ),
               ),
@@ -57,12 +59,12 @@ class SelectableImageTile extends StatelessWidget {
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
+                  color: Theme.of(context).colorScheme.primary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.check,
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.onPrimary,
                   size: 16,
                 ),
               ),

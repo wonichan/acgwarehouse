@@ -20,7 +20,7 @@ class CollectionListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: _buildCoverThumbnail(),
+      leading: _buildCoverThumbnail(context),
       title: Text(
         collection.name,
         maxLines: 1,
@@ -48,33 +48,45 @@ class CollectionListItem extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
             ),
           ),
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'delete',
             child: ListTile(
-              leading: Icon(Icons.delete, color: Colors.red),
-              title: Text('删除', style: TextStyle(color: Colors.red)),
+              leading: Icon(
+                Icons.delete,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                '删除',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
               contentPadding: EdgeInsets.zero,
             ),
           ),
         ],
       ),
       selected: isSelected,
-      selectedTileColor: Theme.of(context).primaryColor.withOpacity(0.1),
+      selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
       onTap: onTap,
     );
   }
 
-  Widget _buildCoverThumbnail() {
+  Widget _buildCoverThumbnail(BuildContext context) {
     return Container(
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        color: Colors.grey[300],
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
       child: collection.coverImageId != null
-          ? const Icon(Icons.image, color: Colors.grey)
-          : const Icon(Icons.folder, color: Colors.grey),
+          ? Icon(
+              Icons.image,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            )
+          : Icon(
+              Icons.folder,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
     );
   }
 }

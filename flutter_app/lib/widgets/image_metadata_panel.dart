@@ -339,10 +339,14 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                 const Spacer(),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.blue.withValues(alpha: 0.6),
-                    disabledForegroundColor: Colors.white,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    disabledBackgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.6),
+                    disabledForegroundColor: Theme.of(
+                      context,
+                    ).colorScheme.onPrimary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
                     ),
@@ -354,12 +358,12 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   ),
                   onPressed: _isAITriggered ? null : _triggerAITags,
                   icon: _isAITriggered
-                      ? const SizedBox.square(
+                      ? SizedBox.square(
                           dimension: 14,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
+                              Theme.of(context).colorScheme.onPrimary,
                             ),
                           ),
                         )
@@ -432,8 +436,10 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                     onChanged: (value) {
                       setState(() => _useCustomPrompt = value);
                     },
-                    activeThumbColor: Colors.blue,
-                    activeTrackColor: Colors.blue.withValues(alpha: 0.2),
+                    activeThumbColor: Theme.of(context).colorScheme.primary,
+                    activeTrackColor: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.2),
                   ),
                   if (_isLoadingPrompt)
                     const SizedBox(
@@ -462,7 +468,9 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: Colors.blue),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                   filled: true,
                   fillColor: theme.inputFillColor,
@@ -626,13 +634,13 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
       _TagGroupTone.rejected => theme.inputFillColor.withValues(alpha: 0.35),
     };
     final badgeColor = switch (tone) {
-      _TagGroupTone.pending => Colors.orange.withValues(alpha: 0.14),
-      _TagGroupTone.confirmed => Colors.green.withValues(alpha: 0.14),
+      _TagGroupTone.pending => theme.pendingBadgeBackground,
+      _TagGroupTone.confirmed => theme.confirmedBadgeBackground,
       _TagGroupTone.rejected => theme.statusBackground,
     };
     final badgeTextColor = switch (tone) {
-      _TagGroupTone.pending => Colors.orange.shade800,
-      _TagGroupTone.confirmed => Colors.green.shade700,
+      _TagGroupTone.pending => theme.pendingBadgeForeground,
+      _TagGroupTone.confirmed => theme.confirmedBadgeForeground,
       _TagGroupTone.rejected => theme.textMuted,
     };
 

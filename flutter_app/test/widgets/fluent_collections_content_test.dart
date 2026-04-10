@@ -10,10 +10,12 @@ class _FakeCollectionService extends CollectionService {
   _FakeCollectionService({
     this.collections = const <Collection>[],
     this.imagesByCollectionId = const <int, List<ImageModel>>{},
+    this.collectionsError,
   }) : super(baseUrl: 'http://localhost:8080');
 
   final List<Collection> collections;
   final Map<int, List<ImageModel>> imagesByCollectionId;
+  final Object? collectionsError;
   final List<int> fetchedCollectionImageIds = <int>[];
 
   @override
@@ -21,6 +23,9 @@ class _FakeCollectionService extends CollectionService {
     int limit = 20,
     int offset = 0,
   }) async {
+    if (collectionsError != null) {
+      throw collectionsError!;
+    }
     return collections;
   }
 
@@ -115,5 +120,82 @@ void main() {
     expect(service.fetchedCollectionImageIds, <int>[1, 2]);
     expect(find.byType(FluentImageCard), findsNothing);
     expect(find.text('该合集暂无图片'), findsOneWidget);
+  });
+
+  testWidgets('uses Fluent theme colors for selections and dividers', (
+    tester,
+  ) async {
+    final service = _FakeCollectionService(
+      collections: <Collection>[
+        _buildCollection(id: 1, name: '角色合集', imageCount: 1),
+      ],
+      imagesByCollectionId: <int, List<ImageModel>>{
+        1: <ImageModel>[_buildImage(1, 'alpha.png')],
+      },
+    );
+
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: fluent.FluentTheme(
+          data: fluent.FluentThemeData(
+            accentColor: fluent.Colors.purple,
+            resources: const fluent.ResourceDictionary.light(
+              dividerStrokeColorDefault: fluent.Color(0xFF112233),
+              cardBackgroundFillColorSecondary: fluent.Color(0xFF445566),
+            ),
+          ),
+          child: FluentCollectionsContent(collectionService: service),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Check divider color
+    final coloredBox = tester.widget<fluent.ColoredBox>(
+      find
+          .descendant(
+            of: find.byType(fluent.SizedBox),
+            matching: find.byType(fluent.ColoredBox),
+          )
+          .first,
+    );
+    expect(coloredBox.color, const fluent.Color(0xFF112233));
+
+    // Check selection color
+    final container = tester.widget<fluent.Container>(
+      find
+          .descendant(
+            of: find.widgetWithText(fluent.GestureDetector, '角色合集'),
+            matching: find.byType(fluent.Container),
+          )
+          .first,
+    );
+    final decoration = container.decoration as fluent.BoxDecoration;
+    expect(decoration.color, fluent.Colors.purple.withValues(alpha: 0.12));
+  });
+
+  testWidgets('uses critical theme icon for collection load errors', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        theme: fluent.FluentThemeData(
+          resources: const fluent.ResourceDictionary.light(
+            systemFillColorCritical: fluent.Color(0xFFCC0000),
+          ),
+        ),
+        home: FluentCollectionsContent(
+          collectionService: _FakeCollectionService(
+            collectionsError: Exception('boom'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final icon = tester.widget<fluent.Icon>(
+      find.byIcon(fluent.FluentIcons.error),
+    );
+    expect(icon.color, const fluent.Color(0xFFCC0000));
   });
 }

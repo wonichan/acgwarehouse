@@ -39,7 +39,7 @@ class TagChip extends StatefulWidget {
 class _TagChipState extends State<TagChip> {
   bool _isHovered = false;
 
-  Color get _dotColor {
+  Color _dotColor(BuildContext context) {
     switch (widget.style) {
       case TagChipStyle.confirmed:
         return Colors.green.shade500;
@@ -48,16 +48,17 @@ class _TagChipState extends State<TagChip> {
       case TagChipStyle.rejected:
         return Colors.red.shade400;
       default:
-        return Colors.grey.shade400;
+        return Theme.of(context).colorScheme.outline;
     }
   }
 
-  Color get _textColor {
+  Color _textColor(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     switch (widget.style) {
       case TagChipStyle.rejected:
-        return Colors.grey.shade500;
+        return colorScheme.onSurface.withOpacity(0.5);
       default:
-        return Colors.grey.shade800;
+        return colorScheme.onSurface;
     }
   }
 
@@ -103,7 +104,7 @@ class _TagChipState extends State<TagChip> {
                 width: 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: _dotColor,
+                  color: _dotColor(context),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -111,7 +112,7 @@ class _TagChipState extends State<TagChip> {
               Text(
                 widget.tag.preferredLabel,
                 style: TextStyle(
-                  color: _textColor,
+                  color: _textColor(context),
                   fontSize: 14,
                   fontWeight: _fontWeight,
                   decoration: isRejected ? TextDecoration.lineThrough : null,
@@ -148,13 +149,13 @@ class _TagChipState extends State<TagChip> {
                         if (widget.onEdit != null)
                           _buildIcon(
                             Icons.edit,
-                            Colors.blueGrey.shade400,
+                            Theme.of(context).colorScheme.outline,
                             widget.onEdit!,
                           ),
                         if (widget.onDelete != null)
                           _buildIcon(
                             Icons.delete_outline,
-                            Colors.grey.shade600,
+                            Theme.of(context).colorScheme.outlineVariant,
                             widget.onDelete!,
                           ),
                       ],

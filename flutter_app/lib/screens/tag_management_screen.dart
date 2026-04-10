@@ -50,7 +50,9 @@ class _TagManagementContent extends StatelessWidget {
                 children: [
                   Text(
                     '加载失败: ${provider.error}',
-                    style: const TextStyle(color: Colors.red),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
@@ -104,7 +106,7 @@ class _TagManagementContent extends StatelessWidget {
               '总使用量',
               totals['usageCount'] ?? 0,
               Icons.label,
-              Colors.blue,
+              Theme.of(context).colorScheme.primary,
             ),
           ),
           const SizedBox(width: 8),
@@ -114,7 +116,7 @@ class _TagManagementContent extends StatelessWidget {
               '待复核',
               totals['pendingCount'] ?? 0,
               Icons.pending_actions,
-              Colors.orange,
+              Theme.of(context).colorScheme.secondary,
             ),
           ),
           const SizedBox(width: 8),
@@ -124,7 +126,7 @@ class _TagManagementContent extends StatelessWidget {
               'AI 生成',
               totals['aiCount'] ?? 0,
               Icons.auto_awesome,
-              Colors.purple,
+              Theme.of(context).colorScheme.tertiary,
             ),
           ),
         ],
@@ -256,8 +258,9 @@ class _TagManagementContent extends StatelessWidget {
           Chip(
             label: Text('${stat.usageCount}'),
             backgroundColor: stat.usageCount == 0
-                ? Colors.red[100]
-                : Colors.grey[200],
+                ? Theme.of(context).colorScheme.errorContainer
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
+            side: BorderSide.none,
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -278,13 +281,22 @@ class _TagManagementContent extends StatelessWidget {
                   ],
                 ),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete',
                 child: Row(
                   children: [
-                    Icon(Icons.delete, size: 20, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('删除标签', style: TextStyle(color: Colors.red)),
+                    Icon(
+                      Icons.delete,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '删除标签',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -380,7 +392,10 @@ class _TagManagementContent extends StatelessWidget {
             child: const Text('取消'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('删除'),
           ),

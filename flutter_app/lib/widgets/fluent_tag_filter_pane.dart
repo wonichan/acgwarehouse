@@ -62,7 +62,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: theme.accentColor.withOpacity(0.2),
+                      color: theme.accentColor.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -143,10 +143,10 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           FluentIcons.error,
                           size: 32,
-                          color: Color(0xFFFF0000),
+                          color: theme.resources.systemFillColorCritical,
                         ),
                         const SizedBox(height: 8),
                         Text('加载失败: ${provider.error}'),

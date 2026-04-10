@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/image.dart';
 import '../providers/selection_provider.dart';
 
@@ -11,7 +10,7 @@ class ImageGrid extends StatelessWidget {
   final SelectionProvider? selectionProvider;
   final int crossAxisCount;
   final ScrollController? scrollController;
-  
+
   const ImageGrid({
     super.key,
     required this.images,
@@ -20,7 +19,7 @@ class ImageGrid extends StatelessWidget {
     this.crossAxisCount = 3,
     this.scrollController,
   });
-  
+
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
@@ -50,15 +49,21 @@ class ImageGrid extends StatelessWidget {
           onLongPress: selectionProvider == null
               ? null
               : () {
-                  selectionProvider!.handleImageTap(image.id, longPress: true, index: index);
+                  selectionProvider!.handleImageTap(
+                    image.id,
+                    longPress: true,
+                    index: index,
+                  );
                 },
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _buildImageTile(image),
+              _buildImageTile(context, image),
               if (inSelectionMode)
                 Container(
-                  color: isSelected ? Colors.black.withOpacity(0.25) : Colors.transparent,
+                  color: isSelected
+                      ? Colors.black.withOpacity(0.25)
+                      : Colors.transparent,
                 ),
               if (inSelectionMode)
                 Positioned(
@@ -79,29 +84,31 @@ class ImageGrid extends StatelessWidget {
       },
     );
   }
-  
-  Widget _buildImageTile(ImageModel image) {
+
+  Widget _buildImageTile(BuildContext context, ImageModel image) {
     final thumbnailUrl = image.thumbnailSmallUrl;
-    
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (thumbnailUrl == null || thumbnailUrl.isEmpty) {
       return Container(
-        color: Colors.grey[200],
-        child: const Icon(Icons.image, color: Colors.grey),
+        color: colorScheme.surfaceContainerHighest,
+        child: Icon(Icons.image, color: colorScheme.outlineVariant),
       );
     }
-    
+
     return Image.network(
       thumbnailUrl,
       fit: BoxFit.cover,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
         return Container(
-          color: Colors.grey[200],
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: Center(
             child: CircularProgressIndicator(
               strokeWidth: 2,
               value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                  ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
                   : null,
             ),
           ),
@@ -110,8 +117,8 @@ class ImageGrid extends StatelessWidget {
       errorBuilder: (context, error, stackTrace) {
         debugPrint('Image load error: $error, URL: $thumbnailUrl');
         return Container(
-          color: Colors.grey[200],
-          child: const Icon(Icons.error, color: Colors.red),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: Icon(Icons.error, color: Theme.of(context).colorScheme.error),
         );
       },
     );

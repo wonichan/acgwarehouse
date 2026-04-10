@@ -57,7 +57,11 @@ class _FluentSearchContentState extends State<FluentSearchContent> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(FluentIcons.error, size: 64, color: Color(0xFFFF0000)),
+          Icon(
+            FluentIcons.error,
+            size: 64,
+            color: FluentTheme.of(context).resources.systemFillColorCritical,
+          ),
           const SizedBox(height: 16),
           Text('错误: ${provider.error}'),
           const SizedBox(height: 16),

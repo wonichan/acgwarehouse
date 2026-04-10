@@ -35,17 +35,15 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('搜索'),
-      ),
+      appBar: AppBar(title: const Text('搜索')),
       body: Column(
         children: [
           // Search bar
           _buildSearchBar(context),
-          
+
           // Sort options
           _buildSortOptions(context),
-          
+
           // Results or history
           Expanded(
             child: Consumer<SearchProvider>(
@@ -59,7 +57,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                        Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                         const SizedBox(height: 16),
                         Text('错误: ${provider.error}'),
                         const SizedBox(height: 16),
@@ -76,7 +78,9 @@ class _SearchScreenState extends State<SearchScreen> {
                 }
 
                 // Show history if no search yet
-                if (provider.results.isEmpty && provider.searchHistory.isNotEmpty && _showHistory) {
+                if (provider.results.isEmpty &&
+                    provider.searchHistory.isNotEmpty &&
+                    _showHistory) {
                   return _buildSearchHistory(context, provider);
                 }
 
@@ -86,7 +90,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.search, size: 48, color: Colors.grey),
+                        Icon(
+                          Icons.search,
+                          size: 48,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
                         const SizedBox(height: 16),
                         const Text('没有找到匹配的图片'),
                         const SizedBox(height: 16),
@@ -104,7 +112,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   children: [
                     // Results count
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: Row(
                         children: [
                           Text('找到 ${provider.totalResults} 张图片'),
@@ -129,14 +140,16 @@ class _SearchScreenState extends State<SearchScreen> {
                           onNotification: (notification) {
                             if (notification is ScrollEndNotification &&
                                 notification.metrics.pixels >=
-                                    notification.metrics.maxScrollExtent - 200) {
+                                    notification.metrics.maxScrollExtent -
+                                        200) {
                               provider.loadMore();
                             }
                             return false;
                           },
                           child: ImageGrid(
                             images: provider.results,
-                            onImageTap: (image) => _showImageDetail(context, image),
+                            onImageTap: (image) =>
+                                _showImageDetail(context, image),
                           ),
                         ),
                       ),
@@ -170,9 +183,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   },
                 )
               : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,
         ),
         onSubmitted: (_) {
@@ -211,7 +222,9 @@ class _SearchScreenState extends State<SearchScreen> {
               const SizedBox(width: 16),
               IconButton(
                 icon: Icon(
-                  provider.sortOrder == 'desc' ? Icons.arrow_downward : Icons.arrow_upward,
+                  provider.sortOrder == 'desc'
+                      ? Icons.arrow_downward
+                      : Icons.arrow_upward,
                 ),
                 onPressed: () {
                   provider.setSort(
