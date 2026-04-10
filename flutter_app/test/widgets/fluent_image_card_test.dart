@@ -42,35 +42,74 @@ void main() {
     expect(tapped, isTrue);
   });
 
-  testWidgets('FluentImageCard triggers onDoubleClick on double click', (
+  testWidgets('shows unselected selection affordance in selection mode', (
     tester,
   ) async {
-    bool tapped = false;
-    bool doubleTapped = false;
-
     await tester.pumpWidget(
       fluent.FluentApp(
         home: fluent.ScaffoldPage(
           content: Material(
             child: FluentImageCard(
               image: testImage,
-              onTap: (image) => tapped = true,
-              onDoubleClick: (image) => doubleTapped = true,
+              isSelectionMode: true,
+              isSelected: false,
             ),
           ),
         ),
       ),
     );
 
-    final gestureDetector = find.byType(fluent.GestureDetector);
-    // Simulate double click
-    await tester.tap(gestureDetector);
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(gestureDetector);
-    await tester.pump(const Duration(milliseconds: 500));
+    // Weak checkmark should be present
+    expect(find.byIcon(fluent.FluentIcons.check_mark), findsOneWidget);
+  });
 
-    // Since we trigger both, doubleTapped should be true
-    expect(doubleTapped, isTrue);
+  testWidgets(
+    'tapping card in selection mode calls onSelect instead of onTap',
+    (tester) async {
+      bool selected = false;
+      bool tapped = false;
+
+      await tester.pumpWidget(
+        fluent.FluentApp(
+          home: fluent.ScaffoldPage(
+            content: Material(
+              child: FluentImageCard(
+                image: testImage,
+                isSelectionMode: true,
+                onTap: (img) => tapped = true,
+                onSelect: (img, sel) => selected = true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(fluent.GestureDetector));
+      await tester.pump();
+
+      expect(tapped, isFalse);
+      expect(selected, isTrue);
+    },
+  );
+
+  testWidgets('shows selected overlay and checkmark when selected', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: fluent.ScaffoldPage(
+          content: Material(
+            child: FluentImageCard(
+              image: testImage,
+              isSelectionMode: true,
+              isSelected: true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(fluent.FluentIcons.check_mark), findsOneWidget);
   });
 
   testWidgets('FluentImageCard triggers onSecondaryTapDown on right click', (

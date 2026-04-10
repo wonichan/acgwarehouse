@@ -16,6 +16,7 @@ class FluentImageCard extends StatefulWidget {
 
   /// Selection mode support
   final bool isSelected;
+  final bool isSelectionMode;
   final void Function(ImageModel image, bool selected)? onSelect;
 
   const FluentImageCard({
@@ -25,6 +26,7 @@ class FluentImageCard extends StatefulWidget {
     this.onSecondaryTapDown,
     this.borderRadius = 8.0,
     this.isSelected = false,
+    this.isSelectionMode = false,
     this.onSelect,
   });
 
@@ -44,11 +46,11 @@ class _FluentImageCardState extends State<FluentImageCard> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
-        onTap: widget.onSelect != null
+        onTap: widget.isSelectionMode && widget.onSelect != null
             ? () {
                 widget.onSelect!(widget.image, !widget.isSelected);
               }
-            : widget.onTap != null
+            : (!widget.isSelectionMode && widget.onTap != null)
             ? () => widget.onTap!(widget.image)
             : null,
         onSecondaryTapDown: widget.onSecondaryTapDown != null
@@ -75,17 +77,21 @@ class _FluentImageCardState extends State<FluentImageCard> {
                 child: _buildImage(thumbnailUrl, theme),
               ),
               // Selection overlay
-              if (widget.isSelected)
+              if (widget.isSelectionMode)
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(widget.borderRadius),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: theme.accentColor.withValues(alpha: 0.35),
+                        color: widget.isSelected
+                            ? theme.accentColor.withValues(alpha: 0.35)
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(
                           widget.borderRadius,
                         ),
-                        border: Border.all(color: theme.accentColor, width: 2),
+                        border: widget.isSelected
+                            ? Border.all(color: theme.accentColor, width: 2)
+                            : null,
                       ),
                       child: Align(
                         alignment: Alignment.topRight,
@@ -93,14 +99,30 @@ class _FluentImageCardState extends State<FluentImageCard> {
                           padding: const EdgeInsets.all(4),
                           child: Container(
                             padding: const EdgeInsets.all(2),
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
+                            decoration: BoxDecoration(
+                              color: widget.isSelected
+                                  ? Colors.white
+                                  : theme
+                                        .resources
+                                        .cardBackgroundFillColorSecondary
+                                        .withValues(alpha: 0.7),
                               shape: BoxShape.circle,
+                              border: widget.isSelected
+                                  ? null
+                                  : Border.all(
+                                      color: theme
+                                          .resources
+                                          .textFillColorSecondary
+                                          .withValues(alpha: 0.5),
+                                      width: 1,
+                                    ),
                             ),
                             child: Icon(
                               FluentIcons.check_mark,
                               size: 12,
-                              color: theme.accentColor,
+                              color: widget.isSelected
+                                  ? theme.accentColor
+                                  : Colors.transparent,
                             ),
                           ),
                         ),

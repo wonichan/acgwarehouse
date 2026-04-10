@@ -313,17 +313,10 @@ class _FluentGalleryContentState extends State<FluentGalleryContent> {
             final image = images[index];
             return FluentImageCard(
               image: image,
+              isSelectionMode: selection.isSelectionMode,
               isSelected: selection.isSelected(image.id),
-              onTap: widget.onImageTap,
-              onSelect: selection.isSelectionMode
-                  ? (img, selected) {
-                      if (selected) {
-                        selection.toggleSelection(img.id);
-                      } else {
-                        selection.toggleSelection(img.id);
-                      }
-                    }
-                  : null,
+              onTap: selection.isSelectionMode ? null : widget.onImageTap,
+              onSelect: (img, selected) => selection.toggleSelection(img.id),
               onSecondaryTapDown: (img, details) {
                 _showImageContextMenu(img, details.globalPosition);
               },

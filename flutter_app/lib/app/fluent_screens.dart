@@ -23,7 +23,9 @@ import '../providers/selection_provider.dart';
 /// Fluent 风格图库页面
 /// 包含 CommandBar 工具栏和图库内容
 class FluentGalleryPage extends StatefulWidget {
-  const FluentGalleryPage({super.key});
+  final BatchService? batchService;
+
+  const FluentGalleryPage({super.key, this.batchService});
 
   @override
   State<FluentGalleryPage> createState() => _FluentGalleryPageState();
@@ -61,59 +63,19 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
             title: _buildTitle(context, imageProvider, tagProvider),
             commandBar: CommandBar(
               mainAxisAlignment: MainAxisAlignment.end,
-              primaryItems: [
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.sort),
-                  label: const Text('排序'),
-                  onPressed: () {
-                    _showGallerySortOptions(context, imageProvider);
-                  },
-                ),
-                const CommandBarSeparator(),
-                // Refresh button
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.refresh),
-                  label: const Text('刷新'),
-                  onPressed: () {
-                    imageProvider.loadImages(refresh: true);
-                  },
-                ),
-                const CommandBarSeparator(),
-                // Batch add tags — only when images are selected
-                if (selection.hasSelection) ...[
-                  CommandBarButton(
-                    icon: const Icon(FluentIcons.tag),
-                    label: Text('批量添加标签 (${selection.selectedCount})'),
-                    onPressed: () {
-                      _showBatchAddTagDialog(
-                        context,
-                        selection,
-                        tagProvider,
-                        imageProvider,
-                      );
-                    },
-                  ),
-                  CommandBarButton(
-                    icon: const Icon(FluentIcons.clear),
-                    label: const Text('取消选择'),
-                    onPressed: selection.clearSelection,
-                  ),
-                  const CommandBarSeparator(),
-                ],
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.auto_enhance_on),
-                  label: const Text('批量AI标签'),
-                  onPressed: imageProvider.images.isEmpty
-                      ? null
-                      : () {
-                          _confirmAndTriggerBatchAITags(
-                            context,
-                            imageProvider,
-                            tagProvider,
-                          );
-                        },
-                ),
-              ],
+              primaryItems: selection.isSelectionMode
+                  ? _buildSelectionModeItems(
+                      context,
+                      selection,
+                      imageProvider,
+                      tagProvider,
+                    )
+                  : _buildBrowseModeItems(
+                      context,
+                      selection,
+                      imageProvider,
+                      tagProvider,
+                    ),
             ),
           ),
           content: Row(
@@ -144,6 +106,187 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
         );
       },
     );
+  }
+
+  List<CommandBarItem> _buildBrowseModeItems(
+    BuildContext context,
+    SelectionProvider selection,
+    ImageListProvider imageProvider,
+    TagProvider tagProvider,
+  ) {
+    return [
+      CommandBarButton(
+        icon: const Icon(FluentIcons.sort),
+        label: const Text('排序'),
+        onPressed: () {
+          _showGallerySortOptions(context, imageProvider);
+        },
+      ),
+      const CommandBarSeparator(),
+      CommandBarButton(
+        icon: const Icon(FluentIcons.refresh),
+        label: const Text('刷新'),
+        onPressed: () {
+          imageProvider.loadImages(refresh: true);
+        },
+      ),
+      const CommandBarSeparator(),
+      CommandBarButton(
+        icon: const Icon(FluentIcons.auto_enhance_on),
+        label: const Text('批量AI标签'),
+        onPressed: imageProvider.images.isEmpty
+            ? null
+            : () {
+                _confirmAndTriggerBatchAITags(
+                  context,
+                  imageProvider,
+                  tagProvider,
+                );
+              },
+      ),
+      const CommandBarSeparator(),
+      CommandBarButton(
+        icon: const Icon(FluentIcons.multi_select),
+        label: const Text('选择'),
+        onPressed: () {
+          selection.enterSelectionMode();
+        },
+      ),
+    ];
+  }
+
+  List<CommandBarItem> _buildSelectionModeItems(
+    BuildContext context,
+    SelectionProvider selection,
+    ImageListProvider imageProvider,
+    TagProvider tagProvider,
+  ) {
+    return [
+      CommandBarButton(
+        icon: const Icon(FluentIcons.clear_selection),
+        label: const Text('全不选'),
+        onPressed: () {
+          selection.clearSelection();
+        },
+      ),
+      CommandBarButton(
+        icon: const Icon(FluentIcons.select_all),
+        label: const Text('全选'),
+        onPressed: () {
+          selection.selectAll(imageProvider.images.map((e) => e.id).toList());
+        },
+      ),
+      const CommandBarSeparator(),
+      CommandBarButton(
+        icon: const Icon(FluentIcons.tag),
+        label: Text('批量添加标签 (${selection.selectedCount})'),
+        onPressed: selection.hasSelection
+            ? () {
+                _showBatchAddTagDialog(
+                  context,
+                  selection,
+                  tagProvider,
+                  imageProvider,
+                );
+              }
+            : null,
+      ),
+      CommandBarButton(
+        icon: const Icon(FluentIcons.delete),
+        label: Text('批量删除 (${selection.selectedCount})'),
+        onPressed: selection.hasSelection
+            ? () {
+                _confirmAndDeleteSelectedImages(
+                  context,
+                  selection,
+                  imageProvider,
+                );
+              }
+            : null,
+      ),
+      const CommandBarSeparator(),
+      CommandBarButton(
+        icon: const Icon(FluentIcons.cancel),
+        label: const Text('退出选择模式'),
+        onPressed: () {
+          selection.exitSelectionMode();
+        },
+      ),
+    ];
+  }
+
+  Future<void> _confirmAndDeleteSelectedImages(
+    BuildContext context,
+    SelectionProvider selection,
+    ImageListProvider imageProvider,
+  ) async {
+    final selectedCount = selection.selectedCount;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => ContentDialog(
+        title: const Text('确认批量删除'),
+        content: Text('将彻底删除选中的 $selectedCount 张图片的源文件及缩略图，且不可恢复。'),
+        actions: [
+          Button(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+          ),
+          FilledButton(
+            child: const Text('确认删除'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    try {
+      final batchService =
+          widget.batchService ??
+          BatchService(baseUrl: context.read<ConfigProvider>().baseUrl);
+      final deleted = await batchService.batchDeleteImages(
+        selection.selectedImageIds.toList(),
+      );
+
+      if (!context.mounted) return;
+      await imageProvider.loadImages(refresh: true);
+
+      if (!context.mounted) return;
+      selection.exitSelectionMode();
+
+      // TODO: Handle partial success when backend supports returning details instead of failing entirely.
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => ContentDialog(
+          title: const Text('删除成功'),
+          content: Text('已删除 $deleted 张图片'),
+          actions: [
+            FilledButton(
+              child: const Text('知道了'),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => ContentDialog(
+          title: const Text('删除失败'),
+          content: Text('批量删除失败：$e'),
+          actions: [
+            FilledButton(
+              child: const Text('关闭'),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildGalleryWorkspace(BuildContext context) {
@@ -273,7 +416,7 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
                       vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: theme.accentColor.withOpacity(0.3),
+                      color: theme.accentColor.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -291,7 +434,10 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
           ),
         ),
         const SizedBox(width: 12),
-        SizedBox(width: 1, child: Container(color: hintColor.withOpacity(0.3))),
+        SizedBox(
+          width: 1,
+          child: Container(color: hintColor.withValues(alpha: 0.3)),
+        ),
         const SizedBox(width: 12),
         // 已选标签 chips
         if (selectedTags.isNotEmpty)
@@ -499,13 +645,14 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
     if (result == null || !context.mounted) return;
 
     try {
-      final batchService = BatchService(
-        baseUrl: context.read<ConfigProvider>().baseUrl,
-      );
+      final batchService =
+          widget.batchService ??
+          BatchService(baseUrl: context.read<ConfigProvider>().baseUrl);
       final updated = await batchService.batchAddTags(selectedIds, result);
       if (!context.mounted) return;
-      selection.clearSelection();
-      imageProvider.loadImages(refresh: true);
+      await imageProvider.loadImages(refresh: true);
+      if (!context.mounted) return;
+      selection.exitSelectionMode();
       await showDialog<void>(
         context: context,
         builder: (ctx) => ContentDialog(

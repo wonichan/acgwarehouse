@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:ui' show Size;
 
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
-import 'package:flutter/material.dart'
-    show Autocomplete, GlobalKey, Material, MaterialApp, TextField;
+import 'package:flutter/material.dart' show Autocomplete, MaterialApp, Widget;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/tag.dart';
 import 'package:gallery/providers/image_provider.dart';
@@ -13,6 +12,7 @@ import 'package:gallery/providers/search_provider.dart';
 import 'package:gallery/providers/selection_provider.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/services/api_service.dart';
+import 'package:gallery/services/batch_service.dart';
 import 'package:gallery/services/search_service.dart';
 import 'package:gallery/services/tag_service.dart';
 import 'package:http/http.dart' as http;
@@ -25,6 +25,46 @@ import 'package:gallery/widgets/fluent_image_card.dart';
 import 'package:gallery/widgets/tag_management/tag_management_workspace.dart';
 
 void main() {
+  Widget buildFluentGalleryTestApp({
+    required http.Client client,
+    ImageListProvider? imageProvider,
+    TagProvider? tagProvider,
+    SelectionProvider? selectionProvider,
+    BatchService? batchService,
+  }) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ImageListProvider>(
+          create: (_) =>
+              imageProvider ??
+              ImageListProvider(
+                ApiService(baseUrl: 'http://localhost:8080', client: client),
+              ),
+        ),
+        ChangeNotifierProvider<TagProvider>(
+          create: (_) =>
+              tagProvider ??
+              TagProvider(
+                TagService(baseUrl: 'http://localhost:8080', client: client),
+              ),
+        ),
+        ChangeNotifierProvider<NavigationProvider>(
+          create: (_) => NavigationProvider(),
+        ),
+        ChangeNotifierProvider<ConfigProvider>(
+          create: (_) =>
+              ConfigProvider(initialBaseUrl: 'http://localhost:8080'),
+        ),
+        ChangeNotifierProvider<SelectionProvider>(
+          create: (_) => selectionProvider ?? SelectionProvider(),
+        ),
+      ],
+      child: fluent.FluentApp(
+        home: FluentGalleryPage(batchService: batchService),
+      ),
+    );
+  }
+
   testWidgets(
     'FluentTagManagementPage hosts TagManagementWorkspace in ScaffoldPage',
     (tester) async {
@@ -76,32 +116,18 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<ImageListProvider>(
-              create: (_) => imageProvider,
-            ),
-            ChangeNotifierProvider<TagProvider>(
-              create: (_) => TagProvider(
-                TagService(
-                  baseUrl: 'http://localhost:8080',
-                  client: mockClient,
-                ),
-              ),
-            ),
-            ChangeNotifierProvider<NavigationProvider>(
-              create: (_) => NavigationProvider(),
-            ),
-          ],
-          child: const fluent.FluentApp(home: FluentGalleryPage()),
+        buildFluentGalleryTestApp(
+          client: mockClient,
+          imageProvider: imageProvider,
         ),
       );
       await tester.pumpAndSettle();
 
       expect(find.byType(fluent.ScaffoldPage), findsOneWidget);
       expect(find.text('图库'), findsWidgets);
-      // The new design uses a tokenized search bar in the header instead of a filter button
-      expect(find.byType(fluent.AutoSuggestBox<Tag>), findsOneWidget);
+      expect(find.text('标签筛选'), findsOneWidget);
+      expect(find.text('未打标签'), findsOneWidget);
+      expect(find.text('选择'), findsOneWidget);
 
       await tester.tap(find.text('排序').first);
       await tester.pumpAndSettle();
@@ -121,7 +147,7 @@ void main() {
     },
   );
 
-  testWidgets('FluentGalleryPage has inline search bar in header', (
+  testWidgets('FluentGalleryPage shows browse-mode toolbar actions', (
     tester,
   ) async {
     final mockClient = MockClient((request) async {
@@ -137,39 +163,14 @@ void main() {
       return http.Response('{}', 200);
     });
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<ImageListProvider>(
-            create: (_) => ImageListProvider(
-              ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
-            ),
-          ),
-          ChangeNotifierProvider<TagProvider>(
-            create: (_) => TagProvider(
-              TagService(baseUrl: 'http://localhost:8080', client: mockClient),
-            ),
-          ),
-          ChangeNotifierProvider<NavigationProvider>(
-            create: (_) => NavigationProvider(),
-          ),
-          ChangeNotifierProvider<ConfigProvider>(
-            create: (_) =>
-                ConfigProvider(initialBaseUrl: 'http://localhost:8080'),
-          ),
-          ChangeNotifierProvider<SelectionProvider>(
-            create: (_) => SelectionProvider(),
-          ),
-        ],
-        child: const fluent.FluentApp(home: FluentGalleryPage()),
-      ),
-    );
+    await tester.pumpWidget(buildFluentGalleryTestApp(client: mockClient));
     await tester.pumpAndSettle();
 
-    // Should find the inline search bar (AutoSuggestBox for tokenized search)
-    expect(find.byType(fluent.AutoSuggestBox<Tag>), findsOneWidget);
-    // Should find TextBox within the autocomplete
-    expect(find.byType(fluent.TextBox), findsWidgets);
+    expect(find.text('排序'), findsOneWidget);
+    expect(find.text('刷新'), findsOneWidget);
+    expect(find.text('批量AI标签'), findsOneWidget);
+    expect(find.text('选择'), findsOneWidget);
+    expect(find.text('全选'), findsNothing);
   });
 
   testWidgets(
@@ -185,32 +186,7 @@ void main() {
         return http.Response('{}', 200);
       });
 
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<ImageListProvider>(
-              create: (_) => ImageListProvider(
-                ApiService(
-                  baseUrl: 'http://localhost:8080',
-                  client: mockClient,
-                ),
-              ),
-            ),
-            ChangeNotifierProvider<TagProvider>(
-              create: (_) => TagProvider(
-                TagService(
-                  baseUrl: 'http://localhost:8080',
-                  client: mockClient,
-                ),
-              ),
-            ),
-            ChangeNotifierProvider<NavigationProvider>(
-              create: (_) => NavigationProvider(),
-            ),
-          ],
-          child: const fluent.FluentApp(home: FluentGalleryPage()),
-        ),
-      );
+      await tester.pumpWidget(buildFluentGalleryTestApp(client: mockClient));
       await tester.pumpAndSettle();
 
       // CommandBar should have Sort button
@@ -255,7 +231,7 @@ void main() {
   testWidgets('FluentGalleryPage exposes batch AI trigger action', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    await tester.binding.setSurfaceSize(const Size(2200, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     Map<String, dynamic>? batchRequestBody;
@@ -336,6 +312,9 @@ void main() {
   testWidgets('FluentGalleryPage opens in-window detail on image double tap', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final mockClient = MockClient((request) async {
       if (request.url.path.endsWith('/api/v1/images')) {
         return http.Response(
@@ -361,21 +340,9 @@ void main() {
     await imageProvider.loadImages(refresh: true);
 
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<ImageListProvider>(
-            create: (_) => imageProvider,
-          ),
-          ChangeNotifierProvider<TagProvider>(
-            create: (_) => TagProvider(
-              TagService(baseUrl: 'http://localhost:8080', client: mockClient),
-            ),
-          ),
-          ChangeNotifierProvider<NavigationProvider>(
-            create: (_) => NavigationProvider(),
-          ),
-        ],
-        child: const fluent.FluentApp(home: FluentGalleryPage()),
+      buildFluentGalleryTestApp(
+        client: mockClient,
+        imageProvider: imageProvider,
       ),
     );
     await tester.pump();
@@ -383,13 +350,376 @@ void main() {
 
     expect(find.byType(FluentImageCard), findsOneWidget);
 
-    await tester.tap(find.byType(FluentImageCard));
+    await tester.tap(find.byType(FluentImageCard), warnIfMissed: false);
     await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(find.byType(FluentImageCard));
+    await tester.tap(find.byType(FluentImageCard), warnIfMissed: false);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('图片详情'), findsOneWidget);
+  });
+
+  testWidgets('FluentGalleryPage enters selection mode and switches toolbar', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(2200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        return http.Response(
+          '{"images":[{"id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","phash":123,"thumbnail_small_url":"http://example.com/thumb.png","thumbnail_large_url":"http://example.com/large.png","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"total":1,"has_more":false}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response('{"tags":[]}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
+    await imageProvider.loadImages(refresh: true);
+
+    await tester.pumpWidget(
+      buildFluentGalleryTestApp(
+        client: mockClient,
+        imageProvider: imageProvider,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('选择'), findsOneWidget);
+    expect(find.text('批量AI标签'), findsOneWidget);
+
+    await tester.tap(find.text('选择'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('批量AI标签'), findsNothing);
+    expect(find.text('全不选'), findsOneWidget);
+    expect(find.text('全选'), findsOneWidget);
+    expect(find.text('批量添加标签 (0)'), findsOneWidget);
+    expect(find.text('批量删除 (0)'), findsOneWidget);
+    expect(find.text('退出选择模式'), findsOneWidget);
+  });
+
+  testWidgets('全不选 keeps selection mode active and disables batch actions', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        return http.Response(
+          '{"images":[{"id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","phash":123,"thumbnail_small_url":"http://example.com/thumb.png","thumbnail_large_url":"http://example.com/large.png","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"total":1,"has_more":false}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response('{"tags":[]}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
+    await imageProvider.loadImages(refresh: true);
+    final selectionProvider = SelectionProvider()
+      ..enterSelectionMode()
+      ..toggleSelection(1);
+
+    await tester.pumpWidget(
+      buildFluentGalleryTestApp(
+        client: mockClient,
+        imageProvider: imageProvider,
+        selectionProvider: selectionProvider,
+        batchService: BatchService(
+          client: mockClient,
+          baseUrl: 'http://localhost:8080',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.text('全不选'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(selectionProvider.isSelectionMode, isTrue);
+    expect(selectionProvider.selectedCount, 0);
+    expect(find.text('全选'), findsOneWidget);
+    expect(find.text('退出选择模式'), findsOneWidget);
+    expect(find.text('批量添加标签 (0)'), findsOneWidget);
+    expect(find.text('批量删除 (0)'), findsOneWidget);
+  });
+
+  testWidgets('退出选择模式 clears selection and restores browse toolbar', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(2200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        return http.Response(
+          '{"images":[{"id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","phash":123,"thumbnail_small_url":"http://example.com/thumb.png","thumbnail_large_url":"http://example.com/large.png","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"total":1,"has_more":false}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response('{"tags":[]}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
+    await imageProvider.loadImages(refresh: true);
+    final selectionProvider = SelectionProvider()
+      ..enterSelectionMode()
+      ..toggleSelection(1);
+
+    await tester.pumpWidget(
+      buildFluentGalleryTestApp(
+        client: mockClient,
+        imageProvider: imageProvider,
+        selectionProvider: selectionProvider,
+        batchService: BatchService(
+          client: mockClient,
+          baseUrl: 'http://localhost:8080',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.text('退出选择模式'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(selectionProvider.isSelectionMode, isFalse);
+    expect(selectionProvider.selectedCount, 0);
+    expect(find.text('选择'), findsOneWidget);
+    expect(find.text('批量AI标签'), findsOneWidget);
+    expect(find.text('全选'), findsNothing);
+  });
+
+  testWidgets('batch delete confirms, refreshes, and exits selection mode', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(2200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Map<String, dynamic>? deleteBody;
+    var imageRequestCount = 0;
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        imageRequestCount += 1;
+        return http.Response(
+          '{"images":[{"id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","phash":123,"thumbnail_small_url":"http://example.com/thumb.png","thumbnail_large_url":"http://example.com/large.png","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"total":1,"has_more":false}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response('{"tags":[]}', 200);
+      }
+      if (request.url.path.endsWith('/api/v1/batch/images/delete')) {
+        deleteBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response('{"images_deleted":1}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
+    await imageProvider.loadImages(refresh: true);
+    final selectionProvider = SelectionProvider()
+      ..enterSelectionMode()
+      ..toggleSelection(1);
+
+    await tester.pumpWidget(
+      buildFluentGalleryTestApp(
+        client: mockClient,
+        imageProvider: imageProvider,
+        selectionProvider: selectionProvider,
+        batchService: BatchService(
+          client: mockClient,
+          baseUrl: 'http://localhost:8080',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.text('批量删除 (1)'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('确认批量删除'), findsOneWidget);
+    expect(find.textContaining('1 张图片'), findsOneWidget);
+    expect(find.text('取消'), findsOneWidget);
+    expect(find.text('确认删除'), findsOneWidget);
+
+    await tester.tap(find.text('确认删除'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(deleteBody, isNotNull);
+    expect(deleteBody!['image_ids'], equals([1]));
+    expect(imageRequestCount, greaterThanOrEqualTo(2));
+    expect(selectionProvider.isSelectionMode, isFalse);
+    expect(find.text('删除成功'), findsOneWidget);
+
+    await tester.tap(find.text('知道了'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('选择'), findsOneWidget);
+    expect(find.text('批量AI标签'), findsOneWidget);
+  });
+
+  testWidgets('batch add success refreshes and exits selection mode', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(2200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Map<String, dynamic>? addBody;
+    var imageRequestCount = 0;
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        imageRequestCount += 1;
+        return http.Response(
+          '{"images":[{"id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","phash":123,"thumbnail_small_url":"http://example.com/thumb.png","thumbnail_large_url":"http://example.com/large.png","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"total":1,"has_more":false}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response(
+          '{"tags":[{"id":101,"preferred_label":"tag1","slug":"tag1","review_state":"confirmed","trust_score":0.9,"usage_count":10,"created_at":"2024-01-01T00:00:00Z"}]}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/batch/tags/add')) {
+        addBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response('{"images_updated":1}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
+    await imageProvider.loadImages(refresh: true);
+    final selectionProvider = SelectionProvider()
+      ..enterSelectionMode()
+      ..toggleSelection(1);
+
+    await tester.pumpWidget(
+      buildFluentGalleryTestApp(
+        client: mockClient,
+        imageProvider: imageProvider,
+        selectionProvider: selectionProvider,
+        batchService: BatchService(
+          client: mockClient,
+          baseUrl: 'http://localhost:8080',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.text('批量添加标签 (1)'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('批量添加标签'), findsOneWidget);
+    await tester.tap(find.text('tag1'));
+    await tester.pump();
+    await tester.tap(find.text('确认添加'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(addBody, isNotNull);
+    expect(addBody!['image_ids'], equals([1]));
+    expect(addBody!['tag_ids'], equals([101]));
+    expect(imageRequestCount, greaterThanOrEqualTo(2));
+    expect(selectionProvider.isSelectionMode, isFalse);
+    expect(find.text('批量添加成功'), findsOneWidget);
+
+    await tester.tap(find.text('知道了'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('选择'), findsOneWidget);
+  });
+
+  testWidgets('batch add failure preserves selection mode', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(2200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        return http.Response(
+          '{"images":[{"id":1,"path":"C:/images/alpha.png","filename":"alpha.png","source_root":"C:/images","file_size":2048,"width":800,"height":600,"format":"png","phash":123,"thumbnail_small_url":"http://example.com/thumb.png","thumbnail_large_url":"http://example.com/large.png","created_at":"2026-04-05T00:00:00.000Z","updated_at":"2026-04-05T00:00:00.000Z"}],"total":1,"has_more":false}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response(
+          '{"tags":[{"id":101,"preferred_label":"tag1","slug":"tag1","review_state":"confirmed","trust_score":0.9,"usage_count":10,"created_at":"2024-01-01T00:00:00Z"}]}',
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/api/v1/batch/tags/add')) {
+        return http.Response('oops', 500);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
+    await imageProvider.loadImages(refresh: true);
+    final selectionProvider = SelectionProvider()
+      ..enterSelectionMode()
+      ..toggleSelection(1);
+
+    await tester.pumpWidget(
+      buildFluentGalleryTestApp(
+        client: mockClient,
+        imageProvider: imageProvider,
+        selectionProvider: selectionProvider,
+        batchService: BatchService(
+          client: mockClient,
+          baseUrl: 'http://localhost:8080',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.text('批量添加标签 (1)'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('tag1'));
+    await tester.pump();
+    await tester.tap(find.text('确认添加'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('批量添加失败'), findsOneWidget);
+    expect(selectionProvider.isSelectionMode, isTrue);
+    expect(selectionProvider.selectedCount, 1);
   });
 
   testWidgets('GalleryScreen renders inline search bar and untagged toggle', (

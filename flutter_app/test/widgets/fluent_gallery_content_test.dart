@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/image.dart';
 import 'package:gallery/widgets/fluent_image_card.dart';
 import 'package:gallery/providers/image_provider.dart';
+import 'package:gallery/providers/selection_provider.dart';
 import 'package:gallery/services/api_service.dart';
 import 'package:gallery/services/collection_service.dart';
 import 'package:gallery/widgets/justified_image_grid.dart';
@@ -102,11 +103,32 @@ void main() {
         initialHasMore: true,
       );
 
+      final apiService = ApiService(
+        baseUrl: 'http://localhost:8080',
+        client: MockClient((request) async => http.Response('{}', 200)),
+      );
+      final collectionService = CollectionService(
+        baseUrl: 'http://localhost:8080',
+        client: MockClient(
+          (request) async => http.Response('{"collections":[]}', 200),
+        ),
+      );
+
       await tester.pumpWidget(
-        ChangeNotifierProvider<ImageListProvider>.value(
-          value: provider,
-          child: const fluent.FluentApp(
-            home: SizedBox.expand(child: FluentGalleryContent()),
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ImageListProvider>.value(value: provider),
+            ChangeNotifierProvider<SelectionProvider>(
+              create: (_) => SelectionProvider(),
+            ),
+          ],
+          child: fluent.FluentApp(
+            home: SizedBox.expand(
+              child: FluentGalleryContent(
+                apiService: apiService,
+                collectionService: collectionService,
+              ),
+            ),
           ),
         ),
       );
@@ -123,11 +145,32 @@ void main() {
       initialHasMore: false,
     );
 
+    final apiService = ApiService(
+      baseUrl: 'http://localhost:8080',
+      client: MockClient((request) async => http.Response('{}', 200)),
+    );
+    final collectionService = CollectionService(
+      baseUrl: 'http://localhost:8080',
+      client: MockClient(
+        (request) async => http.Response('{"collections":[]}', 200),
+      ),
+    );
+
     await tester.pumpWidget(
-      ChangeNotifierProvider<ImageListProvider>.value(
-        value: provider,
-        child: const fluent.FluentApp(
-          home: SizedBox.expand(child: FluentGalleryContent()),
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ImageListProvider>.value(value: provider),
+          ChangeNotifierProvider<SelectionProvider>(
+            create: (_) => SelectionProvider(),
+          ),
+        ],
+        child: fluent.FluentApp(
+          home: SizedBox.expand(
+            child: FluentGalleryContent(
+              apiService: apiService,
+              collectionService: collectionService,
+            ),
+          ),
         ),
       ),
     );
@@ -137,40 +180,6 @@ void main() {
     // The UI now uses JustifiedImageGrid with ListView.builder
     expect(find.byType(JustifiedImageGrid), findsOneWidget);
     expect(find.byType(ListView), findsOneWidget);
-  });
-
-  testWidgets('triggers onImageDoubleTap on double click', (tester) async {
-    final provider = _TrackingImageListProvider(
-      initialImages: [buildImage(1)],
-      initialHasMore: false,
-    );
-
-    bool doubleTapped = false;
-
-    await tester.pumpWidget(
-      ChangeNotifierProvider<ImageListProvider>.value(
-        value: provider,
-        child: fluent.FluentApp(
-          home: fluent.ScaffoldPage(
-            content: Material(
-              child: FluentGalleryContent(
-                onImageDoubleTap: (image) => doubleTapped = true,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final card = find.byType(FluentImageCard).first;
-    // double tap
-    await tester.tap(card);
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(card);
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(doubleTapped, isTrue);
   });
 
   testWidgets('shows context menu and opens collection dialog on right click', (
@@ -193,8 +202,13 @@ void main() {
     );
 
     await tester.pumpWidget(
-      ChangeNotifierProvider<ImageListProvider>.value(
-        value: provider,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ImageListProvider>.value(value: provider),
+          ChangeNotifierProvider<SelectionProvider>(
+            create: (_) => SelectionProvider(),
+          ),
+        ],
         child: fluent.FluentApp(
           home: fluent.ScaffoldPage(
             content: Material(
@@ -249,8 +263,13 @@ void main() {
       );
 
       await tester.pumpWidget(
-        ChangeNotifierProvider<ImageListProvider>.value(
-          value: provider,
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ImageListProvider>.value(value: provider),
+            ChangeNotifierProvider<SelectionProvider>(
+              create: (_) => SelectionProvider(),
+            ),
+          ],
           child: fluent.FluentApp(
             home: fluent.ScaffoldPage(
               content: Material(
@@ -281,4 +300,104 @@ void main() {
       expect(find.text('图片已彻底删除'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'clicking a card in selection mode toggles selection instead of opening detail',
+    (tester) async {
+      final provider = _MutableImageListProvider(
+        initialImages: [buildImage(1)],
+      );
+      final selectionProvider = SelectionProvider()..enterSelectionMode();
+      final apiService = ApiService(
+        baseUrl: 'http://localhost:8080',
+        client: MockClient((request) async => http.Response('{}', 200)),
+      );
+      final collectionService = CollectionService(
+        baseUrl: 'http://localhost:8080',
+        client: MockClient(
+          (request) async => http.Response('{"collections":[]}', 200),
+        ),
+      );
+
+      bool opened = false;
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ImageListProvider>.value(value: provider),
+            ChangeNotifierProvider<SelectionProvider>.value(
+              value: selectionProvider,
+            ),
+          ],
+          child: fluent.FluentApp(
+            home: fluent.ScaffoldPage(
+              content: Material(
+                child: FluentGalleryContent(
+                  apiService: apiService,
+                  collectionService: collectionService,
+                  onImageTap: (_) => opened = true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FluentImageCard));
+      await tester.pump();
+
+      expect(opened, isFalse);
+      expect(selectionProvider.isSelected(1), isTrue);
+    },
+  );
+
+  testWidgets('right click still opens context menu in selection mode', (
+    tester,
+  ) async {
+    final provider = _MutableImageListProvider(initialImages: [buildImage(1)]);
+    final selectionProvider = SelectionProvider()..enterSelectionMode();
+    final apiService = ApiService(
+      baseUrl: 'http://localhost:8080',
+      client: MockClient((request) async => http.Response('{}', 200)),
+    );
+    final collectionService = CollectionService(
+      baseUrl: 'http://localhost:8080',
+      client: MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/api/v1/collections')) {
+          return http.Response('{"collections":[]}', 200);
+        }
+        return http.Response('{}', 200);
+      }),
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ImageListProvider>.value(value: provider),
+          ChangeNotifierProvider<SelectionProvider>.value(
+            value: selectionProvider,
+          ),
+        ],
+        child: fluent.FluentApp(
+          home: fluent.ScaffoldPage(
+            content: Material(
+              child: FluentGalleryContent(
+                apiService: apiService,
+                collectionService: collectionService,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FluentImageCard), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('打开源文件'), findsOneWidget);
+    expect(find.text('删除源文件及缩略图'), findsOneWidget);
+  });
 }
