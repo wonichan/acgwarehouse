@@ -13,11 +13,12 @@ import (
 )
 
 type openAICompatibleRequest struct {
-	Model       string                    `json:"model"`
-	Messages    []openAICompatibleMessage `json:"messages"`
-	Temperature float64                   `json:"temperature,omitempty"`
-	TopP        float64                   `json:"top_p,omitempty"`
-	MaxTokens   int                       `json:"max_tokens,omitempty"`
+	Model           string                    `json:"model"`
+	Messages        []openAICompatibleMessage `json:"messages"`
+	Temperature     float64                   `json:"temperature,omitempty"`
+	TopP            float64                   `json:"top_p,omitempty"`
+	MaxTokens       int                       `json:"max_tokens,omitempty"`
+	ReasoningEffort string                    `json:"reasoning_effort,omitempty"`
 }
 
 type openAICompatibleMessage struct {
@@ -54,9 +55,11 @@ func generateOpenAICompatibleTags(ctx context.Context, httpClient *http.Client, 
 	}
 
 	req := openAICompatibleRequest{
-		Model:       model,
-		Temperature: 0.2,
-		MaxTokens:   1000,
+		Model:           model,
+		Temperature:     0.25,
+		MaxTokens:       10000,
+		TopP:            0.7,
+		ReasoningEffort: "high",
 		Messages: []openAICompatibleMessage{
 			{
 				Role: "user",
