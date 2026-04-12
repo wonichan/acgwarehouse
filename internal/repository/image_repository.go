@@ -41,6 +41,8 @@ type ImageRepository interface {
 	CountUntagged(ctx context.Context) (int64, error)
 	FindPendingTags(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountPendingTags(ctx context.Context) (int64, error)
+	FindPendingTagsByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
+	CountPendingTagsByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
 	FindImagesWithoutAITags(ctx context.Context, limit int) ([]domain.Image, error)
 	// FindBackfillCandidates returns images matching the filter that are eligible for AI backfill:
 	// no AI source tags and no active (pending/queued/running) AI tasks.
@@ -502,6 +504,109 @@ func (r *sqliteImageRepository) CountPendingTags(ctx context.Context) (int64, er
 			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
 		)
 	`).Scan(&count)
+	return count, err
+}
+
+// FindPendingTagsByTagIDs returns images that have at least one pending tag association
+// AND have ALL the specified tag IDs (AND semantics).
+func (r *sqliteImageRepository) FindPendingTagsByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error) {
+	if len(tagIDs) == 0 {
+		return []domain.Image{}, nil
+	}
+
+	validSortFields := map[string]string{
+		"created_at": "i.created_at",
+		"filename":   "i.filename",
+		"file_size":  "i.file_size",
+		"id":         "i.id",
+	}
+
+	sortColumn := validSortFields[sortBy]
+	if sortColumn == "" {
+		sortColumn = "i.id"
+	}
+
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+
+	placeholders := make([]string, len(tagIDs))
+	args := make([]any, 0, len(tagIDs)+2)
+	for i, id := range tagIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM images i
+		LEFT JOIN collection_images ci ON ci.image_id = i.id
+		WHERE EXISTS (
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
+		)
+		AND i.id IN (
+			SELECT it2.image_id
+			FROM image_tags it2
+			WHERE it2.tag_id IN (%s) AND it2.review_state != 'rejected'
+			GROUP BY it2.image_id
+			HAVING COUNT(DISTINCT it2.tag_id) = ?
+		)
+		ORDER BY %s %s, i.id %s
+		LIMIT ? OFFSET ?
+	`, imageSelectColumns, strings.Join(placeholders, ", "), sortColumn, sortDir, sortDir)
+
+	args = append(args, int64(len(tagIDs)), int64(limit), int64(offset))
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	images := make([]domain.Image, 0)
+	for rows.Next() {
+		var image domain.Image
+		if err := scanImage(rows, &image); err != nil {
+			return nil, err
+		}
+		images = append(images, image)
+	}
+
+	return images, rows.Err()
+}
+
+// CountPendingTagsByTagIDs returns the count of images that have at least one pending tag association
+// AND have ALL the specified tag IDs (AND semantics).
+func (r *sqliteImageRepository) CountPendingTagsByTagIDs(ctx context.Context, tagIDs []int64) (int64, error) {
+	if len(tagIDs) == 0 {
+		return 0, nil
+	}
+
+	placeholders := make([]string, len(tagIDs))
+	args := make([]any, 0, len(tagIDs))
+	for i, id := range tagIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	var count int64
+	query := fmt.Sprintf(`
+		SELECT COUNT(i.id)
+		FROM images i
+		WHERE EXISTS (
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
+		)
+		AND i.id IN (
+			SELECT it2.image_id
+			FROM image_tags it2
+			WHERE it2.tag_id IN (%s) AND it2.review_state != 'rejected'
+			GROUP BY it2.image_id
+			HAVING COUNT(DISTINCT it2.tag_id) = ?
+		)
+	`, strings.Join(placeholders, ", "))
+
+	args = append(args, int64(len(tagIDs)))
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
 }
 

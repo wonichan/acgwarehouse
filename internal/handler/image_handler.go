@@ -138,10 +138,6 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "has_pending_tags=true is incompatible with has_tags=false"})
 		return
 	}
-	if hasPendingTags != nil && *hasPendingTags && tagIDsStr != "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "has_pending_tags=true is incompatible with tag_ids parameter"})
-		return
-	}
 
 	var images []any
 	var total int64
@@ -160,6 +156,25 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 			return
 		}
 		for _, img := range untaggedImages {
+			images = append(images, rewriteImageForRequest(c.Request, img))
+		}
+	} else if hasPendingTags != nil && *hasPendingTags && tagIDsStr != "" {
+		tagIDs, err := parseTagIDs(tagIDsStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tag_ids format"})
+			return
+		}
+		pendingImages, err := h.imageRepo.FindPendingTagsByTagIDs(ctx, tagIDs, limit, offset, sortBy, sortDir)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		total, err = h.imageRepo.CountPendingTagsByTagIDs(ctx, tagIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, img := range pendingImages {
 			images = append(images, rewriteImageForRequest(c.Request, img))
 		}
 	} else if hasPendingTags != nil && *hasPendingTags {
@@ -362,10 +377,6 @@ func (h *ImageHandler) viewerWindowGallery(c *gin.Context, req viewerWindowReque
 			respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
 			return
 		}
-		if len(req.Snapshot.TagIDs) > 0 {
-			respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
-			return
-		}
 	}
 
 	var (
@@ -377,6 +388,8 @@ func (h *ImageHandler) viewerWindowGallery(c *gin.Context, req viewerWindowReque
 	switch {
 	case req.Snapshot.HasTags != nil && !*req.Snapshot.HasTags:
 		total, err = h.imageRepo.CountUntagged(ctx)
+	case req.Snapshot.HasPendingTags != nil && *req.Snapshot.HasPendingTags && len(req.Snapshot.TagIDs) > 0:
+		total, err = h.imageRepo.CountPendingTagsByTagIDs(ctx, req.Snapshot.TagIDs)
 	case req.Snapshot.HasPendingTags != nil && *req.Snapshot.HasPendingTags:
 		total, err = h.imageRepo.CountPendingTags(ctx)
 	case len(req.Snapshot.TagIDs) > 0:
@@ -402,6 +415,15 @@ func (h *ImageHandler) viewerWindowGallery(c *gin.Context, req viewerWindowReque
 			return
 		}
 		for _, image := range untagged {
+			items = append(items, image)
+		}
+	case req.Snapshot.HasPendingTags != nil && *req.Snapshot.HasPendingTags && len(req.Snapshot.TagIDs) > 0:
+		pending, err := h.imageRepo.FindPendingTagsByTagIDs(ctx, req.Snapshot.TagIDs, limit, windowStart, sortBy, sortDir)
+		if err != nil {
+			respondViewerServerError(c)
+			return
+		}
+		for _, image := range pending {
 			items = append(items, image)
 		}
 	case req.Snapshot.HasPendingTags != nil && *req.Snapshot.HasPendingTags:

@@ -344,6 +344,12 @@ func (m *mockBackfillImageRepo) FindPendingTags(_ context.Context, _, _ int, _, 
 	return nil, nil
 }
 func (m *mockBackfillImageRepo) CountPendingTags(_ context.Context) (int64, error) { return 0, nil }
+func (m *mockBackfillImageRepo) FindPendingTagsByTagIDs(_ context.Context, _ []int64, _, _ int, _, _ string) ([]domain.Image, error) {
+	return nil, nil
+}
+func (m *mockBackfillImageRepo) CountPendingTagsByTagIDs(_ context.Context, _ []int64) (int64, error) {
+	return 0, nil
+}
 func (m *mockBackfillImageRepo) FindImagesWithoutAITags(_ context.Context, _ int) ([]domain.Image, error) {
 	return nil, nil
 }

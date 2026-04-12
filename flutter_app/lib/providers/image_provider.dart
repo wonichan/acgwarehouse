@@ -117,9 +117,9 @@ class ImageListProvider extends ChangeNotifier {
   Future<void> setTagFilter(List<int> tagIds) async {
     debugPrint('setTagFilter 被调用: tagIds=$tagIds');
     _selectedTagIds = List.unmodifiable(tagIds);
-    // Clear hasTagsFilter when setting tag filter (mutually exclusive)
+    // Clear hasTagsFilter when setting tag filter (mutually exclusive with untagged).
+    // Keep hasPendingTagsFilter so tag selection can be combined with pending tags filter.
     _hasTagsFilter = null;
-    _hasPendingTagsFilter = null;
     // Reset pagination when filter changes
     _currentOffset = 0;
     _hasMore = true;
@@ -153,9 +153,9 @@ class ImageListProvider extends ChangeNotifier {
   Future<void> setHasPendingTagsFilter(bool? hasPendingTags) async {
     debugPrint('setHasPendingTagsFilter 被调用: hasPendingTags=$hasPendingTags');
     _hasPendingTagsFilter = hasPendingTags;
-    // Clear other filters when setting this (mutually exclusive)
+    // Only clear hasTagsFilter (untagged) - mutually exclusive with pending tags.
+    // Keep selectedTagIds so pending tags can be combined with specific tag filters.
     if (hasPendingTags != null) {
-      _selectedTagIds = [];
       _hasTagsFilter = null;
     }
     _currentOffset = 0;

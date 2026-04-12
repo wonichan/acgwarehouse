@@ -708,7 +708,7 @@ func TestImageHandlerListImagesHasPendingTagsTrueWithHasTagsFalseReturnsError(t 
 	}
 }
 
-func TestImageHandlerListImagesHasPendingTagsTrueWithTagIDsReturnsError(t *testing.T) {
+func TestImageHandlerListImagesHasPendingTagsTrueWithTagIDsReturnsResults(t *testing.T) {
 	t.Parallel()
 
 	router, repos := newImageHandlerTestRouter(t)
@@ -722,15 +722,15 @@ func TestImageHandlerListImagesHasPendingTagsTrueWithTagIDsReturnsError(t *testi
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_pending_tags=true&tag_ids="+itoa(tag.ID), nil)
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
 	var resp map[string]any
 	decodeJSONResponse(t, w, &resp)
 
-	if resp["error"] == nil {
-		t.Fatal("response missing 'error' field")
+	if _, ok := resp["total"]; !ok {
+		t.Fatal("response missing 'total' field")
 	}
 }
 
