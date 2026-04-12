@@ -41,12 +41,13 @@ type viewerWindowRequest struct {
 }
 
 type viewerWindowSnapshot struct {
-	SortBy    string  `json:"sort_by"`
-	SortDir   string  `json:"sort_dir"`
-	TagIDs    []int64 `json:"tag_ids"`
-	HasTags   *bool   `json:"has_tags"`
-	Query     string  `json:"q"`
-	SortOrder string  `json:"sort_order"`
+	SortBy         string  `json:"sort_by"`
+	SortDir        string  `json:"sort_dir"`
+	TagIDs         []int64 `json:"tag_ids"`
+	HasTags        *bool   `json:"has_tags"`
+	HasPendingTags *bool   `json:"has_pending_tags"`
+	Query          string  `json:"q"`
+	SortOrder      string  `json:"sort_order"`
 }
 
 func NewImageHandler(imageRepo repository.ImageRepository, tagRepo repository.TagRepository, imageTagRepo repository.ImageTagRepository, depsOpt ...any) *ImageHandler {
@@ -119,6 +120,13 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 		hasTags = &val
 	}
 
+	hasPendingTagsStr := strings.TrimSpace(c.Query("has_pending_tags"))
+	var hasPendingTags *bool
+	if hasPendingTagsStr != "" {
+		val := strings.ToLower(hasPendingTagsStr) == "true"
+		hasPendingTags = &val
+	}
+
 	tagIDsStr := strings.TrimSpace(c.Query("tag_ids"))
 
 	// 验证互斥性：has_tags=false 与 tag_ids 不能同时使用
@@ -126,8 +134,16 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "has_tags=false is incompatible with tag_ids parameter"})
 		return
 	}
+	if hasPendingTags != nil && *hasPendingTags && hasTags != nil && !*hasTags {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "has_pending_tags=true is incompatible with has_tags=false"})
+		return
+	}
+	if hasPendingTags != nil && *hasPendingTags && tagIDsStr != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "has_pending_tags=true is incompatible with tag_ids parameter"})
+		return
+	}
 
-	var images []interface{}
+	var images []any
 	var total int64
 
 	// 根据 has_tags 参数决定查询方式
@@ -144,6 +160,20 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 			return
 		}
 		for _, img := range untaggedImages {
+			images = append(images, rewriteImageForRequest(c.Request, img))
+		}
+	} else if hasPendingTags != nil && *hasPendingTags {
+		pendingImages, err := h.imageRepo.FindPendingTags(ctx, limit, offset, sortBy, sortDir)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		total, err = h.imageRepo.CountPendingTags(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, img := range pendingImages {
 			images = append(images, rewriteImageForRequest(c.Request, img))
 		}
 	} else if tagIDsStr != "" {
@@ -327,16 +357,28 @@ func (h *ImageHandler) viewerWindowGallery(c *gin.Context, req viewerWindowReque
 		respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
 		return
 	}
+	if req.Snapshot.HasPendingTags != nil && *req.Snapshot.HasPendingTags {
+		if req.Snapshot.HasTags != nil && !*req.Snapshot.HasTags {
+			respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
+			return
+		}
+		if len(req.Snapshot.TagIDs) > 0 {
+			respondViewerRequestError(c, "selected_index is out of range for the supplied snapshot")
+			return
+		}
+	}
 
 	var (
 		total int64
-		items []interface{}
+		items []any
 		err   error
 	)
 
 	switch {
 	case req.Snapshot.HasTags != nil && !*req.Snapshot.HasTags:
 		total, err = h.imageRepo.CountUntagged(ctx)
+	case req.Snapshot.HasPendingTags != nil && *req.Snapshot.HasPendingTags:
+		total, err = h.imageRepo.CountPendingTags(ctx)
 	case len(req.Snapshot.TagIDs) > 0:
 		total, err = h.imageRepo.CountByTagIDs(ctx, req.Snapshot.TagIDs)
 	default:
@@ -360,6 +402,15 @@ func (h *ImageHandler) viewerWindowGallery(c *gin.Context, req viewerWindowReque
 			return
 		}
 		for _, image := range untagged {
+			items = append(items, image)
+		}
+	case req.Snapshot.HasPendingTags != nil && *req.Snapshot.HasPendingTags:
+		pending, err := h.imageRepo.FindPendingTags(ctx, limit, windowStart, sortBy, sortDir)
+		if err != nil {
+			respondViewerServerError(c)
+			return
+		}
+		for _, image := range pending {
 			items = append(items, image)
 		}
 	case len(req.Snapshot.TagIDs) > 0:
@@ -427,7 +478,7 @@ func (h *ImageHandler) viewerWindowSearch(c *gin.Context, req viewerWindowReques
 		respondViewerSnapshotDrift(c)
 		return
 	}
-	items := make([]interface{}, 0, len(result.Images))
+	items := make([]any, 0, len(result.Images))
 	for _, image := range result.Images {
 		items = append(items, image)
 	}
@@ -447,20 +498,16 @@ func normalizeGallerySort(sortBy, sortDir string) (string, string) {
 
 func serviceViewerWindowStart(selectedIndex, limit, total int) int {
 	start := selectedIndex - limit/2
-	if start < 0 {
-		start = 0
-	}
+	start = max(start, 0)
 	maxStart := total - limit
-	if maxStart < 0 {
-		maxStart = 0
-	}
+	maxStart = max(maxStart, 0)
 	if start > maxStart {
 		start = maxStart
 	}
 	return start
 }
 
-func respondViewerWindow(c *gin.Context, items []interface{}, windowStart, selectedIndex, selectedIndexInWindow int, total int64) {
+func respondViewerWindow(c *gin.Context, items []any, windowStart, selectedIndex, selectedIndexInWindow int, total int64) {
 	c.JSON(http.StatusOK, gin.H{
 		"items":                    rewriteViewerItemsForRequest(c.Request, items),
 		"window_start_index":       windowStart,

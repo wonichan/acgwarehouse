@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/tag.dart';
 import '../services/tag_service.dart';
+import 'tag_picker_results_panel.dart';
 
 /// 编辑标签对话框
 ///
@@ -23,25 +24,51 @@ class EditTagDialog extends StatefulWidget {
 }
 
 class _EditTagDialogState extends State<EditTagDialog> {
+  static const int _pageSize = 20;
+
   final _controller = TextEditingController();
-  List<Tag> _suggestions = [];
+  final ScrollController _scrollController = ScrollController();
+  List<Tag> _defaultTags = [];
+  List<Tag> _searchResults = [];
   bool _loading = false;
+  bool _loadingMore = false;
+  bool _isSearchMode = false;
+  bool _hasMoreDefaultTags = true;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(() => setState(() {}));
+    _scrollController.addListener(_handleScroll);
+    _loadDefaultTags();
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handleScroll() {
+    if (_isSearchMode || _loading || _loadingMore || !_hasMoreDefaultTags) {
+      return;
+    }
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 120) {
+      _loadDefaultTags(loadMore: true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final displayedTags = _isSearchMode ? _searchResults : _defaultTags;
+    final emptyMessage = _isSearchMode ? '未找到匹配标签' : '暂无可选标签';
 
     return AlertDialog(
       backgroundColor: colorScheme.surfaceContainerHigh,
@@ -68,41 +95,20 @@ class _EditTagDialogState extends State<EditTagDialog> {
               ),
               onChanged: _searchTags,
             ),
-            // 加载指示器
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            // 建议列表
-            if (_suggestions.isNotEmpty)
-              Flexible(
-                child: Container(
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    border: Border.all(color: colorScheme.outlineVariant),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  margin: const EdgeInsets.only(top: 8),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _suggestions.length,
-                    itemBuilder: (context, index) {
-                      final tag = _suggestions[index];
-                      return ListTile(
-                        dense: true,
-                        title: Text(tag.preferredLabel),
-                        subtitle: tag.primaryCategory != null
-                            ? Text(tag.primaryCategory!)
-                            : null,
-                        trailing: Text('${tag.usageCount}'),
-                        onTap: () => _selectTag(tag),
-                      );
-                    },
-                  ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: TagPickerResultsPanel(
+                  tags: displayedTags,
+                  isLoading: _loading,
+                  isLoadingMore: _loadingMore,
+                  emptyMessage: emptyMessage,
+                  scrollController: _isSearchMode ? null : _scrollController,
+                  onTagTap: _selectTag,
                 ),
               ),
+            ),
           ],
         ),
       ),
@@ -122,29 +128,80 @@ class _EditTagDialogState extends State<EditTagDialog> {
   }
 
   Future<void> _searchTags(String query) async {
+    final trimmed = query.trim();
     setState(() {
-      // 当输入变化时，清空建议并触发重建以更新按钮状态
-      if (query.isEmpty) {
-        _suggestions = [];
+      if (trimmed.isEmpty) {
+        _isSearchMode = false;
+        _searchResults = [];
       }
     });
 
-    if (query.isEmpty) {
+    if (trimmed.isEmpty) {
       return;
     }
 
-    setState(() => _loading = true);
+    setState(() {
+      _isSearchMode = true;
+      _loading = true;
+    });
     try {
-      final tags = await widget.tagService.searchTags(query);
+      final tags = await widget.tagService.searchTags(trimmed);
       if (mounted) {
         setState(() {
-          _suggestions = tags;
+          _searchResults = tags;
           _loading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _loadDefaultTags({bool loadMore = false}) async {
+    if (_loading || _loadingMore) {
+      return;
+    }
+    if (loadMore && !_hasMoreDefaultTags) {
+      return;
+    }
+
+    setState(() {
+      if (loadMore) {
+        _loadingMore = true;
+      } else {
+        _loading = true;
+      }
+    });
+
+    try {
+      final tags = await widget.tagService.fetchTags(
+        limit: _pageSize,
+        offset: loadMore ? _defaultTags.length : 0,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        if (loadMore) {
+          _defaultTags = [..._defaultTags, ...tags];
+        } else {
+          _defaultTags = tags;
+        }
+        _hasMoreDefaultTags = tags.length == _pageSize;
+        _loading = false;
+        _loadingMore = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadingMore = false;
+          _hasMoreDefaultTags = false;
+        });
       }
     }
   }

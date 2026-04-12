@@ -36,6 +36,7 @@ class ApiService {
   /// [sortDir] - Sort direction (asc or desc)
   /// [tagIds] - Optional list of tag IDs to filter images by (AND semantics)
   /// [hasTags] - Optional filter for tagged/untagged images (true = has tags, false = no tags)
+  /// [hasPendingTags] - Optional filter for images with pending tags
   Future<PaginationResponse<ImageModel>> fetchImages({
     int offset = 0,
     int limit = 20,
@@ -43,6 +44,7 @@ class ApiService {
     String sortDir = 'desc',
     List<int>? tagIds,
     bool? hasTags,
+    bool? hasPendingTags,
   }) async {
     final queryParams = <String, String>{
       'offset': offset.toString(),
@@ -57,6 +59,18 @@ class ApiService {
 
     if (hasTags != null) {
       queryParams['has_tags'] = hasTags.toString();
+    }
+
+    if (hasPendingTags != null) {
+      queryParams['has_pending_tags'] = hasPendingTags.toString();
+    }
+
+    if (hasTags != null) {
+      queryParams['has_tags'] = hasTags.toString();
+    }
+
+    if (hasPendingTags != null) {
+      queryParams['has_pending_tags'] = hasPendingTags.toString();
     }
 
     final uri = Uri.parse(

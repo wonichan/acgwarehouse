@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,9 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("read gif file: %w", err)
 		}
+		if err := validateImageBytes(data, "image/gif"); err != nil {
+			return nil, "", err
+		}
 		return data, "image/gif", nil
 	}
 
@@ -101,7 +105,11 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("read file: %w", err)
 		}
-		return data, detectContentType(filePath), nil
+		contentType := http.DetectContentType(data)
+		if err := validateImageBytes(data, ""); err != nil {
+			return nil, "", err
+		}
+		return data, contentType, nil
 	}
 
 	if pixels > maxAIPixelCount {

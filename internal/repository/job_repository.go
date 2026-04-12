@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
@@ -15,6 +17,9 @@ type JobRepository interface {
 	FindByType(jobType string) ([]domain.AsyncJob, error)
 	FindByTypeAndStatus(jobType string, status string) ([]domain.AsyncJob, error)
 	Update(job *domain.AsyncJob) error
+	// FindAndClaimReadyJobs atomically finds up to limit ready jobs of the given type
+	// and transitions them to 'running', returning the claimed jobs.
+	FindAndClaimReadyJobs(ctx context.Context, jobType string, limit int) ([]domain.AsyncJob, error)
 	// Admin dashboard support methods
 	FindRecent(limit int) ([]domain.AsyncJob, error)
 	FindFailed() ([]domain.AsyncJob, error)
@@ -149,8 +154,84 @@ func (r *sqliteJobRepository) CountByStatus(status string) (int64, error) {
 	return count, err
 }
 
-// ResetRunningToReady resets all running jobs to ready status.
-// This is used to recover jobs that were in running state when the server crashed.
+// FindAndClaimReadyJobs atomically finds up to limit ready jobs and transitions them to running.
+func (r *sqliteJobRepository) FindAndClaimReadyJobs(ctx context.Context, jobType string, limit int) ([]domain.AsyncJob, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id FROM async_jobs WHERE type = ? AND status = 'ready' ORDER BY id ASC LIMIT ?
+	`, jobType, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	now := time.Now()
+	_, err = tx.ExecContext(ctx, `
+		UPDATE async_jobs SET status = 'running', started_at = ?
+		WHERE type = ? AND status = 'ready' AND id IN (`+strings.Join(placeholders, ",")+`)
+	`, append([]any{now, jobType}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+
+	jobs, err := r.findManyTx(tx, `
+		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
+		FROM async_jobs WHERE type = ? AND status = 'running' AND id IN (`+strings.Join(placeholders, ",")+`) ORDER BY id ASC
+	`, append([]any{jobType}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return jobs, nil
+}
+
+func (r *sqliteJobRepository) findManyTx(tx *sql.Tx, query string, args ...any) ([]domain.AsyncJob, error) {
+	rows, err := tx.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	jobs := make([]domain.AsyncJob, 0)
+	for rows.Next() {
+		var job domain.AsyncJob
+		if err := rows.Scan(&job.ID, &job.PlatformTaskID, &job.Type, &job.Status, &job.Payload, &job.Progress, &job.Error, &job.CreatedAt, &job.StartedAt, &job.FinishedAt); err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, job)
+	}
+	return jobs, rows.Err()
+}
+
 func (r *sqliteJobRepository) ResetRunningToReady() (int64, error) {
 	result, err := r.db.Exec(`UPDATE async_jobs SET status = 'ready', started_at = NULL WHERE status = 'running'`)
 	if err != nil {

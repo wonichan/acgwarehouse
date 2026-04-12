@@ -19,6 +19,7 @@ class ImageListProvider extends ChangeNotifier {
   bool _sortAsc = false;
   List<int> _selectedTagIds = [];
   bool? _hasTagsFilter;
+  bool? _hasPendingTagsFilter;
 
   ImageListProvider(this._apiService);
 
@@ -31,6 +32,7 @@ class ImageListProvider extends ChangeNotifier {
   bool get sortAsc => _sortAsc;
   List<int> get selectedTagIds => _selectedTagIds;
   bool? get hasTagsFilter => _hasTagsFilter;
+  bool? get hasPendingTagsFilter => _hasPendingTagsFilter;
 
   int indexOfImage(int imageId) =>
       _images.indexWhere((image) => image.id == imageId);
@@ -53,7 +55,7 @@ class ImageListProvider extends ChangeNotifier {
       }
 
       debugPrint(
-        '加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds, hasTags=$_hasTagsFilter, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}',
+        '加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds, hasTags=$_hasTagsFilter, hasPendingTags=$_hasPendingTagsFilter, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}',
       );
 
       final response = await _apiService.fetchImages(
@@ -66,6 +68,7 @@ class ImageListProvider extends ChangeNotifier {
         sortDir: _sortAsc ? 'asc' : 'desc',
         tagIds: _selectedTagIds.isNotEmpty ? _selectedTagIds : null,
         hasTags: _hasTagsFilter,
+        hasPendingTags: _hasPendingTagsFilter,
       );
 
       if (refresh) {
@@ -116,6 +119,7 @@ class ImageListProvider extends ChangeNotifier {
     _selectedTagIds = List.unmodifiable(tagIds);
     // Clear hasTagsFilter when setting tag filter (mutually exclusive)
     _hasTagsFilter = null;
+    _hasPendingTagsFilter = null;
     // Reset pagination when filter changes
     _currentOffset = 0;
     _hasMore = true;
@@ -132,14 +136,30 @@ class ImageListProvider extends ChangeNotifier {
   Future<void> setHasTagsFilter(bool? hasTags) async {
     debugPrint('setHasTagsFilter 被调用: hasTags=$hasTags');
     _hasTagsFilter = hasTags;
-    // Clear tag selection when setting hasTagsFilter (mutually exclusive)
+    // Clear tag selection and pending filter when setting hasTagsFilter (mutually exclusive)
     if (hasTags != null) {
       _selectedTagIds = [];
+      _hasPendingTagsFilter = null;
     }
     // Reset pagination when filter changes
     _currentOffset = 0;
     _hasMore = true;
     // Clear images immediately to show empty state while loading
+    _images = [];
+    notifyListeners();
+    await loadImages(refresh: true);
+  }
+
+  Future<void> setHasPendingTagsFilter(bool? hasPendingTags) async {
+    debugPrint('setHasPendingTagsFilter 被调用: hasPendingTags=$hasPendingTags');
+    _hasPendingTagsFilter = hasPendingTags;
+    // Clear other filters when setting this (mutually exclusive)
+    if (hasPendingTags != null) {
+      _selectedTagIds = [];
+      _hasTagsFilter = null;
+    }
+    _currentOffset = 0;
+    _hasMore = true;
     _images = [];
     notifyListeners();
     await loadImages(refresh: true);

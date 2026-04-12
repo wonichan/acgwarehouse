@@ -83,7 +83,9 @@ class _GalleryContentState extends State<_GalleryContent> {
           if (provider.images.isEmpty) {
             final hasTagFilter = provider.selectedTagIds.isNotEmpty;
             final hasUntaggedFilter = provider.hasTagsFilter == false;
-            final hasFilters = hasTagFilter || hasUntaggedFilter;
+            final hasPendingTagsFilter = provider.hasPendingTagsFilter == true;
+            final hasFilters =
+                hasTagFilter || hasUntaggedFilter || hasPendingTagsFilter;
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -109,6 +111,7 @@ class _GalleryContentState extends State<_GalleryContent> {
                         context.read<TagProvider>().clearSelection();
                         provider.setTagFilter([]);
                         provider.setHasTagsFilter(null);
+                        provider.setHasPendingTagsFilter(null);
                       },
                       icon: const Icon(Icons.clear_all),
                       label: const Text('清除筛选'),
@@ -316,6 +319,7 @@ class _GalleryContentState extends State<_GalleryContent> {
                 tagProvider.clearSelection();
                 imageListProvider.setTagFilter([]);
                 imageListProvider.setHasTagsFilter(null);
+                imageListProvider.setHasPendingTagsFilter(null);
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -350,6 +354,46 @@ class _GalleryContentState extends State<_GalleryContent> {
                   const SizedBox(width: 4),
                   Text(
                     '未打标签',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: textColor,
+                      height: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Toggle for "Pending Tags Only"
+          InkWell(
+            onTap: () {
+              final isPending = imageListProvider.hasPendingTagsFilter == true;
+              imageListProvider.setHasPendingTagsFilter(
+                isPending ? null : true,
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: imageListProvider.hasPendingTagsFilter == true
+                    ? colorScheme.surfaceContainerHighest
+                    : Colors.transparent,
+                border: Border.all(color: borderColor),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    imageListProvider.hasPendingTagsFilter == true
+                        ? Icons.help_outline
+                        : Icons.help_outline,
+                    size: 14,
+                    color: textColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '标签未确认',
                     style: TextStyle(
                       fontSize: 13,
                       color: textColor,

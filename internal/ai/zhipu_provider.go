@@ -32,3 +32,7 @@ func (p *ZhipuProvider) GenerateTags(ctx context.Context, imageURL, prompt strin
 	}
 	return result, nil
 }
+
+func (p *ZhipuProvider) GenerateTagsBatch(ctx context.Context, requests []TagRequest) (*BatchTagResult, error) {
+	return generateTagsBatchFallback(ctx, p, requests)
+}

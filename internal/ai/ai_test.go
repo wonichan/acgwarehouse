@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -570,6 +571,71 @@ func TestDoubaoProvider_HandleErrors(t *testing.T) {
 	}
 }
 
+func TestDoubaoProvider_GenerateTagsBatch_BuildsMultiImageRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req doubaoBatchRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+
+		if len(req.Messages) != 1 {
+			t.Fatalf("expected 1 message, got %d", len(req.Messages))
+		}
+
+		content := req.Messages[0].Content
+		imageCount := 0
+		for _, item := range content {
+			if item.Type == "image_url" {
+				imageCount++
+			}
+		}
+		if imageCount != 4 {
+			t.Errorf("expected 4 images in batch request, got %d", imageCount)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(doubaoBatchResponse{
+			Choices: []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			}{
+				{Message: struct {
+					Content string `json:"content"`
+				}{Content: "1: tag1,tag2\n2: tag3,tag4\n3: tag5,tag6\n4: tag7,tag8"}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &DoubaoProvider{
+		apiKey:     "test-api-key",
+		model:      "doubao-seed-2-0-pro",
+		endpoint:   server.URL,
+		httpClient: server.Client(),
+	}
+
+	requests := []TagRequest{
+		{ImageID: 1, Path: "https://example.com/1.jpg", Prompt: ""},
+		{ImageID: 2, Path: "https://example.com/2.jpg", Prompt: ""},
+		{ImageID: 3, Path: "https://example.com/3.jpg", Prompt: ""},
+		{ImageID: 4, Path: "https://example.com/4.jpg", Prompt: ""},
+	}
+
+	result, err := provider.GenerateTagsBatch(context.Background(), requests)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(result.Groups) != 4 {
+		t.Fatalf("expected 4 groups, got %d", len(result.Groups))
+	}
+	if len(result.Groups[0]) != 2 {
+		t.Errorf("group 0 expected 2 tags, got %d", len(result.Groups[0]))
+	}
+}
+
 func TestDoubaoProvider_ProcessImageURL_RespectsPayloadBudget(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "ai_payload_budget_*.jpg")
 	if err != nil {
@@ -622,6 +688,193 @@ func TestEnsureDataURLFitsBudget_RejectsOversizedPayload(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "data url payload exceeds budget") {
 		t.Fatalf("expected budget error, got %v", err)
+	}
+}
+
+func TestNewProvider_DoubaoBatchModeNormalization(t *testing.T) {
+	tests := []struct {
+		name string
+		mode string
+		want string
+	}{
+		{name: "default auto", mode: "", want: "auto"},
+		{name: "propagates multi", mode: "multi", want: "multi"},
+		{name: "normalizes case and whitespace", mode: " SINGLE ", want: "single"},
+		{name: "invalid falls back to auto", mode: "unexpected", want: "auto"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewProvider(&config.AIConfig{
+				Provider:        "doubao",
+				APIKey:          "test-api-key",
+				Model:           "doubao-vision-pro",
+				DoubaoBatchMode: tt.mode,
+			})
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			doubaoProvider, ok := provider.(*DoubaoProvider)
+			if !ok {
+				t.Fatalf("expected DoubaoProvider, got %T", provider)
+			}
+			if doubaoProvider.effectiveBatchMode() != tt.want {
+				t.Fatalf("expected batch mode %q, got %q", tt.want, doubaoProvider.effectiveBatchMode())
+			}
+		})
+	}
+}
+
+func TestDoubaoProvider_GenerateTagsBatch_SingleRequestUsesBatchPathInMultiMode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req doubaoRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("failed to decode request: %v", err)
+		}
+		prompt := req.Messages[0].Content[0].Text
+		if !strings.Contains(prompt, "1:") {
+			t.Fatalf("expected numbered batch prompt, got %q", prompt)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(doubaoBatchResponse{Choices: []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		}{{Message: struct {
+			Content string `json:"content"`
+		}{Content: "1: anime, blue hair, illustration"}}}})
+	}))
+	defer server.Close()
+
+	provider := &DoubaoProvider{apiKey: "test-api-key", model: "doubao-vision-pro", endpoint: server.URL, httpClient: server.Client(), batchMode: "multi"}
+	result, err := provider.GenerateTagsBatch(context.Background(), []TagRequest{{ImageID: 1, Path: "https://example.com/image.jpg", Prompt: "generate tags"}})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(result.Groups) != 1 || strings.Join(result.Groups[0], ",") != "anime,blue hair,illustration" {
+		t.Fatalf("unexpected batch result: %+v", result)
+	}
+}
+
+func TestDoubaoProvider_GenerateTagsBatch_UsesSharedProviderErrorHandling(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(doubaoBatchResponse{Error: &struct {
+			Message string `json:"message"`
+			Code    string `json:"code"`
+		}{Message: "bad request", Code: "invalid_request"}})
+	}))
+	defer server.Close()
+
+	provider := &DoubaoProvider{apiKey: "test-api-key", model: "doubao-vision-pro", endpoint: server.URL, httpClient: server.Client(), batchMode: "multi"}
+	_, err := provider.GenerateTagsBatch(context.Background(), []TagRequest{{ImageID: 1, Path: "https://example.com/image.jpg", Prompt: "generate tags"}})
+	if err == nil || !strings.Contains(err.Error(), "api error: bad request") {
+		t.Fatalf("expected provider error handling, got %v", err)
+	}
+}
+
+func TestProcessImageURLForProvider_RejectsPathOutsideAllowedRoots(t *testing.T) {
+	allowedRoot := t.TempDir()
+	outsideDir := t.TempDir()
+	outsidePath := filepath.Join(outsideDir, "outside.jpg")
+	if err := os.WriteFile(outsidePath, []byte("not-an-image"), 0o644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+
+	previousRoots := SetAllowedLocalImageRoots([]string{allowedRoot})
+	defer SetAllowedLocalImageRoots(previousRoots)
+
+	_, err := processImageURLForProvider(outsidePath)
+	if err == nil || !strings.Contains(err.Error(), "outside allowed scan roots") {
+		t.Fatalf("expected allowed-root rejection, got %v", err)
+	}
+}
+
+func TestDoubaoProvider_GenerateTagsBatch_SanitizesUpstreamErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"secret":"token","error":"bad"}`))
+	}))
+	defer server.Close()
+
+	provider := &DoubaoProvider{apiKey: "test-api-key", model: "doubao-vision-pro", endpoint: server.URL, httpClient: server.Client(), batchMode: "multi"}
+	_, err := provider.GenerateTagsBatch(context.Background(), []TagRequest{{ImageID: 1, Path: "https://example.com/image.jpg", Prompt: "generate tags"}})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "token") || strings.Contains(err.Error(), "body:") {
+		t.Fatalf("expected sanitized upstream error, got %v", err)
+	}
+}
+
+func TestNewProvider_DoubaoFallbackModels_PreserveForcedMultiBatchSemantics(t *testing.T) {
+	primaryCalls := 0
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		primaryCalls++
+		var req doubaoBatchRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("failed to decode primary request: %v", err)
+		}
+		if got := req.Model; got != "doubao-primary" {
+			t.Fatalf("expected primary model, got %q", got)
+		}
+		if prompt := req.Messages[0].Content[0].Text; !strings.Contains(prompt, "1:") {
+			t.Fatalf("expected multi-mode batch prompt on primary, got %q", prompt)
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer primary.Close()
+
+	fallbackCalls := 0
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackCalls++
+		var req doubaoBatchRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("failed to decode fallback request: %v", err)
+		}
+		if got := req.Model; got != "doubao-fallback" {
+			t.Fatalf("expected fallback model, got %q", got)
+		}
+		if prompt := req.Messages[0].Content[0].Text; !strings.Contains(prompt, "1:") {
+			t.Fatalf("expected multi-mode batch prompt on fallback, got %q", prompt)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(doubaoBatchResponse{Choices: []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		}{{Message: struct {
+			Content string `json:"content"`
+		}{Content: "1: built, via, newprovider"}}}})
+	}))
+	defer fallback.Close()
+
+	provider, err := NewProvider(&config.AIConfig{Provider: "doubao", APIKey: "test-api-key", Model: "doubao-primary", FallbackModels: []string{"doubao-fallback"}, DoubaoBatchMode: "multi"})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	fallbackProvider, ok := provider.(*FallbackDoubaoProvider)
+	if !ok {
+		t.Fatalf("expected FallbackDoubaoProvider, got %T", provider)
+	}
+	fallbackProvider.clients[0].endpoint = primary.URL
+	fallbackProvider.clients[0].httpClient = primary.Client()
+	fallbackProvider.clients[1].endpoint = fallback.URL
+	fallbackProvider.clients[1].httpClient = fallback.Client()
+
+	result, err := provider.GenerateTagsBatch(context.Background(), []TagRequest{{ImageID: 1, Path: "https://example.com/image.jpg", Prompt: "generate tags"}})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if primaryCalls != 1 || fallbackCalls != 1 {
+		t.Fatalf("expected one primary and one fallback call, got primary=%d fallback=%d", primaryCalls, fallbackCalls)
+	}
+	if len(result.Groups) != 1 || strings.Join(result.Groups[0], ",") != "built,via,newprovider" {
+		t.Fatalf("unexpected results: %+v", result)
 	}
 }
 

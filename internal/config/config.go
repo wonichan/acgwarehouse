@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
@@ -38,14 +39,16 @@ type StorageConfig struct {
 }
 
 type AIConfig struct {
-	Provider                string `yaml:"provider"`
-	APIKey                  string `yaml:"api_key"`
-	Model                   string `yaml:"model"`
-	RequestsPerMinute       int    `yaml:"requests_per_minute"` // 限流：每分钟请求数，默认 60
-	MaxConcurrency          int    `yaml:"max_concurrency"`     // 并发限制：同时执行的最大AI请求数，默认 3
-	AutoAITagOnImport       bool   `yaml:"auto_ai_tag_on_import"`
-	AutoScanIntervalMinutes int    `yaml:"auto_scan_interval_minutes"`
-	AutoScanBatchSize       int    `yaml:"auto_scan_batch_size"`
+	Provider                string   `yaml:"provider"`
+	APIKey                  string   `yaml:"api_key"`
+	Model                   string   `yaml:"model"`
+	FallbackModels          []string `yaml:"fallback_models"`
+	DoubaoBatchMode         string   `yaml:"doubao_batch_mode"`
+	RequestsPerMinute       int      `yaml:"requests_per_minute"` // 限流：每分钟请求数，默认 60
+	MaxConcurrency          int      `yaml:"max_concurrency"`     // 并发限制：同时执行的最大AI请求数，默认 3
+	AutoAITagOnImport       bool     `yaml:"auto_ai_tag_on_import"`
+	AutoScanIntervalMinutes int      `yaml:"auto_scan_interval_minutes"`
+	AutoScanBatchSize       int      `yaml:"auto_scan_batch_size"`
 }
 
 type COSConfig struct {
@@ -247,6 +250,8 @@ func applyDefaults(cfg *Config) {
 	if cfg.AI.AutoScanBatchSize <= 0 {
 		cfg.AI.AutoScanBatchSize = 100
 	}
+	cfg.AI.FallbackModels = normalizeFallbackModels(cfg.AI.FallbackModels)
+	applyDoubaoBatchMode(cfg, cfg.AI.DoubaoBatchMode)
 }
 
 func applyEnvOverrides(cfg *Config) {
@@ -286,6 +291,12 @@ func applyEnvOverrides(cfg *Config) {
 
 	if v := os.Getenv("AI_MODEL"); v != "" {
 		cfg.AI.Model = v
+	}
+	if v := os.Getenv("AI_FALLBACK_MODELS"); v != "" {
+		cfg.AI.FallbackModels = normalizeFallbackModels(strings.Split(v, ","))
+	}
+	if v := os.Getenv("AI_DOUBAO_BATCH_MODE"); v != "" {
+		applyDoubaoBatchMode(cfg, v)
 	}
 	if v := os.Getenv("AUTO_AI_TAG_ON_IMPORT"); v != "" {
 		if enabled, err := strconv.ParseBool(v); err == nil {
@@ -362,4 +373,41 @@ func applyEnvOverrides(cfg *Config) {
 	if cfg.WorkerPool.RefillBatchSize <= 0 {
 		cfg.WorkerPool.RefillBatchSize = cfg.WorkerPool.QueueSize
 	}
+}
+
+func applyDoubaoBatchMode(cfg *Config, raw string) {
+	if cfg == nil {
+		return
+	}
+	cfg.AI.DoubaoBatchMode = normalizeDoubaoBatchMode(raw)
+}
+
+func normalizeDoubaoBatchMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "single", "auto", "multi":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return "auto"
+	}
+}
+
+func normalizeFallbackModels(models []string) []string {
+	if len(models) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(models))
+	for _, model := range models {
+		trimmed := strings.TrimSpace(model)
+		if trimmed != "" {
+			normalized = append(normalized, trimmed)
+		}
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
+}
+
+func NormalizeFallbackModelsForProvider(models []string) []string {
+	return normalizeFallbackModels(models)
 }

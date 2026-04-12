@@ -125,13 +125,53 @@ class _MetadataPanelQaPage extends StatelessWidget {
 }
 
 class _FakeTagClient extends http.BaseClient {
+  static final List<Map<String, dynamic>> _allTags = List.generate(25, (index) {
+    return {
+      'id': index + 1,
+      'preferred_label': index == 0
+          ? 'blue hair'
+          : index == 1
+          ? 'school uniform'
+          : index == 20
+          ? 'long hair'
+          : 'demo-tag-${index + 1}',
+      'slug': 'demo-tag-${index + 1}',
+      'primary_category': index.isEven ? 'hair' : 'outfit',
+      'review_state': 'confirmed',
+      'trust_score': 0.9,
+      'usage_count': 100 - index,
+      'created_at': '2024-01-01T00:00:00Z',
+    };
+  });
+
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final path = request.url.path;
+    final query = request.url.queryParameters;
     if (path.endsWith('/api/v1/ai-tags/default-prompt')) {
       return _jsonResponse('{"default_prompt":"default prompt"}');
     }
+    if (path.endsWith('/api/v1/tags')) {
+      final search = query['search']?.trim().toLowerCase() ?? '';
+      final limit = int.tryParse(query['limit'] ?? '') ?? 20;
+      final offset = int.tryParse(query['offset'] ?? '') ?? 0;
+      final filtered = search.isEmpty
+          ? _allTags
+          : _allTags.where((tag) {
+              final label = (tag['preferred_label'] as String).toLowerCase();
+              return label.contains(search);
+            }).toList();
+      final page = filtered.skip(offset).take(limit).toList();
+      return _jsonResponse(
+        jsonEncode({'tags': page, 'total': filtered.length}),
+      );
+    }
     if (path.endsWith('/api/v1/images/1/tags')) {
+      if (request.method == 'POST') {
+        return _jsonResponse(
+          '{"id":99,"tag_id":99,"preferred_label":"manual-added-tag","review_state":"confirmed","confidence":1}',
+        );
+      }
       return _jsonResponse(
         '{"confirmed":[{"id":2,"preferred_label":"confirmed-tag","review_state":"confirmed"}],"pending":[{"id":1,"preferred_label":"pending-tag","review_state":"pending"}],"rejected":[{"id":3,"preferred_label":"rejected-tag","review_state":"rejected"}]}',
       );

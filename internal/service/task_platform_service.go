@@ -296,6 +296,24 @@ func (s *TaskPlatformService) MarkJobFailed(ctx context.Context, jobID int64, er
 	return nil
 }
 
+func (s *TaskPlatformService) MarkJobsCompleted(ctx context.Context, jobIDs []int64) error {
+	for _, jobID := range jobIDs {
+		if err := s.MarkJobCompleted(ctx, jobID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *TaskPlatformService) MarkJobsFailed(ctx context.Context, jobIDs []int64, errorSummary string) error {
+	for _, jobID := range jobIDs {
+		if err := s.MarkJobFailed(ctx, jobID, errorSummary); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *TaskPlatformService) updateTaskStatusForJob(ctx context.Context, jobID int64, status string, errorSummary *string) error {
 	job, err := s.jobRepo.FindByID(jobID)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,9 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("read gif file: %w", err)
 		}
+		if err := validateImageBytes(data, "image/gif"); err != nil {
+			return nil, "", err
+		}
 		return data, "image/gif", nil
 	}
 
@@ -95,7 +99,10 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("read file: %w", err)
 		}
-		contentType := detectContentType(filePath)
+		contentType := http.DetectContentType(data)
+		if err := validateImageBytes(data, ""); err != nil {
+			return nil, "", err
+		}
 		return data, contentType, nil
 	}
 
@@ -123,6 +130,17 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 	}
 
 	return compressedData, contentType, nil
+}
+
+func validateImageBytes(data []byte, expected string) error {
+	contentType := http.DetectContentType(data)
+	if !strings.HasPrefix(contentType, "image/") {
+		return fmt.Errorf("invalid image content type: %s", contentType)
+	}
+	if expected != "" && contentType != expected {
+		return fmt.Errorf("unexpected image content type: %s", contentType)
+	}
+	return nil
 }
 
 func PrepareImageForDataURL(filePath string) ([]byte, string, error) {

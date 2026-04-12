@@ -43,10 +43,38 @@ void main() {
     ),
   ];
 
-  Widget createTestWidget({
-    required int imageId,
-    required Tag currentTag,
-  }) {
+  final defaultTagResults = List.generate(
+    20,
+    (index) => Tag(
+      id: index + 10,
+      preferredLabel: index == 0
+          ? 'blonde hair'
+          : index == 1
+          ? 'smile'
+          : 'default edit tag ${index + 1}',
+      slug: 'default-edit-tag-${index + 1}',
+      primaryCategory: index.isEven ? 'hair' : 'expression',
+      reviewState: 'confirmed',
+      trustScore: 0.9,
+      usageCount: 60 - index,
+      createdAt: DateTime.parse('2024-01-11T08:00:00Z'),
+    ),
+  );
+
+  final nextPageResults = [
+    Tag(
+      id: 12,
+      preferredLabel: 'green eyes',
+      slug: 'green-eyes',
+      primaryCategory: 'eyes',
+      reviewState: 'confirmed',
+      trustScore: 0.88,
+      usageCount: 38,
+      createdAt: DateTime.parse('2024-01-14T08:00:00Z'),
+    ),
+  ];
+
+  Widget createTestWidget({required int imageId, required Tag currentTag}) {
     return MaterialApp(
       home: Builder(
         builder: (context) {
@@ -77,14 +105,19 @@ void main() {
   setUp(() {
     mockTagService = MockTagService();
     EditTagDialogTestResult.lastResult = null;
+    when(
+      () => mockTagService.fetchTags(
+        limit: any(named: 'limit'),
+        offset: any(named: 'offset'),
+      ),
+    ).thenAnswer((_) async => defaultTagResults);
   });
 
   group('EditTagDialog', () {
     testWidgets('displays search box and current tag text', (tester) async {
-      await tester.pumpWidget(createTestWidget(
-        imageId: 123,
-        currentTag: sampleCurrentTag,
-      ));
+      await tester.pumpWidget(
+        createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+      );
 
       // Open the dialog
       await tester.tap(find.text('Open Dialog'));
@@ -107,13 +140,13 @@ void main() {
 
     testWidgets('filters tag list when searching', (tester) async {
       // Setup mock to return search results
-      when(() => mockTagService.searchTags('hair'))
-          .thenAnswer((_) async => sampleSearchResults);
+      when(
+        () => mockTagService.searchTags('hair'),
+      ).thenAnswer((_) async => sampleSearchResults);
 
-      await tester.pumpWidget(createTestWidget(
-        imageId: 123,
-        currentTag: sampleCurrentTag,
-      ));
+      await tester.pumpWidget(
+        createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+      );
 
       // Open the dialog
       await tester.tap(find.text('Open Dialog'));
@@ -137,15 +170,90 @@ void main() {
       expect(find.text('hair'), findsWidgets);
     });
 
+    testWidgets('shows default tags immediately when dialog opens', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+      );
+
+      await tester.tap(find.text('Open Dialog'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      verify(
+        () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 0),
+      ).called(1);
+      expect(find.text('blonde hair'), findsOneWidget);
+      expect(find.text('smile'), findsOneWidget);
+    });
+
+    testWidgets(
+      'typing uses search results and clearing restores default tags',
+      (tester) async {
+        when(
+          () => mockTagService.searchTags('hair'),
+        ).thenAnswer((_) async => sampleSearchResults);
+
+        await tester.pumpWidget(
+          createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+        );
+
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'hair');
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.text('red hair'), findsOneWidget);
+        expect(find.text('blonde hair'), findsNothing);
+
+        await tester.enterText(find.byType(TextField), '');
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.text('blonde hair'), findsOneWidget);
+        expect(find.text('smile'), findsOneWidget);
+      },
+    );
+
+    testWidgets('loads more default tags when scrolled near bottom', (
+      tester,
+    ) async {
+      when(
+        () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 0),
+      ).thenAnswer((_) async => defaultTagResults);
+      when(
+        () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 20),
+      ).thenAnswer((_) async => nextPageResults);
+
+      await tester.pumpWidget(
+        createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+      );
+
+      await tester.tap(find.text('Open Dialog'));
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -1000));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      verify(
+        () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 20),
+      ).called(1);
+      expect(find.text('green eyes', skipOffstage: false), findsOneWidget);
+    });
+
     testWidgets('returns selected existing tag data on tap', (tester) async {
       // Setup mock
-      when(() => mockTagService.searchTags('hair'))
-          .thenAnswer((_) async => sampleSearchResults);
+      when(
+        () => mockTagService.searchTags('hair'),
+      ).thenAnswer((_) async => sampleSearchResults);
 
-      await tester.pumpWidget(createTestWidget(
-        imageId: 123,
-        currentTag: sampleCurrentTag,
-      ));
+      await tester.pumpWidget(
+        createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+      );
 
       // Open the dialog
       await tester.tap(find.text('Open Dialog'));
@@ -169,10 +277,9 @@ void main() {
     });
 
     testWidgets('returns new tag data when creating new tag', (tester) async {
-      await tester.pumpWidget(createTestWidget(
-        imageId: 123,
-        currentTag: sampleCurrentTag,
-      ));
+      await tester.pumpWidget(
+        createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+      );
 
       // Open the dialog
       await tester.tap(find.text('Open Dialog'));
@@ -194,11 +301,12 @@ void main() {
       expect(EditTagDialogTestResult.lastResult!['label'], 'new custom tag');
     });
 
-    testWidgets('cancel button closes dialog without returning data', (tester) async {
-      await tester.pumpWidget(createTestWidget(
-        imageId: 123,
-        currentTag: sampleCurrentTag,
-      ));
+    testWidgets('cancel button closes dialog without returning data', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+      );
 
       // Open the dialog
       await tester.tap(find.text('Open Dialog'));
@@ -215,13 +323,13 @@ void main() {
 
     testWidgets('clears suggestions when search text is empty', (tester) async {
       // Setup mock
-      when(() => mockTagService.searchTags('hair'))
-          .thenAnswer((_) async => sampleSearchResults);
+      when(
+        () => mockTagService.searchTags('hair'),
+      ).thenAnswer((_) async => sampleSearchResults);
 
-      await tester.pumpWidget(createTestWidget(
-        imageId: 123,
-        currentTag: sampleCurrentTag,
-      ));
+      await tester.pumpWidget(
+        createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+      );
 
       // Open the dialog
       await tester.tap(find.text('Open Dialog'));
@@ -244,11 +352,12 @@ void main() {
       expect(find.text('black hair'), findsNothing);
     });
 
-    testWidgets('create button is disabled when text field is empty', (tester) async {
-      await tester.pumpWidget(createTestWidget(
-        imageId: 123,
-        currentTag: sampleCurrentTag,
-      ));
+    testWidgets('create button is disabled when text field is empty', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+      );
 
       // Open the dialog
       await tester.tap(find.text('Open Dialog'));

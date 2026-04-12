@@ -34,7 +34,7 @@ type ThumbnailService struct {
 func NewThumbnailService() *ThumbnailService {
 	return &ThumbnailService{
 		SmallWidth:   200,
-		LargeWidth:   500,
+		LargeWidth:   800,
 		SmallQuality: 85,
 		LargeQuality: 90,
 	}

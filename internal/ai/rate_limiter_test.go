@@ -153,3 +153,8 @@ func (m *mockProvider) GenerateTags(ctx context.Context, imageURL, prompt string
 	m.lastPrompt = prompt
 	return m.result, m.err
 }
+
+func (m *mockProvider) GenerateTagsBatch(ctx context.Context, requests []TagRequest) (*BatchTagResult, error) {
+	m.callCount++
+	return &BatchTagResult{Groups: make([][]string, len(requests))}, m.err
+}

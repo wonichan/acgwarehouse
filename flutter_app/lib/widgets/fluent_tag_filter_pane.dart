@@ -9,11 +9,15 @@ import '../providers/image_provider.dart';
 class FluentTagFilterPane extends StatefulWidget {
   final bool? hasTagsFilter;
   final Function(bool? hasTags)? onHasTagsChanged;
+  final bool? hasPendingTagsFilter;
+  final Function(bool? hasPendingTags)? onHasPendingTagsChanged;
 
   const FluentTagFilterPane({
     super.key,
     this.hasTagsFilter,
     this.onHasTagsChanged,
+    this.hasPendingTagsFilter,
+    this.onHasPendingTagsChanged,
   });
 
   @override
@@ -103,11 +107,16 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           _buildUntaggedToggle(context, isDark),
           const SizedBox(height: 12),
 
+          // 标签未确认开关
+          _buildPendingTagsToggle(context, isDark),
+          const SizedBox(height: 12),
+
           // 清空按钮
           Consumer<TagProvider>(
             builder: (context, provider, _) {
               if (provider.selectedTagIds.isEmpty &&
-                  widget.hasTagsFilter != false) {
+                  widget.hasTagsFilter != false &&
+                  widget.hasPendingTagsFilter != true) {
                 return const SizedBox.shrink();
               }
               return Button(
@@ -123,6 +132,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                   provider.clearSelection();
                   context.read<ImageListProvider>().setTagFilter([]);
                   widget.onHasTagsChanged?.call(null);
+                  widget.onHasPendingTagsChanged?.call(null);
                 },
               );
             },
@@ -222,6 +232,23 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
         const Icon(FluentIcons.tag_unknown, size: 16),
         const SizedBox(width: 6),
         const Expanded(child: Text('未打标签', style: TextStyle(fontSize: 13))),
+      ],
+    );
+  }
+
+  Widget _buildPendingTagsToggle(BuildContext context, bool isDark) {
+    return Row(
+      children: [
+        ToggleSwitch(
+          checked: widget.hasPendingTagsFilter == true,
+          onChanged: (value) {
+            widget.onHasPendingTagsChanged?.call(value ? true : null);
+          },
+        ),
+        const SizedBox(width: 8),
+        const Icon(FluentIcons.tag_unknown, size: 16),
+        const SizedBox(width: 6),
+        const Expanded(child: Text('标签未确认', style: TextStyle(fontSize: 13))),
       ],
     );
   }

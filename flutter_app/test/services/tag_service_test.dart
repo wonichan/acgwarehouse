@@ -22,6 +22,38 @@ void main() {
   });
 
   group('TagService', () {
+    group('fetchTags', () {
+      test('sends limit and offset for default tag paging', () async {
+        when(
+          mockClient.get(any),
+        ).thenAnswer((_) async => http.Response('{"tags":[],"total":0}', 200));
+
+        await tagService.fetchTags(limit: 30, offset: 60);
+
+        final captured =
+            verify(mockClient.get(captureAny)).captured.single as Uri;
+        expect(captured.path, '/api/v1/tags');
+        expect(captured.queryParameters['limit'], '30');
+        expect(captured.queryParameters['offset'], '60');
+        expect(captured.queryParameters.containsKey('search'), isFalse);
+      });
+
+      test('includes search query when provided', () async {
+        when(
+          mockClient.get(any),
+        ).thenAnswer((_) async => http.Response('{"tags":[],"total":0}', 200));
+
+        await tagService.fetchTags(search: 'hair', limit: 20, offset: 0);
+
+        final captured =
+            verify(mockClient.get(captureAny)).captured.single as Uri;
+        expect(captured.path, '/api/v1/tags');
+        expect(captured.queryParameters['search'], 'hair');
+        expect(captured.queryParameters['limit'], '20');
+        expect(captured.queryParameters['offset'], '0');
+      });
+    });
+
     group('triggerAITags', () {
       test('parses accepted batch response with job_ids list', () async {
         when(

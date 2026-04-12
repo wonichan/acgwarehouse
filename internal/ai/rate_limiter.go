@@ -46,6 +46,14 @@ func (c *RateLimitedClient) GenerateTags(ctx context.Context, imageURL, prompt s
 	return c.provider.GenerateTags(ctx, imageURL, prompt)
 }
 
+// GenerateTagsBatch 批量生成标签，带限流控制
+func (c *RateLimitedClient) GenerateTagsBatch(ctx context.Context, requests []TagRequest) (*BatchTagResult, error) {
+	if err := c.limiter.Wait(ctx); err != nil {
+		return nil, err
+	}
+	return c.provider.GenerateTagsBatch(ctx, requests)
+}
+
 // SetRequestsPerMinute 动态调整每分钟请求数限制
 func (c *RateLimitedClient) SetRequestsPerMinute(requestsPerMinute int) {
 	if requestsPerMinute <= 0 {

@@ -1,4 +1,4 @@
-package app
+﻿package app
 
 import (
 	"context"
@@ -325,3 +325,6 @@ func (r *refillTestJobRepo) FindFailed() ([]domain.AsyncJob, error)    { return 
 func (r *refillTestJobRepo) UpdateStatus(int64, string, *string) error { return nil }
 func (r *refillTestJobRepo) CountByStatus(string) (int64, error)       { return 0, nil }
 func (r *refillTestJobRepo) ResetRunningToReady() (int64, error)       { return 0, nil }
+func (r *refillTestJobRepo) FindAndClaimReadyJobs(ctx context.Context, jobType string, limit int) ([]domain.AsyncJob, error) {
+	return nil, nil
+}

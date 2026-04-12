@@ -39,6 +39,8 @@ type ImageRepository interface {
 	CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
 	FindUntagged(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountUntagged(ctx context.Context) (int64, error)
+	FindPendingTags(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
+	CountPendingTags(ctx context.Context) (int64, error)
 	FindImagesWithoutAITags(ctx context.Context, limit int) ([]domain.Image, error)
 	// FindBackfillCandidates returns images matching the filter that are eligible for AI backfill:
 	// no AI source tags and no active (pending/queued/running) AI tasks.
@@ -438,6 +440,66 @@ func (r *sqliteImageRepository) CountUntagged(ctx context.Context) (int64, error
 		FROM images i
 		WHERE NOT EXISTS (
 			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state != 'rejected'
+		)
+	`).Scan(&count)
+	return count, err
+}
+
+// FindPendingTags returns images that have at least one pending tag association.
+func (r *sqliteImageRepository) FindPendingTags(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error) {
+	validSortFields := map[string]string{
+		"created_at": "i.created_at",
+		"filename":   "i.filename",
+		"file_size":  "i.file_size",
+		"id":         "i.id",
+	}
+
+	sortColumn := validSortFields[sortBy]
+	if sortColumn == "" {
+		sortColumn = "i.id"
+	}
+
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM images i
+		LEFT JOIN collection_images ci ON ci.image_id = i.id
+		WHERE EXISTS (
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
+		)
+		ORDER BY %s %s, i.id %s
+		LIMIT ? OFFSET ?
+	`, imageSelectColumns, sortColumn, sortDir, sortDir)
+
+	rows, err := r.db.QueryContext(ctx, query, int64(limit), int64(offset))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	images := make([]domain.Image, 0)
+	for rows.Next() {
+		var image domain.Image
+		if err := scanImage(rows, &image); err != nil {
+			return nil, err
+		}
+		images = append(images, image)
+	}
+
+	return images, rows.Err()
+}
+
+// CountPendingTags returns the count of images that have at least one pending tag association.
+func (r *sqliteImageRepository) CountPendingTags(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(i.id)
+		FROM images i
+		WHERE EXISTS (
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
 		)
 	`).Scan(&count)
 	return count, err

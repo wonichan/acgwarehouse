@@ -12,6 +12,30 @@ import (
 	"strings"
 )
 
+type providerRequestError struct {
+	message   string
+	retryable bool
+	code      string
+}
+
+func (e *providerRequestError) Error() string {
+	return e.message
+}
+
+func newProviderRequestError(message string, retryable bool, code string) error {
+	return &providerRequestError{message: message, retryable: retryable, code: code}
+}
+
+func classifyOpenAICompatibleAPIError(message, code string) error {
+	normalizedCode := strings.ToLower(strings.TrimSpace(code))
+	switch normalizedCode {
+	case "invalid_api_key", "invalid_request", "authentication_error", "unauthorized", "forbidden":
+		return newProviderRequestError(fmt.Sprintf("api error: %s", message), false, normalizedCode)
+	default:
+		return newProviderRequestError(fmt.Sprintf("api error: %s", message), true, normalizedCode)
+	}
+}
+
 type openAICompatibleRequest struct {
 	Model           string                    `json:"model"`
 	Messages        []openAICompatibleMessage `json:"messages"`
@@ -51,7 +75,7 @@ type openAICompatibleResponse struct {
 func generateOpenAICompatibleTags(ctx context.Context, httpClient *http.Client, endpoint, apiKey, model, imageURL, prompt string) (*TagResult, error) {
 	processedURL, err := processImageURLForProvider(imageURL)
 	if err != nil {
-		return nil, fmt.Errorf("process image url: %w", err)
+		return nil, newProviderRequestError(fmt.Sprintf("process image url: %v", err), false, "local_image_processing")
 	}
 
 	req := openAICompatibleRequest{
@@ -73,12 +97,12 @@ func generateOpenAICompatibleTags(ctx context.Context, httpClient *http.Client, 
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, newProviderRequestError(fmt.Sprintf("marshal request: %v", err), false, "marshal_request")
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, newProviderRequestError(fmt.Sprintf("create request: %v", err), false, "create_request")
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -96,13 +120,13 @@ func generateOpenAICompatibleTags(ctx context.Context, httpClient *http.Client, 
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, errors.New("rate limit exceeded")
+		return nil, newProviderRequestError("rate limit exceeded", true, "rate_limit")
 	}
 	if resp.StatusCode >= http.StatusInternalServerError {
-		return nil, fmt.Errorf("service unavailable: %d", resp.StatusCode)
+		return nil, newProviderRequestError(fmt.Sprintf("service unavailable: %d", resp.StatusCode), true, fmt.Sprintf("http_%d", resp.StatusCode))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(respBody))
+		return nil, newProviderRequestError(fmt.Sprintf("unexpected status code: %d", resp.StatusCode), false, fmt.Sprintf("http_%d", resp.StatusCode))
 	}
 
 	var providerResp openAICompatibleResponse
@@ -111,7 +135,7 @@ func generateOpenAICompatibleTags(ctx context.Context, httpClient *http.Client, 
 	}
 
 	if providerResp.Error != nil {
-		return nil, fmt.Errorf("api error: %s", providerResp.Error.Message)
+		return nil, classifyOpenAICompatibleAPIError(providerResp.Error.Message, providerResp.Error.Code)
 	}
 
 	if len(providerResp.Choices) == 0 {
@@ -131,6 +155,9 @@ func generateOpenAICompatibleTags(ctx context.Context, httpClient *http.Client, 
 func processImageURLForProvider(imageURL string) (string, error) {
 	if strings.HasPrefix(imageURL, "http://") || strings.HasPrefix(imageURL, "https://") {
 		return imageURL, nil
+	}
+	if err := validateLocalImagePath(imageURL); err != nil {
+		return "", fmt.Errorf("validate local image path: %w", err)
 	}
 
 	data, contentType, err := PrepareImageForDataURL(imageURL)

@@ -589,6 +589,48 @@ func TestImageHandlerListImagesFiltersByHasTagsFalse(t *testing.T) {
 	}
 }
 
+func TestImageHandlerListImagesFiltersByHasPendingTagsTrue(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := repos.tagRepo.Save(context.Background(), tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	if err := repos.imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag image 1: %v", err)
+	}
+	if err := repos.imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 2, TagID: tag.ID, ReviewState: "pending"}); err != nil {
+		t.Fatalf("tag image 2: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_pending_tags=true", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Images []map[string]any `json:"images"`
+		Total  int64            `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Images) != 1 {
+		t.Fatalf("len(images) = %d, want 1 (only image with pending tag)", len(resp.Images))
+	}
+	if resp.Images[0]["id"].(float64) != 2 {
+		t.Fatalf("images[0].id = %v, want 2 (the image with pending tag)", resp.Images[0]["id"])
+	}
+	if resp.Total != 1 {
+		t.Fatalf("total = %d, want 1", resp.Total)
+	}
+}
+
 func TestImageHandlerListImagesHasTagsTrueReturnsAllImages(t *testing.T) {
 	t.Parallel()
 
@@ -631,6 +673,53 @@ func TestImageHandlerListImagesHasTagsFalseWithTagIDsReturnsError(t *testing.T) 
 	// Test: has_tags=false AND tag_ids should return 400
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_tags=false&tag_ids="+itoa(tag.ID), nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	decodeJSONResponse(t, w, &resp)
+
+	if resp["error"] == nil {
+		t.Fatal("response missing 'error' field")
+	}
+}
+
+func TestImageHandlerListImagesHasPendingTagsTrueWithHasTagsFalseReturnsError(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newImageHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_pending_tags=true&has_tags=false", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	decodeJSONResponse(t, w, &resp)
+
+	if resp["error"] == nil {
+		t.Fatal("response missing 'error' field")
+	}
+}
+
+func TestImageHandlerListImagesHasPendingTagsTrueWithTagIDsReturnsError(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := repos.tagRepo.Save(context.Background(), tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_pending_tags=true&tag_ids="+itoa(tag.ID), nil)
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {

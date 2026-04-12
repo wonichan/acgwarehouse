@@ -11,6 +11,7 @@ type DoubaoProvider struct {
 	model      string
 	endpoint   string
 	httpClient *http.Client
+	batchMode  string
 }
 
 type doubaoRequest = openAICompatibleRequest
@@ -31,4 +32,11 @@ func (p *DoubaoProvider) GenerateTags(ctx context.Context, imageURL, prompt stri
 		return nil, err
 	}
 	return result, nil
+}
+
+func (p *DoubaoProvider) effectiveBatchMode() string {
+	if p == nil {
+		return doubaoBatchModeAuto
+	}
+	return normalizeDoubaoBatchMode(p.batchMode)
 }

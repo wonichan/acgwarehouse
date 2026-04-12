@@ -138,6 +138,8 @@ func (a *App) handleAIConfigChange(old, new *config.Config) {
 			log.Printf("AI 请求限流已调整为: %d 请求/分钟", newAI.RequestsPerMinute)
 		}
 	}
+
+	ai.SetAllowedLocalImageRoots(new.Storage.ScanRoots)
 }
 
 // initWorkerManager initializes the worker manager and registers all handlers.
@@ -265,11 +267,12 @@ func (a *App) registerAIHandlers() {
 
 	// 初始化 AI 标签生成并发控制器
 	worker.InitAITagConcurrencyLimiter(a.config.AI.MaxConcurrency)
+	ai.SetAllowedLocalImageRoots(a.config.Storage.ScanRoots)
 
 	client := ai.NewRateLimitedClient(provider, a.config.AI.RequestsPerMinute)
 	a.aiRateLimitedClient = client
 
-	aiHandler := worker.NewAITagJobHandler(client, a.obsRepo, a.governanceSvc, a.imageTagRepo)
+	aiHandler := worker.NewBatchAITagJobHandler(a.jobRepo, client, a.obsRepo, a.governanceSvc, a.newTaskPlatformService(), repository.NewPlatformTaskRepository(a.db), a.imageTagRepo, a.config.AI.DoubaoBatchMode)
 	aiRegenerationHandler := worker.NewAITagRegenerationJobHandler(client, a.obsRepo, a.governanceSvc)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagGeneration, aiHandler)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagRegeneration, aiRegenerationHandler)

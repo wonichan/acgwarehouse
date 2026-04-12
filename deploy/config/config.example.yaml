@@ -38,6 +38,15 @@ ai:
   api_key: "YOUR_API_KEY_HERE"
   # AI model name
   model: "doubao-seed-2-0-lite-260215"
+  # Fallback models for Doubao (try in order if primary model fails)
+  fallback_models:
+    - "doubao-seed-2-0-pro-260215"
+    - "doubao-seed-2-0-mini-260215"
+  # Doubao-only image request mode:
+  # - single: never claim extra jobs, always use single-image requests
+  # - auto: keep current behavior (1 image = single request, multiple images = batch request)
+  # - multi: allow claiming extra jobs and force the batch request path even for one image
+  doubao_batch_mode: "auto"
   # Rate limiting: requests per minute (default: 60)
   requests_per_minute: 60
   # 同时执行的最大AI请求数，默认3

@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +18,7 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
 
-func TestRegisterAITagHandler_Registration(t *testing.T) {
+func TestRegisterBatchAITagHandler_Registration(t *testing.T) {
 	// Test 1: AI 标签任务处理器正确注册
 	mockJobRepo := &mockJobRepoForAI{}
 	mockObsRepo := &mockTagObservationRepo{}
@@ -29,7 +31,7 @@ func TestRegisterAITagHandler_Registration(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil)
+	RegisterBatchAITagHandler(manager, mockJobRepo, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil, nil, nil, "auto")
 
 	// 验证处理器已注册
 	if _, ok := manager.handlers["ai_tag_generation"]; !ok {
@@ -37,7 +39,7 @@ func TestRegisterAITagHandler_Registration(t *testing.T) {
 	}
 }
 
-func TestAITagHandler_ParsesPayload(t *testing.T) {
+func TestBatchAITagHandler_ParsesPayload(t *testing.T) {
 	// Test 2: 处理器解析 payload 并调用 AI 服务
 	mockJobRepo := &mockJobRepoForAI{}
 	mockObsRepo := &mockTagObservationRepo{}
@@ -51,7 +53,7 @@ func TestAITagHandler_ParsesPayload(t *testing.T) {
 
 	manager := NewManager(mockJobRepo)
 	governance := &mockTagGovernanceService{}
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, governance, nil)
+	RegisterBatchAITagHandler(manager, mockJobRepo, mockClient, mockObsRepo, governance, nil, nil, nil, "auto")
 
 	// 创建测试 payload
 	payload := AITagPayload{
@@ -93,7 +95,7 @@ func TestAITagHandler_ParsesPayload(t *testing.T) {
 	}
 }
 
-func TestAITagHandler_SavesObservation(t *testing.T) {
+func TestBatchAITagHandler_SavesObservation(t *testing.T) {
 	// Test 3: 处理器保存观测记录
 	mockJobRepo := &mockJobRepoForAI{}
 	mockObsRepo := &mockTagObservationRepo{}
@@ -107,7 +109,7 @@ func TestAITagHandler_SavesObservation(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil)
+	RegisterBatchAITagHandler(manager, mockJobRepo, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil, nil, nil, "auto")
 
 	payload := AITagPayload{
 		ImageID: 456,
@@ -128,8 +130,8 @@ func TestAITagHandler_SavesObservation(t *testing.T) {
 	if obs.ImageID != 456 {
 		t.Errorf("expected image ID 456, got %d", obs.ImageID)
 	}
-	if obs.Provider != "mock" {
-		t.Errorf("expected provider 'mock', got %s", obs.Provider)
+	if obs.Provider != "doubao" {
+		t.Errorf("expected provider 'doubao', got %s", obs.Provider)
 	}
 	if obs.ModelName != "doubao-vision-pro" {
 		t.Errorf("expected model 'doubao-vision-pro', got %s", obs.ModelName)
@@ -142,7 +144,7 @@ func TestAITagHandler_SavesObservation(t *testing.T) {
 	}
 }
 
-func TestAITagHandler_PersistsPendingImageTagsForReview(t *testing.T) {
+func TestBatchAITagHandler_PersistsPendingImageTagsForReview(t *testing.T) {
 	db := mustOpenAIWorkerDB(t)
 	seedAIWorkerImage(t, db, 456)
 
@@ -159,8 +161,9 @@ func TestAITagHandler_PersistsPendingImageTagsForReview(t *testing.T) {
 		},
 	}
 
-	manager := NewManager(&mockJobRepoForAI{})
-	RegisterAITagHandler(manager, mockClient, obsRepo, governance, imageTagRepo)
+	mockJobRepo := &mockJobRepoForAI{}
+	manager := NewManager(mockJobRepo)
+	RegisterBatchAITagHandler(manager, mockJobRepo, mockClient, obsRepo, governance, nil, nil, nil, "auto")
 
 	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 456, Path: "/test/image.png"})
 	handler := manager.handlers["ai_tag_generation"]
@@ -196,7 +199,7 @@ func TestAITagHandler_PersistsPendingImageTagsForReview(t *testing.T) {
 	}
 }
 
-func TestAITagHandler_RemovesRejectedAITagsBeforeSavingFreshResults(t *testing.T) {
+func TestBatchAITagHandler_RemovesRejectedAITagsBeforeSavingFreshResults(t *testing.T) {
 	db := mustOpenAIWorkerDB(t)
 	seedAIWorkerImage(t, db, 457)
 	ctx := context.Background()
@@ -223,8 +226,9 @@ func TestAITagHandler_RemovesRejectedAITagsBeforeSavingFreshResults(t *testing.T
 		},
 	}
 
-	manager := NewManager(&mockJobRepoForAI{})
-	RegisterAITagHandler(manager, mockClient, obsRepo, governance, imageTagRepo)
+	mockJobRepo := &mockJobRepoForAI{}
+	manager := NewManager(mockJobRepo)
+	RegisterBatchAITagHandler(manager, mockJobRepo, mockClient, obsRepo, governance, nil, nil, nil, "auto")
 
 	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 457, Path: "/test/image.png"})
 	handler := manager.handlers["ai_tag_generation"]
@@ -247,39 +251,6 @@ func TestAITagHandler_RemovesRejectedAITagsBeforeSavingFreshResults(t *testing.T
 	}
 	if len(items) != 1 || items[0].TagID != newTag.ID {
 		t.Fatalf("unexpected image tags after fresh generation: %+v", items)
-	}
-}
-
-func TestAITagHandler_SkipsWhenImageAlreadyHasAITags(t *testing.T) {
-	mockJobRepo := &mockJobRepoForAI{}
-	mockObsRepo := &mockTagObservationRepo{}
-	mockClient := &mockAIClient{
-		result: &ai.TagResult{
-			Tags:       []string{"blue hair", "girl", "outdoors"},
-			Confidence: 0.95,
-			ModelName:  "doubao-vision-pro",
-		},
-	}
-
-	manager := NewManager(mockJobRepo)
-	governance := &mockTagGovernanceService{}
-	aiTagChecker := &mockAITagPresenceChecker{hasAITags: true}
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, governance, aiTagChecker)
-
-	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 789, Path: "/test/image.png"})
-	handler := manager.handlers["ai_tag_generation"]
-	if err := handler(context.Background(), 3, string(payloadBytes)); err != nil {
-		t.Fatalf("handler failed: %v", err)
-	}
-
-	if mockClient.lastImageURL != "" {
-		t.Fatalf("expected AI client not to be called, got %q", mockClient.lastImageURL)
-	}
-	if mockObsRepo.savedObservation != nil {
-		t.Fatal("expected observation not to be saved when AI tags already exist")
-	}
-	if governance.called {
-		t.Fatal("expected governance merge not to be called when AI tags already exist")
 	}
 }
 
@@ -371,14 +342,14 @@ func TestAITagRegenerationHandlerReplacesPendingAITagsButPreservesConfirmedTags(
 	}
 }
 
-func TestAITagHandler_InvalidPayload(t *testing.T) {
+func TestBatchAITagHandler_InvalidPayload(t *testing.T) {
 	// Test: 处理无效 payload
 	mockJobRepo := &mockJobRepoForAI{}
 	mockObsRepo := &mockTagObservationRepo{}
 	mockClient := &mockAIClient{}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil)
+	RegisterBatchAITagHandler(manager, mockJobRepo, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil, nil, nil, "auto")
 
 	handler := manager.handlers["ai_tag_generation"]
 	err := handler(context.Background(), 1, "invalid json")
@@ -387,7 +358,7 @@ func TestAITagHandler_InvalidPayload(t *testing.T) {
 	}
 }
 
-func TestAITagHandler_AIServiceError(t *testing.T) {
+func TestBatchAITagHandler_AIServiceError(t *testing.T) {
 	// Test: AI 服务错误处理
 	mockJobRepo := &mockJobRepoForAI{}
 	mockObsRepo := &mockTagObservationRepo{}
@@ -396,7 +367,7 @@ func TestAITagHandler_AIServiceError(t *testing.T) {
 	}
 
 	manager := NewManager(mockJobRepo)
-	RegisterAITagHandler(manager, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil)
+	RegisterBatchAITagHandler(manager, mockJobRepo, mockClient, mockObsRepo, &mockTagGovernanceService{}, nil, nil, nil, "auto")
 
 	payload := AITagPayload{
 		ImageID: 1,
@@ -411,7 +382,7 @@ func TestAITagHandler_AIServiceError(t *testing.T) {
 	}
 }
 
-func TestAITagHandler_RejectsErrorLikeModelOutput(t *testing.T) {
+func TestBatchAITagHandler_RejectsErrorLikeModelOutput(t *testing.T) {
 	db := mustOpenAIWorkerDB(t)
 	seedAIWorkerImage(t, db, 777)
 
@@ -429,11 +400,11 @@ func TestAITagHandler_RejectsErrorLikeModelOutput(t *testing.T) {
 		},
 	}
 
-	handler := NewAITagJobHandler(mockClient, obsRepo, governance, nil)
+	handler := NewBatchAITagJobHandler(&mockJobRepoForAI{}, mockClient, obsRepo, governance, nil, nil, nil, "auto")
 	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 777, Path: "/images/test.png"})
 	err := handler(context.Background(), 9, string(payloadBytes))
-	if err == nil {
-		t.Fatal("expected invalid AI output to be rejected")
+	if err == nil || !strings.Contains(err.Error(), "validate tags") {
+		t.Fatalf("expected validate tags error, got %v", err)
 	}
 
 	observations, err := obsRepo.FindByImageID(context.Background(), 777)
@@ -452,10 +423,250 @@ func TestAITagHandler_RejectsErrorLikeModelOutput(t *testing.T) {
 	}
 }
 
+func TestBatchAITagHandler_SingleModeDoesNotClaimExtraJobsAndUsesGenerateTags(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{extraJobs: []domain.AsyncJob{{ID: 2, Payload: `{"image_id":2,"path":"/extra.jpg"}`}}}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{result: &ai.TagResult{Tags: []string{"girl", "anime"}, Confidence: 0.9, ModelName: "doubao"}}
+	governance := &mockTagGovernanceService{}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, nil, nil, nil, "single")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 1, Path: "/single.jpg"})
+	if err := handler(context.Background(), 1, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+	if mockJobRepo.claimCalls != 0 {
+		t.Fatalf("expected no claim calls in single mode, got %d", mockJobRepo.claimCalls)
+	}
+	if mockClient.generateTagsCalls != 1 || mockClient.generateTagsBatchCalls != 0 {
+		t.Fatalf("expected single GenerateTags call, got generate=%d batch=%d", mockClient.generateTagsCalls, mockClient.generateTagsBatchCalls)
+	}
+}
+
+func TestBatchAITagHandler_AutoModeMultiRequestUsesGenerateTagsBatch(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{extraJobs: []domain.AsyncJob{{ID: 2, Payload: `{"image_id":2,"path":"/extra.jpg"}`}}}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{result: &ai.TagResult{Tags: []string{"girl", "anime"}, Confidence: 0.9, ModelName: "doubao"}}
+	governance := &mockTagGovernanceService{}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, nil, nil, nil, "auto")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 1, Path: "/single.jpg"})
+	if err := handler(context.Background(), 1, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+	if mockJobRepo.claimCalls != 1 {
+		t.Fatalf("expected claim call in auto mode, got %d", mockJobRepo.claimCalls)
+	}
+	if mockClient.generateTagsCalls != 0 || mockClient.generateTagsBatchCalls != 1 {
+		t.Fatalf("expected batch call in auto mode with extra jobs, got generate=%d batch=%d", mockClient.generateTagsCalls, mockClient.generateTagsBatchCalls)
+	}
+}
+
+func TestBatchAITagHandler_MultiModeSingleRequestUsesGenerateTagsBatch(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{result: &ai.TagResult{Tags: []string{"girl", "anime"}, Confidence: 0.9, ModelName: "doubao"}}
+	governance := &mockTagGovernanceService{}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, nil, nil, nil, "multi")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 1, Path: "/single.jpg"})
+	if err := handler(context.Background(), 1, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+	if mockClient.generateTagsCalls != 0 || mockClient.generateTagsBatchCalls != 1 {
+		t.Fatalf("expected forced batch call in multi mode, got generate=%d batch=%d", mockClient.generateTagsCalls, mockClient.generateTagsBatchCalls)
+	}
+}
+
+func TestBatchAITagHandler_NonDoubaoProviderIgnoresDoubaoBatchMode(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{
+		name:   "qwen",
+		result: &ai.TagResult{Tags: []string{"girl", "anime"}, Confidence: 0.9, ModelName: "qwen-vl-max"},
+	}
+	governance := &mockTagGovernanceService{}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, nil, nil, nil, "single")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 1, Path: "/single.jpg"})
+	if err := handler(context.Background(), 1, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+	if mockJobRepo.claimCalls != 1 {
+		t.Fatalf("expected non-doubao provider to ignore doubao_batch_mode and still claim, got %d", mockJobRepo.claimCalls)
+	}
+}
+
+func TestBatchAITagHandler_SkipsWhenImageAlreadyHasAITags(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{
+		result: &ai.TagResult{Tags: []string{"blue hair", "girl", "outdoors"}, Confidence: 0.95, ModelName: "doubao-vision-pro"},
+	}
+	governance := &mockTagGovernanceService{}
+	checker := &mockAITagPresenceChecker{hasAITags: true}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, nil, nil, checker, "auto")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 789, Path: "/test/image.png"})
+	if err := handler(context.Background(), 3, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+
+	if governance.called {
+		t.Fatal("expected governance merge to be skipped when image already has AI tags")
+	}
+	if mockClient.generateTagsCalls != 0 || mockClient.generateTagsBatchCalls != 0 {
+		t.Fatalf("expected no AI calls when image already has AI tags, got generate=%d batch=%d", mockClient.generateTagsCalls, mockClient.generateTagsBatchCalls)
+	}
+}
+
+func TestBatchAITagHandler_DoesNotOverwriteSkippedJobsWhenBatchFails(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{extraJobs: []domain.AsyncJob{{ID: 2, Payload: `{"image_id":2,"path":"/extra.jpg"}`}}}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{
+		result: &ai.TagResult{Tags: []string{"girl", "anime"}, Confidence: 0.9, ModelName: "doubao"},
+		err:    errors.New("upstream failed"),
+	}
+	governance := &mockTagGovernanceService{}
+	checker := &mockAITagPresenceChecker{hasAITagsForImage: map[int64]bool{1: true}}
+	platformSvc := &mockBatchPlatformService{}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, platformSvc, nil, checker, "auto")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 1, Path: "/single.jpg"})
+	err := handler(context.Background(), 1, string(payloadBytes))
+	if err == nil {
+		t.Fatal("expected batch failure")
+	}
+	if got := mockJobRepo.updatesByID[1].Status; got != "finished" {
+		t.Fatalf("expected skipped triggering job to stay finished, got %q", got)
+	}
+	if mockJobRepo.updatesByID[1].Error != nil {
+		t.Fatalf("expected skipped triggering job to keep nil error, got %v", *mockJobRepo.updatesByID[1].Error)
+	}
+	if got := mockJobRepo.updatesByID[2].Status; got != "failed" {
+		t.Fatalf("expected requested sibling to fail, got %q", got)
+	}
+	if len(platformSvc.completed) != 1 || platformSvc.completed[0][0] != 1 {
+		t.Fatalf("expected skipped job completion sync, got %+v", platformSvc.completed)
+	}
+	if len(platformSvc.failed) != 1 || len(platformSvc.failed[0]) != 1 || platformSvc.failed[0][0] != 2 {
+		t.Fatalf("expected only request job failure sync, got %+v", platformSvc.failed)
+	}
+}
+
+func TestBatchAITagHandler_MarksInvalidClaimedPayloadJobsFailed(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{extraJobs: []domain.AsyncJob{{ID: 2, Payload: `not-json`}}}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{result: &ai.TagResult{Tags: []string{"girl", "anime"}, Confidence: 0.9, ModelName: "doubao"}}
+	governance := &mockTagGovernanceService{}
+	platformSvc := &mockBatchPlatformService{}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, platformSvc, nil, nil, "auto")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 1, Path: "/single.jpg"})
+	if err := handler(context.Background(), 1, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+	if got := mockJobRepo.updatesByID[2].Status; got != "failed" {
+		t.Fatalf("expected invalid claimed payload job to fail, got %q", got)
+	}
+	if mockJobRepo.updatesByID[2].Error == nil || !strings.Contains(*mockJobRepo.updatesByID[2].Error, "parse payload") {
+		t.Fatalf("expected parse payload error on invalid claimed job, got %+v", mockJobRepo.updatesByID[2].Error)
+	}
+	if len(platformSvc.failed) != 1 || len(platformSvc.failed[0]) != 1 || platformSvc.failed[0][0] != 2 {
+		t.Fatalf("expected invalid claimed payload job failure sync, got %+v", platformSvc.failed)
+	}
+	if got := mockJobRepo.updatesByID[1].Status; got != "finished" {
+		t.Fatalf("expected triggering job to finish successfully, got %q", got)
+	}
+}
+
+func TestBatchAITagHandler_SyncsInvalidClaimedPayloadFailuresBeforeAIError(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{extraJobs: []domain.AsyncJob{{ID: 2, Payload: `not-json`}}}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{
+		result: &ai.TagResult{Tags: []string{"girl", "anime"}, Confidence: 0.9, ModelName: "doubao"},
+		err:    errors.New("upstream failed"),
+	}
+	governance := &mockTagGovernanceService{}
+	platformSvc := &mockBatchPlatformService{}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, platformSvc, nil, nil, "auto")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 1, Path: "/single.jpg"})
+	err := handler(context.Background(), 1, string(payloadBytes))
+	if err == nil {
+		t.Fatal("expected upstream failure")
+	}
+	if len(platformSvc.failed) != 2 {
+		t.Fatalf("expected two failure sync calls, got %+v", platformSvc.failed)
+	}
+	if len(platformSvc.failed[0]) != 1 || platformSvc.failed[0][0] != 2 {
+		t.Fatalf("expected invalid payload job synced first, got %+v", platformSvc.failed)
+	}
+	if len(platformSvc.failed[1]) != 1 || platformSvc.failed[1][0] != 1 {
+		t.Fatalf("expected triggering request job synced on AI failure, got %+v", platformSvc.failed)
+	}
+}
+
+func TestBatchAITagHandler_TriggeringJobPostProcessingFailureReturnsError(t *testing.T) {
+	mockJobRepo := &mockJobRepoForAI{AsyncJob: domain.AsyncJob{ID: 1, Type: "ai_tag_generation", Status: "running", Payload: `{"image_id":1,"path":"/single.jpg"}`}}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{result: &ai.TagResult{Tags: []string{"girl", "anime"}, Confidence: 0.9, ModelName: "doubao"}}
+	governance := &mockTagGovernanceService{err: errors.New("merge failed")}
+	platformSvc := &mockBatchPlatformService{}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, platformSvc, nil, nil, "auto")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 1, Path: "/single.jpg"})
+	err := handler(context.Background(), 1, string(payloadBytes))
+	if err == nil || !strings.Contains(err.Error(), "merge failed") {
+		t.Fatalf("expected triggering job failure to return merge error, got %v", err)
+	}
+	if len(platformSvc.failed) != 1 || platformSvc.failed[0][0] != 1 {
+		t.Fatalf("expected failed sync for triggering job, got %+v", platformSvc.failed)
+	}
+}
+
+func TestBatchAITagHandler_OnlyClaimsSiblingJobsFromSameBatch(t *testing.T) {
+	triggerTaskID := int64(101)
+	sameBatchTaskID := int64(102)
+	otherBatchTaskID := int64(201)
+	mockJobRepo := &mockJobRepoForAI{
+		AsyncJob: domain.AsyncJob{ID: 1, PlatformTaskID: &triggerTaskID, Type: "ai_tag_generation", Status: "running", Payload: `{"image_id":1,"path":"/trigger.jpg"}`},
+		extraJobs: []domain.AsyncJob{
+			{ID: 2, PlatformTaskID: &sameBatchTaskID, Type: "ai_tag_generation", Status: "running", Payload: `{"image_id":2,"path":"/same.jpg"}`},
+			{ID: 3, PlatformTaskID: &otherBatchTaskID, Type: "ai_tag_generation", Status: "running", Payload: `{"image_id":3,"path":"/other.jpg"}`},
+		},
+	}
+	mockObsRepo := &mockTagObservationRepo{}
+	mockClient := &mockAIClient{result: &ai.TagResult{Tags: []string{"girl", "anime"}, Confidence: 0.9, ModelName: "doubao"}}
+	governance := &mockTagGovernanceService{}
+	taskRepo := &mockPlatformTaskRepo{tasks: map[int64]*domain.PlatformTask{
+		triggerTaskID:    {ID: triggerTaskID, BatchID: 1000, TaskType: domain.PlatformTaskTypeAITagGeneration},
+		sameBatchTaskID:  {ID: sameBatchTaskID, BatchID: 1000, TaskType: domain.PlatformTaskTypeAITagGeneration},
+		otherBatchTaskID: {ID: otherBatchTaskID, BatchID: 2000, TaskType: domain.PlatformTaskTypeAITagGeneration},
+	}}
+
+	handler := NewBatchAITagJobHandler(mockJobRepo, mockClient, mockObsRepo, governance, nil, taskRepo, nil, "auto")
+	payloadBytes, _ := json.Marshal(AITagPayload{ImageID: 1, Path: "/trigger.jpg"})
+	if err := handler(context.Background(), 1, string(payloadBytes)); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+	if mockClient.generateTagsBatchCalls != 1 {
+		t.Fatalf("expected one batch call, got %d", mockClient.generateTagsBatchCalls)
+	}
+	if len(mockClient.lastBatchRequests) != 2 {
+		t.Fatalf("expected trigger + same-batch sibling only, got %+v", mockClient.lastBatchRequests)
+	}
+	if updated, ok := mockJobRepo.updatesByID[3]; !ok || updated.Status != "ready" || updated.StartedAt != nil {
+		t.Fatalf("expected other-batch job released back to ready, got %+v", updated)
+	}
+}
+
 // ========== Mocks ==========
 
 type mockJobRepoForAI struct {
 	domain.AsyncJob
+	extraJobs   []domain.AsyncJob
+	claimCalls  int
+	updatesByID map[int64]domain.AsyncJob
 }
 
 func (m *mockJobRepoForAI) Save(job *domain.AsyncJob) error {
@@ -463,7 +674,13 @@ func (m *mockJobRepoForAI) Save(job *domain.AsyncJob) error {
 	job.ID = 1
 	return nil
 }
-func (m *mockJobRepoForAI) FindByID(id int64) (*domain.AsyncJob, error) { return &m.AsyncJob, nil }
+func (m *mockJobRepoForAI) FindByID(id int64) (*domain.AsyncJob, error) {
+	if m.AsyncJob.ID == 0 || m.AsyncJob.ID != id {
+		return nil, sql.ErrNoRows
+	}
+	job := m.AsyncJob
+	return &job, nil
+}
 func (m *mockJobRepoForAI) FindByPlatformTaskID(platformTaskID int64) ([]domain.AsyncJob, error) {
 	return nil, nil
 }
@@ -475,6 +692,10 @@ func (m *mockJobRepoForAI) FindByType(jobType string) ([]domain.AsyncJob, error)
 }
 func (m *mockJobRepoForAI) Update(job *domain.AsyncJob) error {
 	m.AsyncJob = *job
+	if m.updatesByID == nil {
+		m.updatesByID = make(map[int64]domain.AsyncJob)
+	}
+	m.updatesByID[job.ID] = *job
 	return nil
 }
 func (m *mockJobRepoForAI) FindRecent(limit int) ([]domain.AsyncJob, error) {
@@ -494,6 +715,21 @@ func (m *mockJobRepoForAI) CountByStatus(status string) (int64, error) {
 }
 func (m *mockJobRepoForAI) ResetRunningToReady() (int64, error) {
 	return 0, nil
+}
+func (m *mockJobRepoForAI) CasPendingToRunning(ctx context.Context, jobType string, limit int) ([]domain.AsyncJob, error) {
+	return nil, nil
+}
+func (m *mockJobRepoForAI) FindAndClaimReadyJobs(ctx context.Context, jobType string, limit int) ([]domain.AsyncJob, error) {
+	m.claimCalls++
+	if len(m.extraJobs) == 0 {
+		return nil, nil
+	}
+	if limit > len(m.extraJobs) {
+		limit = len(m.extraJobs)
+	}
+	claimed := append([]domain.AsyncJob(nil), m.extraJobs[:limit]...)
+	m.extraJobs = m.extraJobs[limit:]
+	return claimed, nil
 }
 
 type mockTagObservationRepo struct {
@@ -534,25 +770,82 @@ func (m *mockTagGovernanceService) MergeTags(ctx context.Context, imageID int64,
 }
 
 type mockAIClient struct {
-	result       *ai.TagResult
-	err          error
-	lastImageURL string
+	result                 *ai.TagResult
+	err                    error
+	lastImageURL           string
+	lastBatchRequests      []ai.TagRequest
+	generateTagsCalls      int
+	generateTagsBatchCalls int
+	name                   string
 }
 
 type mockAITagPresenceChecker struct {
-	hasAITags bool
-	err       error
+	hasAITags         bool
+	hasAITagsForImage map[int64]bool
+	err               error
 }
 
 func (m *mockAITagPresenceChecker) HasAITags(ctx context.Context, imageID int64) (bool, error) {
+	if m.hasAITagsForImage != nil {
+		return m.hasAITagsForImage[imageID], m.err
+	}
 	return m.hasAITags, m.err
 }
 
+type mockBatchPlatformService struct {
+	completed [][]int64
+	failed    [][]int64
+	errors    []string
+}
+
+type mockPlatformTaskRepo struct {
+	tasks map[int64]*domain.PlatformTask
+}
+
+func (m *mockPlatformTaskRepo) FindByID(ctx context.Context, taskID int64) (*domain.PlatformTask, error) {
+	if m.tasks == nil {
+		return nil, sql.ErrNoRows
+	}
+	task, ok := m.tasks[taskID]
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
+	return task, nil
+}
+
+func (m *mockBatchPlatformService) MarkJobsCompleted(ctx context.Context, jobIDs []int64) error {
+	m.completed = append(m.completed, append([]int64(nil), jobIDs...))
+	return nil
+}
+
+func (m *mockBatchPlatformService) MarkJobsFailed(ctx context.Context, jobIDs []int64, errorSync string) error {
+	m.failed = append(m.failed, append([]int64(nil), jobIDs...))
+	m.errors = append(m.errors, errorSync)
+	return nil
+}
+
+func (m *mockAIClient) GenerateTagsBatch(ctx context.Context, requests []ai.TagRequest) (*ai.BatchTagResult, error) {
+	m.generateTagsBatchCalls++
+	m.lastBatchRequests = append([]ai.TagRequest(nil), requests...)
+	groups := make([][]string, len(requests))
+	for i := range groups {
+		groups[i] = m.result.Tags
+	}
+	return &ai.BatchTagResult{
+		Groups:      groups,
+		ModelName:   m.result.ModelName,
+		RawResponse: m.result.RawResponse,
+	}, m.err
+}
 func (m *mockAIClient) Name() string {
-	return "mock"
+	if m.name != "" {
+		return m.name
+	}
+	return "doubao"
 }
 
 func (m *mockAIClient) GenerateTags(ctx context.Context, imageURL, prompt string) (*ai.TagResult, error) {
+	m.generateTagsCalls++
 	m.lastImageURL = imageURL
 	return m.result, m.err
 }

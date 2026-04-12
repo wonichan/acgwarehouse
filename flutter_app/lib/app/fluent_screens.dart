@@ -99,6 +99,10 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
                     onHasTagsChanged: (value) {
                       imageProvider.setHasTagsFilter(value);
                     },
+                    hasPendingTagsFilter: imageProvider.hasPendingTagsFilter,
+                    onHasPendingTagsChanged: (value) {
+                      imageProvider.setHasPendingTagsFilter(value);
+                    },
                   ),
                 ),
             ],

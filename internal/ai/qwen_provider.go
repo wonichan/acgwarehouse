@@ -32,3 +32,7 @@ func (p *QwenProvider) GenerateTags(ctx context.Context, imageURL, prompt string
 	}
 	return result, nil
 }
+
+func (p *QwenProvider) GenerateTagsBatch(ctx context.Context, requests []TagRequest) (*BatchTagResult, error) {
+	return generateTagsBatchFallback(ctx, p, requests)
+}
