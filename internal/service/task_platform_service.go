@@ -250,6 +250,11 @@ func (s *TaskPlatformService) QueueTask(ctx context.Context, task *domain.Platfo
 	}
 	if err := s.taskRepo.SetLatestAsyncJob(ctx, task.ID, &job.ID); err != nil {
 		log.Printf("[service] QueueTask failed: error=%v", err)
+		// Mark the orphaned job as failed so refillLoop won't pick it up as a ghost task.
+		errMsg := fmt.Sprintf("orphaned: SetLatestAsyncJob failed: %v", err)
+		if cleanupErr := s.jobRepo.UpdateStatus(job.ID, "failed", &errMsg); cleanupErr != nil {
+			log.Printf("[service] QueueTask cleanup failed: job_id=%d error=%v", job.ID, cleanupErr)
+		}
 		return nil, err
 	}
 	queuedTask, err := s.taskRepo.FindByID(ctx, task.ID)

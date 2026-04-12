@@ -31,6 +31,13 @@ func TestCalculateResizeDimensions_HandlesIntOverflow(t *testing.T) {
 	}
 }
 
+func TestValidateImageBytes_RejectsNonImageData(t *testing.T) {
+	err := validateImageBytes([]byte("not an image"), "")
+	if err == nil {
+		t.Fatal("expected non-image bytes to be rejected")
+	}
+}
+
 // TestCompressImageIfNeeded_SmallFileUnchanged tests that files under 10MB are returned unchanged
 func TestCompressImageIfNeeded_SmallFileUnchanged(t *testing.T) {
 	// Create a small test image (~100KB)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/ai"
@@ -271,8 +272,9 @@ func (a *App) registerAIHandlers() {
 
 	client := ai.NewRateLimitedClient(provider, a.config.AI.RequestsPerMinute)
 	a.aiRateLimitedClient = client
+	batchCoordinator := worker.NewAITagBatchCoordinator(4, 300*time.Millisecond)
 
-	aiHandler := worker.NewBatchAITagJobHandler(a.jobRepo, client, a.obsRepo, a.governanceSvc, a.newTaskPlatformService(), repository.NewPlatformTaskRepository(a.db), a.imageTagRepo, a.config.AI.DoubaoBatchMode)
+	aiHandler := worker.NewBatchAITagJobHandler(a.jobRepo, client, a.obsRepo, a.governanceSvc, a.newTaskPlatformService(), repository.NewPlatformTaskRepository(a.db), a.imageTagRepo, a.config.AI.DoubaoBatchMode, batchCoordinator)
 	aiRegenerationHandler := worker.NewAITagRegenerationJobHandler(client, a.obsRepo, a.governanceSvc)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagGeneration, aiHandler)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagRegeneration, aiRegenerationHandler)

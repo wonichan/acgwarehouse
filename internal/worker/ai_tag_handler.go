@@ -128,10 +128,166 @@ func RegisterBatchAITagHandler(manager *Manager, repo aiTagBatchRepo, client ai.
 }
 
 // NewBatchAITagJobHandler 创建批量 AI 标签处理器
-func NewBatchAITagJobHandler(repo aiTagBatchRepo, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, platformSvc aiTagBatchPlatformSvc, taskRepo aiTagBatchTaskRepo, aiTagChecker AITagPresenceChecker, batchMode string) JobFunc {
-	return func(ctx context.Context, id int64, payload string) error {
-		return handleBatchAITagGeneration(ctx, id, payload, repo, client, obsRepo, governance, platformSvc, taskRepo, aiTagChecker, batchMode)
+
+func NewBatchAITagJobHandler(_ aiTagBatchRepo, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, _ aiTagBatchPlatformSvc, _ aiTagBatchTaskRepo, aiTagChecker AITagPresenceChecker, batchMode string, coordinators ...*aiTagBatchCoordinator) JobFunc {
+	coordinator := firstAITagBatchCoordinator(coordinators...)
+	if coordinator == nil {
+		coordinator = newAITagBatchCoordinator(aiTagBatchSize, defaultAITagBatchWaitWindow)
 	}
+	return func(ctx context.Context, id int64, payload string) error {
+		return handleQueuedAITagGeneration(ctx, id, payload, client, obsRepo, governance, aiTagChecker, batchMode, coordinator)
+	}
+}
+
+func firstAITagBatchCoordinator(coordinators ...*aiTagBatchCoordinator) *aiTagBatchCoordinator {
+	for _, coordinator := range coordinators {
+		if coordinator != nil {
+			return coordinator
+		}
+	}
+	return nil
+}
+
+func handleQueuedAITagGeneration(ctx context.Context, id int64, payload string, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, aiTagChecker AITagPresenceChecker, batchMode string, coordinator *aiTagBatchCoordinator) error {
+	if governance == nil {
+		return fmt.Errorf("batch merge: governance service is nil")
+	}
+
+	effectiveMode := normalizeAITagBatchMode(batchMode)
+	if client == nil || client.Name() != "doubao" {
+		effectiveMode = aiTagBatchModeAuto
+	}
+
+	var p AITagPayload
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		return fmt.Errorf("parse payload: %w", err)
+	}
+
+	if aiTagChecker != nil {
+		hasAITags, err := aiTagChecker.HasAITags(ctx, p.ImageID)
+		if err != nil {
+			return fmt.Errorf("check existing ai tags: %w", err)
+		}
+		if hasAITags {
+			return nil
+		}
+	}
+
+	if effectiveMode == aiTagBatchModeSingle || coordinator == nil {
+		return executeAITagBatch(ctx, []aiTagBatchItem{{JobID: id, Payload: p}}, client, obsRepo, governance, effectiveMode)[0]
+	}
+
+	return coordinator.Submit(ctx, aiTagBatchItem{JobID: id, Payload: p}, func(batchCtx context.Context, items []aiTagBatchItem) []error {
+		return executeAITagBatch(batchCtx, items, client, obsRepo, governance, effectiveMode)
+	})
+}
+
+func executeAITagBatch(ctx context.Context, items []aiTagBatchItem, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, batchMode string) []error {
+	errs := make([]error, len(items))
+	if len(items) == 0 {
+		return errs
+	}
+	if governance == nil {
+		for i := range errs {
+			errs[i] = fmt.Errorf("batch merge: governance service is nil")
+		}
+		return errs
+	}
+
+	if limiter := aiTagConcurrencyLimiter.Load(); limiter != nil {
+		release, err := limiter.Acquire(ctx)
+		if err != nil {
+			for i := range errs {
+				errs[i] = fmt.Errorf("acquire concurrency slot: %w", err)
+			}
+			return errs
+		}
+		defer release()
+	}
+
+	log.Printf("AI 批量标签任务批次: job_ids=%v total=%d", batchItemJobIDs(items), len(items))
+	requests := make([]ai.TagRequest, len(items))
+	for i := range items {
+		prompt := items[i].Payload.Prompt
+		if prompt == "" {
+			prompt = DefaultTagPrompt
+		}
+		requests[i] = ai.TagRequest{
+			ImageID: items[i].Payload.ImageID,
+			Path:    items[i].Payload.Path,
+			Prompt:  prompt,
+		}
+	}
+
+	var (
+		groups     [][]string
+		modelName  string
+		confidence float64
+	)
+	if batchMode != aiTagBatchModeMulti && len(requests) == 1 {
+		result, err := client.GenerateTags(ctx, requests[0].Path, requests[0].Prompt)
+		if err != nil {
+			for i := range errs {
+				errs[i] = fmt.Errorf("generate tags: %w", err)
+			}
+			return errs
+		}
+		groups = [][]string{result.Tags}
+		modelName = result.ModelName
+		confidence = result.Confidence
+	} else {
+		batchResult, err := client.GenerateTagsBatch(ctx, requests)
+		if err != nil {
+			for i := range errs {
+				errs[i] = fmt.Errorf("generate tags: %w", err)
+			}
+			return errs
+		}
+		groups = batchResult.Groups
+		modelName = batchResult.ModelName
+		confidence = batchResult.Confidence
+	}
+
+	for i := range items {
+		if i >= len(groups) {
+			errs[i] = fmt.Errorf("generate tags: missing batch result")
+			continue
+		}
+		tags := groups[i]
+		if err := validateGeneratedTags(tags); err != nil {
+			errs[i] = fmt.Errorf("validate tags: %w", err)
+			continue
+		}
+		obs := &domain.TagObservation{
+			ImageID:      items[i].Payload.ImageID,
+			RawText:      strings.Join(tags, ", "),
+			Confidence:   confidence,
+			EvidenceType: "ai_generated",
+			Provider:     client.Name(),
+			ModelName:    modelName,
+			CreatedAt:    time.Now(),
+		}
+		if err := obsRepo.Save(ctx, obs); err != nil {
+			errs[i] = fmt.Errorf("save observation: %w", err)
+			continue
+		}
+		if err := governance.MergeTags(ctx, obs.ImageID, tags, obs.ID, obs.Confidence); err != nil {
+			errs[i] = fmt.Errorf("merge tags: %w", err)
+			continue
+		}
+		log.Printf("AI 批量标签单个任务完成: job_id=%d image_id=%d tag_count=%d", items[i].JobID, obs.ImageID, len(tags))
+	}
+
+	log.Printf("AI 批量标签全部完成: total=%d", len(items))
+	return errs
+}
+
+func batchItemJobIDs(items []aiTagBatchItem) []int64 {
+	ids := make([]int64, len(items))
+	for i := range items {
+		ids[i] = items[i].JobID
+	}
+	return ids
 }
 
 // NewAITagRegenerationJobHandler 创建 AI 标签重生成处理器
@@ -152,285 +308,6 @@ func NewAITagRegenerationJobHandler(client ai.AIProvider, obsRepo repository.Tag
 		log.Printf("AI 标签重生成任务清理旧标签完成: job_id=%d image_id=%d", id, p.ImageID)
 		return handleAITagGenerationWithPayload(ctx, id, p, client, obsRepo, governance, nil)
 	}
-}
-
-// handleBatchAITagGeneration 批量处理 AI 标签生成任务
-// 当前触发 job + 额外抓取最多 (batchSize-1) 个 ready job → 一次 AI 调用
-func handleBatchAITagGeneration(ctx context.Context, triggeringJobID int64, triggeringPayload string, repo aiTagBatchRepo, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, platformSvc aiTagBatchPlatformSvc, taskRepo aiTagBatchTaskRepo, aiTagChecker AITagPresenceChecker, batchMode string) error {
-	if governance == nil {
-		return fmt.Errorf("batch merge: governance service is nil")
-	}
-	effectiveMode := normalizeAITagBatchMode(batchMode)
-	if client == nil || client.Name() != "doubao" {
-		effectiveMode = aiTagBatchModeAuto
-	}
-
-	if limiter := aiTagConcurrencyLimiter.Load(); limiter != nil {
-		release, err := limiter.Acquire(ctx)
-		if err != nil {
-			return fmt.Errorf("acquire concurrency slot: %w", err)
-		}
-		defer release()
-	}
-
-	// 构建当前触发 job
-	var tp AITagPayload
-	if err := json.Unmarshal([]byte(triggeringPayload), &tp); err != nil {
-		return fmt.Errorf("parse triggering payload: %w", err)
-	}
-
-	triggeringJob := domain.AsyncJob{
-		ID:      triggeringJobID,
-		Payload: triggeringPayload,
-	}
-	if persistedJob, err := repo.FindByID(triggeringJobID); err == nil && persistedJob != nil {
-		triggeringJob = *persistedJob
-	}
-
-	// 额外抓取最多 (aiTagBatchSize - 1) 个 ready job
-	extraJobs := []domain.AsyncJob{}
-	if effectiveMode != aiTagBatchModeSingle {
-		var err error
-		extraJobs, err = repo.FindAndClaimReadyJobs(ctx, "ai_tag_generation", aiTagBatchSize-1)
-		if err != nil {
-			log.Printf("AI 批量标签抓取额外任务失败: %v，仅处理当前 job", err)
-		}
-		extraJobs = isolateClaimedJobsByBatch(ctx, triggeringJob, extraJobs, repo, taskRepo)
-	}
-
-	allJobs := append([]domain.AsyncJob{triggeringJob}, extraJobs...)
-	log.Printf("AI 批量标签任务批次: job_ids=%v total=%d", jobIDsList(allJobs), len(allJobs))
-
-	requests := make([]ai.TagRequest, 0, len(allJobs))
-	requestJobs := make([]domain.AsyncJob, 0, len(allJobs))
-	completedIDs := make([]int64, 0, len(allJobs))
-	skippedIDs := make([]int64, 0, len(allJobs))
-	failedIDs := make([]int64, 0, len(allJobs))
-	var triggeringErr error
-	for _, job := range allJobs {
-		var p AITagPayload
-		if err := json.Unmarshal([]byte(job.Payload), &p); err != nil {
-			log.Printf("AI 批量标签解析 payload 失败: job_id=%d error=%v，标记失败", job.ID, err)
-			markJobFailed(&job, fmt.Sprintf("parse payload: %v", err))
-			_ = repo.Update(&job)
-			failedIDs = append(failedIDs, job.ID)
-			continue
-		}
-		prompt := p.Prompt
-		if prompt == "" {
-			prompt = DefaultTagPrompt
-		}
-		if aiTagChecker != nil {
-			hasAITags, err := aiTagChecker.HasAITags(ctx, p.ImageID)
-			if err != nil {
-				return fmt.Errorf("check existing ai tags: %w", err)
-			}
-			if hasAITags {
-				markJobFinished(&job)
-				_ = repo.Update(&job)
-				skippedIDs = append(skippedIDs, job.ID)
-				continue
-			}
-		}
-		requests = append(requests, ai.TagRequest{
-			ImageID: p.ImageID,
-			Path:    p.Path,
-			Prompt:  prompt,
-		})
-		requestJobs = append(requestJobs, job)
-	}
-
-	if len(requests) == 0 {
-		if len(skippedIDs) > 0 {
-			if platformSvc != nil {
-				if err := platformSvc.MarkJobsCompleted(ctx, skippedIDs); err != nil {
-					log.Printf("AI 批量标签同步平台任务完成状态失败: job_ids=%v error=%v", skippedIDs, err)
-				}
-			}
-			log.Printf("AI 批量标签全部跳过: total=%d skipped=%d", len(allJobs), len(skippedIDs))
-			if len(failedIDs) == 0 {
-				return nil
-			}
-		}
-		if len(failedIDs) > 0 && platformSvc != nil {
-			if err := platformSvc.MarkJobsFailed(ctx, failedIDs, "payload parsing failed"); err != nil {
-				log.Printf("AI 批量标签同步无效任务失败状态失败: job_ids=%v error=%v", failedIDs, err)
-			}
-		}
-		if len(failedIDs) > 0 && len(skippedIDs) == 0 {
-			return fmt.Errorf("all %d batch payloads invalid", len(allJobs))
-		}
-		return nil
-	}
-
-	if len(failedIDs) > 0 && platformSvc != nil {
-		if err := platformSvc.MarkJobsFailed(ctx, failedIDs, "payload parsing failed"); err != nil {
-			log.Printf("AI 批量标签同步无效任务失败状态失败: job_ids=%v error=%v", failedIDs, err)
-		}
-		failedIDs = nil
-	}
-
-	var batchResult *ai.BatchTagResult
-	if effectiveMode != aiTagBatchModeMulti && len(requests) == 1 {
-		if len(skippedIDs) > 0 && platformSvc != nil {
-			if err := platformSvc.MarkJobsCompleted(ctx, skippedIDs); err != nil {
-				log.Printf("AI 批量标签同步平台任务完成状态失败: job_ids=%v error=%v", skippedIDs, err)
-			}
-		}
-		result, err := client.GenerateTags(ctx, requests[0].Path, requests[0].Prompt)
-		if err != nil {
-			return markAllBatchJobsFailed(ctx, requestJobs, repo, platformSvc, err)
-		}
-		batchResult = &ai.BatchTagResult{
-			Groups:     [][]string{result.Tags},
-			ModelName:  result.ModelName,
-			Confidence: result.Confidence,
-		}
-	} else {
-		if len(skippedIDs) > 0 && platformSvc != nil {
-			if err := platformSvc.MarkJobsCompleted(ctx, skippedIDs); err != nil {
-				log.Printf("AI 批量标签同步平台任务完成状态失败: job_ids=%v error=%v", skippedIDs, err)
-			}
-		}
-		var err error
-		batchResult, err = client.GenerateTagsBatch(ctx, requests)
-		if err != nil {
-			return markAllBatchJobsFailed(ctx, requestJobs, repo, platformSvc, err)
-		}
-	}
-
-	for i := range requestJobs {
-		if i >= len(batchResult.Groups) {
-			break
-		}
-		tags := batchResult.Groups[i]
-		if err := validateGeneratedTags(tags); err != nil {
-			log.Printf("AI 批量标签结果校验失败: job_id=%d image_id=%d error=%v", requestJobs[i].ID, extractImageID(requestJobs[i].Payload), err)
-			markJobFailed(&requestJobs[i], err.Error())
-			_ = repo.Update(&requestJobs[i])
-			failedIDs = append(failedIDs, requestJobs[i].ID)
-			if requestJobs[i].ID == triggeringJobID {
-				triggeringErr = fmt.Errorf("validate tags: %w", err)
-			}
-			continue
-		}
-
-		payload := extractPayload(requestJobs[i].Payload)
-		obs := &domain.TagObservation{
-			ImageID:      payload.ImageID,
-			RawText:      strings.Join(tags, ", "),
-			Confidence:   batchResult.Confidence,
-			EvidenceType: "ai_generated",
-			Provider:     client.Name(),
-			ModelName:    batchResult.ModelName,
-			CreatedAt:    time.Now(),
-		}
-
-		if err := obsRepo.Save(ctx, obs); err != nil {
-			log.Printf("AI 批量标签保存观测失败: job_id=%d error=%v", requestJobs[i].ID, err)
-			markJobFailed(&requestJobs[i], fmt.Sprintf("save observation: %v", err))
-			_ = repo.Update(&requestJobs[i])
-			failedIDs = append(failedIDs, requestJobs[i].ID)
-			if requestJobs[i].ID == triggeringJobID {
-				triggeringErr = fmt.Errorf("save observation: %w", err)
-			}
-			continue
-		}
-
-		if err := governance.MergeTags(ctx, obs.ImageID, tags, obs.ID, obs.Confidence); err != nil {
-			log.Printf("AI 批量标签合并标签失败: job_id=%d image_id=%d error=%v", requestJobs[i].ID, obs.ImageID, err)
-			markJobFailed(&requestJobs[i], fmt.Sprintf("merge tags: %v", err))
-			_ = repo.Update(&requestJobs[i])
-			failedIDs = append(failedIDs, requestJobs[i].ID)
-			if requestJobs[i].ID == triggeringJobID {
-				triggeringErr = fmt.Errorf("merge tags: %w", err)
-			}
-			continue
-		}
-
-		markJobFinished(&requestJobs[i])
-		_ = repo.Update(&requestJobs[i])
-		completedIDs = append(completedIDs, requestJobs[i].ID)
-		log.Printf("AI 批量标签单个任务完成: job_id=%d image_id=%d tag_count=%d", requestJobs[i].ID, obs.ImageID, len(tags))
-	}
-
-	if len(completedIDs) > 0 && platformSvc != nil {
-		if err := platformSvc.MarkJobsCompleted(ctx, completedIDs); err != nil {
-			log.Printf("AI 批量标签同步平台任务完成状态失败: job_ids=%v error=%v", completedIDs, err)
-		}
-	}
-	if len(failedIDs) > 0 && platformSvc != nil {
-		if err := platformSvc.MarkJobsFailed(ctx, failedIDs, "tag processing failed"); err != nil {
-			log.Printf("AI 批量标签同步平台任务失败状态失败: job_ids=%v error=%v", failedIDs, err)
-		}
-	}
-	if triggeringErr != nil {
-		return triggeringErr
-	}
-
-	log.Printf("AI 批量标签全部完成: total=%d success=%d failed=%d", len(completedIDs)+len(failedIDs), len(completedIDs), len(failedIDs))
-	return nil
-}
-
-func isolateClaimedJobsByBatch(ctx context.Context, triggeringJob domain.AsyncJob, jobs []domain.AsyncJob, repo aiTagBatchRepo, taskRepo aiTagBatchTaskRepo) []domain.AsyncJob {
-	if taskRepo == nil || triggeringJob.PlatformTaskID == nil {
-		return jobs
-	}
-	triggerTask, err := taskRepo.FindByID(ctx, *triggeringJob.PlatformTaskID)
-	if err != nil || triggerTask == nil {
-		return jobs
-	}
-	filtered := make([]domain.AsyncJob, 0, len(jobs))
-	for _, job := range jobs {
-		if job.PlatformTaskID == nil {
-			releaseClaimedJob(&job, repo)
-			continue
-		}
-		task, err := taskRepo.FindByID(ctx, *job.PlatformTaskID)
-		if err != nil || task == nil || task.BatchID != triggerTask.BatchID {
-			releaseClaimedJob(&job, repo)
-			continue
-		}
-		filtered = append(filtered, job)
-	}
-	return filtered
-}
-
-func releaseClaimedJob(job *domain.AsyncJob, repo aiTagBatchRepo) {
-	if job == nil {
-		return
-	}
-	job.Status = "ready"
-	job.StartedAt = nil
-	job.FinishedAt = nil
-	job.Error = nil
-	job.Progress = 0
-	_ = repo.Update(job)
-}
-
-func containsJobID(jobIDs []int64, target int64) bool {
-	for _, jobID := range jobIDs {
-		if jobID == target {
-			return true
-		}
-	}
-	return false
-}
-
-func markAllBatchJobsFailed(ctx context.Context, jobs []domain.AsyncJob, repo aiTagBatchRepo, platformSvc aiTagBatchPlatformSvc, err error) error {
-	errText := err.Error()
-	jobIDs := make([]int64, len(jobs))
-	for i := range jobs {
-		markJobFailed(&jobs[i], errText)
-		_ = repo.Update(&jobs[i])
-		jobIDs[i] = jobs[i].ID
-	}
-	if platformSvc != nil {
-		if syncErr := platformSvc.MarkJobsFailed(ctx, jobIDs, errText); syncErr != nil {
-			log.Printf("AI 批量标签同步平台任务失败状态失败: job_ids=%v error=%v", jobIDs, syncErr)
-		}
-	}
-	return fmt.Errorf("generate tags: %w", err)
 }
 
 func normalizeAITagBatchMode(raw string) string {
@@ -543,40 +420,4 @@ func looksLikeAIErrorMessage(text string) bool {
 		}
 	}
 	return false
-}
-
-func markJobFailed(job *domain.AsyncJob, errMsg string) {
-	now := time.Now()
-	job.Status = "failed"
-	job.Error = &errMsg
-	job.FinishedAt = &now
-}
-
-func markJobFinished(job *domain.AsyncJob) {
-	now := time.Now()
-	job.Status = "finished"
-	job.Progress = 100
-	job.FinishedAt = &now
-}
-
-func extractImageID(payload string) int64 {
-	var p AITagPayload
-	if err := json.Unmarshal([]byte(payload), &p); err != nil {
-		return 0
-	}
-	return p.ImageID
-}
-
-func extractPayload(payload string) AITagPayload {
-	var p AITagPayload
-	_ = json.Unmarshal([]byte(payload), &p)
-	return p
-}
-
-func jobIDsList(jobs []domain.AsyncJob) []int64 {
-	ids := make([]int64, len(jobs))
-	for i, j := range jobs {
-		ids[i] = j.ID
-	}
-	return ids
 }

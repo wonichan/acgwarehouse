@@ -140,6 +140,17 @@ func CompressImageIfNeeded(filePath string) ([]byte, string, error) {
 	return compressedData, contentType, nil
 }
 
+func validateImageBytes(data []byte, expected string) error {
+	contentType := http.DetectContentType(data)
+	if !strings.HasPrefix(contentType, "image/") {
+		return fmt.Errorf("invalid image content type: %s", contentType)
+	}
+	if expected != "" && contentType != expected {
+		return fmt.Errorf("unexpected image content type: %s", contentType)
+	}
+	return nil
+}
+
 func PrepareImageForDataURL(filePath string) ([]byte, string, error) {
 	data, contentType, err := CompressImageIfNeeded(filePath)
 	if err != nil {
