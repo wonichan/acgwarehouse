@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -51,7 +52,7 @@ func main() {
 	taskPlatformSvc := service.NewTaskPlatformService(repository.NewTaskBatchRepository(db), repository.NewPlatformTaskRepository(db), jobRepo)
 	scannerSvc := service.NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, *workers)
 
-	result, err := scannerSvc.Scan(nil, paths)
+	result, err := scannerSvc.Scan(context.TODO(), paths)
 	if err != nil {
 		logger.Fatalf("scan failed: %v", err)
 	}

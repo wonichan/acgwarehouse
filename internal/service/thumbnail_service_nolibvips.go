@@ -6,12 +6,12 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	"log"
 	"os"
 	"time"
 
 	"github.com/disintegration/imaging"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	_ "golang.org/x/image/webp"
 )
 
@@ -269,20 +269,20 @@ func (s *ThumbnailService) generateThumbnail(src image.Image, width, quality int
 
 func (s *ThumbnailService) GenerateBoth(imgPath string) (small, large *domain.Thumbnail, err error) {
 	startedAt := time.Now()
-	log.Printf("thumbnail generate-both started: path=%s", imgPath)
+	logger.Infof("thumbnail generate-both started: path=%s", imgPath)
 
 	fileSize, err := getFileSize(imgPath)
 	if err != nil {
-		log.Printf("thumbnail stat failed: path=%s error=%v", imgPath, err)
+		logger.Errorf("thumbnail stat failed: path=%s error=%v", imgPath, err)
 		return nil, nil, fmt.Errorf("get file size: %w", err)
 	}
 
 	src, err := imaging.Open(imgPath)
 	if err != nil {
-		log.Printf("thumbnail open failed: path=%s error=%v", imgPath, err)
+		logger.Errorf("thumbnail open failed: path=%s error=%v", imgPath, err)
 		return nil, nil, fmt.Errorf("open image: %w", err)
 	}
-	log.Printf("thumbnail source loaded: path=%s file_size=%d width=%d height=%d", imgPath, fileSize, src.Bounds().Dx(), src.Bounds().Dy())
+	logger.Infof("thumbnail source loaded: path=%s file_size=%d width=%d height=%d", imgPath, fileSize, src.Bounds().Dx(), src.Bounds().Dy())
 
 	filter := selectResizeFilter(fileSize)
 
@@ -290,24 +290,24 @@ func (s *ThumbnailService) GenerateBoth(imgPath string) (small, large *domain.Th
 	if fileSize >= mediumFileThreshold {
 		maxPreScaleWidth := s.LargeWidth * 4
 		workingImg = preScaleForLargeImage(src, maxPreScaleWidth)
-		log.Printf("thumbnail pre-scale applied: path=%s max_pre_scale_width=%d working_width=%d working_height=%d", imgPath, maxPreScaleWidth, workingImg.Bounds().Dx(), workingImg.Bounds().Dy())
+		logger.Infof("thumbnail pre-scale applied: path=%s max_pre_scale_width=%d working_width=%d working_height=%d", imgPath, maxPreScaleWidth, workingImg.Bounds().Dx(), workingImg.Bounds().Dy())
 	}
 
 	smallWidth, smallQuality, _ := s.paramsBySize("small")
 	small, err = s.generateSmallWithMinSize(workingImg, smallWidth, smallQuality, filter)
 	if err != nil {
-		log.Printf("thumbnail small generation failed: path=%s width=%d quality=%d error=%v", imgPath, smallWidth, smallQuality, err)
+		logger.Errorf("thumbnail small generation failed: path=%s width=%d quality=%d error=%v", imgPath, smallWidth, smallQuality, err)
 		return nil, nil, err
 	}
-	log.Printf("thumbnail small generated: path=%s bytes=%d width=%d height=%d", imgPath, len(small.Data), small.Width, small.Height)
+	logger.Infof("thumbnail small generated: path=%s bytes=%d width=%d height=%d", imgPath, len(small.Data), small.Width, small.Height)
 
 	largeWidth, largeQuality, _ := s.paramsBySize("large")
 	large, err = s.generateLargeWithMaxSize(workingImg, largeWidth, largeQuality, len(small.Data), filter)
 	if err != nil {
-		log.Printf("thumbnail large generation failed: path=%s width=%d quality=%d small_bytes=%d error=%v", imgPath, largeWidth, largeQuality, len(small.Data), err)
+		logger.Errorf("thumbnail large generation failed: path=%s width=%d quality=%d small_bytes=%d error=%v", imgPath, largeWidth, largeQuality, len(small.Data), err)
 		return nil, nil, err
 	}
-	log.Printf(
+	logger.Infof(
 		"thumbnail generate-both completed: path=%s duration=%s small_bytes=%d small_width=%d small_height=%d large_bytes=%d large_width=%d large_height=%d",
 		imgPath,
 		time.Since(startedAt),

@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -55,7 +55,7 @@ func NewTaskPlatformService(
 }
 
 func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPlanRequest) (*TaskPlatformPlanResult, error) {
-	log.Printf("[service] PlanBatch started: source_type=%s summary_label=%s total_images=%d", req.SourceType, req.SummaryLabel, len(req.Items))
+	logger.Infof("[service] PlanBatch started: source_type=%s summary_label=%s total_images=%d", req.SourceType, req.SummaryLabel, len(req.Items))
 	now := time.Now()
 	batch := &domain.TaskBatch{
 		SourceType:   req.SourceType,
@@ -66,7 +66,7 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 		CreatedAt:    now,
 	}
 	if err := s.batchRepo.Create(ctx, batch); err != nil {
-		log.Printf("[service] PlanBatch failed: error=%v", err)
+		logger.Errorf("[service] PlanBatch failed: error=%v", err)
 		return nil, err
 	}
 
@@ -85,7 +85,7 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 	taskTypes := uniqueNonEmptyStrings(req.TaskTypes)
 	existingByDedupeKey, err := s.buildExistingTaskLookup(ctx, req.Items, taskTypes, req.IgnoreHistoricalCompleted)
 	if err != nil {
-		log.Printf("[service] PlanBatch failed: error=%v", err)
+		logger.Errorf("[service] PlanBatch failed: error=%v", err)
 		return nil, err
 	}
 	for _, item := range req.Items {
@@ -120,7 +120,7 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 				CreatedAt:       now,
 			}
 			if err := s.taskRepo.Create(ctx, &task); err != nil {
-				log.Printf("[service] PlanBatch failed: image_id=%d task_type=%s error=%v", item.ImageID, taskType, err)
+				logger.Errorf("[service] PlanBatch failed: image_id=%d task_type=%s error=%v", item.ImageID, taskType, err)
 				return nil, err
 			}
 			createdTasks = append(createdTasks, task)
@@ -136,17 +136,17 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 
 	batch.NewImages = int64(len(createdImages))
 	if err := s.batchRepo.Update(ctx, batch); err != nil {
-		log.Printf("[service] PlanBatch failed: error=%v", err)
+		logger.Errorf("[service] PlanBatch failed: error=%v", err)
 		return nil, err
 	}
 
 	refreshed, err := s.batchRepo.RefreshStatus(ctx, batch.ID)
 	if err != nil {
-		log.Printf("[service] PlanBatch failed: error=%v", err)
+		logger.Errorf("[service] PlanBatch failed: error=%v", err)
 		return nil, err
 	}
 	result := &TaskPlatformPlanResult{Batch: refreshed, CreatedTasks: createdTasks}
-	log.Printf("[service] PlanBatch completed: batch_id=%d created_tasks=%d", result.Batch.ID, len(result.CreatedTasks))
+	logger.Infof("[service] PlanBatch completed: batch_id=%d created_tasks=%d", result.Batch.ID, len(result.CreatedTasks))
 	return result, nil
 }
 
@@ -216,10 +216,10 @@ func platformTaskStatusPriority(status string) int {
 }
 
 func (s *TaskPlatformService) RefreshBatchStatus(ctx context.Context, batchID int64) (*domain.TaskBatch, error) {
-	log.Printf("[service] RefreshBatchStatus started: batch_id=%d", batchID)
+	logger.Infof("[service] RefreshBatchStatus started: batch_id=%d", batchID)
 	batch, err := s.batchRepo.RefreshStatus(ctx, batchID)
 	if err != nil {
-		log.Printf("[service] RefreshBatchStatus failed: batch_id=%d error=%v", batchID, err)
+		logger.Errorf("[service] RefreshBatchStatus failed: batch_id=%d error=%v", batchID, err)
 		return nil, err
 	}
 	return batch, nil
@@ -230,10 +230,10 @@ func (s *TaskPlatformService) QueueTask(ctx context.Context, task *domain.Platfo
 	if task != nil {
 		taskType = task.TaskType
 	}
-	log.Printf("[service] QueueTask started: task_type=%s job_type=%s", taskType, jobType)
+	logger.Infof("[service] QueueTask started: task_type=%s job_type=%s", taskType, jobType)
 	if task == nil {
 		err := fmt.Errorf("platform task is required")
-		log.Printf("[service] QueueTask failed: task_type=%s job_type=%s error=%v", taskType, jobType, err)
+		logger.Errorf("[service] QueueTask failed: task_type=%s job_type=%s error=%v", taskType, jobType, err)
 		return nil, err
 	}
 	job := &domain.AsyncJob{
@@ -245,59 +245,59 @@ func (s *TaskPlatformService) QueueTask(ctx context.Context, task *domain.Platfo
 		CreatedAt:      time.Now(),
 	}
 	if err := s.jobRepo.Save(job); err != nil {
-		log.Printf("[service] QueueTask failed: error=%v", err)
+		logger.Errorf("[service] QueueTask failed: error=%v", err)
 		return nil, err
 	}
 	if err := s.taskRepo.SetLatestAsyncJob(ctx, task.ID, &job.ID); err != nil {
-		log.Printf("[service] QueueTask failed: error=%v", err)
+		logger.Errorf("[service] QueueTask failed: error=%v", err)
 		// Mark the orphaned job as failed so refillLoop won't pick it up as a ghost task.
 		errMsg := fmt.Sprintf("orphaned: SetLatestAsyncJob failed: %v", err)
 		if cleanupErr := s.jobRepo.UpdateStatus(job.ID, "failed", &errMsg); cleanupErr != nil {
-			log.Printf("[service] QueueTask cleanup failed: job_id=%d error=%v", job.ID, cleanupErr)
+			logger.Errorf("[service] QueueTask cleanup failed: job_id=%d error=%v", job.ID, cleanupErr)
 		}
 		return nil, err
 	}
 	queuedTask, err := s.taskRepo.FindByID(ctx, task.ID)
 	if err != nil {
-		log.Printf("[service] QueueTask failed: error=%v", err)
+		logger.Errorf("[service] QueueTask failed: error=%v", err)
 		return nil, err
 	}
 	*task = *queuedTask
 	if _, err := s.batchRepo.RefreshStatus(ctx, task.BatchID); err != nil {
-		log.Printf("[service] QueueTask failed: error=%v", err)
+		logger.Errorf("[service] QueueTask failed: error=%v", err)
 		return nil, err
 	}
-	log.Printf("[service] QueueTask completed: job_id=%d", job.ID)
+	logger.Infof("[service] QueueTask completed: job_id=%d", job.ID)
 	return job, nil
 }
 
 func (s *TaskPlatformService) MarkJobRunning(ctx context.Context, jobID int64) error {
-	log.Printf("[service] MarkJobRunning started: job_id=%d", jobID)
+	logger.Infof("[service] MarkJobRunning started: job_id=%d", jobID)
 	if err := s.updateTaskStatusForJob(ctx, jobID, domain.PlatformTaskStatusRunning, nil); err != nil {
-		log.Printf("[service] MarkJobRunning failed: job_id=%d error=%v", jobID, err)
+		logger.Errorf("[service] MarkJobRunning failed: job_id=%d error=%v", jobID, err)
 		return err
 	}
-	log.Printf("[service] MarkJobRunning completed: job_id=%d", jobID)
+	logger.Infof("[service] MarkJobRunning completed: job_id=%d", jobID)
 	return nil
 }
 
 func (s *TaskPlatformService) MarkJobCompleted(ctx context.Context, jobID int64) error {
-	log.Printf("[service] MarkJobCompleted started: job_id=%d", jobID)
+	logger.Infof("[service] MarkJobCompleted started: job_id=%d", jobID)
 	if err := s.updateTaskStatusForJob(ctx, jobID, domain.PlatformTaskStatusCompleted, nil); err != nil {
-		log.Printf("[service] MarkJobCompleted failed: job_id=%d error=%v", jobID, err)
+		logger.Errorf("[service] MarkJobCompleted failed: job_id=%d error=%v", jobID, err)
 		return err
 	}
-	log.Printf("[service] MarkJobCompleted completed: job_id=%d", jobID)
+	logger.Infof("[service] MarkJobCompleted completed: job_id=%d", jobID)
 	return nil
 }
 
 func (s *TaskPlatformService) MarkJobFailed(ctx context.Context, jobID int64, errorSummary string) error {
-	log.Printf("[service] MarkJobFailed started: job_id=%d error=%s", jobID, errorSummary)
+	logger.Errorf("[service] MarkJobFailed started: job_id=%d error=%s", jobID, errorSummary)
 	if err := s.updateTaskStatusForJob(ctx, jobID, domain.PlatformTaskStatusFailed, &errorSummary); err != nil {
-		log.Printf("[service] MarkJobFailed failed: job_id=%d error=%v", jobID, err)
+		logger.Errorf("[service] MarkJobFailed failed: job_id=%d error=%v", jobID, err)
 		return err
 	}
-	log.Printf("[service] MarkJobFailed completed: job_id=%d", jobID)
+	logger.Infof("[service] MarkJobFailed completed: job_id=%d", jobID)
 	return nil
 }
 
@@ -322,7 +322,7 @@ func (s *TaskPlatformService) MarkJobsFailed(ctx context.Context, jobIDs []int64
 func (s *TaskPlatformService) updateTaskStatusForJob(ctx context.Context, jobID int64, status string, errorSummary *string) error {
 	job, err := s.jobRepo.FindByID(jobID)
 	if err != nil {
-		log.Printf("[service] updateTaskStatusForJob failed: job_id=%d status=%s error=%v", jobID, status, err)
+		logger.Errorf("[service] updateTaskStatusForJob failed: job_id=%d status=%s error=%v", jobID, status, err)
 		return err
 	}
 	if job.PlatformTaskID == nil {
@@ -330,7 +330,7 @@ func (s *TaskPlatformService) updateTaskStatusForJob(ctx context.Context, jobID 
 	}
 	task, err := s.taskRepo.FindByID(ctx, *job.PlatformTaskID)
 	if err != nil {
-		log.Printf("[service] updateTaskStatusForJob failed: job_id=%d task_id=%d status=%s error=%v", jobID, *job.PlatformTaskID, status, err)
+		logger.Errorf("[service] updateTaskStatusForJob failed: job_id=%d task_id=%d status=%s error=%v", jobID, *job.PlatformTaskID, status, err)
 		return err
 	}
 	if task.Status == domain.PlatformTaskStatusCancelled {
@@ -361,12 +361,12 @@ func (s *TaskPlatformService) updateTaskStatusForJob(ctx context.Context, jobID 
 		task.Status = status
 	}
 	if err := s.taskRepo.Update(ctx, task); err != nil {
-		log.Printf("[service] updateTaskStatusForJob failed: job_id=%d task_id=%d status=%s error=%v", jobID, task.ID, status, err)
+		logger.Errorf("[service] updateTaskStatusForJob failed: job_id=%d task_id=%d status=%s error=%v", jobID, task.ID, status, err)
 		return err
 	}
 	_, err = s.batchRepo.RefreshStatus(ctx, task.BatchID)
 	if err != nil {
-		log.Printf("[service] updateTaskStatusForJob failed: job_id=%d batch_id=%d status=%s error=%v", jobID, task.BatchID, status, err)
+		logger.Errorf("[service] updateTaskStatusForJob failed: job_id=%d batch_id=%d status=%s error=%v", jobID, task.BatchID, status, err)
 	}
 	return err
 }

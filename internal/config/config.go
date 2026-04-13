@@ -302,86 +302,146 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("AI_MODEL"); v != "" {
 		cfg.AI.Model = v
 	}
-
 	if v := os.Getenv("AI_FALLBACK_MODELS"); v != "" {
 		cfg.AI.FallbackModels = normalizeFallbackModels(strings.Split(v, ","))
 	}
-
 	if v := os.Getenv("AI_DOUBAO_BATCH_MODE"); v != "" {
 		applyDoubaoBatchMode(cfg, v)
 	}
+	if v := os.Getenv("AUTO_AI_TAG_ON_IMPORT"); v != "" {
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			cfg.AI.AutoAITagOnImport = enabled
+		}
+	}
+	if v := os.Getenv("AUTO_AI_TAG_SCAN_INTERVAL_MINUTES"); v != "" {
+		if interval, err := strconv.Atoi(v); err == nil && interval > 0 {
+			cfg.AI.AutoScanIntervalMinutes = interval
+		}
+	}
+	if v := os.Getenv("AUTO_AI_TAG_BATCH_SIZE"); v != "" {
+		if batchSize, err := strconv.Atoi(v); err == nil && batchSize > 0 {
+			cfg.AI.AutoScanBatchSize = batchSize
+		}
+	}
 
+	if v := os.Getenv("AI_REQUESTS_PER_MINUTE"); v != "" {
+		if rpm, err := strconv.Atoi(v); err == nil {
+			cfg.AI.RequestsPerMinute = rpm
+		}
+	}
+	if v := os.Getenv("AI_MAX_CONCURRENCY"); v != "" {
+		if mc, err := strconv.Atoi(v); err == nil && mc > 0 {
+			cfg.AI.MaxConcurrency = mc
+		}
+	}
+
+	// 缩略图存储提供者
 	if v := os.Getenv("THUMBNAIL_STORAGE_PROVIDER"); v != "" {
 		cfg.ThumbnailStorageProvider = v
 	}
 
+	// COS 环境变量覆盖
+	if v := os.Getenv("COS_SECRET_ID"); v != "" {
+		cfg.COS.SecretID = v
+	}
+	if v := os.Getenv("COS_SECRET_KEY"); v != "" {
+		cfg.COS.SecretKey = v
+	}
 	if v := os.Getenv("COS_BUCKET_URL"); v != "" {
 		cfg.COS.BucketURL = v
 	}
 
-	if v := os.Getenv("COS_SECRET_ID"); v != "" {
-		cfg.COS.SecretID = v
-	}
-
-	if v := os.Getenv("COS_SECRET_KEY"); v != "" {
-		cfg.COS.SecretKey = v
-	}
-
+	// MinIO 环境变量覆盖
 	if v := os.Getenv("MINIO_ENDPOINT"); v != "" {
 		cfg.Minio.Endpoint = v
 	}
-
 	if v := os.Getenv("MINIO_ACCESS_KEY"); v != "" {
 		cfg.Minio.AccessKey = v
 	}
-
 	if v := os.Getenv("MINIO_SECRET_KEY"); v != "" {
 		cfg.Minio.SecretKey = v
 	}
-
 	if v := os.Getenv("MINIO_BUCKET"); v != "" {
 		cfg.Minio.Bucket = v
 	}
-
 	if v := os.Getenv("MINIO_USE_SSL"); v != "" {
-		cfg.Minio.UseSSL = strings.EqualFold(v, "true") || v == "1"
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			cfg.Minio.UseSSL = enabled
+		}
 	}
 
+	// Admin 环境变量覆盖
 	if v := os.Getenv("ADMIN_USERNAME"); v != "" {
 		cfg.Admin.Username = v
 	}
-
 	if v := os.Getenv("ADMIN_PASSWORD"); v != "" {
 		cfg.Admin.Password = v
 	}
 
+	// WorkerPool 环境变量覆盖
 	if v := os.Getenv("WORKER_COUNT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			cfg.WorkerPool.WorkerCount = n
+		if wc, err := strconv.Atoi(v); err == nil && wc > 0 {
+			cfg.WorkerPool.WorkerCount = wc
 		}
 	}
+	if v := os.Getenv("WORKER_QUEUE_SIZE"); v != "" {
+		if qs, err := strconv.Atoi(v); err == nil && qs > 0 {
+			cfg.WorkerPool.QueueSize = qs
+		}
+	}
+	if v := os.Getenv("WORKER_REFILL_INTERVAL"); v != "" {
+		if ri, err := strconv.Atoi(v); err == nil && ri > 0 {
+			cfg.WorkerPool.RefillIntervalSeconds = ri
+		}
+	}
+	if v := os.Getenv("WORKER_REFILL_THRESHOLD"); v != "" {
+		if rt, err := strconv.ParseFloat(v, 64); err == nil && rt > 0 && rt <= 1 {
+			cfg.WorkerPool.RefillThreshold = rt
+		}
+	}
+	if v := os.Getenv("WORKER_REFILL_BATCH_SIZE"); v != "" {
+		if rb, err := strconv.Atoi(v); err == nil && rb > 0 {
+			cfg.WorkerPool.RefillBatchSize = rb
+		}
+	}
+	if cfg.WorkerPool.RefillBatchSize <= 0 {
+		cfg.WorkerPool.RefillBatchSize = cfg.WorkerPool.QueueSize
+	}
+}
 
-	if v := os.Getenv("QUEUE_SIZE"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			cfg.WorkerPool.QueueSize = n
-		}
+func applyDoubaoBatchMode(cfg *Config, raw string) {
+	if cfg == nil {
+		return
 	}
+	cfg.AI.DoubaoBatchMode = normalizeDoubaoBatchMode(raw)
+}
 
-	if v := os.Getenv("REFILL_INTERVAL_SECONDS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			cfg.WorkerPool.RefillIntervalSeconds = n
-		}
+func normalizeDoubaoBatchMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "single", "auto", "multi":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return "auto"
 	}
+}
 
-	if v := os.Getenv("REFILL_THRESHOLD"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			cfg.WorkerPool.RefillThreshold = f
+func normalizeFallbackModels(models []string) []string {
+	if len(models) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(models))
+	for _, model := range models {
+		trimmed := strings.TrimSpace(model)
+		if trimmed != "" {
+			normalized = append(normalized, trimmed)
 		}
 	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
+}
 
-	if v := os.Getenv("REFILL_BATCH_SIZE"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			cfg.WorkerPool.RefillBatchSize = n
-		}
-	}
+func NormalizeFallbackModelsForProvider(models []string) []string {
+	return normalizeFallbackModels(models)
 }

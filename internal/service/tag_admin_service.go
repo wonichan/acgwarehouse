@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -217,7 +217,7 @@ func (s *TagAdminService) ListGovernanceTags(ctx context.Context, search string,
 }
 
 func (s *TagAdminService) MergeTags(ctx context.Context, sourceTagID, targetTagID int64) (*TagMergeResult, error) {
-	log.Printf("[service] TagAdmin MergeTags started: source_id=%d target_id=%d", sourceTagID, targetTagID)
+	logger.Infof("[service] TagAdmin MergeTags started: source_id=%d target_id=%d", sourceTagID, targetTagID)
 	if sourceTagID <= 0 || targetTagID <= 0 {
 		return nil, ErrTagNotFound
 	}
@@ -235,7 +235,7 @@ func (s *TagAdminService) MergeTags(ctx context.Context, sourceTagID, targetTagI
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
+		logger.Errorf("[service] TagAdmin MergeTags failed: %v", err)
 		return nil, err
 	}
 	defer func() {
@@ -246,7 +246,7 @@ func (s *TagAdminService) MergeTags(ctx context.Context, sourceTagID, targetTagI
 
 	sourceTag, err := queryTagByIDTx(ctx, tx, sourceTagID)
 	if err != nil {
-		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
+		logger.Errorf("[service] TagAdmin MergeTags failed: %v", err)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrTagNotFound
 		}
@@ -254,7 +254,7 @@ func (s *TagAdminService) MergeTags(ctx context.Context, sourceTagID, targetTagI
 	}
 	targetTag, err := queryTagByIDTx(ctx, tx, targetTagID)
 	if err != nil {
-		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
+		logger.Errorf("[service] TagAdmin MergeTags failed: %v", err)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrTagNotFound
 		}
@@ -272,36 +272,36 @@ func (s *TagAdminService) MergeTags(ctx context.Context, sourceTagID, targetTagI
 	}
 
 	if err := s.mergeImageAssociationsTx(ctx, tx, sourceTagID, targetTagID, mergeResult); err != nil {
-		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
+		logger.Errorf("[service] TagAdmin MergeTags failed: %v", err)
 		return nil, err
 	}
 
 	if err := s.mergeAliasesTx(ctx, tx, sourceTag, targetTag, mergeResult); err != nil {
-		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
+		logger.Errorf("[service] TagAdmin MergeTags failed: %v", err)
 		return nil, err
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM tag_aliases WHERE tag_id = ?`, sourceTagID); err != nil {
-		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
+		logger.Errorf("[service] TagAdmin MergeTags failed: %v", err)
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE id = ?`, sourceTagID); err != nil {
-		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
+		logger.Errorf("[service] TagAdmin MergeTags failed: %v", err)
 		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
+		logger.Errorf("[service] TagAdmin MergeTags failed: %v", err)
 		return nil, err
 	}
 	tx = nil
 
 	if err := s.imageTagRepo.SyncFTSForTag(ctx, targetTagID); err != nil {
-		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
+		logger.Errorf("[service] TagAdmin MergeTags failed: %v", err)
 		return nil, err
 	}
 
-	log.Printf("[service] TagAdmin MergeTags completed: source_id=%d target_id=%d migrated_images=%d migrated_aliases=%d", sourceTagID, targetTagID, mergeResult.MigratedImageAssociations, mergeResult.MigratedAliases)
+	logger.Infof("[service] TagAdmin MergeTags completed: source_id=%d target_id=%d migrated_images=%d migrated_aliases=%d", sourceTagID, targetTagID, mergeResult.MigratedImageAssociations, mergeResult.MigratedAliases)
 	return mergeResult, nil
 }
 
@@ -343,7 +343,7 @@ func (s *TagAdminService) GetDeletePreview(ctx context.Context, tagID int64) (*T
 }
 
 func (s *TagAdminService) CleanupUnusedTags(ctx context.Context, tagIDs []int64) (*TagCleanupResult, error) {
-	log.Printf("[service] TagAdmin CleanupUnusedTags started: tag_count=%d", len(tagIDs))
+	logger.Infof("[service] TagAdmin CleanupUnusedTags started: tag_count=%d", len(tagIDs))
 	result := &TagCleanupResult{
 		Deleted: make([]TagCleanupEntry, 0),
 		Blocked: make([]TagCleanupEntry, 0),
@@ -353,7 +353,7 @@ func (s *TagAdminService) CleanupUnusedTags(ctx context.Context, tagIDs []int64)
 	for _, tagID := range tagIDs {
 		preview, err := s.GetDeletePreview(ctx, tagID)
 		if err != nil {
-			log.Printf("[service] TagAdmin CleanupUnusedTags failed GetDeletePreview for tag_id=%d: %v", tagID, err)
+			logger.Errorf("[service] TagAdmin CleanupUnusedTags failed GetDeletePreview for tag_id=%d: %v", tagID, err)
 			entry := TagCleanupEntry{TagID: tagID}
 			if errors.Is(err, ErrTagNotFound) {
 				entry.Error = "tag not found"
@@ -375,7 +375,7 @@ func (s *TagAdminService) CleanupUnusedTags(ctx context.Context, tagIDs []int64)
 		}
 
 		if err := s.deleteUnusedTag(ctx, preview.TagID); err != nil {
-			log.Printf("[service] TagAdmin CleanupUnusedTags failed deleteUnusedTag for tag_id=%d: %v", preview.TagID, err)
+			logger.Errorf("[service] TagAdmin CleanupUnusedTags failed deleteUnusedTag for tag_id=%d: %v", preview.TagID, err)
 			result.Failed = append(result.Failed, TagCleanupEntry{
 				TagID:          preview.TagID,
 				PreferredLabel: preview.PreferredLabel,
@@ -390,7 +390,7 @@ func (s *TagAdminService) CleanupUnusedTags(ctx context.Context, tagIDs []int64)
 		})
 	}
 
-	log.Printf("[service] TagAdmin CleanupUnusedTags completed: deleted=%d blocked=%d failed=%d", len(result.Deleted), len(result.Blocked), len(result.Failed))
+	logger.Infof("[service] TagAdmin CleanupUnusedTags completed: deleted=%d blocked=%d failed=%d", len(result.Deleted), len(result.Blocked), len(result.Failed))
 	return result, nil
 }
 
