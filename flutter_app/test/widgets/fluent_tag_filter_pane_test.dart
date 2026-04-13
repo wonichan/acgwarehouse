@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:flutter/widgets.dart' show StatefulBuilder;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/providers/image_provider.dart';
@@ -61,5 +62,69 @@ void main() {
     expect(find.text('protagonist'), findsOneWidget);
     expect(find.text('heroine'), findsOneWidget);
     expect(find.text('7'), findsWidgets);
+  });
+
+  testWidgets('untagged toggle clears visible tag selection state', (
+    tester,
+  ) async {
+    final client = MockClient((request) async {
+      if (request.url.path.contains('tree')) {
+        return http.Response(
+          '{"tree":[{"id":1,"preferred_label":"characters","level":"root","tree_usage_count":2,"children":[]}]}',
+          200,
+        );
+      }
+      return http.Response(
+        '{"tags":[{"id":1,"preferred_label":"characters","level":"root","slug":"characters","review_state":"approved","trust_score":1.0,"usage_count":2,"created_at":"2023-01-01T00:00:00Z"}],"total":1}',
+        200,
+      );
+    });
+
+    final provider = TagProvider(
+      TagService(baseUrl: 'http://localhost:8080', client: client),
+    );
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080'),
+    );
+    bool? hasTagsFilter;
+
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<TagProvider>.value(value: provider),
+            ChangeNotifierProvider<ImageListProvider>.value(
+              value: imageProvider,
+            ),
+          ],
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return fluent.ScaffoldPage(
+                content: FluentTagFilterPane(
+                  hasTagsFilter: hasTagsFilter,
+                  onHasTagsChanged: (value) {
+                    setState(() {
+                      hasTagsFilter = value;
+                    });
+                    imageProvider.setHasTagsFilter(value);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    provider.setSelection([1]);
+    await tester.pumpAndSettle();
+    expect(provider.selectedTagIds, {1});
+
+    await tester.tap(find.byType(fluent.ToggleSwitch).first);
+    await tester.pumpAndSettle();
+
+    expect(provider.selectedTagIds, isEmpty);
+    expect(imageProvider.hasTagsFilter, false);
   });
 }

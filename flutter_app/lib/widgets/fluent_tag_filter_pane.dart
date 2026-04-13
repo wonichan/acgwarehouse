@@ -302,6 +302,9 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
         ToggleSwitch(
           checked: widget.hasTagsFilter == false,
           onChanged: (value) {
+            if (value) {
+              context.read<TagProvider>().clearSelection();
+            }
             widget.onHasTagsChanged?.call(value ? false : null);
           },
         ),
