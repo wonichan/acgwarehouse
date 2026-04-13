@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -35,7 +35,7 @@ func NewBatchService(
 
 // BatchAddTags adds tags to multiple images
 func (s *BatchService) BatchAddTags(ctx context.Context, imageIDs, tagIDs []int64) (int, error) {
-	log.Printf("[service] BatchAddTags started: image_count=%d tag_count=%d", len(imageIDs), len(tagIDs))
+	logger.Infof("[service] BatchAddTags started: image_count=%d tag_count=%d", len(imageIDs), len(tagIDs))
 	if len(imageIDs) == 0 || len(tagIDs) == 0 {
 		return 0, errors.New("image_ids and tag_ids must not be empty")
 	}
@@ -50,13 +50,13 @@ func (s *BatchService) BatchAddTags(ctx context.Context, imageIDs, tagIDs []int6
 			if errors.Is(err, sql.ErrNoRows) {
 				continue
 			}
-			log.Printf("[service] BatchAddTags failed: tagRepo.FindByID err=%v", err)
+			logger.Errorf("[service] BatchAddTags failed: tagRepo.FindByID err=%v", err)
 			return 0, err
 		}
 		validTags[tagID] = struct{}{}
 	}
 	if len(validTags) == 0 {
-		log.Printf("[service] BatchAddTags completed: success_count=%d", 0)
+		logger.Infof("[service] BatchAddTags completed: success_count=%d", 0)
 		return 0, nil
 	}
 
@@ -68,7 +68,7 @@ func (s *BatchService) BatchAddTags(ctx context.Context, imageIDs, tagIDs []int6
 			if errors.Is(err, sql.ErrNoRows) {
 				continue // Skip non-existent images
 			}
-			log.Printf("[service] BatchAddTags failed: imageRepo.FindByID err=%v", err)
+			logger.Errorf("[service] BatchAddTags failed: imageRepo.FindByID err=%v", err)
 			return successCount, err
 		}
 
@@ -84,20 +84,20 @@ func (s *BatchService) BatchAddTags(ctx context.Context, imageIDs, tagIDs []int6
 				ReviewState: "pending",
 			}
 			if err := s.imageTagRepo.Save(ctx, imageTag); err != nil {
-				log.Printf("[service] BatchAddTags failed: imageTagRepo.Save err=%v", err)
+				logger.Errorf("[service] BatchAddTags failed: imageTagRepo.Save err=%v", err)
 				return successCount, err
 			}
 		}
 		successCount++
 	}
 
-	log.Printf("[service] BatchAddTags completed: success_count=%d", successCount)
+	logger.Infof("[service] BatchAddTags completed: success_count=%d", successCount)
 	return successCount, nil
 }
 
 // BatchRemoveTags removes tags from multiple images
 func (s *BatchService) BatchRemoveTags(ctx context.Context, imageIDs, tagIDs []int64) (int, error) {
-	log.Printf("[service] BatchRemoveTags started: image_count=%d tag_count=%d", len(imageIDs), len(tagIDs))
+	logger.Infof("[service] BatchRemoveTags started: image_count=%d tag_count=%d", len(imageIDs), len(tagIDs))
 	if len(imageIDs) == 0 || len(tagIDs) == 0 {
 		return 0, errors.New("image_ids and tag_ids must not be empty")
 	}
@@ -108,7 +108,7 @@ func (s *BatchService) BatchRemoveTags(ctx context.Context, imageIDs, tagIDs []i
 		for _, tagID := range tagIDs {
 			rowsAffected, err := s.imageTagRepo.Delete(ctx, imageID, tagID)
 			if err != nil {
-				log.Printf("[service] BatchRemoveTags failed: imageTagRepo.Delete err=%v", err)
+				logger.Errorf("[service] BatchRemoveTags failed: imageTagRepo.Delete err=%v", err)
 				continue
 			}
 			if rowsAffected > 0 {
@@ -120,13 +120,13 @@ func (s *BatchService) BatchRemoveTags(ctx context.Context, imageIDs, tagIDs []i
 		}
 	}
 
-	log.Printf("[service] BatchRemoveTags completed: removed_count=%d", successCount)
+	logger.Infof("[service] BatchRemoveTags completed: removed_count=%d", successCount)
 	return successCount, nil
 }
 
 // BatchMoveToCollection moves images to a collection
 func (s *BatchService) BatchMoveToCollection(ctx context.Context, imageIDs []int64, collectionID int64) (int, error) {
-	log.Printf("[service] BatchMoveToCollection started: image_count=%d collection_id=%d", len(imageIDs), collectionID)
+	logger.Infof("[service] BatchMoveToCollection started: image_count=%d collection_id=%d", len(imageIDs), collectionID)
 	if len(imageIDs) == 0 {
 		return 0, errors.New("image_ids must not be empty")
 	}
@@ -134,7 +134,7 @@ func (s *BatchService) BatchMoveToCollection(ctx context.Context, imageIDs []int
 	// Verify collection exists
 	_, err := s.collectionRepo.FindByID(ctx, collectionID)
 	if err != nil {
-		log.Printf("[service] BatchMoveToCollection failed: collectionRepo.FindByID err=%v", err)
+		logger.Errorf("[service] BatchMoveToCollection failed: collectionRepo.FindByID err=%v", err)
 		return 0, errors.New("collection not found")
 	}
 
@@ -146,12 +146,12 @@ func (s *BatchService) BatchMoveToCollection(ctx context.Context, imageIDs []int
 			if errors.Is(err, sql.ErrNoRows) {
 				continue // Skip non-existent images
 			}
-			log.Printf("[service] BatchMoveToCollection failed: imageRepo.FindByID err=%v", err)
+			logger.Errorf("[service] BatchMoveToCollection failed: imageRepo.FindByID err=%v", err)
 			return successCount, err
 		}
 
 		if err := s.collectionRepo.AddImage(ctx, collectionID, imageID); err != nil {
-			log.Printf("[service] BatchMoveToCollection failed: collectionRepo.AddImage err=%v", err)
+			logger.Errorf("[service] BatchMoveToCollection failed: collectionRepo.AddImage err=%v", err)
 			return successCount, err
 		}
 		successCount++
@@ -161,17 +161,17 @@ func (s *BatchService) BatchMoveToCollection(ctx context.Context, imageIDs []int
 	if successCount > 0 {
 		err = s.collectionRepo.UpdateCover(ctx, collectionID, imageIDs[len(imageIDs)-1])
 		if err != nil {
-			log.Printf("[service] BatchMoveToCollection failed: collectionRepo.UpdateCover err=%v", err)
+			logger.Errorf("[service] BatchMoveToCollection failed: collectionRepo.UpdateCover err=%v", err)
 		}
 	}
 
-	log.Printf("[service] BatchMoveToCollection completed: moved_count=%d", successCount)
+	logger.Infof("[service] BatchMoveToCollection completed: moved_count=%d", successCount)
 	return successCount, nil
 }
 
 // BatchRemoveFromCollection removes images from a collection
 func (s *BatchService) BatchRemoveFromCollection(ctx context.Context, imageIDs []int64, collectionID int64) (int, error) {
-	log.Printf("[service] BatchRemoveFromCollection started: image_count=%d collection_id=%d", len(imageIDs), collectionID)
+	logger.Infof("[service] BatchRemoveFromCollection started: image_count=%d collection_id=%d", len(imageIDs), collectionID)
 	if len(imageIDs) == 0 {
 		return 0, errors.New("image_ids must not be empty")
 	}
@@ -179,7 +179,7 @@ func (s *BatchService) BatchRemoveFromCollection(ctx context.Context, imageIDs [
 	// Verify collection exists
 	collection, err := s.collectionRepo.FindByID(ctx, collectionID)
 	if err != nil {
-		log.Printf("[service] BatchRemoveFromCollection failed: collectionRepo.FindByID err=%v", err)
+		logger.Errorf("[service] BatchRemoveFromCollection failed: collectionRepo.FindByID err=%v", err)
 		return 0, errors.New("collection not found")
 	}
 
@@ -193,7 +193,7 @@ func (s *BatchService) BatchRemoveFromCollection(ctx context.Context, imageIDs [
 		}
 
 		if err := s.collectionRepo.RemoveImage(ctx, collectionID, imageID); err != nil {
-			log.Printf("[service] BatchRemoveFromCollection failed: collectionRepo.RemoveImage err=%v", err)
+			logger.Errorf("[service] BatchRemoveFromCollection failed: collectionRepo.RemoveImage err=%v", err)
 			continue // Continue with other removals
 		}
 		successCount++
@@ -203,23 +203,23 @@ func (s *BatchService) BatchRemoveFromCollection(ctx context.Context, imageIDs [
 	if coverNeedsUpdate && successCount > 0 {
 		latestImageID, err := s.collectionRepo.GetLatestImageID(ctx, collectionID)
 		if err != nil {
-			log.Printf("[service] BatchRemoveFromCollection failed: collectionRepo.GetLatestImageID err=%v", err)
+			logger.Errorf("[service] BatchRemoveFromCollection failed: collectionRepo.GetLatestImageID err=%v", err)
 		}
 		if latestImageID != nil {
 			err = s.collectionRepo.UpdateCover(ctx, collectionID, *latestImageID)
 			if err != nil {
-				log.Printf("[service] BatchRemoveFromCollection failed: collectionRepo.UpdateCover err=%v", err)
+				logger.Errorf("[service] BatchRemoveFromCollection failed: collectionRepo.UpdateCover err=%v", err)
 			}
 		}
 	}
 
-	log.Printf("[service] BatchRemoveFromCollection completed: removed_count=%d", successCount)
+	logger.Infof("[service] BatchRemoveFromCollection completed: removed_count=%d", successCount)
 	return successCount, nil
 }
 
 // BatchDeleteImages deletes multiple images
 func (s *BatchService) BatchDeleteImages(ctx context.Context, imageIDs []int64) (int, error) {
-	log.Printf("[service] BatchDeleteImages started: image_count=%d", len(imageIDs))
+	logger.Infof("[service] BatchDeleteImages started: image_count=%d", len(imageIDs))
 	if len(imageIDs) == 0 {
 		return 0, errors.New("image_ids must not be empty")
 	}
@@ -228,12 +228,12 @@ func (s *BatchService) BatchDeleteImages(ctx context.Context, imageIDs []int64) 
 	for _, imageID := range imageIDs {
 		// Delete image (cascade will remove related image_tags)
 		if err := s.imageRepo.Delete(imageID); err != nil {
-			log.Printf("[service] BatchDeleteImages failed: imageRepo.Delete err=%v", err)
+			logger.Errorf("[service] BatchDeleteImages failed: imageRepo.Delete err=%v", err)
 			continue
 		}
 		successCount++
 	}
 
-	log.Printf("[service] BatchDeleteImages completed: deleted_count=%d", successCount)
+	logger.Infof("[service] BatchDeleteImages completed: deleted_count=%d", successCount)
 	return successCount, nil
 }

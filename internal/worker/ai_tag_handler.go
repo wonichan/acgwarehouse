@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -79,14 +79,14 @@ var aiTagConcurrencyLimiter atomic.Pointer[ai.ConcurrencyLimiter]
 // InitAITagConcurrencyLimiter 初始化 AI 标签生成的并发控制器
 func InitAITagConcurrencyLimiter(maxConcurrency int) {
 	aiTagConcurrencyLimiter.Store(ai.NewConcurrencyLimiter(maxConcurrency))
-	log.Printf("AI 标签生成并发限制已设置: %d", maxConcurrency)
+	logger.Infof("AI 标签生成并发限制已设置: %d", maxConcurrency)
 }
 
 // SetAITagConcurrencyLimiter 动态调整 AI 标签生成的并发限制
 func SetAITagConcurrencyLimiter(maxConcurrency int) {
 	if limiter := aiTagConcurrencyLimiter.Load(); limiter != nil {
 		limiter.SetLimit(maxConcurrency)
-		log.Printf("AI 标签生成并发限制已调整为: %d", maxConcurrency)
+		logger.Infof("AI 标签生成并发限制已调整为: %d", maxConcurrency)
 	}
 }
 
@@ -204,7 +204,7 @@ func executeAITagBatch(ctx context.Context, items []aiTagBatchItem, client ai.AI
 		defer release()
 	}
 
-	log.Printf("AI 批量标签任务批次: job_ids=%v total=%d", batchItemJobIDs(items), len(items))
+	logger.Infof("AI 批量标签任务批次: job_ids=%v total=%d", batchItemJobIDs(items), len(items))
 	requests := make([]ai.TagRequest, len(items))
 	for i := range items {
 		prompt := items[i].Payload.Prompt
@@ -274,10 +274,10 @@ func executeAITagBatch(ctx context.Context, items []aiTagBatchItem, client ai.AI
 			errs[i] = fmt.Errorf("merge tags: %w", err)
 			continue
 		}
-		log.Printf("AI 批量标签单个任务完成: job_id=%d image_id=%d tag_count=%d", items[i].JobID, obs.ImageID, len(tags))
+		logger.Infof("AI 批量标签单个任务完成: job_id=%d image_id=%d tag_count=%d", items[i].JobID, obs.ImageID, len(tags))
 	}
 
-	log.Printf("AI 批量标签全部完成: total=%d", len(items))
+	logger.Infof("AI 批量标签全部完成: total=%d", len(items))
 	return errs
 }
 
@@ -299,12 +299,12 @@ func NewAITagRegenerationJobHandler(client ai.AIProvider, obsRepo repository.Tag
 		if err := json.Unmarshal([]byte(payload), &p); err != nil {
 			return fmt.Errorf("parse payload: %w", err)
 		}
-		log.Printf("AI 标签重生成任务开始清理旧标签: job_id=%d image_id=%d", id, p.ImageID)
+		logger.Infof("AI 标签重生成任务开始清理旧标签: job_id=%d image_id=%d", id, p.ImageID)
 		if err := governance.RemovePendingAITags(ctx, p.ImageID); err != nil {
-			log.Printf("AI 标签重生成任务清理旧标签失败: job_id=%d image_id=%d error=%v", id, p.ImageID, err)
+			logger.Errorf("AI 标签重生成任务清理旧标签失败: job_id=%d image_id=%d error=%v", id, p.ImageID, err)
 			return fmt.Errorf("remove pending ai tags: %w", err)
 		}
-		log.Printf("AI 标签重生成任务清理旧标签完成: job_id=%d image_id=%d", id, p.ImageID)
+		logger.Infof("AI 标签重生成任务清理旧标签完成: job_id=%d image_id=%d", id, p.ImageID)
 		return handleAITagGenerationWithPayload(ctx, id, p, client, obsRepo, governance, nil)
 	}
 }
@@ -328,12 +328,12 @@ func handleAITagGenerationWithPayload(ctx context.Context, id int64, p AITagPayl
 	if client != nil {
 		providerName = client.Name()
 	}
-	log.Printf("AI 标签任务开始: job_id=%d image_id=%d path=%s provider=%s custom_prompt=%t", id, p.ImageID, p.Path, providerName, p.Prompt != "")
+	logger.Infof("AI 标签任务开始: job_id=%d image_id=%d path=%s provider=%s custom_prompt=%t", id, p.ImageID, p.Path, providerName, p.Prompt != "")
 
 	if limiter := aiTagConcurrencyLimiter.Load(); limiter != nil {
 		release, err := limiter.Acquire(ctx)
 		if err != nil {
-			log.Printf("AI 标签任务获取并发槽位失败: job_id=%d image_id=%d error=%v", id, p.ImageID, err)
+			logger.Errorf("AI 标签任务获取并发槽位失败: job_id=%d image_id=%d error=%v", id, p.ImageID, err)
 			return fmt.Errorf("acquire concurrency slot: %w", err)
 		}
 		defer release()
@@ -343,17 +343,17 @@ func handleAITagGenerationWithPayload(ctx context.Context, id int64, p AITagPayl
 	if prompt == "" {
 		prompt = DefaultTagPrompt
 	}
-	log.Printf("AI 标签任务调用模型: job_id=%d image_id=%d provider=%s prompt_length=%d", id, p.ImageID, providerName, len(prompt))
+	logger.Infof("AI 标签任务调用模型: job_id=%d image_id=%d provider=%s prompt_length=%d", id, p.ImageID, providerName, len(prompt))
 	result, err := client.GenerateTags(ctx, p.Path, prompt)
 	if err != nil {
-		log.Printf("AI 标签任务调用模型失败: job_id=%d image_id=%d provider=%s error=%v", id, p.ImageID, providerName, err)
+		logger.Errorf("AI 标签任务调用模型失败: job_id=%d image_id=%d provider=%s error=%v", id, p.ImageID, providerName, err)
 		return fmt.Errorf("generate tags: %w", err)
 	}
 	if err := validateGeneratedTags(result.Tags); err != nil {
-		log.Printf("AI 标签任务结果校验失败: job_id=%d image_id=%d provider=%s raw_tag_count=%d error=%v", id, p.ImageID, providerName, len(result.Tags), err)
+		logger.Errorf("AI 标签任务结果校验失败: job_id=%d image_id=%d provider=%s raw_tag_count=%d error=%v", id, p.ImageID, providerName, len(result.Tags), err)
 		return fmt.Errorf("validate tags: %w", err)
 	}
-	log.Printf("AI 标签任务生成完成: job_id=%d image_id=%d provider=%s model=%s tag_count=%d confidence=%.4f", id, p.ImageID, providerName, result.ModelName, len(result.Tags), result.Confidence)
+	logger.Infof("AI 标签任务生成完成: job_id=%d image_id=%d provider=%s model=%s tag_count=%d confidence=%.4f", id, p.ImageID, providerName, result.ModelName, len(result.Tags), result.Confidence)
 
 	obs := &domain.TagObservation{
 		ImageID:      p.ImageID,
@@ -366,15 +366,15 @@ func handleAITagGenerationWithPayload(ctx context.Context, id int64, p AITagPayl
 	}
 
 	if err := obsRepo.Save(ctx, obs); err != nil {
-		log.Printf("AI 标签任务保存观测失败: job_id=%d image_id=%d provider=%s error=%v", id, p.ImageID, providerName, err)
+		logger.Errorf("AI 标签任务保存观测失败: job_id=%d image_id=%d provider=%s error=%v", id, p.ImageID, providerName, err)
 		return fmt.Errorf("save observation: %w", err)
 	}
 
 	if err := governance.MergeTags(ctx, p.ImageID, result.Tags, obs.ID, result.Confidence); err != nil {
-		log.Printf("AI 标签任务合并标签失败: job_id=%d image_id=%d observation_id=%d error=%v", id, p.ImageID, obs.ID, err)
+		logger.Errorf("AI 标签任务合并标签失败: job_id=%d image_id=%d observation_id=%d error=%v", id, p.ImageID, obs.ID, err)
 		return fmt.Errorf("merge tags: %w", err)
 	}
-	log.Printf("AI 标签任务完成: job_id=%d image_id=%d observation_id=%d tag_count=%d duration=%s", id, p.ImageID, obs.ID, len(result.Tags), time.Since(startedAt))
+	logger.Infof("AI 标签任务完成: job_id=%d image_id=%d observation_id=%d tag_count=%d duration=%s", id, p.ImageID, obs.ID, len(result.Tags), time.Since(startedAt))
 
 	return nil
 }

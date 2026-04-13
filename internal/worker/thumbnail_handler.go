@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
@@ -54,16 +54,16 @@ func (h *ThumbnailHandler) Handle(ctx context.Context, jobID int64, payload stri
 	}
 
 	startedAt := time.Now()
-	log.Printf("thumbnail task started: job_id=%d image_id=%d filename=%s path=%s", jobID, p.ImageID, p.Filename, p.Path)
+	logger.Infof("thumbnail task started: job_id=%d image_id=%d filename=%s path=%s", jobID, p.ImageID, p.Filename, p.Path)
 
 	uploadName := fmt.Sprintf("%d-%s", p.ImageID, p.Filename)
 
 	small, large, err := h.thumbnailSvc.GenerateBoth(p.Path)
 	if err != nil {
-		log.Printf("thumbnail generation failed: job_id=%d image_id=%d error=%v", jobID, p.ImageID, err)
+		logger.Errorf("thumbnail generation failed: job_id=%d image_id=%d error=%v", jobID, p.ImageID, err)
 		return fmt.Errorf("generate thumbnails: %w", err)
 	}
-	log.Printf(
+	logger.Infof(
 		"thumbnail generation completed: job_id=%d image_id=%d small_bytes=%d small_width=%d small_height=%d large_bytes=%d large_width=%d large_height=%d",
 		jobID,
 		p.ImageID,
@@ -77,27 +77,27 @@ func (h *ThumbnailHandler) Handle(ctx context.Context, jobID int64, payload stri
 
 	smallURL, err := h.uploader.Upload(ctx, uploadName, "small", small.Data)
 	if err != nil {
-		log.Printf("thumbnail upload failed: job_id=%d image_id=%d size=small error=%v", jobID, p.ImageID, err)
+		logger.Errorf("thumbnail upload failed: job_id=%d image_id=%d size=small error=%v", jobID, p.ImageID, err)
 		return fmt.Errorf("upload small thumbnail: %w", err)
 	}
-	log.Printf("thumbnail upload completed: job_id=%d image_id=%d size=small url=%s", jobID, p.ImageID, smallURL)
+	logger.Infof("thumbnail upload completed: job_id=%d image_id=%d size=small url=%s", jobID, p.ImageID, smallURL)
 	largeURL, err := h.uploader.Upload(ctx, uploadName, "large", large.Data)
 	if err != nil {
-		log.Printf("thumbnail upload failed: job_id=%d image_id=%d size=large error=%v", jobID, p.ImageID, err)
+		logger.Errorf("thumbnail upload failed: job_id=%d image_id=%d size=large error=%v", jobID, p.ImageID, err)
 		if rollbackErr := h.uploader.DeleteByURL(ctx, smallURL); rollbackErr != nil {
-			log.Printf("thumbnail rollback failed: job_id=%d image_id=%d size=small url=%s error=%v", jobID, p.ImageID, smallURL, rollbackErr)
+			logger.Errorf("thumbnail rollback failed: job_id=%d image_id=%d size=small url=%s error=%v", jobID, p.ImageID, smallURL, rollbackErr)
 			return fmt.Errorf("upload large thumbnail: %w", errors.Join(err, fmt.Errorf("rollback small thumbnail failed: %w", rollbackErr)))
 		}
-		log.Printf("thumbnail rollback completed: job_id=%d image_id=%d size=small url=%s", jobID, p.ImageID, smallURL)
+		logger.Infof("thumbnail rollback completed: job_id=%d image_id=%d size=small url=%s", jobID, p.ImageID, smallURL)
 		return fmt.Errorf("upload large thumbnail: %w", err)
 	}
-	log.Printf("thumbnail upload completed: job_id=%d image_id=%d size=large url=%s", jobID, p.ImageID, largeURL)
+	logger.Infof("thumbnail upload completed: job_id=%d image_id=%d size=large url=%s", jobID, p.ImageID, largeURL)
 
 	if err := h.imageRepo.UpdateThumbnails(p.ImageID, smallURL, largeURL); err != nil {
-		log.Printf("thumbnail db update failed: job_id=%d image_id=%d error=%v", jobID, p.ImageID, err)
+		logger.Errorf("thumbnail db update failed: job_id=%d image_id=%d error=%v", jobID, p.ImageID, err)
 		return fmt.Errorf("update thumbnail urls: %w", err)
 	}
-	log.Printf(
+	logger.Infof(
 		"thumbnail task completed: job_id=%d image_id=%d duration=%s small_url=%s large_url=%s",
 		jobID,
 		p.ImageID,

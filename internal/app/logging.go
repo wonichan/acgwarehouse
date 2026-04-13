@@ -2,11 +2,12 @@ package app
 
 import (
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 )
 
 var goLogStdout io.Writer = os.Stdout
@@ -37,13 +38,13 @@ func SetupGoLogging(paths LogSourcePaths) (func(), error) {
 		return nil, err
 	}
 
-	previousWriter := log.Writer()
-	log.SetOutput(io.MultiWriter(goLogStdout, file))
+	previousWriter := logger.Writer()
+	logger.SetOutput(io.MultiWriter(goLogStdout, file))
 
 	var once sync.Once
 	return func() {
 		once.Do(func() {
-			log.SetOutput(previousWriter)
+			logger.SetOutput(previousWriter)
 			_ = file.Close()
 		})
 	}, nil

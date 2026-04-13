@@ -386,6 +386,15 @@ func (r *ringBuffer) clear() {
 
 func detectSeverity(line string) string {
 	lower := strings.ToLower(line)
+	if strings.Contains(lower, "level=fatal") || strings.Contains(lower, "level=panic") || strings.Contains(lower, "level=error") {
+		return "error"
+	}
+	if strings.Contains(lower, "level=warn") || strings.Contains(lower, "level=warning") {
+		return "warning"
+	}
+	if strings.Contains(lower, "level=info") || strings.Contains(lower, "level=debug") {
+		return "normal"
+	}
 	for _, kw := range []string{"error", "fatal", "panic", "traceback", "exception", "failed"} {
 		if strings.Contains(lower, kw) {
 			return "error"

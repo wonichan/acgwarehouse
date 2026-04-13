@@ -2,11 +2,12 @@ package app
 
 import (
 	"bytes"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 )
 
 func TestResolveLogSourcePathsPrefersExplicitLogsDir(t *testing.T) {
@@ -46,14 +47,11 @@ func TestResolveLogSourcePathsFallsBackToDevRuntimeLogs(t *testing.T) {
 }
 
 func TestSetupGoLoggingCreatesFileAndTeesLogOutput(t *testing.T) {
-	originalWriter := log.Writer()
-	originalFlags := log.Flags()
+	originalWriter := logger.Writer()
 	originalStdout := goLogStdout
-	log.SetFlags(0)
 	defer func() {
 		goLogStdout = originalStdout
-		log.SetOutput(originalWriter)
-		log.SetFlags(originalFlags)
+		logger.SetOutput(originalWriter)
 	}()
 
 	stdoutBuffer := &bytes.Buffer{}
@@ -66,7 +64,7 @@ func TestSetupGoLoggingCreatesFileAndTeesLogOutput(t *testing.T) {
 	}
 	defer cleanup()
 
-	log.Print("tee check")
+	logger.Info("tee check")
 	cleanup()
 
 	raw, err := os.ReadFile(paths.GoLogPath)

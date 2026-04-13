@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 	"github.com/wonichan/acgwarehouse-backend/internal/sqliteutil"
@@ -24,7 +24,7 @@ func main() {
 
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		logger.Fatalf("failed to load config: %v", err)
 	}
 
 	paths := cfg.Storage.ScanRoots
@@ -32,17 +32,17 @@ func main() {
 		paths = []string{*scanPath}
 	}
 	if len(paths) == 0 {
-		log.Fatal("no scan roots configured")
+		logger.Fatal("no scan roots configured")
 	}
 
 	db, err := openDatabase(cfg)
 	if err != nil {
-		log.Fatalf("failed to open database: %v", err)
+		logger.Fatalf("failed to open database: %v", err)
 	}
 	defer db.Close()
 
 	if err := repository.EnsureScanSchema(db); err != nil {
-		log.Fatalf("failed to ensure scan schema: %v", err)
+		logger.Fatalf("failed to ensure scan schema: %v", err)
 	}
 
 	metadataSvc := service.NewMetadataService()
@@ -53,7 +53,7 @@ func main() {
 
 	result, err := scannerSvc.Scan(nil, paths)
 	if err != nil {
-		log.Fatalf("scan failed: %v", err)
+		logger.Fatalf("scan failed: %v", err)
 	}
 
 	fmt.Printf("Total files: %d\n", result.TotalFiles)

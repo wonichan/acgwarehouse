@@ -3,13 +3,13 @@ package worker
 import (
 	"context"
 	"errors"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/panjf2000/ants/v2"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -113,13 +113,13 @@ func (m *Manager) Start(ctx context.Context) {
 		ants.WithPreAlloc(true),
 		// 防止任务 panic 导致整个 pool 崩溃
 		ants.WithPanicHandler(func(i interface{}) {
-			log.Printf("[ANTS PANIC] task panicked: %v", i)
+			logger.Errorf("[ANTS PANIC] task panicked: %v", i)
 		}),
 		// 空闲 goroutine 回收时间（10分钟）
 		ants.WithExpiryDuration(10*time.Minute),
 	)
 	if err != nil {
-		log.Printf("创建 ants 池失败: %v", err)
+		logger.Errorf("创建 ants 池失败: %v", err)
 		m.runningMu.Lock()
 		m.running = false
 		m.runningMu.Unlock()
@@ -133,7 +133,7 @@ func (m *Manager) Start(ctx context.Context) {
 	m.dispatchWg.Add(1)
 	go m.dispatchLoop()
 
-	log.Printf("启动 %d 个 worker 协程处理任务 (ants pool)", m.GetWorkerCount())
+	logger.Infof("启动 %d 个 worker 协程处理任务 (ants pool)", m.GetWorkerCount())
 }
 
 // Stop releases the ants pool and waits for running tasks to complete.
@@ -173,7 +173,7 @@ func (m *Manager) SetWorkerCount(ctx context.Context, newCount int) {
 
 	if pool == nil {
 		m.workerCount.Store(int32(newCount))
-		log.Printf("Worker 数量已调整为 %d (pool 未启动)", newCount)
+		logger.Infof("Worker 数量已调整为 %d (pool 未启动)", newCount)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (m *Manager) SetWorkerCount(ctx context.Context, newCount int) {
 	pool.Tune(newCount)
 
 	m.workerCount.Store(int32(newCount))
-	log.Printf("Worker 数量已调整为 %d", newCount)
+	logger.Infof("Worker 数量已调整为 %d", newCount)
 }
 
 // GetWorkerCount returns the current number of workers.
@@ -210,7 +210,7 @@ func (m *Manager) AddJob(ctx context.Context, jobType, payload string) (int64, e
 	}
 
 	if err := m.enqueueJob(context.Background(), job); err != nil {
-		log.Printf("任务 #%d 已持久化，但当前未入队: %v", job.ID, err)
+		logger.Infof("任务 #%d 已持久化，但当前未入队: %v", job.ID, err)
 		return job.ID, nil
 	}
 
@@ -287,7 +287,7 @@ func (m *Manager) dispatchLoop() {
 		}
 
 		if err := m.submitJob(pending.ctx, pending.job); err != nil {
-			log.Printf("提交任务到 pool 失败，稍后重试: %v", err)
+			logger.Errorf("提交任务到 pool 失败，稍后重试: %v", err)
 			select {
 			case <-m.stopCh:
 				atomic.StoreInt32(&m.pendingCnt, 0)
@@ -338,7 +338,7 @@ func (m *Manager) processJob(ctx context.Context, job *domain.AsyncJob) {
 		finished := time.Now()
 		job.FinishedAt = &finished
 		_ = m.jobRepo.Update(job)
-		log.Printf("任务 %d 失败: 未找到处理器 %s", job.ID, job.Type)
+		logger.Errorf("任务 %d 失败: 未找到处理器 %s", job.ID, job.Type)
 		return
 	}
 
@@ -348,18 +348,18 @@ func (m *Manager) processJob(ctx context.Context, job *domain.AsyncJob) {
 	job.Error = nil
 	_ = m.jobRepo.Update(job)
 
-	log.Printf("开始执行任务: %s #%d", job.Type, job.ID)
+	logger.Infof("开始执行任务: %s #%d", job.Type, job.ID)
 
 	if err := handler(ctx, job.ID, job.Payload); err != nil {
 		errText := err.Error()
 		job.Status = "failed"
 		job.Error = &errText
-		log.Printf("任务 %s #%d 执行失败: %v", job.Type, job.ID, err)
+		logger.Errorf("任务 %s #%d 执行失败: %v", job.Type, job.ID, err)
 	} else {
 		job.Status = "finished"
 		job.Progress = 100
 		duration := time.Since(started)
-		log.Printf("任务 %s #%d 执行完成，耗时: %.2f秒", job.Type, job.ID, duration.Seconds())
+		logger.Infof("任务 %s #%d 执行完成，耗时: %.2f秒", job.Type, job.ID, duration.Seconds())
 	}
 
 	finished := time.Now()

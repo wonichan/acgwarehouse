@@ -1,10 +1,10 @@
 package middleware
 
 import (
-	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 )
 
 // Logger logs request method, path, status and latency.
@@ -14,6 +14,6 @@ func Logger() gin.HandlerFunc {
 		c.Next()
 
 		latency := time.Since(start)
-		log.Printf("method=%s path=%s status=%d latency=%s", c.Request.Method, c.Request.URL.Path, c.Writer.Status(), latency)
+		logger.Infof("method=%s path=%s status=%d latency=%s", c.Request.Method, c.Request.URL.Path, c.Writer.Status(), latency)
 	}
 }

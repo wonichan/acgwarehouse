@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"os"
 	"strconv"
 	"strings"
@@ -145,7 +145,7 @@ func (r *Reloader) Start() error {
 	}
 
 	go r.watchLoop()
-	log.Printf("配置热重载已启用，监听文件: %s", r.path)
+	logger.Infof("配置热重载已启用，监听文件: %s", r.path)
 	return nil
 }
 
@@ -173,7 +173,7 @@ func (r *Reloader) watchLoop() {
 			if !ok {
 				return
 			}
-			log.Printf("配置文件监听错误: %v", err)
+			logger.Infof("配置文件监听错误: %v", err)
 		}
 	}
 }
@@ -181,7 +181,7 @@ func (r *Reloader) watchLoop() {
 func (r *Reloader) reload() {
 	newCfg, err := loadConfig(r.path)
 	if err != nil {
-		log.Printf("重载配置失败: %v", err)
+		logger.Errorf("重载配置失败: %v", err)
 		return
 	}
 
@@ -192,7 +192,7 @@ func (r *Reloader) reload() {
 	copy(callbacks, r.callbacks)
 	r.mu.Unlock()
 
-	log.Printf("配置已重新加载")
+	logger.Infof("配置已重新加载")
 
 	// Call all registered callbacks
 	for _, cb := range callbacks {

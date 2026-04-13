@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"strings"
 	"time"
 
@@ -72,7 +72,7 @@ func (a *App) startAutoScheduler() {
 	}
 	a.autoSchedulerControl.Start(context.Background())
 	a.autoSchedulerStarted = true
-	log.Printf("AI 标签自动调度服务已启动，扫描间隔: %d 分钟", a.config.AI.AutoScanIntervalMinutes)
+	logger.Infof("AI 标签自动调度服务已启动，扫描间隔: %d 分钟", a.config.AI.AutoScanIntervalMinutes)
 }
 
 func (a *App) stopAutoScheduler() {
@@ -83,7 +83,7 @@ func (a *App) stopAutoScheduler() {
 	}
 	a.autoSchedulerControl.Stop()
 	a.autoSchedulerStarted = false
-	log.Printf("AI 标签自动调度服务已停止")
+	logger.Infof("AI 标签自动调度服务已停止")
 }
 
 func (a *App) handleAutoSchedulerConfigChange(old, new *config.Config) {
@@ -117,7 +117,7 @@ func (a *App) handleAutoSchedulerConfigChange(old, new *config.Config) {
 	a.initAutoScheduler(new)
 	a.startAutoScheduler()
 	if started {
-		log.Printf("AI 标签自动调度服务已重启，新间隔: %d 分钟", newAI.AutoScanIntervalMinutes)
+		logger.Infof("AI 标签自动调度服务已重启，新间隔: %d 分钟", newAI.AutoScanIntervalMinutes)
 	}
 }
 
@@ -136,7 +136,7 @@ func (a *App) handleAIConfigChange(old, new *config.Config) {
 	if oldAI.RequestsPerMinute != newAI.RequestsPerMinute {
 		if a.aiRateLimitedClient != nil {
 			a.aiRateLimitedClient.SetRequestsPerMinute(newAI.RequestsPerMinute)
-			log.Printf("AI 请求限流已调整为: %d 请求/分钟", newAI.RequestsPerMinute)
+			logger.Infof("AI 请求限流已调整为: %d 请求/分钟", newAI.RequestsPerMinute)
 		}
 	}
 
@@ -151,7 +151,7 @@ func (a *App) initWorkerManager() error {
 		a.config.WorkerPool.WorkerCount,
 		a.config.WorkerPool.QueueSize,
 	)
-	log.Printf("任务管理器配置: workers=%d, queue_size=%d", a.config.WorkerPool.WorkerCount, a.config.WorkerPool.QueueSize)
+	logger.Infof("任务管理器配置: workers=%d, queue_size=%d", a.config.WorkerPool.WorkerCount, a.config.WorkerPool.QueueSize)
 	a.jobManager.Start(context.Background())
 
 	// Register config change callback
@@ -190,19 +190,19 @@ func (a *App) registerThumbnailHandler() {
 			a.config.Minio.UseSSL,
 		)
 		if err != nil {
-			log.Printf("thumbnail job handler not registered: minio init failed: %v", err)
+			logger.Errorf("thumbnail job handler not registered: minio init failed: %v", err)
 			return
 		}
 		uploader = minioSvc
-		log.Printf("缩略图存储使用 MinIO: endpoint=%s bucket=%s", a.config.Minio.Endpoint, a.config.Minio.Bucket)
+		logger.Infof("缩略图存储使用 MinIO: endpoint=%s bucket=%s", a.config.Minio.Endpoint, a.config.Minio.Bucket)
 	default:
 		cosSvc, err := service.NewCOSService(&a.config.COS)
 		if err != nil {
-			log.Printf("thumbnail job handler not registered: cos init failed: %v", err)
+			logger.Errorf("thumbnail job handler not registered: cos init failed: %v", err)
 			return
 		}
 		uploader = cosSvc
-		log.Printf("缩略图存储使用 COS: bucket=%s", a.config.COS.BucketURL)
+		logger.Infof("缩略图存储使用 COS: bucket=%s", a.config.COS.BucketURL)
 	}
 
 	thumbnailHandler := worker.NewThumbnailHandler(thumbnailSvc, uploader, a.imageRepo)
@@ -210,7 +210,7 @@ func (a *App) registerThumbnailHandler() {
 
 	// Register image_imported handler - auto-triggers thumbnail generation
 	a.jobManager.RegisterHandler(domain.PlatformTaskTypeImageImported, a.createImageImportedHandler(taskPlatformSvc))
-	log.Printf("已注册 image_imported 处理器 - 将自动触发缩略图生成")
+	logger.Infof("已注册 image_imported 处理器 - 将自动触发缩略图生成")
 }
 
 // createImageImportedHandler creates the handler for image_imported events.
@@ -266,11 +266,11 @@ func (a *App) createImageImportedHandler(taskPlatformSvc *service.TaskPlatformSe
 		}
 
 		if createdJobs == 0 {
-			log.Printf("图片 %d 的缩略图平台任务已存在，本次 image_imported 仅保留内部调度记录", p.ImageID)
+			logger.Infof("图片 %d 的缩略图平台任务已存在，本次 image_imported 仅保留内部调度记录", p.ImageID)
 			return nil
 		}
 
-		log.Printf("已为新导入的图片 %d 创建 %d 个缩略图平台任务", p.ImageID, createdJobs)
+		logger.Infof("已为新导入的图片 %d 创建 %d 个缩略图平台任务", p.ImageID, createdJobs)
 		return nil
 	}
 }
@@ -281,14 +281,14 @@ func (a *App) registerScanHandler() {
 	scannerSvc := service.NewScannerService(metadataSvc, a.imageRepo, a.jobRepo, a.newTaskPlatformService(), 4)
 	scanHandler := worker.NewScanHandler(scannerSvc, a.config.Storage.ScanRoots)
 	a.jobManager.RegisterHandler("manual_scan", scanHandler.Handle)
-	log.Printf("已注册 manual_scan 处理器 - 支持手动触发扫描任务")
+	logger.Infof("已注册 manual_scan 处理器 - 支持手动触发扫描任务")
 }
 
 // registerAIHandlers registers AI-related handlers if configured.
 func (a *App) registerAIHandlers() {
 	provider, err := ai.NewProvider(&a.config.AI)
 	if err != nil {
-		log.Printf("AI provider not configured for background processing: %v", err)
+		logger.Infof("AI provider not configured for background processing: %v", err)
 		return
 	}
 
@@ -322,7 +322,7 @@ func (a *App) registerPlatformTaskHandler(jobType string, handler worker.JobFunc
 		}
 		if err := handler(ctx, id, payload); err != nil {
 			if markErr := taskPlatformSvc.MarkJobFailed(ctx, id, err.Error()); markErr != nil {
-				log.Printf("同步平台任务失败状态失败: job=%d err=%v", id, markErr)
+				logger.Errorf("同步平台任务失败状态失败: job=%d err=%v", id, markErr)
 			}
 			return err
 		}

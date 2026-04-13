@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 )
 
 type aiTagImageFinder interface {
@@ -83,7 +83,7 @@ func (s *AITagAutoScheduler) Start(ctx context.Context) {
 					return
 				case <-s.ticker.C():
 					if _, err := s.scanAndEnqueue(context.Background()); err != nil {
-						log.Printf("AI 标签自动调度扫描失败: %v", err)
+						logger.Errorf("AI 标签自动调度扫描失败: %v", err)
 					}
 				}
 			}

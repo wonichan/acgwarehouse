@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"net"
 	"net/http"
 	"sync"
@@ -156,7 +156,7 @@ func (a *App) LogSourcePaths() LogSourcePaths {
 func (a *App) Run() error {
 	// Setup config hot reload
 	if err := a.cfgReloader.Start(); err != nil {
-		log.Printf("配置热重载启动失败: %v", err)
+		logger.Errorf("配置热重载启动失败: %v", err)
 	}
 	a.cfgReloader.OnChange(func(old, new *config.Config) {
 		a.handleAutoSchedulerConfigChange(old, new)
@@ -185,7 +185,7 @@ func (a *App) Run() error {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if err := a.Shutdown(shutdownCtx); err != nil {
-				log.Printf("shutdown endpoint error: %v", err)
+				logger.Errorf("shutdown endpoint error: %v", err)
 			}
 		}()
 	})
@@ -246,8 +246,8 @@ func (a *App) Run() error {
 		return err
 	}
 
-	log.Printf("ACGWarehouse server starting on %s", manifestBaseURL)
-	log.Printf("runtime manifest generated at %s", a.runtimeManifestPath)
+	logger.Infof("ACGWarehouse server starting on %s", manifestBaseURL)
+	logger.Infof("runtime manifest generated at %s", a.runtimeManifestPath)
 	return a.httpServer.Serve(listener)
 }
 
@@ -284,7 +284,7 @@ func (a *App) Shutdown(ctx context.Context) error {
 		}
 
 		if err := RemoveRuntimeManifest(a.runtimeManifestPath); err != nil {
-			log.Printf("runtime manifest cleanup failed: %v", err)
+			logger.Errorf("runtime manifest cleanup failed: %v", err)
 		}
 
 		// Shutdown HTTP server
@@ -363,7 +363,7 @@ func (a *App) refillReadyJobs() int {
 		}
 	}
 	if loaded > 0 {
-		log.Printf("后台补充加载了 %d 个任务", loaded)
+		logger.Infof("后台补充加载了 %d 个任务", loaded)
 	}
 	return loaded
 }
@@ -372,19 +372,19 @@ func (a *App) refillReadyJobs() int {
 func (a *App) recoverJobs() {
 	// Reset running jobs to ready (handle abnormal restart)
 	if count, err := a.jobRepo.ResetRunningToReady(); err != nil {
-		log.Printf("重置 running 任务失败: %v", err)
+		logger.Errorf("重置 running 任务失败: %v", err)
 	} else if count > 0 {
-		log.Printf("已重置 %d 个 running 状态的任务为 ready", count)
+		logger.Infof("已重置 %d 个 running 状态的任务为 ready", count)
 	}
 
 	// Load ready jobs into queue
 	jobs, err := a.jobRepo.FindByStatus("ready")
 	if err != nil {
-		log.Printf("加载待处理任务失败: %v", err)
+		logger.Errorf("加载待处理任务失败: %v", err)
 		return
 	}
 	if len(jobs) > 0 {
-		log.Printf("发现 %d 个待处理任务，正在加载到队列...", len(jobs))
+		logger.Infof("发现 %d 个待处理任务，正在加载到队列...", len(jobs))
 		loadedCount := 0
 		skippedCount := 0
 		for i := range jobs {
@@ -394,7 +394,7 @@ func (a *App) recoverJobs() {
 				skippedCount++
 			}
 		}
-		log.Printf("任务加载完成，已加载 %d 个，跳过 %d 个（将在队列空闲时自动加载）", loadedCount, skippedCount)
+		logger.Infof("任务加载完成，已加载 %d 个，跳过 %d 个（将在队列空闲时自动加载）", loadedCount, skippedCount)
 	}
 }
 
