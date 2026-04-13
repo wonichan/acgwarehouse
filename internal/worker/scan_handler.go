@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
 
@@ -55,7 +55,7 @@ func (h *ScanHandler) Handle(ctx context.Context, jobID int64, payload string) e
 
 	// 记录扫描结果
 	if result != nil {
-		log.Printf("扫描完成: 总文件 %d, 导入 %d, 跳过 %d, 失败 %d, 耗时 %v",
+		logger.Infof("扫描完成: 总文件 %d, 导入 %d, 跳过 %d, 失败 %d, 耗时 %v",
 			result.TotalFiles,
 			result.Imported,
 			result.Skipped,

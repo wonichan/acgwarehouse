@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -44,10 +44,10 @@ func NewWatcherService(scannerSvc *ScannerService, metadataSvc *MetadataService,
 }
 
 func (w *WatcherService) Start(ctx context.Context) error {
-	log.Printf("[service] WatcherService started: roots=%d", len(w.roots))
+	logger.Infof("[service] WatcherService started: roots=%d", len(w.roots))
 	for _, root := range w.roots {
 		if err := w.addRecursive(root); err != nil {
-			log.Printf("[service] WatcherService start failed: root=%s error=%v", root, err)
+			logger.Errorf("[service] WatcherService start failed: root=%s error=%v", root, err)
 			return err
 		}
 	}
@@ -77,7 +77,7 @@ func (w *WatcherService) Start(ctx context.Context) error {
 func (w *WatcherService) Stop() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	log.Printf("[service] WatcherService stopped")
+	logger.Infof("[service] WatcherService stopped")
 	if w.closed {
 		return
 	}

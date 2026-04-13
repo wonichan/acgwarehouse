@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"strings"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/ai"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 	"github.com/wonichan/acgwarehouse-backend/internal/worker"

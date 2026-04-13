@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"strings"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -33,21 +33,21 @@ func NewTagGovernanceService(
 }
 
 func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tags []string, observationID int64, confidence float64) error {
-	log.Printf("[service] MergeTags started: image_id=%d tag_count=%d observation_id=%d", imageID, len(tags), observationID)
+	logger.Infof("[service] MergeTags started: image_id=%d tag_count=%d observation_id=%d", imageID, len(tags), observationID)
 	if observationID > 0 {
 		if _, err := s.obsRepo.FindByID(ctx, observationID); err != nil {
-			log.Printf("[service] MergeTags obsRepo.FindByID error: %v", err)
+			logger.Errorf("[service] MergeTags obsRepo.FindByID error: %v", err)
 			return err
 		}
 		if err := s.RemoveRejectedAITags(ctx, imageID); err != nil {
-			log.Printf("[service] MergeTags RemoveRejectedAITags error: %v", err)
+			logger.Errorf("[service] MergeTags RemoveRejectedAITags error: %v", err)
 			return err
 		}
 	}
 
 	existingImageTags, err := s.imageTagRepo.FindByImageID(ctx, imageID)
 	if err != nil {
-		log.Printf("[service] MergeTags imageTagRepo.FindByImageID error: %v", err)
+		logger.Errorf("[service] MergeTags imageTagRepo.FindByImageID error: %v", err)
 		return err
 	}
 	existingByTagID := make(map[int64]*domain.ImageTag, len(existingImageTags))
@@ -64,7 +64,7 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 		tag, err := s.tagRepo.FindByLabel(ctx, normalized)
 		if err != nil {
 			if !errors.Is(err, sql.ErrNoRows) {
-				log.Printf("[service] MergeTags tagRepo.FindByLabel error: %v", err)
+				logger.Errorf("[service] MergeTags tagRepo.FindByLabel error: %v", err)
 				return err
 			}
 
@@ -73,11 +73,11 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 				if aliasErr == nil {
 					tag, err = s.tagRepo.FindByID(ctx, alias.TagID)
 					if err != nil {
-						log.Printf("[service] MergeTags tagRepo.FindByID error: %v", err)
+						logger.Errorf("[service] MergeTags tagRepo.FindByID error: %v", err)
 						return err
 					}
 				} else if !errors.Is(aliasErr, sql.ErrNoRows) {
-					log.Printf("[service] MergeTags aliasRepo.FindByNormalizedLabel error: %v", aliasErr)
+					logger.Errorf("[service] MergeTags aliasRepo.FindByNormalizedLabel error: %v", aliasErr)
 					return aliasErr
 				}
 			}
@@ -93,7 +93,7 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 				TrustScore:     confidence,
 			}
 			if err := s.tagRepo.Save(ctx, tag); err != nil {
-				log.Printf("[service] MergeTags tagRepo.Save error: %v", err)
+				logger.Errorf("[service] MergeTags tagRepo.Save error: %v", err)
 				return err
 			}
 		} else {
@@ -118,30 +118,30 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 			Confidence:          confidence,
 			ReviewState:         "pending",
 		}); err != nil {
-			log.Printf("[service] MergeTags imageTagRepo.Save error: %v", err)
+			logger.Errorf("[service] MergeTags imageTagRepo.Save error: %v", err)
 			return err
 		}
 		existingByTagID[tag.ID] = &domain.ImageTag{ImageID: imageID, TagID: tag.ID, Source: source, SourceObservationID: sourceObservationID, Confidence: confidence, ReviewState: "pending"}
 	}
 
-	log.Printf("[service] MergeTags completed: image_id=%d tags_merged=%d", imageID, len(tags))
+	logger.Infof("[service] MergeTags completed: image_id=%d tags_merged=%d", imageID, len(tags))
 	return nil
 }
 
 func (s *TagGovernanceService) RemovePendingAITags(ctx context.Context, imageID int64) error {
-	log.Printf("[service] RemovePendingAITags started: image_id=%d", imageID)
+	logger.Infof("[service] RemovePendingAITags started: image_id=%d", imageID)
 	return s.removeAITagsByState(ctx, imageID, "pending")
 }
 
 func (s *TagGovernanceService) RemoveRejectedAITags(ctx context.Context, imageID int64) error {
-	log.Printf("[service] RemoveRejectedAITags started: image_id=%d", imageID)
+	logger.Infof("[service] RemoveRejectedAITags started: image_id=%d", imageID)
 	return s.removeAITagsByState(ctx, imageID, "rejected")
 }
 
 func (s *TagGovernanceService) removeAITagsByState(ctx context.Context, imageID int64, state string) error {
 	items, err := s.imageTagRepo.FindByImageID(ctx, imageID)
 	if err != nil {
-		log.Printf("[service] removeAITagsByState imageTagRepo.FindByImageID error: %v", err)
+		logger.Errorf("[service] removeAITagsByState imageTagRepo.FindByImageID error: %v", err)
 		return err
 	}
 	for _, item := range items {
@@ -150,7 +150,7 @@ func (s *TagGovernanceService) removeAITagsByState(ctx context.Context, imageID 
 		}
 		_, err := s.imageTagRepo.Delete(ctx, imageID, item.TagID)
 		if err != nil {
-			log.Printf("[service] removeAITagsByState imageTagRepo.Delete error: %v", err)
+			logger.Errorf("[service] removeAITagsByState imageTagRepo.Delete error: %v", err)
 			return err
 		}
 	}

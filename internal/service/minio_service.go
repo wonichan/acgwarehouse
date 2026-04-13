@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 )
 
 type MinioService struct {
@@ -46,7 +46,7 @@ func NewMinioService(endpoint, accessKey, secretKey, bucket string, useSSL bool)
 }
 
 func (s *MinioService) Upload(ctx context.Context, filename, size string, data []byte) (string, error) {
-	log.Printf("[service] MinIO Upload started: filename=%s size=%s", filename, size)
+	logger.Infof("[service] MinIO Upload started: filename=%s size=%s", filename, size)
 	key := fmt.Sprintf("thumbnails/%s/%s-%s.jpg", time.Now().Format("20060102"), filename, size)
 
 	contentType := http.DetectContentType(data)
@@ -58,7 +58,7 @@ func (s *MinioService) Upload(ctx context.Context, filename, size string, data [
 		ContentType: contentType,
 	})
 	if err != nil {
-		log.Printf("[service] MinIO Upload failure: filename=%s size=%s error=%v", filename, size, err)
+		logger.Errorf("[service] MinIO Upload failure: filename=%s size=%s error=%v", filename, size, err)
 		return "", fmt.Errorf("upload thumbnail to minio: %w", err)
 	}
 
@@ -68,24 +68,24 @@ func (s *MinioService) Upload(ctx context.Context, filename, size string, data [
 	}
 
 	finalURL := fmt.Sprintf("%s://%s/%s/%s", scheme, s.endpoint, s.bucket, key)
-	log.Printf("[service] MinIO Upload completed: url=%s", finalURL)
+	logger.Infof("[service] MinIO Upload completed: url=%s", finalURL)
 	return finalURL, nil
 }
 
 func (s *MinioService) DeleteByURL(ctx context.Context, objectURL string) error {
-	log.Printf("[service] MinIO DeleteByURL started: url=%s", objectURL)
+	logger.Infof("[service] MinIO DeleteByURL started: url=%s", objectURL)
 	if s == nil || s.client == nil {
 		return fmt.Errorf("minio service is not initialized")
 	}
 
 	if objectURL == "" {
-		log.Printf("[service] MinIO DeleteByURL skipped: empty url")
+		logger.Infof("[service] MinIO DeleteByURL skipped: empty url")
 		return nil
 	}
 
 	u, err := url.Parse(objectURL)
 	if err != nil {
-		log.Printf("[service] MinIO DeleteByURL url parse failure: url=%s error=%v", objectURL, err)
+		logger.Errorf("[service] MinIO DeleteByURL url parse failure: url=%s error=%v", objectURL, err)
 		return fmt.Errorf("parse object url: %w", err)
 	}
 
@@ -95,16 +95,16 @@ func (s *MinioService) DeleteByURL(ctx context.Context, objectURL string) error 
 		key = strings.TrimPrefix(key, bucketPrefix)
 	}
 	if key == "" || key == "." {
-		log.Printf("[service] MinIO DeleteByURL invalid key failure: url=%s key=%s", objectURL, key)
+		logger.Infof("[service] MinIO DeleteByURL invalid key failure: url=%s key=%s", objectURL, key)
 		return fmt.Errorf("invalid object key from url: %s", objectURL)
 	}
 
 	err = s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
-		log.Printf("[service] MinIO DeleteByURL deletion failure: url=%s key=%s error=%v", objectURL, key, err)
+		logger.Errorf("[service] MinIO DeleteByURL deletion failure: url=%s key=%s error=%v", objectURL, key, err)
 		return fmt.Errorf("delete object from minio: %w", err)
 	}
 
-	log.Printf("[service] MinIO DeleteByURL completed: url=%s", objectURL)
+	logger.Infof("[service] MinIO DeleteByURL completed: url=%s", objectURL)
 	return nil
 }
