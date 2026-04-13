@@ -11,6 +11,18 @@ class TagGovernanceRow {
   final int manualCount;
   final int affectedImageCount;
   final bool canDelete;
+  final String? level;
+  final int? parentId;
+  final int directUsageCount;
+  final int treeUsageCount;
+  final int directPendingCount;
+  final int treePendingCount;
+  final int directConfirmedCount;
+  final int treeConfirmedCount;
+  final int directAiCount;
+  final int treeAiCount;
+  final int directManualCount;
+  final int treeManualCount;
 
   const TagGovernanceRow({
     required this.tagId,
@@ -25,6 +37,18 @@ class TagGovernanceRow {
     required this.manualCount,
     required this.affectedImageCount,
     required this.canDelete,
+    this.level,
+    this.parentId,
+    this.directUsageCount = 0,
+    this.treeUsageCount = 0,
+    this.directPendingCount = 0,
+    this.treePendingCount = 0,
+    this.directConfirmedCount = 0,
+    this.treeConfirmedCount = 0,
+    this.directAiCount = 0,
+    this.treeAiCount = 0,
+    this.directManualCount = 0,
+    this.treeManualCount = 0,
   });
 
   factory TagGovernanceRow.fromJson(Map<String, dynamic> json) {
@@ -43,6 +67,18 @@ class TagGovernanceRow {
       manualCount: json['manual_count'] as int? ?? 0,
       affectedImageCount: json['affected_image_count'] as int? ?? 0,
       canDelete: json['can_delete'] as bool? ?? false,
+      level: json['level'] as String?,
+      parentId: json['parent_id'] as int?,
+      directUsageCount: json['direct_usage_count'] as int? ?? 0,
+      treeUsageCount: json['tree_usage_count'] as int? ?? 0,
+      directPendingCount: json['direct_pending_count'] as int? ?? 0,
+      treePendingCount: json['tree_pending_count'] as int? ?? 0,
+      directConfirmedCount: json['direct_confirmed_count'] as int? ?? 0,
+      treeConfirmedCount: json['tree_confirmed_count'] as int? ?? 0,
+      directAiCount: json['direct_ai_count'] as int? ?? 0,
+      treeAiCount: json['tree_ai_count'] as int? ?? 0,
+      directManualCount: json['direct_manual_count'] as int? ?? 0,
+      treeManualCount: json['tree_manual_count'] as int? ?? 0,
     );
   }
 }
@@ -88,7 +124,11 @@ class TagGovernanceFailure {
     return TagGovernanceFailure(
       tagId: json['tag_id'] as int,
       preferredLabel: json['preferred_label'] as String? ?? '',
-      message: json['message'] as String? ?? '',
+      message:
+          json['message'] as String? ??
+          json['blocking_reason'] as String? ??
+          json['error'] as String? ??
+          '',
     );
   }
 }

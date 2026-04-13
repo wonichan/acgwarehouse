@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -132,12 +131,13 @@ func mustSeedImageTagSourceMigrationData(t *testing.T, db *sql.DB) {
 		t.Fatalf("seed images: %v", err)
 	}
 
-	tagRepo := NewTagRepository(db)
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", UsageCount: 1}); err != nil {
-		t.Fatalf("seed tag 1: %v", err)
-	}
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 2, PreferredLabel: "rain night", Slug: "rain-night", UsageCount: 1}); err != nil {
-		t.Fatalf("seed tag 2: %v", err)
+	if _, err := db.Exec(`
+		INSERT INTO tags (id, preferred_label, slug, usage_count)
+		VALUES
+			(1, 'blue sky', 'blue-sky', 1),
+			(2, 'rain night', 'rain-night', 1)
+	`); err != nil {
+		t.Fatalf("seed tags: %v", err)
 	}
 
 	if _, err := db.Exec(`

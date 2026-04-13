@@ -198,6 +198,135 @@ func TestImageRepositoryCountByTagIDsReturnsCorrectCount(t *testing.T) {
 	}
 }
 
+func TestImageRepositoryFindByTagIDsExpandsSelectedAncestors(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+	tagRepo := NewTagRepository(db)
+	imageTagRepo := NewImageTagRepository(db)
+
+	root := &domain.Tag{PreferredLabel: "character", Slug: "character", Level: domain.TagLevelRoot}
+	if err := tagRepo.Save(ctx, root); err != nil {
+		t.Fatalf("save root: %v", err)
+	}
+	parent := &domain.Tag{PreferredLabel: "protagonist", Slug: "protagonist", Level: domain.TagLevelParent, ParentID: &root.ID}
+	if err := tagRepo.Save(ctx, parent); err != nil {
+		t.Fatalf("save parent: %v", err)
+	}
+	child := &domain.Tag{PreferredLabel: "heroine", Slug: "heroine", Level: domain.TagLevelChild, ParentID: &parent.ID}
+	if err := tagRepo.Save(ctx, child); err != nil {
+		t.Fatalf("save child: %v", err)
+	}
+
+	images := []*domain.Image{
+		{Path: "/hierarchy/1.png", Filename: "1.png", SourceRoot: "/hierarchy", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/hierarchy/2.png", Filename: "2.png", SourceRoot: "/hierarchy", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	for _, img := range images {
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[0].ID, TagID: child.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save child tag image: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[1].ID, TagID: parent.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save parent tag image: %v", err)
+	}
+
+	filtered, err := repo.FindByTagIDs(ctx, []int64{root.ID}, 10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindByTagIDs(root) error = %v", err)
+	}
+	if len(filtered) != 2 {
+		t.Fatalf("len(filtered) = %d, want 2", len(filtered))
+	}
+
+	count, err := repo.CountByTagIDs(ctx, []int64{root.ID})
+	if err != nil {
+		t.Fatalf("CountByTagIDs(root) error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("count = %d, want 2", count)
+	}
+}
+
+func TestImageRepositoryFindByTagIDsKeepsExpandedAndSemantics(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+	tagRepo := NewTagRepository(db)
+	imageTagRepo := NewImageTagRepository(db)
+
+	rootA := &domain.Tag{PreferredLabel: "series", Slug: "series", Level: domain.TagLevelRoot}
+	rootB := &domain.Tag{PreferredLabel: "mood", Slug: "mood", Level: domain.TagLevelRoot}
+	if err := tagRepo.Save(ctx, rootA); err != nil {
+		t.Fatalf("save rootA: %v", err)
+	}
+	if err := tagRepo.Save(ctx, rootB); err != nil {
+		t.Fatalf("save rootB: %v", err)
+	}
+	parentA := &domain.Tag{PreferredLabel: "cast", Slug: "cast", Level: domain.TagLevelParent, ParentID: &rootA.ID}
+	parentB := &domain.Tag{PreferredLabel: "tone", Slug: "tone", Level: domain.TagLevelParent, ParentID: &rootB.ID}
+	childA := &domain.Tag{PreferredLabel: "lead", Slug: "lead", Level: domain.TagLevelChild, ParentID: &parentA.ID}
+	childB := &domain.Tag{PreferredLabel: "calm", Slug: "calm", Level: domain.TagLevelChild, ParentID: &parentB.ID}
+	if err := tagRepo.Save(ctx, parentA); err != nil {
+		t.Fatalf("save parentA: %v", err)
+	}
+	if err := tagRepo.Save(ctx, parentB); err != nil {
+		t.Fatalf("save parentB: %v", err)
+	}
+	if err := tagRepo.Save(ctx, childA); err != nil {
+		t.Fatalf("save childA: %v", err)
+	}
+	if err := tagRepo.Save(ctx, childB); err != nil {
+		t.Fatalf("save childB: %v", err)
+	}
+
+	images := []*domain.Image{
+		{Path: "/expanded/1.png", Filename: "1.png", SourceRoot: "/expanded", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/expanded/2.png", Filename: "2.png", SourceRoot: "/expanded", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/expanded/3.png", Filename: "3.png", SourceRoot: "/expanded", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	for _, img := range images {
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[0].ID, TagID: childA.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save image0 childA: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[0].ID, TagID: childB.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save image0 childB: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[1].ID, TagID: childA.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save image1 childA: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[2].ID, TagID: childB.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save image2 childB: %v", err)
+	}
+
+	filtered, err := repo.FindByTagIDs(ctx, []int64{rootA.ID, rootB.ID}, 10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindByTagIDs(expanded AND) error = %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].ID != images[0].ID {
+		t.Fatalf("unexpected filtered images: %+v", filtered)
+	}
+
+	count, err := repo.CountByTagIDs(ctx, []int64{rootA.ID, rootB.ID})
+	if err != nil {
+		t.Fatalf("CountByTagIDs(expanded AND) error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+}
+
 func newImageRepositoryTestDB(t *testing.T) (*sql.DB, ImageRepository) {
 	t.Helper()
 

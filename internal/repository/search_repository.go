@@ -130,7 +130,10 @@ func (r *sqliteSearchRepository) SearchImages(ctx context.Context, opts SearchQu
 	}
 
 	sortColumn, sortOrder, orderBy := normalizeSearchSort(opts.SortBy, opts.SortOrder)
-	baseWhere, args := r.buildSearchWhere(opts.Query, opts.TagIDs)
+	baseWhere, args, err := r.buildSearchWhere(ctx, opts.Query, opts.TagIDs)
+	if err != nil {
+		return nil, err
+	}
 	query := fmt.Sprintf(`
 		SELECT i.id, i.path, i.filename, i.source_root, i.file_size, i.width, i.height, i.format, COALESCE(i.phash, 0), COALESCE(i.phash_hex, ''), i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
@@ -187,7 +190,10 @@ func (r *sqliteSearchRepository) CountSearchImages(ctx context.Context, opts Sea
 	if strings.TrimSpace(opts.Query) == "" {
 		return 0, nil
 	}
-	baseWhere, args := r.buildSearchWhere(opts.Query, opts.TagIDs)
+	baseWhere, args, err := r.buildSearchWhere(ctx, opts.Query, opts.TagIDs)
+	if err != nil {
+		return 0, err
+	}
 	query := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM images i
@@ -195,7 +201,7 @@ func (r *sqliteSearchRepository) CountSearchImages(ctx context.Context, opts Sea
 		WHERE %s
 	`, baseWhere)
 	var count int64
-	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
 }
 
@@ -220,25 +226,19 @@ func normalizeSearchSort(sortBy, sortOrder string) (string, string, string) {
 	return sortColumn, sortOrder, fmt.Sprintf("%s %s, i.id %s", sortColumn, sortOrder, sortOrder)
 }
 
-func (r *sqliteSearchRepository) buildSearchWhere(query string, tagIDs []int64) (string, []any) {
+func (r *sqliteSearchRepository) buildSearchWhere(ctx context.Context, query string, tagIDs []int64) (string, []any, error) {
 	clauses := []string{"images_fts MATCH ?"}
 	args := []any{r.buildFTSQuery(query)}
 	if len(tagIDs) > 0 {
-		placeholders := make([]string, len(tagIDs))
-		for i, id := range tagIDs {
-			placeholders[i] = "?"
-			args = append(args, id)
+		expandedClauses, err := expandHierarchicalTagClauses(ctx, r.db, tagIDs)
+		if err != nil {
+			return "", nil, err
 		}
-		clauses = append(clauses, fmt.Sprintf(`i.id IN (
-			SELECT it.image_id
-			FROM image_tags it
-			WHERE it.tag_id IN (%s) AND it.review_state != 'rejected'
-			GROUP BY it.image_id
-			HAVING COUNT(DISTINCT it.tag_id) = ?
-		)`, strings.Join(placeholders, ", ")))
-		args = append(args, int64(len(tagIDs)))
+		tagClause, tagArgs := buildImageTagClauseFilters(expandedClauses, "i.id")
+		clauses = append(clauses, tagClause)
+		args = append(args, tagArgs...)
 	}
-	return strings.Join(clauses, " AND "), args
+	return strings.Join(clauses, " AND "), args, nil
 }
 
 // SearchByFilenames performs a LIKE search on filenames.

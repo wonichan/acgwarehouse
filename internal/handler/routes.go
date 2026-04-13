@@ -166,6 +166,10 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	tagDeleteAlias := gin.HandlerFunc(placeholderHandler)
 	tagGetStats := gin.HandlerFunc(placeholderHandler)
 	tagGetGovernance := gin.HandlerFunc(placeholderHandler)
+	tagGetTree := gin.HandlerFunc(placeholderHandler)
+	tagGetParentCandidates := gin.HandlerFunc(placeholderHandler)
+	tagChangeLevel := gin.HandlerFunc(placeholderHandler)
+	tagReparent := gin.HandlerFunc(placeholderHandler)
 	tagGetDeletePreview := gin.HandlerFunc(placeholderHandler)
 	tagMerge := gin.HandlerFunc(placeholderHandler)
 	tagBatchCleanup := gin.HandlerFunc(placeholderHandler)
@@ -181,14 +185,22 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		tagDeleteAlias = tagHandler.DeleteAlias
 		tagGetStats = tagHandler.GetTagStats
 		tagGetGovernance = tagHandler.GetGovernanceTags
+		tagGetTree = tagHandler.GetTagTree
+		tagGetParentCandidates = tagHandler.GetParentCandidates
+		tagChangeLevel = tagHandler.ChangeTagLevel
+		tagReparent = tagHandler.ReparentTag
 		tagGetDeletePreview = tagHandler.GetDeletePreview
 		tagMerge = tagHandler.MergeTag
 		tagBatchCleanup = tagHandler.CleanUnusedTags
 	}
 	api.GET("/tags", tagGet)
 	api.GET("/tags/governance", tagGetGovernance)
+	api.GET("/tags/tree", tagGetTree)
+	api.GET("/tags/parent-candidates", tagGetParentCandidates)
 	api.POST("/tags", tagCreate)
 	api.PUT("/tags/:id", tagUpdate)
+	api.POST("/tags/:id/change-level", tagChangeLevel)
+	api.POST("/tags/:id/reparent", tagReparent)
 	api.DELETE("/tags/:id", tagDelete)
 	api.POST("/tags/:id/merge", tagMerge)
 	api.GET("/tags/:id/delete-preview", tagGetDeletePreview)
@@ -205,7 +217,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	imageTagBatchReview := gin.HandlerFunc(placeholderHandler)
 	imageTagMerge := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.ImageTagRepo != nil && deps.TagRepo != nil && deps.ImageRepo != nil && deps.GovernanceSvc != nil {
-		imageTagHandler := NewImageTagHandler(deps.ImageTagRepo, deps.TagRepo, deps.ImageRepo, deps.GovernanceSvc)
+		imageTagHandler := NewImageTagHandler(deps.ImageTagRepo, deps.TagRepo, deps.AliasRepo, deps.ImageRepo, deps.GovernanceSvc)
 		imageTagGet = imageTagHandler.GetImageTags
 		imageTagAdd = imageTagHandler.AddImageTag
 		imageTagRemove = imageTagHandler.RemoveImageTag

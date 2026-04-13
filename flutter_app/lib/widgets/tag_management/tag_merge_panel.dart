@@ -29,14 +29,20 @@ class _TagMergePanelState extends State<TagMergePanel> {
   bool _isMerging = false;
 
   List<TagGovernanceRow> get _availableTargets {
-    return widget.allRows.where((r) => r.tagId != widget.sourceRow.tagId).where(
-      (r) {
-        if (_searchQuery.isEmpty) return true;
-        return r.preferredLabel.toLowerCase().contains(
-          _searchQuery.toLowerCase(),
-        );
-      },
-    ).toList();
+    // Only allow merging within the same level
+    return widget.allRows
+        .where(
+          (r) =>
+              r.tagId != widget.sourceRow.tagId &&
+              r.level == widget.sourceRow.level,
+        )
+        .where((r) {
+          if (_searchQuery.isEmpty) return true;
+          return r.preferredLabel.toLowerCase().contains(
+            _searchQuery.toLowerCase(),
+          );
+        })
+        .toList();
   }
 
   @override
@@ -63,7 +69,7 @@ class _TagMergePanelState extends State<TagMergePanel> {
           ),
           const SizedBox(height: 8),
           TextBox(
-            placeholder: '搜索目标标签...',
+            placeholder: '搜索同层级目标标签...',
             onChanged: (value) => setState(() => _searchQuery = value),
           ),
           const SizedBox(height: 8),
@@ -74,7 +80,9 @@ class _TagMergePanelState extends State<TagMergePanel> {
               children: _availableTargets.map((row) {
                 final isSelected = _selectedTargetTagId == row.tagId;
                 return ListTile(
-                  title: Text(row.preferredLabel),
+                  title: Text(
+                    '${row.preferredLabel} (级别: ${row.level ?? '无'})',
+                  ),
                   subtitle: Text(
                     'tagId: ${row.tagId}',
                     style: const TextStyle(fontSize: 10),

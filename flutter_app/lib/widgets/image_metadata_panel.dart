@@ -237,6 +237,8 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
             widget.imageId,
             tag.id,
             targetLabel: result['tagLabel'] as String,
+            targetLevel: result['tagLevel'] as String?,
+            targetParentId: result['tagParentId'] as int?,
           );
         }
         await _loadImageTags();
@@ -742,7 +744,12 @@ class _MergeTagDialogState extends State<_MergeTagDialog> {
       if (mounted) {
         setState(() {
           _searchResults = widget.tagProvider.filteredTags
-              .where((t) => t.id != widget.sourceTag.id)
+              .where(
+                (t) =>
+                    t.id != widget.sourceTag.id &&
+                    (widget.sourceTag.level == null ||
+                        t.level == widget.sourceTag.level),
+              )
               .toList();
         });
       }

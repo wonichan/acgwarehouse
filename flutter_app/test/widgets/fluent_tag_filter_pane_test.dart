@@ -1,77 +1,65 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/providers/tag_provider.dart';
+import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/services/tag_service.dart';
+import 'package:gallery/services/api_service.dart';
 import 'package:gallery/widgets/fluent_tag_filter_pane.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  testWidgets('FluentTagFilterPane count badge uses accent theme colors', (
+  testWidgets('FluentTagFilterPane keeps tree semantics while searching', (
     tester,
   ) async {
     final client = MockClient((request) async {
-      return http.Response('{"tags":[]}', 200);
+      if (request.url.path.contains('tree')) {
+        return http.Response(
+          '{"tree":[{"id":1,"preferred_label":"characters","primary_category":"c","level":"root","slug":"characters","review_state":"approved","trust_score":1.0,"usage_count":1,"tree_usage_count":40,"created_at":"2023-01-01T00:00:00Z","children":[{"id":2,"preferred_label":"protagonist","primary_category":"c","level":"parent","slug":"protagonist","review_state":"approved","trust_score":1.0,"usage_count":1,"tree_usage_count":20,"created_at":"2023-01-01T00:00:00Z","children":[{"id":3,"preferred_label":"heroine","primary_category":"c","level":"child","slug":"heroine","review_state":"approved","trust_score":1.0,"usage_count":1,"tree_usage_count":7,"created_at":"2023-01-01T00:00:00Z"}]}]}]}',
+          200,
+        );
+      }
+      return http.Response(
+        '{"tags":[{"id":1,"preferred_label":"characters","primary_category":"c","level":"root","slug":"characters","review_state":"approved","trust_score":1.0,"usage_count":1,"created_at":"2023-01-01T00:00:00Z"},{"id":2,"preferred_label":"protagonist","primary_category":"c","level":"parent","slug":"protagonist","review_state":"approved","trust_score":1.0,"usage_count":1,"created_at":"2023-01-01T00:00:00Z"},{"id":3,"preferred_label":"heroine","primary_category":"c","level":"child","slug":"heroine","review_state":"approved","trust_score":1.0,"usage_count":1,"created_at":"2023-01-01T00:00:00Z"}],"total":3}',
+        200,
+      );
     });
+
     final provider = TagProvider(
       TagService(baseUrl: 'http://localhost:8080', client: client),
     );
-    provider.toggleTag(1);
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080'),
+    );
 
     await tester.pumpWidget(
       fluent.FluentApp(
-        theme: fluent.FluentThemeData(accentColor: fluent.Colors.purple),
-        home: ChangeNotifierProvider<TagProvider>.value(
-          value: provider,
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<TagProvider>.value(value: provider),
+            ChangeNotifierProvider<ImageListProvider>.value(
+              value: imageProvider,
+            ),
+          ],
           child: const fluent.ScaffoldPage(content: FluentTagFilterPane()),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    final countText = tester.widget<fluent.Text>(find.text('1 个'));
-    expect(countText.style?.color, fluent.Colors.purple);
+    expect(find.byType(fluent.TreeView), findsOneWidget);
+    expect(find.text('R'), findsWidgets);
+    expect(find.text('P'), findsWidgets);
+    expect(find.text('C'), findsWidgets);
 
-    final badgeContainer = tester.widget<fluent.Container>(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is fluent.Container &&
-            widget.child is fluent.Text &&
-            (widget.child as fluent.Text).data == '1 个',
-      ),
-    );
-    final decoration = badgeContainer.decoration! as fluent.BoxDecoration;
-    expect(decoration.color, fluent.Colors.purple.withValues(alpha: 0.2));
-  });
-
-  testWidgets('FluentTagFilterPane uses systemFillColorCritical for errors', (
-    tester,
-  ) async {
-    final client = MockClient((request) async {
-      return http.Response('{}', 500);
-    });
-
-    await tester.pumpWidget(
-      fluent.FluentApp(
-        theme: fluent.FluentThemeData(
-          resources: const fluent.ResourceDictionary.light(
-            systemFillColorCritical: fluent.Color(0xFFCC0000),
-          ),
-        ),
-        home: ChangeNotifierProvider<TagProvider>(
-          create: (_) => TagProvider(
-            TagService(baseUrl: 'http://localhost:8080', client: client),
-          ),
-          child: const fluent.ScaffoldPage(content: FluentTagFilterPane()),
-        ),
-      ),
-    );
+    await tester.enterText(find.byType(fluent.TextBox), 'hero');
     await tester.pumpAndSettle();
 
-    final errorIcon = tester.widget<fluent.Icon>(
-      find.byIcon(fluent.FluentIcons.error),
-    );
-    expect(errorIcon.color, const fluent.Color(0xFFCC0000));
+    expect(find.byType(fluent.TreeView), findsOneWidget);
+    expect(find.text('characters'), findsOneWidget);
+    expect(find.text('protagonist'), findsOneWidget);
+    expect(find.text('heroine'), findsOneWidget);
+    expect(find.text('7'), findsWidgets);
   });
 }

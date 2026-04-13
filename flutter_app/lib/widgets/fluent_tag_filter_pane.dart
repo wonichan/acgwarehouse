@@ -31,6 +31,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<TagProvider>().loadTagTree();
       context.read<TagProvider>().loadTags();
     });
   }
@@ -39,6 +40,107 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Widget _buildLevelBadge(String? level, FluentThemeData theme) {
+    if (level == null || level.isEmpty) return const SizedBox.shrink();
+
+    final String label = switch (level) {
+      'root' => 'R',
+      'parent' => 'P',
+      _ => 'C',
+    };
+    final Color accent = switch (level) {
+      'root' => theme.accentColor,
+      'parent' => Colors.orange,
+      _ => theme.resources.textFillColorSecondary,
+    };
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: accent.withValues(alpha: 0.35), width: 0.5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: accent,
+        ),
+      ),
+    );
+  }
+
+  List<TreeViewItem> _buildTreeNodes(
+    List<dynamic> nodes,
+    TagProvider provider,
+  ) {
+    final theme = FluentTheme.of(context);
+    return nodes.map((node) {
+      final tagId = (node['tag_id'] ?? node['id']) as int;
+      final isSelected = provider.selectedTagIds.contains(tagId);
+      final children = node['children'] as List<dynamic>? ?? [];
+      final usageCount = node['tree_usage_count'] ?? node['usage_count'] ?? 0;
+      final level = node['level'] as String?;
+
+      return TreeViewItem(
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Checkbox(
+              checked: isSelected,
+              onChanged: (checked) {
+                provider.toggleTag(tagId);
+                context.read<ImageListProvider>().setTagFilter(
+                  provider.selectedTagIds.toList(),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+            Text(node['preferred_label'] as String? ?? ''),
+            _buildLevelBadge(level, theme),
+            const SizedBox(width: 2),
+            Text(
+              '$usageCount',
+              style: TextStyle(
+                fontSize: 11,
+                color: theme.resources.textFillColorSecondary,
+              ),
+            ),
+          ],
+        ),
+        value: tagId,
+        children: children.isNotEmpty
+            ? _buildTreeNodes(children, provider)
+            : [],
+      );
+    }).toList();
+  }
+
+  List<dynamic> _filterTreeNodes(List<dynamic> nodes, String query) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return nodes;
+    }
+
+    final filtered = <dynamic>[];
+    for (final rawNode in nodes) {
+      final node = Map<String, dynamic>.from(rawNode as Map);
+      final label = (node['preferred_label'] as String? ?? '').toLowerCase();
+      final children = _filterTreeNodes(
+        node['children'] as List<dynamic>? ?? const [],
+        query,
+      );
+      if (label.contains(normalized) || children.isNotEmpty) {
+        node['children'] = children;
+        filtered.add(node);
+      }
+    }
+    return filtered;
   }
 
   @override
@@ -93,12 +195,12 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                     icon: const Icon(FluentIcons.clear, size: 14),
                     onPressed: () {
                       _searchController.clear();
-                      context.read<TagProvider>().searchTags('');
+                      setState(() {});
                     },
                   )
                 : null,
             onChanged: (query) {
-              context.read<TagProvider>().searchTags(query);
+              setState(() {});
             },
           ),
           const SizedBox(height: 12),
@@ -141,11 +243,11 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           const Divider(),
           const SizedBox(height: 8),
 
-          // 标签列表
+          // 标签列表/树
           Expanded(
             child: Consumer<TagProvider>(
               builder: (context, provider, _) {
-                if (provider.isLoading && provider.allTags.isEmpty) {
+                if (provider.isLoading) {
                   return const Center(child: ProgressRing());
                 }
                 if (provider.error != null) {
@@ -164,7 +266,14 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                     ),
                   );
                 }
-                if (provider.filteredTags.isEmpty) {
+
+                final treeData =
+                    provider.tagTree?['tree'] as List<dynamic>? ?? [];
+                final visibleNodes = _filterTreeNodes(
+                  treeData,
+                  _searchController.text,
+                );
+                if (visibleNodes.isEmpty) {
                   return Center(
                     child: Text(
                       '暂无标签',
@@ -175,41 +284,9 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                   );
                 }
 
-                return ListView.builder(
-                  itemCount: provider.filteredTags.length,
-                  itemBuilder: (itemContext, index) {
-                    final tag = provider.filteredTags[index];
-                    final isSelected = provider.selectedTagIds.contains(tag.id);
-
-                    return ToggleButton(
-                      checked: isSelected,
-                      onChanged: (checked) {
-                        provider.toggleTag(tag.id);
-                        context.read<ImageListProvider>().setTagFilter(
-                          provider.selectedTagIds.toList(),
-                        );
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              tag.preferredLabel,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${tag.usageCount}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: theme.resources.textFillColorSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                return TreeView(
+                  items: _buildTreeNodes(visibleNodes, provider),
+                  selectionMode: TreeViewSelectionMode.multiple,
                 );
               },
             ),

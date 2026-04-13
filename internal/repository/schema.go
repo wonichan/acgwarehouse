@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     preferred_label TEXT UNIQUE NOT NULL,
     slug TEXT UNIQUE NOT NULL,
+    level TEXT NOT NULL DEFAULT 'child',
+    parent_id INTEGER REFERENCES tags(id) ON DELETE SET NULL,
     primary_category TEXT,
     review_state TEXT DEFAULT 'pending',
     trust_score REAL DEFAULT 0.0,
@@ -265,6 +267,12 @@ func EnsureScanSchema(db *sql.DB) error {
 	if err := ensureColumnExists(db, "async_jobs", "platform_task_id", "INTEGER REFERENCES platform_tasks(id) ON DELETE SET NULL"); err != nil {
 		return err
 	}
+	if err := ensureColumnExists(db, "tags", "level", "TEXT NOT NULL DEFAULT 'child'"); err != nil {
+		return err
+	}
+	if err := ensureColumnExists(db, "tags", "parent_id", "INTEGER REFERENCES tags(id) ON DELETE SET NULL"); err != nil {
+		return err
+	}
 	if err := ensureColumnExists(db, "image_tags", "source", "TEXT NOT NULL DEFAULT 'manual'"); err != nil {
 		return err
 	}
@@ -290,7 +298,18 @@ func EnsureScanSchema(db *sql.DB) error {
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_images_image_id_unique ON collection_images(image_id)`); err != nil {
 		return err
 	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_tags_parent_id ON tags(parent_id)`); err != nil {
+		return err
+	}
 	_, err := db.Exec(`
+		UPDATE tags
+		SET level = 'child'
+		WHERE level IS NULL OR TRIM(level) = ''
+	`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`
 		UPDATE image_tags
 		SET source = 'ai'
 		WHERE source_observation_id IS NOT NULL

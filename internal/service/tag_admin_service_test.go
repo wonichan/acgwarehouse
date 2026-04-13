@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -22,11 +23,11 @@ func TestTagAdminServiceListGovernanceTagsIncludesRequiredFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListGovernanceTags() error = %v", err)
 	}
-	if total != 3 {
-		t.Fatalf("total = %d, want 3", total)
+	if total != 7 {
+		t.Fatalf("total = %d, want 7", total)
 	}
-	if len(rows) != 3 {
-		t.Fatalf("len(rows) = %d, want 3", len(rows))
+	if len(rows) != 7 {
+		t.Fatalf("len(rows) = %d, want 7", len(rows))
 	}
 	if rows[0].PreferredLabel != "alpha-source" {
 		t.Fatalf("first preferred_label = %q, want %q", rows[0].PreferredLabel, "alpha-source")
@@ -37,14 +38,55 @@ func TestTagAdminServiceListGovernanceTagsIncludesRequiredFields(t *testing.T) {
 	if rows[0].TagID == 0 {
 		t.Fatal("expected tag_id to be populated")
 	}
+	if rows[0].Level == "" {
+		t.Fatal("expected level to be populated")
+	}
+	if rows[0].DirectUsageCount == 0 {
+		t.Fatal("expected direct_usage_count to be populated")
+	}
+	if rows[0].TreeUsageCount == 0 {
+		t.Fatal("expected tree_usage_count to be populated")
+	}
 	if rows[0].PrimaryCategory == "" {
 		t.Fatal("expected primary_category to be populated")
 	}
 	if len(rows[0].Aliases) == 0 {
 		t.Fatal("expected aliases to be populated")
 	}
-	if !rows[2].CanDelete {
+	var unusedRow *TagGovernanceRow
+	for i := range rows {
+		if rows[i].TagID == 3 {
+			unusedRow = &rows[i]
+			break
+		}
+	}
+	if unusedRow == nil {
+		t.Fatal("expected to find unused tag row")
+	}
+	if !unusedRow.CanDelete {
 		t.Fatal("expected unused tag to be deletable")
+	}
+}
+
+func TestTagAdminServiceMergeTagsRejectsCrossLevelMerge(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	_, err := service.MergeTags(context.Background(), 1, 4)
+	if err == nil {
+		t.Fatal("expected cross-level merge to fail")
+	}
+}
+
+func TestTagAdminServiceMergeTagsRejectsSourceWithChildren(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	_, err := service.MergeTags(context.Background(), 4, 7)
+	if !errors.Is(err, ErrMergeSourceHasChildren) {
+		t.Fatalf("MergeTags() error = %v, want %v", err, ErrMergeSourceHasChildren)
 	}
 }
 
@@ -154,6 +196,202 @@ func TestTagAdminServiceGetDeletePreviewAllowsUnusedTag(t *testing.T) {
 	}
 }
 
+func TestTagAdminServiceGetDeletePreviewBlocksTagWithChildren(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	preview, err := service.GetDeletePreview(context.Background(), 4)
+	if err != nil {
+		t.Fatalf("GetDeletePreview() error = %v", err)
+	}
+	if preview.CanDelete {
+		t.Fatal("expected parent tag with children to be blocked")
+	}
+	if preview.BlockingReason != "child_tags_exist" {
+		t.Fatalf("blocking_reason = %q, want %q", preview.BlockingReason, "child_tags_exist")
+	}
+}
+
+func TestTagAdminServiceGetDeletePreviewBlocksRejectedOnlyAssociation(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, imageTagRepo := newTagAdminServiceForTest(t)
+	rejectedOnly := mustSaveAdminTag(t, tagRepo, &domain.Tag{PreferredLabel: "rejected-only", Slug: "rejected-only", Level: domain.TagLevelChild})
+	if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 2, TagID: rejectedOnly.ID, ReviewState: "rejected", Source: domain.ImageTagSourceAI}); err != nil {
+		t.Fatalf("seed rejected image tag: %v", err)
+	}
+
+	preview, err := service.GetDeletePreview(context.Background(), rejectedOnly.ID)
+	if err != nil {
+		t.Fatalf("GetDeletePreview() error = %v", err)
+	}
+	if preview.CanDelete {
+		t.Fatal("expected rejected-only direct association to still block delete")
+	}
+	if preview.AffectedImageCount != 1 {
+		t.Fatalf("affected_image_count = %d, want 1", preview.AffectedImageCount)
+	}
+}
+
+func TestTagAdminServiceGetParentCandidatesReturnsExpectedLevels(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	parents, err := service.GetParentCandidates(context.Background(), domain.TagLevelParent)
+	if err != nil {
+		t.Fatalf("GetParentCandidates(parent) error = %v", err)
+	}
+	if len(parents) != 1 || parents[0].ID != 6 {
+		t.Fatalf("unexpected parent candidates for parent level: %+v", parents)
+	}
+
+	children, err := service.GetParentCandidates(context.Background(), domain.TagLevelChild)
+	if err != nil {
+		t.Fatalf("GetParentCandidates(child) error = %v", err)
+	}
+	if len(children) != 2 || children[0].ID != 4 || children[1].ID != 7 {
+		t.Fatalf("unexpected parent candidates for child level: %+v", children)
+	}
+}
+
+func TestTagAdminServiceGetTagTreeBuildsHierarchy(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	tree, err := service.GetTagTree(context.Background())
+	if err != nil {
+		t.Fatalf("GetTagTree() error = %v", err)
+	}
+	if len(tree) == 0 {
+		t.Fatal("expected non-empty tree")
+	}
+	var root *TagTreeNode
+	var parent *TagTreeNode
+	for i := range tree {
+		if tree[i].TagID == 6 {
+			root = &tree[i]
+			break
+		}
+	}
+	if root == nil {
+		t.Fatal("expected root tag 6 in tree")
+	}
+	if root.Level != domain.TagLevelRoot {
+		t.Fatalf("root.Level = %q, want %q", root.Level, domain.TagLevelRoot)
+	}
+	if len(root.Children) != 2 || root.Children[0].TagID != 4 || root.Children[1].TagID != 7 {
+		t.Fatalf("unexpected children for root node: %+v", root.Children)
+	}
+	parent = &root.Children[0]
+	if parent.Level != domain.TagLevelParent {
+		t.Fatalf("parent.Level = %q, want %q", parent.Level, domain.TagLevelParent)
+	}
+	if len(parent.Children) != 1 || parent.Children[0].TagID != 5 {
+		t.Fatalf("unexpected children for parent node: %+v", parent.Children)
+	}
+	if root.TreeUsageCount < root.UsageCount {
+		t.Fatalf("tree usage should be >= direct usage, got tree=%d direct=%d", root.TreeUsageCount, root.UsageCount)
+	}
+}
+
+func TestTagAdminServiceChangeLevelUpdatesHierarchy(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, _ := newTagAdminServiceForTest(t)
+	newRoot := mustSaveAdminTag(t, tagRepo, &domain.Tag{PreferredLabel: "meta-root", Slug: "meta-root", Level: domain.TagLevelRoot})
+
+	updated, err := service.ChangeLevel(context.Background(), 3, domain.TagLevelParent, &newRoot.ID)
+	if err != nil {
+		t.Fatalf("ChangeLevel() error = %v", err)
+	}
+	if updated.Level != domain.TagLevelParent {
+		t.Fatalf("Level = %q, want %q", updated.Level, domain.TagLevelParent)
+	}
+	if updated.ParentID == nil || *updated.ParentID != newRoot.ID {
+		t.Fatalf("ParentID = %v, want %d", updated.ParentID, newRoot.ID)
+	}
+}
+
+func TestTagAdminServiceChangeLevelParentToRootDetachesChildren(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, _ := newTagAdminServiceForTest(t)
+
+	updated, err := service.ChangeLevel(context.Background(), 4, domain.TagLevelRoot, nil)
+	if err != nil {
+		t.Fatalf("ChangeLevel() error = %v", err)
+	}
+	if updated.Level != domain.TagLevelRoot {
+		t.Fatalf("Level = %q, want %q", updated.Level, domain.TagLevelRoot)
+	}
+	if updated.ParentID != nil {
+		t.Fatalf("ParentID = %v, want nil", updated.ParentID)
+	}
+
+	child, err := tagRepo.FindByID(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("FindByID(child) error = %v", err)
+	}
+	if child.ParentID != nil {
+		t.Fatalf("child.ParentID = %v, want nil", child.ParentID)
+	}
+}
+
+func TestTagAdminServiceChangeLevelParentToRootRollsBackOnChildDetachFailure(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, _ := newTagAdminServiceForTest(t)
+
+	if _, err := service.db.Exec(`
+		CREATE TRIGGER tags_block_child_detach
+		BEFORE UPDATE ON tags
+		WHEN OLD.id = 5 AND NEW.parent_id IS NULL
+		BEGIN
+			SELECT RAISE(FAIL, 'detach blocked');
+		END;
+	`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	_, err := service.ChangeLevel(context.Background(), 4, domain.TagLevelRoot, nil)
+	if err == nil {
+		t.Fatal("expected ChangeLevel() to fail when child detach update fails")
+	}
+
+	parent, err := tagRepo.FindByID(context.Background(), 4)
+	if err != nil {
+		t.Fatalf("FindByID(parent) error = %v", err)
+	}
+	if parent.Level != domain.TagLevelParent {
+		t.Fatalf("parent.Level = %q, want %q", parent.Level, domain.TagLevelParent)
+	}
+
+	child, err := tagRepo.FindByID(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("FindByID(child) error = %v", err)
+	}
+	if child.ParentID == nil || *child.ParentID != 4 {
+		t.Fatalf("child.ParentID = %v, want 4", child.ParentID)
+	}
+}
+
+func TestTagAdminServiceReparentTagAllowsChildDetach(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	updated, err := service.ReparentTag(context.Background(), 5, nil)
+	if err != nil {
+		t.Fatalf("ReparentTag() error = %v", err)
+	}
+	if updated.ParentID != nil {
+		t.Fatalf("ParentID = %v, want nil", updated.ParentID)
+	}
+}
+
 func TestTagAdminServiceCleanupUnusedTagsProcessesSelectedIDsOnly(t *testing.T) {
 	t.Parallel()
 
@@ -220,9 +458,13 @@ func seedTagAdminData(t *testing.T, db *sql.DB) {
 
 	tagRepo := repository.NewTagRepository(db)
 	for _, tag := range []*domain.Tag{
-		{ID: 1, PreferredLabel: "alpha-source", Slug: "alpha-source", PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 7},
-		{ID: 2, PreferredLabel: "alpha-target", Slug: "alpha-target", PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 4},
-		{ID: 3, PreferredLabel: "unused", Slug: "unused", PrimaryCategory: "meta", ReviewState: "pending", UsageCount: 0},
+		{ID: 1, PreferredLabel: "alpha-source", Slug: "alpha-source", Level: domain.TagLevelChild, PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 7},
+		{ID: 2, PreferredLabel: "alpha-target", Slug: "alpha-target", Level: domain.TagLevelChild, PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 4},
+		{ID: 3, PreferredLabel: "unused", Slug: "unused", Level: domain.TagLevelChild, PrimaryCategory: "meta", ReviewState: "pending", UsageCount: 0},
+		{ID: 4, PreferredLabel: "characters", Slug: "characters", Level: domain.TagLevelParent, ParentID: int64Ptr(6), PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 1},
+		{ID: 5, PreferredLabel: "heroine", Slug: "heroine", Level: domain.TagLevelChild, ParentID: int64Ptr(4), PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 1},
+		{ID: 6, PreferredLabel: "franchise", Slug: "franchise", Level: domain.TagLevelRoot, PrimaryCategory: "copyright", ReviewState: "confirmed", UsageCount: 1},
+		{ID: 7, PreferredLabel: "outfit", Slug: "outfit", Level: domain.TagLevelParent, ParentID: int64Ptr(6), PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 0},
 	} {
 		if err := tagRepo.Save(context.Background(), tag); err != nil {
 			t.Fatalf("seed tag %d: %v", tag.ID, err)
@@ -246,4 +488,19 @@ func seedTagAdminData(t *testing.T, db *sql.DB) {
 	if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 2, TagID: 1, Source: domain.ImageTagSourceAI, ReviewState: "pending"}); err != nil {
 		t.Fatalf("seed image_tag 2: %v", err)
 	}
+	if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: 5, Source: domain.ImageTagSourceManual, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("seed image_tag 3: %v", err)
+	}
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
+}
+
+func mustSaveAdminTag(t *testing.T, repo repository.TagRepository, tag *domain.Tag) *domain.Tag {
+	t.Helper()
+	if err := repo.Save(context.Background(), tag); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	return tag
 }

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"strings"
@@ -15,6 +14,7 @@ import (
 type ImageTagHandler struct {
 	imageTagRepo  repository.ImageTagRepository
 	tagRepo       repository.TagRepository
+	aliasRepo     repository.TagAliasRepository
 	imageRepo     repository.ImageRepository
 	governanceSvc *service.TagGovernanceService
 }
@@ -22,12 +22,14 @@ type ImageTagHandler struct {
 func NewImageTagHandler(
 	imageTagRepo repository.ImageTagRepository,
 	tagRepo repository.TagRepository,
+	aliasRepo repository.TagAliasRepository,
 	imageRepo repository.ImageRepository,
 	governanceSvc *service.TagGovernanceService,
 ) *ImageTagHandler {
 	return &ImageTagHandler{
 		imageTagRepo:  imageTagRepo,
 		tagRepo:       tagRepo,
+		aliasRepo:     aliasRepo,
 		imageRepo:     imageRepo,
 		governanceSvc: governanceSvc,
 	}
@@ -64,6 +66,8 @@ func (h *ImageTagHandler) GetImageTags(c *gin.Context) {
 			"image_id":        item.ImageID,
 			"tag_id":          item.TagID,
 			"preferred_label": tag.PreferredLabel,
+			"level":           tag.Level,
+			"parent_id":       tag.ParentID,
 			"review_state":    item.ReviewState,
 			"confidence":      item.Confidence,
 		}
@@ -90,6 +94,8 @@ func (h *ImageTagHandler) AddImageTag(c *gin.Context) {
 	var req struct {
 		TagID    int64  `json:"tag_id"`
 		TagLabel string `json:"tag_label"`
+		Level    string `json:"level"`
+		ParentID *int64 `json:"parent_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -103,17 +109,19 @@ func (h *ImageTagHandler) AddImageTag(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "tag_id or tag_label is required"})
 			return
 		}
-		tag, err := h.tagRepo.FindByLabel(c.Request.Context(), label)
+		tag, _, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
+			PreferredLabel: label,
+			Level:          req.Level,
+			ParentID:       req.ParentID,
+			ReviewState:    "confirmed",
+		})
 		if err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
+			status := http.StatusInternalServerError
+			if errors.Is(err, service.ErrInvalidHierarchy) {
+				status = http.StatusBadRequest
 			}
-			tag = &domain.Tag{PreferredLabel: label, Slug: makeSlug(label), ReviewState: "confirmed", UsageCount: 0}
-			if err := h.tagRepo.Save(c.Request.Context(), tag); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
 		}
 		tagID = tag.ID
 	}
@@ -132,6 +140,8 @@ func (h *ImageTagHandler) AddImageTag(c *gin.Context) {
 		"image_id":        imageID,
 		"tag_id":          tagID,
 		"preferred_label": tag.PreferredLabel,
+		"level":           tag.Level,
+		"parent_id":       tag.ParentID,
 		"review_state":    "confirmed",
 	})
 }
@@ -270,8 +280,10 @@ func (h *ImageTagHandler) MergeImageTag(c *gin.Context) {
 	}
 
 	var req struct {
-		TargetTagID int64  `json:"target_tag_id"`
-		TargetLabel string `json:"target_label"`
+		TargetTagID    int64  `json:"target_tag_id"`
+		TargetLabel    string `json:"target_label"`
+		TargetLevel    string `json:"target_level"`
+		TargetParentID *int64 `json:"target_parent_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -279,24 +291,30 @@ func (h *ImageTagHandler) MergeImageTag(c *gin.Context) {
 	}
 
 	targetTagID := req.TargetTagID
+	sourceTag, err := h.tagRepo.FindByID(c.Request.Context(), sourceTagID)
+	if err != nil {
+		respondRepoError(c, err)
+		return
+	}
 	if targetTagID == 0 {
 		label := strings.TrimSpace(req.TargetLabel)
 		if label == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "target_tag_id or target_label is required"})
 			return
 		}
-		tag, err := h.tagRepo.FindByLabel(c.Request.Context(), label)
+		tag, _, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
+			PreferredLabel: label,
+			Level:          req.TargetLevel,
+			ParentID:       req.TargetParentID,
+			ReviewState:    "confirmed",
+		})
 		if err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
+			status := http.StatusInternalServerError
+			if errors.Is(err, service.ErrInvalidHierarchy) {
+				status = http.StatusBadRequest
 			}
-			// Create new tag if not found
-			tag = &domain.Tag{PreferredLabel: label, Slug: makeSlug(label), ReviewState: "confirmed", UsageCount: 0}
-			if err := h.tagRepo.Save(c.Request.Context(), tag); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
 		}
 		targetTagID = tag.ID
 	}
@@ -305,6 +323,10 @@ func (h *ImageTagHandler) MergeImageTag(c *gin.Context) {
 	targetTag, err := h.tagRepo.FindByID(c.Request.Context(), targetTagID)
 	if err != nil {
 		respondRepoError(c, err)
+		return
+	}
+	if sourceTag.Level != targetTag.Level {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "source and target tags must be at the same level"})
 		return
 	}
 

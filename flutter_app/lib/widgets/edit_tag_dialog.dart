@@ -30,10 +30,15 @@ class _EditTagDialogState extends State<EditTagDialog> {
   final ScrollController _scrollController = ScrollController();
   List<Tag> _defaultTags = [];
   List<Tag> _searchResults = [];
+  List<Tag> _parentCandidates = [];
+  String? _selectedLevel;
+  int? _selectedParentId;
   bool _loading = false;
   bool _loadingMore = false;
   bool _isSearchMode = false;
   bool _hasMoreDefaultTags = true;
+
+  bool get _requiresParent => _selectedLevel == 'parent';
 
   @override
   void initState() {
@@ -41,6 +46,9 @@ class _EditTagDialogState extends State<EditTagDialog> {
     _controller.addListener(() => setState(() {}));
     _scrollController.addListener(_handleScroll);
     _loadDefaultTags();
+    _selectedLevel = widget.currentTag.level ?? 'child';
+    _selectedParentId = widget.currentTag.parentId;
+    _loadParentCandidates();
   }
 
   @override
@@ -48,6 +56,33 @@ class _EditTagDialogState extends State<EditTagDialog> {
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadParentCandidates() async {
+    if (_selectedLevel == null || _selectedLevel == 'root') {
+      if (mounted) {
+        setState(() {
+          _parentCandidates = [];
+          _selectedParentId = null;
+        });
+      }
+      return;
+    }
+    try {
+      final candidates = await widget.tagService.getParentCandidates(
+        _selectedLevel!,
+      );
+      if (mounted) {
+        setState(() {
+          _parentCandidates = candidates
+              .where((t) => t.id != widget.currentTag.id)
+              .toList();
+          if (!_parentCandidates.any((t) => t.id == _selectedParentId)) {
+            _selectedParentId = null;
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   void _handleScroll() {
@@ -96,6 +131,38 @@ class _EditTagDialogState extends State<EditTagDialog> {
               onChanged: _searchTags,
             ),
             const SizedBox(height: 8),
+            InputDecorator(
+              decoration: const InputDecoration(labelText: '新标签层级'),
+              child: Text(switch (_selectedLevel) {
+                'root' => '祖级',
+                'parent' => '父级',
+                _ => '子级',
+              }),
+            ),
+            if (_selectedLevel == 'parent' || _selectedLevel == 'child') ...[
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int?>(
+                initialValue: _selectedParentId,
+                decoration: const InputDecoration(labelText: '父标签'),
+                items: [
+                  if (_selectedLevel == 'child')
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('无父标签'),
+                    ),
+                  ..._parentCandidates.map(
+                    (tag) => DropdownMenuItem<int?>(
+                      value: tag.id,
+                      child: Text(tag.preferredLabel),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() => _selectedParentId = value);
+                },
+              ),
+            ],
+            const SizedBox(height: 8),
             Flexible(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 220),
@@ -118,7 +185,9 @@ class _EditTagDialogState extends State<EditTagDialog> {
           child: const Text('取消'),
         ),
         ElevatedButton(
-          onPressed: _controller.text.isNotEmpty
+          onPressed:
+              _controller.text.isNotEmpty &&
+                  (!_requiresParent || _selectedParentId != null)
               ? () => _createNewTag(_controller.text)
               : null,
           child: const Text('创建新标签'),
@@ -148,7 +217,14 @@ class _EditTagDialogState extends State<EditTagDialog> {
       final tags = await widget.tagService.searchTags(trimmed);
       if (mounted) {
         setState(() {
-          _searchResults = tags;
+          _searchResults = tags
+              .where(
+                (tag) =>
+                    tag.id != widget.currentTag.id &&
+                    (widget.currentTag.level == null ||
+                        tag.level == widget.currentTag.level),
+              )
+              .toList();
           _loading = false;
         });
       }
@@ -186,10 +262,18 @@ class _EditTagDialogState extends State<EditTagDialog> {
       }
 
       setState(() {
+        final filtered = tags
+            .where(
+              (tag) =>
+                  tag.id != widget.currentTag.id &&
+                  (widget.currentTag.level == null ||
+                      tag.level == widget.currentTag.level),
+            )
+            .toList();
         if (loadMore) {
-          _defaultTags = [..._defaultTags, ...tags];
+          _defaultTags = [..._defaultTags, ...filtered];
         } else {
-          _defaultTags = tags;
+          _defaultTags = filtered;
         }
         _hasMoreDefaultTags = tags.length == _pageSize;
         _loading = false;
@@ -218,6 +302,12 @@ class _EditTagDialogState extends State<EditTagDialog> {
   void _createNewTag(String label) {
     if (label.isEmpty) return;
     // 返回创建新标签的信息
-    Navigator.pop(context, {'tagId': null, 'tagLabel': label, 'label': label});
+    Navigator.pop(context, {
+      'tagId': null,
+      'tagLabel': label,
+      'tagLevel': _selectedLevel,
+      'tagParentId': _selectedParentId,
+      'label': label,
+    });
   }
 }

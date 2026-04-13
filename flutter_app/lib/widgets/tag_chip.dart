@@ -37,6 +37,19 @@ class TagChip extends StatefulWidget {
 }
 
 class _TagChipState extends State<TagChip> {
+  String? get _levelLabel {
+    switch (widget.tag.level) {
+      case 'root':
+        return '祖级';
+      case 'parent':
+        return '父级';
+      case 'child':
+        return '子级';
+      default:
+        return null;
+    }
+  }
+
   bool _isHovered = false;
 
   Color _dotColor(BuildContext context) {
@@ -56,7 +69,7 @@ class _TagChipState extends State<TagChip> {
     final colorScheme = Theme.of(context).colorScheme;
     switch (widget.style) {
       case TagChipStyle.rejected:
-        return colorScheme.onSurface.withOpacity(0.5);
+        return colorScheme.onSurface.withValues(alpha: 0.5);
       default:
         return colorScheme.onSurface;
     }
@@ -118,6 +131,29 @@ class _TagChipState extends State<TagChip> {
                   decoration: isRejected ? TextDecoration.lineThrough : null,
                 ),
               ),
+              if (_levelLabel != null) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    _levelLabel!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
               if (hasActions) ...[
                 const SizedBox(width: 4),
                 AnimatedOpacity(

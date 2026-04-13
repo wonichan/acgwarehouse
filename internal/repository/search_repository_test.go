@@ -261,3 +261,61 @@ func TestSearchRepository_FTSFullTextSearchEscapesUnsafeTokens(t *testing.T) {
 		t.Fatalf("CountFTSFullTextSearch returned error for escaped query: %v", err)
 	}
 }
+
+func TestSearchRepositorySearchImagesExpandsAncestorTagFilters(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	if err := EnsureScanSchema(db); err != nil {
+		t.Fatalf("Failed to create schema: %v", err)
+	}
+
+	imageRepo := NewImageRepository(db)
+	tagRepo := NewTagRepository(db)
+	imageTagRepo := NewImageTagRepository(db)
+
+	root := &domain.Tag{PreferredLabel: "character", Slug: "character", Level: domain.TagLevelRoot}
+	if err := tagRepo.Save(context.Background(), root); err != nil {
+		t.Fatalf("save root: %v", err)
+	}
+	parent := &domain.Tag{PreferredLabel: "cast", Slug: "cast", Level: domain.TagLevelParent, ParentID: &root.ID}
+	if err := tagRepo.Save(context.Background(), parent); err != nil {
+		t.Fatalf("save parent: %v", err)
+	}
+	child := &domain.Tag{PreferredLabel: "heroine", Slug: "heroine", Level: domain.TagLevelChild, ParentID: &parent.ID}
+	if err := tagRepo.Save(context.Background(), child); err != nil {
+		t.Fatalf("save child: %v", err)
+	}
+
+	img := &domain.Image{Path: "/search/heroine.png", Filename: "heroine.png", SourceRoot: "/search", Format: "png"}
+	if _, err := imageRepo.SaveImage(img); err != nil {
+		t.Fatalf("save image: %v", err)
+	}
+	if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: img.ID, TagID: child.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("save image tag: %v", err)
+	}
+
+	if err := RebuildFTSIndex(db); err != nil {
+		t.Fatalf("Failed to rebuild FTS index: %v", err)
+	}
+
+	searchRepo := NewSearchRepository(db)
+	images, err := searchRepo.SearchImages(context.Background(), SearchQueryOptions{Query: "heroine", TagIDs: []int64{root.ID}, Limit: 20, Offset: 0})
+	if err != nil {
+		t.Fatalf("SearchImages failed: %v", err)
+	}
+	if len(images) != 1 || images[0].ID != img.ID {
+		t.Fatalf("unexpected search result: %+v", images)
+	}
+
+	count, err := searchRepo.CountSearchImages(context.Background(), SearchQueryOptions{Query: "heroine", TagIDs: []int64{root.ID}})
+	if err != nil {
+		t.Fatalf("CountSearchImages failed: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+}

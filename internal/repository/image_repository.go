@@ -294,6 +294,12 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 		return []domain.Image{}, nil
 	}
 
+	clauses, err := expandHierarchicalTagClauses(ctx, r.db, tagIDs)
+	if err != nil {
+		return nil, err
+	}
+	whereClause, args := buildImageTagClauseFilters(clauses, "i.id")
+
 	// 验证并设置默认排序字段
 	validSortFields := map[string]string{
 		"created_at": "i.created_at",
@@ -312,28 +318,16 @@ func (r *sqliteImageRepository) FindByTagIDs(ctx context.Context, tagIDs []int64
 		sortDir = "desc"
 	}
 
-	// Build placeholders for IN clause
-	placeholders := make([]string, len(tagIDs))
-	args := make([]any, 0, len(tagIDs)+2)
-	for i, id := range tagIDs {
-		placeholders[i] = "?"
-		args = append(args, id)
-	}
-
-	// Query images where matched tag count equals the number of requested tags (AND semantics)
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM images i
 		LEFT JOIN collection_images ci ON ci.image_id = i.id
-		INNER JOIN image_tags it ON it.image_id = i.id
-		WHERE it.tag_id IN (%s) AND it.review_state != 'rejected'
-		GROUP BY i.id
-		HAVING COUNT(DISTINCT it.tag_id) = ?
+		WHERE %s
 		ORDER BY %s %s, i.id %s
 		LIMIT ? OFFSET ?
-	`, imageSelectColumns, strings.Join(placeholders, ", "), sortColumn, sortDir, sortDir)
+	`, imageSelectColumns, whereClause, sortColumn, sortDir, sortDir)
 
-	args = append(args, int64(len(tagIDs)), int64(limit), int64(offset))
+	args = append(args, int64(limit), int64(offset))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -359,28 +353,20 @@ func (r *sqliteImageRepository) CountByTagIDs(ctx context.Context, tagIDs []int6
 		return 0, nil
 	}
 
-	placeholders := make([]string, len(tagIDs))
-	args := make([]any, 0, len(tagIDs)+1)
-	for i, id := range tagIDs {
-		placeholders[i] = "?"
-		args = append(args, id)
+	clauses, err := expandHierarchicalTagClauses(ctx, r.db, tagIDs)
+	if err != nil {
+		return 0, err
 	}
+	whereClause, args := buildImageTagClauseFilters(clauses, "i.id")
 
 	query := fmt.Sprintf(`
-		SELECT COUNT(DISTINCT sub.image_id)
-		FROM (
-			SELECT it.image_id
-			FROM image_tags it
-			WHERE it.tag_id IN (%s) AND it.review_state != 'rejected'
-			GROUP BY it.image_id
-			HAVING COUNT(DISTINCT it.tag_id) = ?
-		) sub
-	`, strings.Join(placeholders, ", "))
-
-	args = append(args, int64(len(tagIDs)))
+		SELECT COUNT(DISTINCT i.id)
+		FROM images i
+		WHERE %s
+	`, whereClause)
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
 }
 
@@ -514,6 +500,12 @@ func (r *sqliteImageRepository) FindPendingTagsByTagIDs(ctx context.Context, tag
 		return []domain.Image{}, nil
 	}
 
+	clauses, err := expandHierarchicalTagClauses(ctx, r.db, tagIDs)
+	if err != nil {
+		return nil, err
+	}
+	tagWhereClause, args := buildImageTagClauseFilters(clauses, "i.id")
+
 	validSortFields := map[string]string{
 		"created_at": "i.created_at",
 		"filename":   "i.filename",
@@ -530,13 +522,6 @@ func (r *sqliteImageRepository) FindPendingTagsByTagIDs(ctx context.Context, tag
 		sortDir = "desc"
 	}
 
-	placeholders := make([]string, len(tagIDs))
-	args := make([]any, 0, len(tagIDs)+2)
-	for i, id := range tagIDs {
-		placeholders[i] = "?"
-		args = append(args, id)
-	}
-
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM images i
@@ -544,18 +529,12 @@ func (r *sqliteImageRepository) FindPendingTagsByTagIDs(ctx context.Context, tag
 		WHERE EXISTS (
 			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
 		)
-		AND i.id IN (
-			SELECT it2.image_id
-			FROM image_tags it2
-			WHERE it2.tag_id IN (%s) AND it2.review_state != 'rejected'
-			GROUP BY it2.image_id
-			HAVING COUNT(DISTINCT it2.tag_id) = ?
-		)
+		AND %s
 		ORDER BY %s %s, i.id %s
 		LIMIT ? OFFSET ?
-	`, imageSelectColumns, strings.Join(placeholders, ", "), sortColumn, sortDir, sortDir)
+	`, imageSelectColumns, tagWhereClause, sortColumn, sortDir, sortDir)
 
-	args = append(args, int64(len(tagIDs)), int64(limit), int64(offset))
+	args = append(args, int64(limit), int64(offset))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -582,12 +561,11 @@ func (r *sqliteImageRepository) CountPendingTagsByTagIDs(ctx context.Context, ta
 		return 0, nil
 	}
 
-	placeholders := make([]string, len(tagIDs))
-	args := make([]any, 0, len(tagIDs))
-	for i, id := range tagIDs {
-		placeholders[i] = "?"
-		args = append(args, id)
+	clauses, err := expandHierarchicalTagClauses(ctx, r.db, tagIDs)
+	if err != nil {
+		return 0, err
 	}
+	tagWhereClause, args := buildImageTagClauseFilters(clauses, "i.id")
 
 	var count int64
 	query := fmt.Sprintf(`
@@ -596,17 +574,9 @@ func (r *sqliteImageRepository) CountPendingTagsByTagIDs(ctx context.Context, ta
 		WHERE EXISTS (
 			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
 		)
-		AND i.id IN (
-			SELECT it2.image_id
-			FROM image_tags it2
-			WHERE it2.tag_id IN (%s) AND it2.review_state != 'rejected'
-			GROUP BY it2.image_id
-			HAVING COUNT(DISTINCT it2.tag_id) = ?
-		)
-	`, strings.Join(placeholders, ", "))
-
-	args = append(args, int64(len(tagIDs)))
-	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+		AND %s
+	`, tagWhereClause)
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
 }
 
@@ -679,24 +649,18 @@ func (r *sqliteImageRepository) UpdateImageDuplicateHashCache(imageID int64, sha
 
 // buildBackfillBaseWhere constructs the WHERE clause fragment and args for the base filter.
 // It handles TagIDs (AND semantics) and HasTags filtering.
-func buildBackfillBaseWhere(filter BackfillCandidateFilter) (string, []any) {
+func buildBackfillBaseWhere(ctx context.Context, db *sql.DB, filter BackfillCandidateFilter) (string, []any, error) {
 	var conds []string
 	var args []any
 
 	if len(filter.TagIDs) > 0 {
-		placeholders := make([]string, len(filter.TagIDs))
-		for i, id := range filter.TagIDs {
-			placeholders[i] = "?"
-			args = append(args, id)
+		clauses, err := expandHierarchicalTagClauses(ctx, db, filter.TagIDs)
+		if err != nil {
+			return "", nil, err
 		}
-		cond := fmt.Sprintf(`i.id IN (
-			SELECT it.image_id FROM image_tags it
-			WHERE it.tag_id IN (%s) AND it.review_state != 'rejected'
-			GROUP BY it.image_id
-			HAVING COUNT(DISTINCT it.tag_id) = ?
-		)`, strings.Join(placeholders, ", "))
-		args = append(args, int64(len(filter.TagIDs)))
+		cond, clauseArgs := buildImageTagClauseFilters(clauses, "i.id")
 		conds = append(conds, cond)
+		args = append(args, clauseArgs...)
 	}
 
 	if filter.HasTags != nil {
@@ -708,15 +672,18 @@ func buildBackfillBaseWhere(filter BackfillCandidateFilter) (string, []any) {
 	}
 
 	if len(conds) > 0 {
-		return " AND " + strings.Join(conds, " AND "), args
+		return " AND " + strings.Join(conds, " AND "), args, nil
 	}
-	return "", args
+	return "", args, nil
 }
 
 // FindBackfillCandidates returns images matching the filter that are eligible for AI backfill:
 // no AI source tags and no active (pending/queued/running) AI tasks.
 func (r *sqliteImageRepository) FindBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) ([]domain.Image, error) {
-	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+	baseWhere, baseArgs, err := buildBackfillBaseWhere(ctx, r.db, filter)
+	if err != nil {
+		return nil, err
+	}
 
 	query := fmt.Sprintf(`
 		SELECT %s
@@ -754,7 +721,10 @@ func (r *sqliteImageRepository) FindBackfillCandidates(ctx context.Context, filt
 
 // CountBackfillCandidates returns the count of images matching the filter that are eligible for AI backfill.
 func (r *sqliteImageRepository) CountBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
-	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+	baseWhere, baseArgs, err := buildBackfillBaseWhere(ctx, r.db, filter)
+	if err != nil {
+		return 0, err
+	}
 
 	query := fmt.Sprintf(`
 		SELECT COUNT(i.id)
@@ -772,13 +742,16 @@ func (r *sqliteImageRepository) CountBackfillCandidates(ctx context.Context, fil
 	`, baseWhere)
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
+	err = r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
 	return count, err
 }
 
 // CountBackfillSkippedWithAITag returns the count of images matching the filter that already have AI source tags.
 func (r *sqliteImageRepository) CountBackfillSkippedWithAITag(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
-	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+	baseWhere, baseArgs, err := buildBackfillBaseWhere(ctx, r.db, filter)
+	if err != nil {
+		return 0, err
+	}
 
 	query := fmt.Sprintf(`
 		SELECT COUNT(i.id)
@@ -791,13 +764,16 @@ func (r *sqliteImageRepository) CountBackfillSkippedWithAITag(ctx context.Contex
 	`, baseWhere)
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
+	err = r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
 	return count, err
 }
 
 // CountBackfillSkippedWithActiveTask returns the count of images matching the filter that already have active AI tasks.
 func (r *sqliteImageRepository) CountBackfillSkippedWithActiveTask(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
-	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+	baseWhere, baseArgs, err := buildBackfillBaseWhere(ctx, r.db, filter)
+	if err != nil {
+		return 0, err
+	}
 
 	query := fmt.Sprintf(`
 		SELECT COUNT(i.id)
@@ -812,13 +788,16 @@ func (r *sqliteImageRepository) CountBackfillSkippedWithActiveTask(ctx context.C
 	`, baseWhere)
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
+	err = r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
 	return count, err
 }
 
 // CountBackfillHitCount returns the total count of images matching the filter (before any skip classification).
 func (r *sqliteImageRepository) CountBackfillHitCount(ctx context.Context, filter BackfillCandidateFilter) (int64, error) {
-	baseWhere, baseArgs := buildBackfillBaseWhere(filter)
+	baseWhere, baseArgs, err := buildBackfillBaseWhere(ctx, r.db, filter)
+	if err != nil {
+		return 0, err
+	}
 
 	query := fmt.Sprintf(`
 		SELECT COUNT(i.id)
@@ -828,6 +807,6 @@ func (r *sqliteImageRepository) CountBackfillHitCount(ctx context.Context, filte
 	`, baseWhere)
 
 	var count int64
-	err := r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
+	err = r.db.QueryRowContext(ctx, query, baseArgs...).Scan(&count)
 	return count, err
 }

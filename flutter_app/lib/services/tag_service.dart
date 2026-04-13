@@ -67,7 +67,13 @@ class TagService {
   }
 
   /// 为图片添加标签
-  Future<Tag> addImageTag(int imageId, {int? tagId, String? tagLabel}) async {
+  Future<Tag> addImageTag(
+    int imageId, {
+    int? tagId,
+    String? tagLabel,
+    String? level,
+    int? parentId,
+  }) async {
     if (tagId == null && tagLabel == null) {
       throw ArgumentError('Either tagId or tagLabel must be provided');
     }
@@ -78,6 +84,8 @@ class TagService {
       body: jsonEncode({
         if (tagId != null) 'tag_id': tagId,
         if (tagLabel != null) 'tag_label': tagLabel,
+        if (level != null) 'level': level,
+        if (parentId != null) 'parent_id': parentId,
       }),
     );
 
@@ -289,7 +297,7 @@ class TagService {
   /// 获取标签治理列表
   Future<List<TagGovernanceRow>> fetchGovernanceTags({
     String? search,
-    int limit = 50,
+    int limit = 500,
     int offset = 0,
   }) async {
     final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/governance')
@@ -413,6 +421,8 @@ class TagService {
     int tagId, {
     int? targetTagId,
     String? targetLabel,
+    String? targetLevel,
+    int? targetParentId,
   }) async {
     if (targetTagId == null && targetLabel == null) {
       throw ArgumentError('Either targetTagId or targetLabel must be provided');
@@ -426,22 +436,13 @@ class TagService {
       body: jsonEncode({
         if (targetTagId != null) 'target_tag_id': targetTagId,
         if (targetLabel != null) 'target_label': targetLabel,
+        if (targetLevel != null) 'target_level': targetLevel,
+        if (targetParentId != null) 'target_parent_id': targetParentId,
       }),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to merge tag: ${response.statusCode}');
     }
-  }
-
-  /// 清理无用标签（usage_count=0）
-  Future<Map<String, dynamic>> cleanUnusedTags() async {
-    final response = await _client.delete(
-      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/cleanup'),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Failed to clean unused tags: ${response.statusCode}');
-    }
-    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   /// 更新标签
@@ -463,6 +464,94 @@ class TagService {
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to update tag: ${response.statusCode}');
+    }
+    return Tag.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  /// 创建标签
+  Future<Tag> createTag({
+    required String preferredLabel,
+    String? primaryCategory,
+    String? level,
+    int? parentId,
+  }) async {
+    final body = <String, dynamic>{
+      'preferred_label': preferredLabel,
+      if (primaryCategory != null) 'primary_category': primaryCategory,
+      if (level != null) 'level': level,
+      if (parentId != null) 'parent_id': parentId,
+    };
+
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Failed to create tag: ${response.statusCode}');
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final tagJson = json['tag'];
+    if (tagJson is Map<String, dynamic>) {
+      return Tag.fromJson(tagJson);
+    }
+    return Tag.fromJson(json);
+  }
+
+  /// 获取标签层级树
+  Future<Map<String, dynamic>> getTree() async {
+    final response = await _client.get(
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/tree'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get tree: ${response.statusCode}');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// 获取父标签候选列表
+  Future<List<Tag>> getParentCandidates(String level) async {
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrlOf(_baseUrl)}/tags/parent-candidates',
+    ).replace(queryParameters: {'level': level});
+    final response = await _client.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to get parent candidates: ${response.statusCode}',
+      );
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return (json['candidates'] as List? ?? [])
+        .map((e) => Tag.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 更改标签层级
+  Future<Tag> changeLevel(int tagId, String level, {int? parentId}) async {
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/$tagId/change-level'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'level': level,
+        if (parentId != null) 'parent_id': parentId,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to change level: ${response.statusCode}');
+    }
+    return Tag.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  /// 重新指定父标签
+  Future<Tag> reparent(int tagId, int? parentId) async {
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/$tagId/reparent'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({if (parentId != null) 'parent_id': parentId}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to reparent: ${response.statusCode}');
     }
     return Tag.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }

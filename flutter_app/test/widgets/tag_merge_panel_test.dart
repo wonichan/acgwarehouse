@@ -26,6 +26,7 @@ class _MergePanelTagProvider extends TagProvider {
       manualCount: 12,
       affectedImageCount: 42,
       canDelete: false,
+      level: 'child',
     ),
     const TagGovernanceRow(
       tagId: 20,
@@ -40,6 +41,7 @@ class _MergePanelTagProvider extends TagProvider {
       manualCount: 0,
       affectedImageCount: 0,
       canDelete: true,
+      level: 'child',
     ),
     const TagGovernanceRow(
       tagId: 30,
@@ -54,6 +56,7 @@ class _MergePanelTagProvider extends TagProvider {
       manualCount: 5,
       affectedImageCount: 15,
       canDelete: false,
+      level: 'root',
     ),
   ];
 
@@ -116,8 +119,8 @@ void main() {
       expect(find.textContaining('long_hair'), findsWidgets);
 
       // Target choices rendered (excludes source tagId=10)
-      expect(find.text('blue_eyes'), findsOneWidget);
-      expect(find.text('school_uniform'), findsOneWidget);
+      expect(find.textContaining('blue_eyes'), findsOneWidget);
+      expect(find.textContaining('school_uniform'), findsNothing);
 
       // Search box for filtering targets
       expect(find.byType(fluent.TextBox), findsOneWidget);
@@ -154,7 +157,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Tap a target to select it
-    await tester.tap(find.text('school_uniform'));
+    await tester.tap(find.textContaining('blue_eyes'));
     await tester.pumpAndSettle();
 
     // Confirm button should be enabled now
@@ -162,6 +165,33 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify the merge was confirmed with the correct target
-    expect(confirmedTargetId, 30);
+    expect(confirmedTargetId, 20);
+  });
+
+  testWidgets('merge panel hides cross-level targets', (tester) async {
+    final mockClient = MockClient((request) async {
+      return http.Response('{"tags":[]}', 200);
+    });
+    final tagProvider = _MergePanelTagProvider(client: mockClient);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<TagProvider>.value(value: tagProvider),
+        ],
+        child: fluent.FluentApp(
+          home: TagMergePanel(
+            sourceRow: _MergePanelTagProvider._allRows.first,
+            allRows: _MergePanelTagProvider._allRows,
+            onConfirm: (_) async {},
+            onCancel: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('blue_eyes'), findsOneWidget);
+    expect(find.textContaining('school_uniform'), findsNothing);
   });
 }

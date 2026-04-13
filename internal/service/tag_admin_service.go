@@ -14,23 +14,38 @@ import (
 )
 
 var (
-	ErrTagNotFound           = errors.New("tag not found")
-	ErrMergeSameSourceTarget = errors.New("source and target tags must be different")
+	ErrTagNotFound            = errors.New("tag not found")
+	ErrMergeSameSourceTarget  = errors.New("source and target tags must be different")
+	ErrCrossLevelMerge        = errors.New("merge requires tags at the same level")
+	ErrMergeSourceHasChildren = errors.New("merge source has child tags")
+	ErrInvalidHierarchy       = errors.New("invalid tag hierarchy")
 )
 
 type TagGovernanceRow struct {
-	TagID              int64    `json:"tag_id"`
-	PreferredLabel     string   `json:"preferred_label"`
-	PrimaryCategory    string   `json:"primary_category"`
-	Aliases            []string `json:"aliases"`
-	UsageCount         int64    `json:"usage_count"`
-	PendingCount       int64    `json:"pending_count"`
-	ConfirmedCount     int64    `json:"confirmed_count"`
-	RejectedCount      int64    `json:"rejected_count"`
-	AICount            int64    `json:"ai_count"`
-	ManualCount        int64    `json:"manual_count"`
-	AffectedImageCount int64    `json:"affected_image_count"`
-	CanDelete          bool     `json:"can_delete"`
+	TagID                int64    `json:"tag_id"`
+	PreferredLabel       string   `json:"preferred_label"`
+	Level                string   `json:"level"`
+	ParentID             *int64   `json:"parent_id,omitempty"`
+	PrimaryCategory      string   `json:"primary_category"`
+	Aliases              []string `json:"aliases"`
+	UsageCount           int64    `json:"usage_count"`
+	DirectUsageCount     int64    `json:"direct_usage_count"`
+	TreeUsageCount       int64    `json:"tree_usage_count"`
+	PendingCount         int64    `json:"pending_count"`
+	DirectPendingCount   int64    `json:"direct_pending_count"`
+	TreePendingCount     int64    `json:"tree_pending_count"`
+	ConfirmedCount       int64    `json:"confirmed_count"`
+	DirectConfirmedCount int64    `json:"direct_confirmed_count"`
+	TreeConfirmedCount   int64    `json:"tree_confirmed_count"`
+	RejectedCount        int64    `json:"rejected_count"`
+	AICount              int64    `json:"ai_count"`
+	DirectAICount        int64    `json:"direct_ai_count"`
+	TreeAICount          int64    `json:"tree_ai_count"`
+	ManualCount          int64    `json:"manual_count"`
+	DirectManualCount    int64    `json:"direct_manual_count"`
+	TreeManualCount      int64    `json:"tree_manual_count"`
+	AffectedImageCount   int64    `json:"affected_image_count"`
+	CanDelete            bool     `json:"can_delete"`
 }
 
 type TagMergeResult struct {
@@ -62,11 +77,30 @@ type TagCleanupResult struct {
 	Failed  []TagCleanupEntry `json:"failed"`
 }
 
+type TagTreeNode struct {
+	TagID          int64         `json:"tag_id"`
+	PreferredLabel string        `json:"preferred_label"`
+	Level          string        `json:"level"`
+	ParentID       *int64        `json:"parent_id,omitempty"`
+	UsageCount     int64         `json:"usage_count"`
+	TreeUsageCount int64         `json:"tree_usage_count"`
+	Children       []TagTreeNode `json:"children"`
+}
+
 type TagAdminService struct {
 	db           *sql.DB
 	tagRepo      repository.TagRepository
 	aliasRepo    repository.TagAliasRepository
 	imageTagRepo repository.ImageTagRepository
+}
+
+type hierarchyStats struct {
+	UsageCount     int64
+	PendingCount   int64
+	ConfirmedCount int64
+	RejectedCount  int64
+	AICount        int64
+	ManualCount    int64
 }
 
 func NewTagAdminService(db *sql.DB, tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository) *TagAdminService {
@@ -99,7 +133,23 @@ func (s *TagAdminService) ListGovernanceTags(ctx context.Context, search string,
 			return nil, 0, err
 		}
 
-		stats, err := s.imageTagRepo.GetTagStats(ctx, tag.ID)
+		directStats, err := s.computeHierarchyStats(ctx, []int64{tag.ID})
+		if err != nil {
+			return nil, 0, err
+		}
+		treeTagIDs, err := s.tagRepo.ResolveAllDescendantIDs(ctx, []int64{tag.ID})
+		if err != nil {
+			return nil, 0, err
+		}
+		treeStats, err := s.computeHierarchyStats(ctx, treeTagIDs)
+		if err != nil {
+			return nil, 0, err
+		}
+		children, err := s.tagRepo.FindChildrenByParent(ctx, tag.ID)
+		if err != nil {
+			return nil, 0, err
+		}
+		directAssociationCount, err := s.countDirectAssociations(ctx, tag.ID)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -110,18 +160,30 @@ func (s *TagAdminService) ListGovernanceTags(ctx context.Context, search string,
 		}
 
 		row := TagGovernanceRow{
-			TagID:              tag.ID,
-			PreferredLabel:     tag.PreferredLabel,
-			PrimaryCategory:    tag.PrimaryCategory,
-			Aliases:            aliasLabels,
-			UsageCount:         stats.UsageCount,
-			PendingCount:       stats.PendingCount,
-			ConfirmedCount:     stats.ConfirmedCount,
-			RejectedCount:      stats.RejectedCount,
-			AICount:            stats.AICount,
-			ManualCount:        stats.ManualCount,
-			AffectedImageCount: stats.UsageCount,
-			CanDelete:          stats.UsageCount == 0,
+			TagID:                tag.ID,
+			PreferredLabel:       tag.PreferredLabel,
+			Level:                tag.Level,
+			ParentID:             tag.ParentID,
+			PrimaryCategory:      tag.PrimaryCategory,
+			Aliases:              aliasLabels,
+			UsageCount:           directStats.UsageCount,
+			DirectUsageCount:     directStats.UsageCount,
+			TreeUsageCount:       treeStats.UsageCount,
+			PendingCount:         directStats.PendingCount,
+			DirectPendingCount:   directStats.PendingCount,
+			TreePendingCount:     treeStats.PendingCount,
+			ConfirmedCount:       directStats.ConfirmedCount,
+			DirectConfirmedCount: directStats.ConfirmedCount,
+			TreeConfirmedCount:   treeStats.ConfirmedCount,
+			RejectedCount:        directStats.RejectedCount,
+			AICount:              directStats.AICount,
+			DirectAICount:        directStats.AICount,
+			TreeAICount:          treeStats.AICount,
+			ManualCount:          directStats.ManualCount,
+			DirectManualCount:    directStats.ManualCount,
+			TreeManualCount:      treeStats.ManualCount,
+			AffectedImageCount:   directAssociationCount,
+			CanDelete:            directAssociationCount == 0 && len(children) == 0,
 		}
 		rows = append(rows, row)
 	}
@@ -173,6 +235,16 @@ func (s *TagAdminService) MergeTags(ctx context.Context, sourceTagID, targetTagI
 		}
 		return nil, err
 	}
+	if sourceTag.Level != targetTag.Level {
+		return nil, ErrCrossLevelMerge
+	}
+	children, err := s.tagRepo.FindChildrenByParent(ctx, sourceTagID)
+	if err != nil {
+		return nil, err
+	}
+	if len(children) > 0 {
+		return nil, ErrMergeSourceHasChildren
+	}
 
 	if err := s.mergeImageAssociationsTx(ctx, tx, sourceTagID, targetTagID, mergeResult); err != nil {
 		log.Printf("[service] TagAdmin MergeTags failed: %v", err)
@@ -221,7 +293,11 @@ func (s *TagAdminService) GetDeletePreview(ctx context.Context, tagID int64) (*T
 		return nil, err
 	}
 
-	stats, err := s.imageTagRepo.GetTagStats(ctx, tagID)
+	children, err := s.tagRepo.FindChildrenByParent(ctx, tagID)
+	if err != nil {
+		return nil, err
+	}
+	directAssociationCount, err := s.countDirectAssociations(ctx, tagID)
 	if err != nil {
 		return nil, err
 	}
@@ -229,10 +305,12 @@ func (s *TagAdminService) GetDeletePreview(ctx context.Context, tagID int64) (*T
 	preview := &TagDeletePreview{
 		TagID:              tag.ID,
 		PreferredLabel:     tag.PreferredLabel,
-		AffectedImageCount: stats.UsageCount,
-		CanDelete:          stats.UsageCount == 0,
+		AffectedImageCount: directAssociationCount,
+		CanDelete:          directAssociationCount == 0 && len(children) == 0,
 	}
-	if !preview.CanDelete {
+	if len(children) > 0 {
+		preview.BlockingReason = "child_tags_exist"
+	} else if !preview.CanDelete {
 		preview.BlockingReason = "merge_or_reclassify_required"
 	}
 
@@ -289,6 +367,168 @@ func (s *TagAdminService) CleanupUnusedTags(ctx context.Context, tagIDs []int64)
 
 	log.Printf("[service] TagAdmin CleanupUnusedTags completed: deleted=%d blocked=%d failed=%d", len(result.Deleted), len(result.Blocked), len(result.Failed))
 	return result, nil
+}
+
+func (s *TagAdminService) GetParentCandidates(ctx context.Context, targetLevel string) ([]*domain.Tag, error) {
+	return s.tagRepo.FindValidParentCandidates(ctx, targetLevel)
+}
+
+func (s *TagAdminService) GetTagTree(ctx context.Context) ([]TagTreeNode, error) {
+	total, err := s.tagRepo.Count(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tags, err := s.tagRepo.FindAll(ctx, total, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	nodes := make(map[int64]*TagTreeNode, len(tags))
+	childrenByParent := make(map[int64][]*TagTreeNode)
+	roots := make([]*TagTreeNode, 0)
+	for _, tag := range tags {
+		treeTagIDs, err := s.tagRepo.ResolveAllDescendantIDs(ctx, []int64{tag.ID})
+		if err != nil {
+			return nil, err
+		}
+		treeStats, err := s.computeHierarchyStats(ctx, treeTagIDs)
+		if err != nil {
+			return nil, err
+		}
+		node := &TagTreeNode{
+			TagID:          tag.ID,
+			PreferredLabel: tag.PreferredLabel,
+			Level:          tag.Level,
+			ParentID:       tag.ParentID,
+			UsageCount:     int64(tag.UsageCount),
+			TreeUsageCount: treeStats.UsageCount,
+			Children:       []TagTreeNode{},
+		}
+		nodes[tag.ID] = node
+		if tag.ParentID == nil {
+			roots = append(roots, node)
+			continue
+		}
+		childrenByParent[*tag.ParentID] = append(childrenByParent[*tag.ParentID], node)
+	}
+
+	for id, node := range nodes {
+		_ = node
+		children := childrenByParent[id]
+		sort.Slice(children, func(i, j int) bool {
+			if children[i].UsageCount == children[j].UsageCount {
+				return children[i].TagID < children[j].TagID
+			}
+			return children[i].UsageCount > children[j].UsageCount
+		})
+	}
+
+	for _, node := range nodes {
+		if node.ParentID != nil {
+			if _, ok := nodes[*node.ParentID]; !ok {
+				roots = append(roots, node)
+			}
+		}
+	}
+
+	sort.Slice(roots, func(i, j int) bool {
+		if roots[i].UsageCount == roots[j].UsageCount {
+			return roots[i].TagID < roots[j].TagID
+		}
+		return roots[i].UsageCount > roots[j].UsageCount
+	})
+
+	result := make([]TagTreeNode, 0, len(roots))
+	for _, root := range roots {
+		result = append(result, buildTagTreeNode(root, childrenByParent))
+	}
+	return result, nil
+}
+
+func (s *TagAdminService) ChangeLevel(ctx context.Context, tagID int64, targetLevel string, parentID *int64) (*domain.Tag, error) {
+	tag, err := s.tagRepo.FindByID(ctx, tagID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrTagNotFound
+		}
+		return nil, err
+	}
+
+	children, err := s.tagRepo.FindChildrenByParent(ctx, tag.ID)
+	if err != nil {
+		return nil, err
+	}
+	descendants, err := s.tagRepo.ResolveAllDescendantIDs(ctx, []int64{tag.ID})
+	if err != nil {
+		return nil, err
+	}
+	hasChildren := len(children) > 0
+	hasDescendants := len(descendants) > 1
+
+	switch {
+	case tag.Level == domain.TagLevelParent && targetLevel == domain.TagLevelChild && hasChildren:
+		return nil, ErrInvalidHierarchy
+	case tag.Level == domain.TagLevelRoot && targetLevel != domain.TagLevelRoot && hasDescendants:
+		return nil, ErrInvalidHierarchy
+	}
+
+	if err := s.validateHierarchyAssignment(ctx, tag.ID, targetLevel, parentID); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	tag.Level = targetLevel
+	tag.ParentID = parentID
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE tags
+		SET preferred_label = ?, slug = ?, level = ?, parent_id = ?, primary_category = ?, review_state = ?, trust_score = ?, usage_count = ?
+		WHERE id = ?
+	`, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.ID); err != nil {
+		return nil, err
+	}
+	if tag.Level == domain.TagLevelRoot && len(children) > 0 {
+		for _, child := range children {
+			child.ParentID = nil
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE tags
+				SET preferred_label = ?, slug = ?, level = ?, parent_id = ?, primary_category = ?, review_state = ?, trust_score = ?, usage_count = ?
+				WHERE id = ?
+			`, child.PreferredLabel, child.Slug, child.Level, child.ParentID, child.PrimaryCategory, child.ReviewState, child.TrustScore, child.UsageCount, child.ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return tag, nil
+}
+
+func (s *TagAdminService) ReparentTag(ctx context.Context, tagID int64, parentID *int64) (*domain.Tag, error) {
+	tag, err := s.tagRepo.FindByID(ctx, tagID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrTagNotFound
+		}
+		return nil, err
+	}
+	if tag.Level == domain.TagLevelRoot {
+		return nil, ErrInvalidHierarchy
+	}
+	if err := s.validateHierarchyAssignment(ctx, tag.ID, tag.Level, parentID); err != nil {
+		return nil, err
+	}
+	tag.ParentID = parentID
+	if err := s.tagRepo.Update(ctx, tag); err != nil {
+		return nil, err
+	}
+	return tag, nil
 }
 
 func (s *TagAdminService) deleteUnusedTag(ctx context.Context, tagID int64) error {
@@ -368,6 +608,111 @@ func (s *TagAdminService) resolveTagSlice(ctx context.Context, search string, li
 		end = offset + limit
 	}
 	return merged[offset:end], total, nil
+}
+
+func (s *TagAdminService) computeHierarchyStats(ctx context.Context, tagIDs []int64) (*hierarchyStats, error) {
+	stats := &hierarchyStats{}
+	if len(tagIDs) == 0 {
+		return stats, nil
+	}
+
+	placeholders := make([]string, len(tagIDs))
+	args := make([]any, 0, len(tagIDs))
+	for i, id := range tagIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			COUNT(DISTINCT CASE WHEN review_state != 'rejected' THEN image_id END) as usage_count,
+			COUNT(DISTINCT CASE WHEN review_state = 'pending' THEN image_id END) as pending_count,
+			COUNT(DISTINCT CASE WHEN review_state = 'confirmed' THEN image_id END) as confirmed_count,
+			COUNT(DISTINCT CASE WHEN review_state = 'rejected' THEN image_id END) as rejected_count,
+			COUNT(DISTINCT CASE WHEN source = 'ai' AND review_state != 'rejected' THEN image_id END) as ai_count,
+			COUNT(DISTINCT CASE WHEN COALESCE(source, 'manual') != 'ai' AND review_state != 'rejected' THEN image_id END) as manual_count
+		FROM image_tags
+		WHERE tag_id IN (%s)
+	`, strings.Join(placeholders, ", "))
+
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(
+		&stats.UsageCount,
+		&stats.PendingCount,
+		&stats.ConfirmedCount,
+		&stats.RejectedCount,
+		&stats.AICount,
+		&stats.ManualCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return stats, nil
+}
+
+func (s *TagAdminService) countDirectAssociations(ctx context.Context, tagID int64) (int64, error) {
+	var count int64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT image_id)
+		FROM image_tags
+		WHERE tag_id = ?
+	`, tagID).Scan(&count)
+	return count, err
+}
+
+func (s *TagAdminService) validateHierarchyAssignment(ctx context.Context, tagID int64, level string, parentID *int64) error {
+	switch level {
+	case domain.TagLevelRoot:
+		if parentID != nil {
+			return ErrInvalidHierarchy
+		}
+		return nil
+	case domain.TagLevelParent:
+		if parentID == nil || *parentID == tagID {
+			return ErrInvalidHierarchy
+		}
+		parentTag, err := s.tagRepo.FindByID(ctx, *parentID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrInvalidHierarchy
+			}
+			return err
+		}
+		if parentTag.Level != domain.TagLevelRoot {
+			return ErrInvalidHierarchy
+		}
+		return nil
+	case domain.TagLevelChild:
+		if parentID == nil {
+			return nil
+		}
+		if *parentID == tagID {
+			return ErrInvalidHierarchy
+		}
+		parentTag, err := s.tagRepo.FindByID(ctx, *parentID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrInvalidHierarchy
+			}
+			return err
+		}
+		if parentTag.Level != domain.TagLevelParent {
+			return ErrInvalidHierarchy
+		}
+		return nil
+	default:
+		return ErrInvalidHierarchy
+	}
+}
+
+func buildTagTreeNode(node *TagTreeNode, childrenByParent map[int64][]*TagTreeNode) TagTreeNode {
+	result := *node
+	children := childrenByParent[node.TagID]
+	result.Children = make([]TagTreeNode, 0, len(children))
+	for _, child := range children {
+		result.Children = append(result.Children, buildTagTreeNode(child, childrenByParent))
+	}
+	return result
 }
 
 func (s *TagAdminService) mergeImageAssociationsTx(ctx context.Context, tx *sql.Tx, sourceTagID, targetTagID int64, result *TagMergeResult) error {
@@ -477,13 +822,15 @@ func (s *TagAdminService) mergeAliasesTx(ctx context.Context, tx *sql.Tx, source
 func queryTagByIDTx(ctx context.Context, tx *sql.Tx, id int64) (*domain.Tag, error) {
 	tag := &domain.Tag{}
 	err := tx.QueryRowContext(ctx, `
-		SELECT id, preferred_label, slug, primary_category, review_state, trust_score, usage_count, created_at
+		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
 		FROM tags
 		WHERE id = ?
 	`, id).Scan(
 		&tag.ID,
 		&tag.PreferredLabel,
 		&tag.Slug,
+		&tag.Level,
+		&tag.ParentID,
 		&tag.PrimaryCategory,
 		&tag.ReviewState,
 		&tag.TrustScore,

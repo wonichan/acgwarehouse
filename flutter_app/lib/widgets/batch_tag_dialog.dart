@@ -16,13 +16,45 @@ class BatchAddTagDialog extends StatefulWidget {
 class _BatchAddTagDialogState extends State<BatchAddTagDialog> {
   final _controller = TextEditingController();
   List<Tag> _suggestions = [];
+  List<Tag> _parentCandidates = [];
+  String? _selectedLevel;
+  int? _selectedParentId;
   bool _loading = false;
   bool _processing = false;
+
+  bool get _requiresParent => _selectedLevel == 'parent';
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadParentCandidates() async {
+    if (_selectedLevel == null || _selectedLevel == 'root') {
+      if (mounted) {
+        setState(() {
+          _parentCandidates = [];
+          _selectedParentId = null;
+        });
+      }
+      return;
+    }
+    final tagService = context.read<TagService>();
+    try {
+      final candidates = await tagService.getParentCandidates(_selectedLevel!);
+      if (mounted) {
+        setState(() {
+          _parentCandidates = candidates;
+          _selectedParentId = null;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -41,6 +73,57 @@ class _BatchAddTagDialogState extends State<BatchAddTagDialog> {
                 prefixIcon: Icon(Icons.search),
               ),
               onChanged: _searchTags,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedLevel,
+                    decoration: const InputDecoration(labelText: '标签层级'),
+                    hint: const Text('请选择层级'),
+                    items: const [
+                      DropdownMenuItem(value: 'root', child: Text('祖级')),
+                      DropdownMenuItem(value: 'parent', child: Text('父级')),
+                      DropdownMenuItem(value: 'child', child: Text('子级')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _selectedLevel = value;
+                        _selectedParentId = null;
+                      });
+                      _loadParentCandidates();
+                    },
+                  ),
+                ),
+                if (_selectedLevel == 'parent' ||
+                    _selectedLevel == 'child') ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      initialValue: _selectedParentId,
+                      decoration: const InputDecoration(labelText: '父标签'),
+                      items: [
+                        if (_selectedLevel == 'child')
+                          const DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('无父标签'),
+                          ),
+                        ..._parentCandidates.map(
+                          (tag) => DropdownMenuItem<int?>(
+                            value: tag.id,
+                            child: Text(tag.preferredLabel),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _selectedParentId = value);
+                      },
+                    ),
+                  ),
+                ],
+              ],
             ),
             if (_loading)
               const Padding(
@@ -90,7 +173,12 @@ class _BatchAddTagDialogState extends State<BatchAddTagDialog> {
           child: const Text('取消'),
         ),
         ElevatedButton(
-          onPressed: _processing ? null : () => _createNewTag(_controller.text),
+          onPressed:
+              _processing ||
+                  _selectedLevel == null ||
+                  (_requiresParent && _selectedParentId == null)
+              ? null
+              : () => _createNewTag(_controller.text),
           child: const Text('创建新标签'),
         ),
       ],
@@ -158,7 +246,12 @@ class _BatchAddTagDialogState extends State<BatchAddTagDialog> {
 
     for (final imageId in widget.imageIds) {
       try {
-        await tagService.addImageTag(imageId, tagLabel: label.trim());
+        await tagService.addImageTag(
+          imageId,
+          tagLabel: label.trim(),
+          level: _selectedLevel,
+          parentId: _selectedParentId,
+        );
         successCount++;
       } catch (e) {
         failCount++;

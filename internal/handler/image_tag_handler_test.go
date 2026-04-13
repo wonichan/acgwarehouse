@@ -71,7 +71,7 @@ func TestImageTagAddImageTagAssociatesExistingTag(t *testing.T) {
 	}
 }
 
-func TestImageTagAddImageTagCreatesMissingTagFromLabel(t *testing.T) {
+func TestImageTagAddImageTagRejectsMissingHierarchyForNewTag(t *testing.T) {
 	t.Parallel()
 
 	router, repos := newImageTagHandlerTestRouter(t)
@@ -82,23 +82,143 @@ func TestImageTagAddImageTagCreatesMissingTagFromLabel(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusCreated)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d body=%s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
 
 	tag, err := repos.tagRepo.FindByLabel(context.Background(), "new aura")
-	if err != nil {
-		t.Fatalf("FindByLabel() error = %v", err)
-	}
-	if tag.ID == 0 {
-		t.Fatal("expected created tag id")
+	if err == nil || tag != nil {
+		t.Fatalf("expected no created tag, got %+v err=%v", tag, err)
 	}
 	items, err := repos.imageTagRepo.FindByImageID(context.Background(), 2)
 	if err != nil {
 		t.Fatalf("FindByImageID() error = %v", err)
 	}
-	if len(items) != 1 || items[0].TagID != tag.ID {
-		t.Fatalf("unexpected items: %+v", items)
+	if len(items) != 0 {
+		t.Fatalf("expected no associations, got %+v", items)
+	}
+}
+
+func TestImageTagAddImageTagCreatesRequestedHierarchyTagFromLabel(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageTagHandlerTestRouter(t)
+	body := bytes.NewBufferString(`{"tag_label":"new parent","level":"parent","parent_id":4}`)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/2/tags", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	tag, err := repos.tagRepo.FindByLabel(context.Background(), "new parent")
+	if err != nil {
+		t.Fatalf("FindByLabel() error = %v", err)
+	}
+	if tag.Level != domain.TagLevelParent {
+		t.Fatalf("Level = %q, want %q", tag.Level, domain.TagLevelParent)
+	}
+	if tag.ParentID == nil || *tag.ParentID != 4 {
+		t.Fatalf("ParentID = %v, want 4", tag.ParentID)
+	}
+}
+
+func TestImageTagAddImageTagReusesExistingAliasMatch(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageTagHandlerTestRouter(t)
+	body := bytes.NewBufferString(`{"tag_label":"morning sun"}`)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/2/tags", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	items, err := repos.imageTagRepo.FindByImageID(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	if len(items) != 1 || items[0].TagID != 2 {
+		t.Fatalf("expected alias lookup to reuse tag 2, got %+v", items)
+	}
+}
+
+func TestImageTagMergeImageTagReusesAliasMatchedTarget(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageTagHandlerTestRouter(t)
+
+	if err := repos.imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: 3, ReviewState: "pending", Source: domain.ImageTagSourceAI}); err != nil {
+		t.Fatalf("seed pending image tag: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"target_label":"morning sun"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/1/tags/3/merge", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	items, err := repos.imageTagRepo.FindByImageID(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	found := false
+	for _, item := range items {
+		if item.TagID == 2 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected merged tag association to tag 2, got %+v", items)
+	}
+}
+
+func TestImageTagMergeImageTagRejectsCrossLevelTarget(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageTagHandlerTestRouter(t)
+	if err := repos.imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: 3, ReviewState: "pending", Source: domain.ImageTagSourceAI}); err != nil {
+		t.Fatalf("seed pending image tag: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"target_tag_id":4}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/1/tags/3/merge", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestImageTagMergeImageTagRejectsNewTargetWithoutExplicitHierarchy(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageTagHandlerTestRouter(t)
+	if err := repos.imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: 3, ReviewState: "pending", Source: domain.ImageTagSourceAI}); err != nil {
+		t.Fatalf("seed pending image tag: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"target_label":"brand new merge target"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/1/tags/3/merge", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d body=%s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
 }
 
@@ -217,12 +337,13 @@ func newImageTagHandlerTestRouter(t *testing.T) (*gin.Engine, *imageTagHandlerTe
 		db:           db,
 	}
 	repos.governance = service.NewTagGovernanceService(repos.tagRepo, nil, repos.obsRepo, repos.imageTagRepo)
-	h := NewImageTagHandler(repos.imageTagRepo, repos.tagRepo, repos.imageRepo, repos.governance)
+	h := NewImageTagHandler(repos.imageTagRepo, repos.tagRepo, repository.NewTagAliasRepository(db), repos.imageRepo, repos.governance)
 
 	router := gin.New()
 	api := router.Group("/api/v1")
 	api.GET("/images/:id/tags", h.GetImageTags)
 	api.POST("/images/:id/tags", h.AddImageTag)
+	api.POST("/images/:id/tags/:tag_id/merge", h.MergeImageTag)
 	api.DELETE("/images/:id/tags/:tag_id", h.RemoveImageTag)
 	api.POST("/images/:id/tags/:tag_id/review", h.ReviewTag)
 	api.POST("/images/:id/tags/batch-review", h.BatchReview)
@@ -246,13 +367,19 @@ func seedImageTagHandlerData(t *testing.T, db *sql.DB) {
 
 	tagRepo := repository.NewTagRepository(db)
 	for _, tag := range []*domain.Tag{
-		{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", ReviewState: "confirmed", UsageCount: 10},
-		{ID: 2, PreferredLabel: "sunrise", Slug: "sunrise", ReviewState: "pending", UsageCount: 5},
-		{ID: 3, PreferredLabel: "cloud", Slug: "cloud", ReviewState: "rejected", UsageCount: 2},
+		{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", Level: domain.TagLevelChild, ReviewState: "confirmed", UsageCount: 10},
+		{ID: 2, PreferredLabel: "sunrise", Slug: "sunrise", Level: domain.TagLevelChild, ReviewState: "pending", UsageCount: 5},
+		{ID: 3, PreferredLabel: "cloud", Slug: "cloud", Level: domain.TagLevelChild, ReviewState: "rejected", UsageCount: 2},
+		{ID: 4, PreferredLabel: "characters", Slug: "characters", Level: domain.TagLevelRoot, ReviewState: "confirmed", UsageCount: 1},
 	} {
 		if err := tagRepo.Save(context.Background(), tag); err != nil {
 			t.Fatalf("seed tag %d: %v", tag.ID, err)
 		}
+	}
+
+	aliasRepo := repository.NewTagAliasRepository(db)
+	if err := aliasRepo.Save(context.Background(), &domain.TagAlias{TagID: 2, Label: "morning sun", AliasType: "synonym"}); err != nil {
+		t.Fatalf("seed alias: %v", err)
 	}
 
 	imageTagRepo := repository.NewImageTagRepository(db)

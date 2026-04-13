@@ -31,6 +31,9 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
       if (provider.governanceRows.isEmpty) {
         provider.loadGovernanceTags();
       }
+      if (provider.tagTree == null) {
+        provider.loadTagTree();
+      }
     });
   }
 
@@ -43,12 +46,25 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
           mainAxisAlignment: MainAxisAlignment.end,
           primaryItems: [
             CommandBarButton(
+              icon: const Icon(FluentIcons.add),
+              label: const Text('新建标签'),
+              onPressed: () async {
+                final provider = context.read<TagProvider>();
+                await showDialog(
+                  context: context,
+                  builder: (_) => const TagEditDialog(),
+                );
+                if (!mounted) return;
+                await provider.loadGovernanceTags();
+                await provider.loadTagTree();
+              },
+            ),
+            CommandBarButton(
               icon: const Icon(FluentIcons.refresh),
               label: const Text('刷新'),
               onPressed: () {
-                context.read<TagProvider>().loadGovernanceTags(
-                  search: _searchQuery.isNotEmpty ? _searchQuery : null,
-                );
+                context.read<TagProvider>().loadGovernanceTags();
+                context.read<TagProvider>().loadTagTree();
               },
             ),
           ],
@@ -108,6 +124,7 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
                   onMerge: _handleMerge,
                   onDelete: _handleDelete,
                   onViewAffectedImages: _handleViewAffectedImages,
+                  searchQuery: _searchQuery,
                 ),
               ),
             ],
@@ -125,7 +142,8 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
     int totalPending = 0;
 
     for (final row in rows) {
-      totalUsage += row.usageCount;
+      totalUsage += row
+          .usageCount; // Using usageCount to match existing logic, could use treeUsageCount instead
       totalAI += row.aiCount;
       totalManual += row.manualCount;
       totalPending += row.pendingCount;
@@ -135,9 +153,9 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _buildStatCard(context, '使用量', totalUsage),
+          _buildStatCard(context, '总计使用量', totalUsage),
           const SizedBox(width: 12),
-          _buildStatCard(context, 'AI', totalAI),
+          _buildStatCard(context, 'AI 生成', totalAI),
           const SizedBox(width: 12),
           _buildStatCard(context, '手动', totalManual),
           const SizedBox(width: 12),
@@ -172,20 +190,23 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
       child: TextBox(
         placeholder: '搜索标签...',
         onChanged: (value) {
-          _searchQuery = value;
-          context.read<TagProvider>().loadGovernanceTags(
-            search: value.isNotEmpty ? value : null,
-          );
+          setState(() {
+            _searchQuery = value;
+          });
         },
       ),
     );
   }
 
-  void _handleEdit(TagGovernanceRow row) {
-    showDialog(
+  void _handleEdit(TagGovernanceRow row) async {
+    final provider = context.read<TagProvider>();
+    await showDialog(
       context: context,
       builder: (_) => TagEditDialog(row: row),
     );
+    if (!mounted) return;
+    await provider.loadGovernanceTags();
+    await provider.loadTagTree();
   }
 
   void _handleMerge(TagGovernanceRow row) {
@@ -199,6 +220,7 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
     if (!mounted) return;
 
     final preview = provider.deletePreview;
+    final bool canDelete = preview?.canDelete ?? row.canDelete;
     final String blockingReason =
         preview?.blockingReason ?? (row.canDelete ? '' : '标签正在被图片使用');
     final int affectedCount =
@@ -226,7 +248,7 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
             child: const Text('取消'),
             onPressed: () => Navigator.pop(context, false),
           ),
-          if (row.canDelete)
+          if (canDelete)
             FilledButton(
               child: const Text('删除'),
               onPressed: () => Navigator.pop(context, true),
@@ -238,14 +260,14 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
     if (confirmed == true && mounted) {
       await provider.deleteTag(row.tagId);
       if (mounted) {
-        await provider.loadGovernanceTags(
-          search: _searchQuery.isNotEmpty ? _searchQuery : null,
-        );
+        await provider.loadGovernanceTags();
+        await provider.loadTagTree();
       }
     }
   }
 
   void _handleViewAffectedImages(TagGovernanceRow row) {
+    context.read<TagProvider>().setSelection([row.tagId]);
     context.read<ImageListProvider>().setTagFilter([row.tagId]);
     context.read<NavigationProvider>().setSelectedIndex(
       NavigationProvider.galleryIndex,
@@ -256,9 +278,8 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
     final provider = context.read<TagProvider>();
     await provider.cleanupSelectedUnusedTags();
     if (mounted) {
-      await provider.loadGovernanceTags(
-        search: _searchQuery.isNotEmpty ? _searchQuery : null,
-      );
+      await provider.loadGovernanceTags();
+      await provider.loadTagTree();
     }
   }
 
@@ -267,9 +288,8 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
     await provider.mergeSelectionInto(targetTagId);
     if (mounted) {
       provider.clearGovernanceSelection();
-      await provider.loadGovernanceTags(
-        search: _searchQuery.isNotEmpty ? _searchQuery : null,
-      );
+      await provider.loadGovernanceTags();
+      await provider.loadTagTree();
     }
   }
 
@@ -279,9 +299,8 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
     if (mounted) {
       provider.clearActiveMergeSource();
       provider.clearGovernanceSelection();
-      await provider.loadGovernanceTags(
-        search: _searchQuery.isNotEmpty ? _searchQuery : null,
-      );
+      await provider.loadGovernanceTags();
+      await provider.loadTagTree();
     }
   }
 }

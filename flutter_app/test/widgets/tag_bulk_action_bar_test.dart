@@ -87,6 +87,45 @@ class _BulkBarTagProvider extends TagProvider {
   }
 }
 
+class _MixedLevelTagProvider extends _BulkBarTagProvider {
+  _MixedLevelTagProvider({super.client});
+
+  @override
+  List<TagGovernanceRow> get governanceRows => [
+    const TagGovernanceRow(
+      tagId: 10,
+      preferredLabel: 'long_hair',
+      primaryCategory: 'appearance',
+      aliases: ['longhair'],
+      usageCount: 42,
+      pendingCount: 5,
+      confirmedCount: 35,
+      rejectedCount: 2,
+      aiCount: 30,
+      manualCount: 12,
+      affectedImageCount: 42,
+      canDelete: false,
+      level: 'root',
+    ),
+    const TagGovernanceRow(
+      tagId: 30,
+      preferredLabel: 'school_uniform',
+      primaryCategory: 'clothing',
+      aliases: ['seifuku'],
+      usageCount: 15,
+      pendingCount: 2,
+      confirmedCount: 13,
+      rejectedCount: 0,
+      aiCount: 10,
+      manualCount: 5,
+      affectedImageCount: 15,
+      canDelete: false,
+      level: 'child',
+      parentId: 10,
+    ),
+  ];
+}
+
 void main() {
   testWidgets(
     'bulk action bar shows selected count and cleanup/merge controls',
@@ -149,5 +188,38 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(cleanupCalls, 1);
+  });
+
+  testWidgets('bulk action bar disables merge when mixed levels selected', (
+    tester,
+  ) async {
+    final mockClient = MockClient((request) async {
+      return http.Response('{"tags":[]}', 200);
+    });
+    final tagProvider = _MixedLevelTagProvider(client: mockClient);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<TagProvider>.value(value: tagProvider),
+        ],
+        child: fluent.FluentApp(
+          home: TagBulkActionBar(
+            onCleanup: () async {},
+            onMergeInto: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final mergeButtonFinder = find.ancestor(
+      of: find.text('合并到...'),
+      matching: find.byType(fluent.Button),
+    );
+    expect(mergeButtonFinder, findsOneWidget);
+
+    final fluent.Button mergeButton = tester.widget(mergeButtonFinder);
+    expect(mergeButton.onPressed, isNull);
   });
 }

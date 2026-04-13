@@ -49,6 +49,27 @@ class TagProvider extends ChangeNotifier {
   Map<String, List<Tag>> get imageTags => _imageTags;
   bool get isLoadingImageTags => _isLoadingImageTags;
 
+  // Tag tree getters
+  Map<String, dynamic>? _tagTree;
+  Map<String, dynamic>? get tagTree => _tagTree;
+
+  // 加载标签树
+  Future<void> loadTagTree() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _tagTree = await _tagService.getTree();
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error loading tag tree: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // Tag statistics getters
   List<TagStatistics> get statistics => _statistics;
   bool get isLoadingStatistics => _isLoadingStatistics;
@@ -143,6 +164,13 @@ class TagProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSelection(Iterable<int> tagIds) {
+    _selectedTagIds
+      ..clear()
+      ..addAll(tagIds);
+    notifyListeners();
+  }
+
   // 加载图片的标签
   Future<void> loadImageTags(int imageId) async {
     final requestVersion = ++_imageTagsRequestVersion;
@@ -168,11 +196,10 @@ class TagProvider extends ChangeNotifier {
       _error = e.toString();
       debugPrint('Error loading image tags: $e');
     } finally {
-      if (requestVersion != _imageTagsRequestVersion) {
-        return;
+      if (requestVersion == _imageTagsRequestVersion) {
+        _isLoadingImageTags = false;
+        notifyListeners();
       }
-      _isLoadingImageTags = false;
-      notifyListeners();
     }
   }
 
@@ -255,12 +282,20 @@ class TagProvider extends ChangeNotifier {
   }
 
   // 添加图片标签
-  Future<void> addImageTag(int imageId, {int? tagId, String? tagLabel}) async {
+  Future<void> addImageTag(
+    int imageId, {
+    int? tagId,
+    String? tagLabel,
+    String? level,
+    int? parentId,
+  }) async {
     try {
       final tag = await _tagService.addImageTag(
         imageId,
         tagId: tagId,
         tagLabel: tagLabel,
+        level: level,
+        parentId: parentId,
       );
       // Add to confirmed list
       _imageTags['confirmed']?.add(tag);
@@ -278,6 +313,8 @@ class TagProvider extends ChangeNotifier {
     int tagId, {
     int? targetTagId,
     String? targetLabel,
+    String? targetLevel,
+    int? targetParentId,
   }) async {
     try {
       await _tagService.mergeImageTag(
@@ -285,6 +322,8 @@ class TagProvider extends ChangeNotifier {
         tagId,
         targetTagId: targetTagId,
         targetLabel: targetLabel,
+        targetLevel: targetLevel,
+        targetParentId: targetParentId,
       );
       // Remove from pending list
       _imageTags['pending']?.removeWhere((t) => t.id == tagId);
@@ -533,6 +572,7 @@ class TagProvider extends ChangeNotifier {
     String? search,
     bool asPrimaryAction = false,
   }) async {
+    const pageSize = 500;
     if (asPrimaryAction) {
       _isRunningGovernanceAction = true;
       _governanceError = null;
@@ -540,7 +580,21 @@ class TagProvider extends ChangeNotifier {
     }
 
     try {
-      _governanceRows = await _tagService.fetchGovernanceTags(search: search);
+      final allRows = <TagGovernanceRow>[];
+      var offset = 0;
+      while (true) {
+        final page = await _tagService.fetchGovernanceTags(
+          search: search,
+          limit: pageSize,
+          offset: offset,
+        );
+        allRows.addAll(page);
+        if (page.length < pageSize) {
+          break;
+        }
+        offset += page.length;
+      }
+      _governanceRows = allRows;
     } catch (e) {
       _governanceError = e.toString();
       debugPrint('Error loading governance tags: $e');
@@ -585,19 +639,6 @@ class TagProvider extends ChangeNotifier {
     }
   }
 
-  // 清理无用标签
-  Future<Map<String, dynamic>> cleanUnusedTags() async {
-    try {
-      final result = await _tagService.cleanUnusedTags();
-      await _refreshStatisticsState();
-      return result;
-    } catch (e) {
-      _error = e.toString();
-      debugPrint('Error cleaning unused tags: $e');
-      rethrow;
-    }
-  }
-
   // 更新标签
   Future<void> updateTag(
     int tagId, {
@@ -613,9 +654,78 @@ class TagProvider extends ChangeNotifier {
         reviewState: reviewState,
       );
       await _refreshStatisticsState();
+      await _refreshGovernanceRows();
+      await loadTagTree();
+      await loadTags();
     } catch (e) {
       _error = e.toString();
       debugPrint('Error updating tag: $e');
+      rethrow;
+    }
+  }
+
+  // 创建标签
+  Future<void> createTag({
+    required String preferredLabel,
+    String? primaryCategory,
+    String? level,
+    int? parentId,
+  }) async {
+    try {
+      await _tagService.createTag(
+        preferredLabel: preferredLabel,
+        primaryCategory: primaryCategory,
+        level: level,
+        parentId: parentId,
+      );
+      await _refreshStatisticsState();
+      await _refreshGovernanceRows();
+      await loadTagTree();
+      await loadTags();
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error creating tag: $e');
+      rethrow;
+    }
+  }
+
+  // 更改标签层级
+  Future<void> changeTagLevel(int tagId, String level, {int? parentId}) async {
+    try {
+      await _tagService.changeLevel(tagId, level, parentId: parentId);
+      await _refreshStatisticsState();
+      await _refreshGovernanceRows();
+      await loadTagTree();
+      await loadTags(); // Refresh all tags to get updated hierarchy
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error changing tag level: $e');
+      rethrow;
+    }
+  }
+
+  // 重新指定父标签
+  Future<void> reparentTag(int tagId, int? parentId) async {
+    try {
+      await _tagService.reparent(tagId, parentId);
+      await _refreshStatisticsState();
+      await _refreshGovernanceRows();
+      await loadTagTree();
+      await loadTags(); // Refresh all tags
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error reparenting tag: $e');
+      rethrow;
+    }
+  }
+
+  // 获取可以作为父标签的候选列表
+  Future<List<Tag>> getParentCandidates(String level) async {
+    try {
+      return await _tagService.getParentCandidates(level);
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error getting parent candidates: $e');
       rethrow;
     }
   }

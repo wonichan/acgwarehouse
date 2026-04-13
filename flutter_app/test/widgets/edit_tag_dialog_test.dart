@@ -18,6 +18,7 @@ void main() {
     trustScore: 0.7,
     usageCount: 5,
     createdAt: DateTime.parse('2024-01-15T10:30:00Z'),
+    level: 'child',
   );
 
   final sampleSearchResults = [
@@ -30,6 +31,7 @@ void main() {
       trustScore: 0.9,
       usageCount: 50,
       createdAt: DateTime.parse('2024-01-10T08:00:00Z'),
+      level: 'child',
     ),
     Tag(
       id: 3,
@@ -40,6 +42,21 @@ void main() {
       trustScore: 0.85,
       usageCount: 100,
       createdAt: DateTime.parse('2024-01-12T09:00:00Z'),
+      level: 'root',
+    ),
+  ];
+
+  final parentCandidates = [
+    Tag(
+      id: 99,
+      preferredLabel: 'characters',
+      slug: 'characters',
+      primaryCategory: 'meta',
+      reviewState: 'confirmed',
+      trustScore: 1,
+      usageCount: 40,
+      createdAt: DateTime.parse('2024-01-01T00:00:00Z'),
+      level: 'root',
     ),
   ];
 
@@ -58,6 +75,7 @@ void main() {
       trustScore: 0.9,
       usageCount: 60 - index,
       createdAt: DateTime.parse('2024-01-11T08:00:00Z'),
+      level: index.isEven ? 'child' : 'root',
     ),
   );
 
@@ -71,6 +89,7 @@ void main() {
       trustScore: 0.88,
       usageCount: 38,
       createdAt: DateTime.parse('2024-01-14T08:00:00Z'),
+      level: 'child',
     ),
   ];
 
@@ -111,6 +130,9 @@ void main() {
         offset: any(named: 'offset'),
       ),
     ).thenAnswer((_) async => defaultTagResults);
+    when(
+      () => mockTagService.getParentCandidates(any()),
+    ).thenAnswer((_) async => parentCandidates);
   });
 
   group('EditTagDialog', () {
@@ -163,9 +185,9 @@ void main() {
       // Verify search was called
       verify(() => mockTagService.searchTags('hair')).called(1);
 
-      // Verify search results are displayed
+      // Verify only same-level search results are displayed
       expect(find.text('red hair'), findsOneWidget);
-      expect(find.text('black hair'), findsOneWidget);
+      expect(find.text('black hair'), findsNothing);
       // Verify category labels are shown
       expect(find.text('hair'), findsWidgets);
     });
@@ -185,7 +207,7 @@ void main() {
         () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 0),
       ).called(1);
       expect(find.text('blonde hair'), findsOneWidget);
-      expect(find.text('smile'), findsOneWidget);
+      expect(find.text('smile'), findsNothing);
     });
 
     testWidgets(
@@ -208,13 +230,14 @@ void main() {
 
         expect(find.text('red hair'), findsOneWidget);
         expect(find.text('blonde hair'), findsNothing);
+        expect(find.text('black hair'), findsNothing);
 
         await tester.enterText(find.byType(TextField), '');
         await tester.pump();
         await tester.pumpAndSettle();
 
         expect(find.text('blonde hair'), findsOneWidget);
-        expect(find.text('smile'), findsOneWidget);
+        expect(find.text('smile'), findsNothing);
       },
     );
 
@@ -225,7 +248,7 @@ void main() {
         () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 0),
       ).thenAnswer((_) async => defaultTagResults);
       when(
-        () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 20),
+        () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 10),
       ).thenAnswer((_) async => nextPageResults);
 
       await tester.pumpWidget(
@@ -240,7 +263,7 @@ void main() {
       await tester.pumpAndSettle();
 
       verify(
-        () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 20),
+        () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 10),
       ).called(1);
       expect(find.text('green eyes', skipOffstage: false), findsOneWidget);
     });
@@ -276,29 +299,83 @@ void main() {
       expect(EditTagDialogTestResult.lastResult!['label'], 'red hair');
     });
 
-    testWidgets('returns new tag data when creating new tag', (tester) async {
+    testWidgets(
+      'edit dialog hides cross-level options in default and search lists',
+      (tester) async {
+        when(
+          () => mockTagService.searchTags('hair'),
+        ).thenAnswer((_) async => sampleSearchResults);
+
+        await tester.pumpWidget(
+          createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+        );
+
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('blonde hair'), findsOneWidget);
+        expect(find.text('smile'), findsNothing);
+
+        await tester.enterText(find.byType(TextField), 'hair');
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
+
+        expect(find.text('red hair'), findsOneWidget);
+        expect(find.text('black hair'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'returns new tag data using current tag level when creating new tag',
+      (tester) async {
+        await tester.pumpWidget(
+          createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
+        );
+
+        // Open the dialog
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
+
+        // Enter new tag name
+        await tester.enterText(find.byType(TextField), 'new custom tag');
+        await tester.pumpAndSettle();
+
+        // Tap create new tag button
+        await tester.tap(find.text('创建新标签'));
+        await tester.pumpAndSettle();
+
+        // Verify dialog is closed and result is returned
+        expect(find.text('编辑标签'), findsNothing);
+        expect(EditTagDialogTestResult.lastResult, isNotNull);
+        expect(EditTagDialogTestResult.lastResult!['tagId'], isNull);
+        expect(
+          EditTagDialogTestResult.lastResult!['tagLabel'],
+          'new custom tag',
+        );
+        expect(EditTagDialogTestResult.lastResult!['tagLevel'], 'child');
+        expect(EditTagDialogTestResult.lastResult!['label'], 'new custom tag');
+      },
+    );
+
+    testWidgets('creating replacement tag keeps current tag level fixed', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createTestWidget(imageId: 123, currentTag: sampleCurrentTag),
       );
 
-      // Open the dialog
       await tester.tap(find.text('Open Dialog'));
       await tester.pumpAndSettle();
 
-      // Enter new tag name
-      await tester.enterText(find.byType(TextField), 'new custom tag');
+      await tester.enterText(find.byType(TextField).first, 'new child tag');
       await tester.pumpAndSettle();
 
-      // Tap create new tag button
       await tester.tap(find.text('创建新标签'));
       await tester.pumpAndSettle();
 
-      // Verify dialog is closed and result is returned
-      expect(find.text('编辑标签'), findsNothing);
       expect(EditTagDialogTestResult.lastResult, isNotNull);
-      expect(EditTagDialogTestResult.lastResult!['tagId'], isNull);
-      expect(EditTagDialogTestResult.lastResult!['tagLabel'], 'new custom tag');
-      expect(EditTagDialogTestResult.lastResult!['label'], 'new custom tag');
+      expect(EditTagDialogTestResult.lastResult!['tagLabel'], 'new child tag');
+      expect(EditTagDialogTestResult.lastResult!['tagLevel'], 'child');
     });
 
     testWidgets('cancel button closes dialog without returning data', (
@@ -371,11 +448,11 @@ void main() {
       final buttonWidget = tester.widget<ElevatedButton>(createButton);
       expect(buttonWidget.onPressed, isNull);
 
-      // Enter some text
+      // Entering text is enough because replacement level is now fixed to current tag level
       await tester.enterText(find.byType(TextField), 'some text');
       await tester.pumpAndSettle();
 
-      // Button should now be enabled
+      // Button should now be enabled because the dialog is locked to the current tag level
       final enabledButton = tester.widget<ElevatedButton>(createButton);
       expect(enabledButton.onPressed, isNotNull);
     });

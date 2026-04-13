@@ -38,11 +38,11 @@ func TestTagGetTagsReturnsListSortedByUsageCount(t *testing.T) {
 	}
 	decodeJSONResponse(t, w, &resp)
 
-	if resp.Total != 3 {
-		t.Fatalf("total = %d, want 3", resp.Total)
+	if resp.Total != 6 {
+		t.Fatalf("total = %d, want 6", resp.Total)
 	}
-	if len(resp.Tags) != 3 {
-		t.Fatalf("len(tags) = %d, want 3", len(resp.Tags))
+	if len(resp.Tags) != 6 {
+		t.Fatalf("len(tags) = %d, want 6", len(resp.Tags))
 	}
 	if resp.Tags[0].PreferredLabel != "blue sky" {
 		t.Fatalf("first tag = %q, want %q", resp.Tags[0].PreferredLabel, "blue sky")
@@ -86,7 +86,7 @@ func TestTagCreateTagCreatesTag(t *testing.T) {
 	t.Parallel()
 
 	router, repos := newTagHandlerTestRouter(t)
-	body := bytes.NewBufferString(`{"preferred_label":"蓝天白云","primary_category":"场景"}`)
+	body := bytes.NewBufferString(`{"preferred_label":"蓝天白云","primary_category":"场景","level":"child"}`)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags", body)
@@ -106,6 +106,77 @@ func TestTagCreateTagCreatesTag(t *testing.T) {
 	}
 	if tag.PrimaryCategory != "场景" {
 		t.Fatalf("primary_category = %q, want %q", tag.PrimaryCategory, "场景")
+	}
+}
+
+func TestTagCreateTagRejectsMissingHierarchyForNewTag(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+	body := bytes.NewBufferString(`{"preferred_label":"brand new rootless tag"}`)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestTagCreateTagCreatesRequestedHierarchyLevel(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newTagHandlerTestRouter(t)
+	body := bytes.NewBufferString(`{"preferred_label":"heroine","primary_category":"artist","level":"parent","parent_id":4}`)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	tag, err := repos.tagRepo.FindByLabel(context.Background(), "heroine")
+	if err != nil {
+		t.Fatalf("FindByLabel() error = %v", err)
+	}
+	if tag.Level != domain.TagLevelParent {
+		t.Fatalf("Level = %q, want %q", tag.Level, domain.TagLevelParent)
+	}
+	if tag.ParentID == nil || *tag.ParentID != 4 {
+		t.Fatalf("ParentID = %v, want 4", tag.ParentID)
+	}
+}
+
+func TestTagCreateTagReusesExistingExactLabel(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+	body := bytes.NewBufferString(`{"preferred_label":"blue sky","level":"root"}`)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		ID     int64 `json:"id"`
+		Reused bool  `json:"reused"`
+	}
+	decodeJSONResponse(t, w, &resp)
+	if resp.ID != 1 {
+		t.Fatalf("id = %d, want 1", resp.ID)
+	}
+	if !resp.Reused {
+		t.Fatal("expected reused=true")
 	}
 }
 
@@ -133,6 +204,22 @@ func TestTagUpdateTagUpdatesPreferredLabel(t *testing.T) {
 	}
 	if tag.Slug != "blue-horizon" {
 		t.Fatalf("slug = %q, want %q", tag.Slug, "blue-horizon")
+	}
+}
+
+func TestTagUpdateTagRejectsHierarchyMutationFields(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+	body := bytes.NewBufferString(`{"level":"root"}`)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/tags/1", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d body=%s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
 }
 
@@ -270,6 +357,142 @@ func TestTagGetGovernanceReturnsRowsOrderedByUsageCount(t *testing.T) {
 	}
 	if resp.Rows[0].UsageCount < resp.Rows[len(resp.Rows)-1].UsageCount {
 		t.Fatal("expected governance rows sorted by usage_count desc")
+	}
+}
+
+func TestTagGetStatsIncludesDirectAndTreeCounts(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/stats", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Stats []struct {
+			TagID            int64  `json:"tag_id"`
+			Level            string `json:"level"`
+			UsageCount       int64  `json:"usage_count"`
+			DirectUsageCount int64  `json:"direct_usage_count"`
+			TreeUsageCount   int64  `json:"tree_usage_count"`
+		} `json:"stats"`
+	}
+	decodeJSONResponse(t, w, &resp)
+	if len(resp.Stats) == 0 {
+		t.Fatal("expected stats rows")
+	}
+	for _, row := range resp.Stats {
+		if row.Level == "" {
+			t.Fatal("expected level in stats row")
+		}
+		if row.UsageCount != row.DirectUsageCount {
+			t.Fatalf("usage_count should mirror direct_usage_count, got %d vs %d", row.UsageCount, row.DirectUsageCount)
+		}
+	}
+}
+
+func TestTagGetTreeReturnsHierarchyData(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/tree", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Tree []struct {
+			TagID    int64 `json:"tag_id"`
+			Children []struct {
+				TagID int64 `json:"tag_id"`
+			} `json:"children"`
+		} `json:"tree"`
+	}
+	decodeJSONResponse(t, w, &resp)
+	if len(resp.Tree) == 0 {
+		t.Fatal("expected non-empty tree")
+	}
+}
+
+func TestTagGetParentCandidatesReturnsRootForParentLevel(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/parent-candidates?level=parent", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Candidates []domain.Tag `json:"candidates"`
+	}
+	decodeJSONResponse(t, w, &resp)
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Level != domain.TagLevelRoot {
+		t.Fatalf("unexpected candidates: %+v", resp.Candidates)
+	}
+}
+
+func TestTagChangeLevelUpdatesHierarchy(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newTagHandlerTestRouter(t)
+	body := bytes.NewBufferString(`{"level":"parent","parent_id":4}`)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags/3/change-level", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	tag, err := repos.tagRepo.FindByID(context.Background(), 3)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if tag.Level != domain.TagLevelParent {
+		t.Fatalf("Level = %q, want %q", tag.Level, domain.TagLevelParent)
+	}
+	if tag.ParentID == nil || *tag.ParentID != 4 {
+		t.Fatalf("ParentID = %v, want 4", tag.ParentID)
+	}
+}
+
+func TestTagReparentDetachesChild(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newTagHandlerTestRouter(t)
+	body := bytes.NewBufferString(`{}`)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tags/5/reparent", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	tag, err := repos.tagRepo.FindByID(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if tag.ParentID != nil {
+		t.Fatalf("ParentID = %v, want nil", tag.ParentID)
 	}
 }
 
@@ -521,9 +744,14 @@ func newTagHandlerTestRouter(t *testing.T) (*gin.Engine, *tagHandlerTestRepos) {
 	api := router.Group("/api/v1")
 	api.GET("/tags", h.GetTags)
 	api.GET("/tags/governance", h.GetGovernanceTags)
+	api.GET("/tags/stats", h.GetTagStats)
+	api.GET("/tags/tree", h.GetTagTree)
+	api.GET("/tags/parent-candidates", h.GetParentCandidates)
 	api.GET("/tags/:id/delete-preview", h.GetDeletePreview)
 	api.POST("/tags", h.CreateTag)
 	api.PUT("/tags/:id", h.UpdateTag)
+	api.POST("/tags/:id/change-level", h.ChangeTagLevel)
+	api.POST("/tags/:id/reparent", h.ReparentTag)
 	api.DELETE("/tags/:id", h.DeleteTag)
 	api.POST("/tags/:id/merge", h.MergeTag)
 	api.POST("/tags/batch/cleanup", h.CleanUnusedTags)
@@ -547,9 +775,12 @@ func seedTagHandlerData(t *testing.T, db *sql.DB) {
 
 	tagRepo := repository.NewTagRepository(db)
 	for _, tag := range []*domain.Tag{
-		{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", PrimaryCategory: "scene", ReviewState: "confirmed", UsageCount: 10},
-		{ID: 2, PreferredLabel: "sunrise", Slug: "sunrise", PrimaryCategory: "scene", ReviewState: "pending", UsageCount: 3},
-		{ID: 3, PreferredLabel: "cloud", Slug: "cloud", PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 1},
+		{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", Level: domain.TagLevelChild, PrimaryCategory: "scene", ReviewState: "confirmed", UsageCount: 10},
+		{ID: 2, PreferredLabel: "sunrise", Slug: "sunrise", Level: domain.TagLevelChild, PrimaryCategory: "scene", ReviewState: "pending", UsageCount: 3},
+		{ID: 3, PreferredLabel: "cloud", Slug: "cloud", Level: domain.TagLevelChild, PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 1},
+		{ID: 4, PreferredLabel: "characters", Slug: "characters", Level: domain.TagLevelRoot, PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 2},
+		{ID: 5, PreferredLabel: "heroine child", Slug: "heroine-child", Level: domain.TagLevelChild, ParentID: int64PtrHandler(6), PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 1},
+		{ID: 6, PreferredLabel: "heroine group", Slug: "heroine-group", Level: domain.TagLevelParent, ParentID: int64PtrHandler(4), PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 1},
 	} {
 		if err := tagRepo.Save(context.Background(), tag); err != nil {
 			t.Fatalf("seed tag %d: %v", tag.ID, err)
@@ -570,6 +801,13 @@ func seedTagHandlerData(t *testing.T, db *sql.DB) {
 	if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: 1, ReviewState: "confirmed"}); err != nil {
 		t.Fatalf("seed image tag: %v", err)
 	}
+	if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: 5, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("seed image tag child: %v", err)
+	}
+}
+
+func int64PtrHandler(v int64) *int64 {
+	return &v
 }
 
 func decodeJSONResponse(t *testing.T, w *httptest.ResponseRecorder, target any) {

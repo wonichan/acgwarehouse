@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:provider/provider.dart';
-import '../models/tag.dart';
 import '../providers/image_provider.dart';
 import '../providers/selection_provider.dart';
 import '../providers/tag_provider.dart';
@@ -8,6 +8,7 @@ import '../services/tag_service.dart';
 import '../widgets/batch_operation_sheet.dart';
 import '../widgets/batch_tag_dialog.dart';
 import '../widgets/responsive_image_grid.dart';
+import '../widgets/fluent_tag_filter_pane.dart';
 import 'image_detail_screen.dart';
 import 'tag_management_screen.dart';
 
@@ -64,7 +65,7 @@ class _GalleryContentState extends State<_GalleryContent> {
       appBar: AppBar(
         title: inSelectionMode
             ? Text('已选 ${selectionProvider.selectedCount} 张')
-            : _buildSearchBar(context),
+            : const Text('图库'),
         actions: inSelectionMode
             ? [
                 TextButton(
@@ -72,7 +73,39 @@ class _GalleryContentState extends State<_GalleryContent> {
                   child: const Text('完成'),
                 ),
               ]
-            : [_buildSortButton(context), _buildManageTagsButton(context)],
+            : [
+                _buildSortButton(context),
+                Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.filter_list),
+                    tooltip: '高级标签筛选',
+                    onPressed: () => Scaffold.of(context).openEndDrawer(),
+                  ),
+                ),
+                _buildManageTagsButton(context),
+              ],
+      ),
+      endDrawer: Drawer(
+        width: 320,
+        child: fluent.FluentTheme(
+          data: fluent.FluentThemeData(
+            brightness: Theme.of(context).brightness == Brightness.dark
+                ? fluent.Brightness.dark
+                : fluent.Brightness.light,
+          ),
+          child: FluentTagFilterPane(
+            hasTagsFilter: context.watch<ImageListProvider>().hasTagsFilter,
+            onHasTagsChanged: (value) {
+              context.read<ImageListProvider>().setHasTagsFilter(value);
+            },
+            hasPendingTagsFilter: context
+                .watch<ImageListProvider>()
+                .hasPendingTagsFilter,
+            onHasPendingTagsChanged: (value) {
+              context.read<ImageListProvider>().setHasPendingTagsFilter(value);
+            },
+          ),
+        ),
       ),
       body: Consumer<ImageListProvider>(
         builder: (context, provider, child) {
@@ -168,248 +201,6 @@ class _GalleryContentState extends State<_GalleryContent> {
     );
   }
 
-  Widget _buildSearchBar(BuildContext context) {
-    final tagProvider = context.watch<TagProvider>();
-    final imageListProvider = context.watch<ImageListProvider>();
-    final selectedTags = tagProvider.selectedTags;
-
-    final colorScheme = Theme.of(context).colorScheme;
-    final borderColor = colorScheme.outlineVariant;
-    final textColor = colorScheme.onSurface;
-    final hintColor = colorScheme.onSurfaceVariant;
-
-    return Container(
-      height: 40,
-      decoration: BoxDecoration(
-        border: Border.all(color: borderColor),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 8),
-          Icon(Icons.search, size: 20, color: hintColor),
-          const SizedBox(width: 8),
-          if (selectedTags.isNotEmpty)
-            ...selectedTags.map(
-              (tag) => Padding(
-                padding: const EdgeInsets.only(right: 6.0),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: borderColor),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        tag.preferredLabel,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: textColor,
-                          height: 1.0,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      InkWell(
-                        onTap: () {
-                          tagProvider.toggleTag(tag.id);
-                          imageListProvider.setTagFilter(
-                            tagProvider.selectedTagIds.toList(),
-                          );
-                        },
-                        child: Icon(Icons.close, size: 14, color: hintColor),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          Expanded(
-            child: Autocomplete<Tag>(
-              optionsBuilder: (TextEditingValue textEditingValue) {
-                if (textEditingValue.text.isEmpty) {
-                  return const Iterable<Tag>.empty();
-                }
-                return tagProvider.allTags.where((Tag tag) {
-                  return tag.preferredLabel.toLowerCase().contains(
-                    textEditingValue.text.toLowerCase(),
-                  );
-                });
-              },
-              displayStringForOption: (Tag option) => option.preferredLabel,
-              onSelected: (Tag selection) {
-                if (!tagProvider.selectedTagIds.contains(selection.id)) {
-                  tagProvider.toggleTag(selection.id);
-                  imageListProvider.setTagFilter(
-                    tagProvider.selectedTagIds.toList(),
-                  );
-                }
-              },
-              fieldViewBuilder:
-                  (
-                    context,
-                    textEditingController,
-                    focusNode,
-                    onFieldSubmitted,
-                  ) {
-                    return TextField(
-                      controller: textEditingController,
-                      focusNode: focusNode,
-                      style: TextStyle(color: textColor, fontSize: 14),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        hintText: 'Search tags...',
-                        hintStyle: TextStyle(color: hintColor, fontSize: 14),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                        ),
-                      ),
-                      onSubmitted: (String value) {
-                        onFieldSubmitted();
-                      },
-                    );
-                  },
-              optionsViewBuilder: (context, onSelected, options) {
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4.0,
-                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(4),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxHeight: 200,
-                        maxWidth: 300,
-                      ),
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: options.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          final Tag option = options.elementAt(index);
-                          return InkWell(
-                            onTap: () => onSelected(option),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                                vertical: 12.0,
-                              ),
-                              child: Text(
-                                option.preferredLabel,
-                                style: TextStyle(color: textColor),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          if (selectedTags.isNotEmpty)
-            InkWell(
-              onTap: () {
-                tagProvider.clearSelection();
-                imageListProvider.setTagFilter([]);
-                imageListProvider.setHasTagsFilter(null);
-                imageListProvider.setHasPendingTagsFilter(null);
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Icon(Icons.clear_all, size: 20, color: hintColor),
-              ),
-            ),
-          const SizedBox(width: 8),
-          // Toggle for "Untagged Only"
-          InkWell(
-            onTap: () {
-              final isUntagged = imageListProvider.hasTagsFilter == false;
-              imageListProvider.setHasTagsFilter(isUntagged ? null : false);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: imageListProvider.hasTagsFilter == false
-                    ? colorScheme.surfaceContainerHighest
-                    : Colors.transparent,
-                border: Border.all(color: borderColor),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    imageListProvider.hasTagsFilter == false
-                        ? Icons.label_off
-                        : Icons.label_outline,
-                    size: 14,
-                    color: textColor,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '未打标签',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: textColor,
-                      height: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Toggle for "Pending Tags Only"
-          InkWell(
-            onTap: () {
-              final isPending = imageListProvider.hasPendingTagsFilter == true;
-              imageListProvider.setHasPendingTagsFilter(
-                isPending ? null : true,
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: imageListProvider.hasPendingTagsFilter == true
-                    ? colorScheme.surfaceContainerHighest
-                    : Colors.transparent,
-                border: Border.all(color: borderColor),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    imageListProvider.hasPendingTagsFilter == true
-                        ? Icons.help_outline
-                        : Icons.help_outline,
-                    size: 14,
-                    color: textColor,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '标签未确认',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: textColor,
-                      height: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSortButton(BuildContext context) {
     return Consumer<ImageListProvider>(
       builder: (context, provider, _) {
@@ -467,6 +258,7 @@ class _GalleryContentState extends State<_GalleryContent> {
 
   Future<void> _batchAddTags(BuildContext context) async {
     final selectionProvider = context.read<SelectionProvider>();
+    final messenger = ScaffoldMessenger.of(context);
     final imageIds = selectionProvider.selectedImageIds.toList();
 
     // Close bottom sheet
@@ -478,10 +270,12 @@ class _GalleryContentState extends State<_GalleryContent> {
     );
 
     // Handle result
-    if (result is Map && result['success'] == true && mounted) {
+    if (!mounted) return;
+
+    if (result is Map && result['success'] == true) {
       final successCount = result['successCount'] as int? ?? 0;
       final failCount = result['failCount'] as int? ?? 0;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             '已为 $successCount 张图片添加标签${failCount > 0 ? '，$failCount 张失败' : ''}',
@@ -489,15 +283,16 @@ class _GalleryContentState extends State<_GalleryContent> {
         ),
       );
       selectionProvider.exitSelectionMode();
-    } else if (result is Map && result['success'] == false && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('添加失败: ${result['error']}')));
+    } else if (result is Map && result['success'] == false) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('添加失败: ${result['error']}')),
+      );
     }
   }
 
   Future<void> _batchRemoveTags(BuildContext context) async {
     final selectionProvider = context.read<SelectionProvider>();
+    final messenger = ScaffoldMessenger.of(context);
     final imageIds = selectionProvider.selectedImageIds.toList();
 
     // Close bottom sheet
@@ -509,10 +304,12 @@ class _GalleryContentState extends State<_GalleryContent> {
     );
 
     // Handle result
-    if (result is Map && result['success'] == true && mounted) {
+    if (!mounted) return;
+
+    if (result is Map && result['success'] == true) {
       final successCount = result['successCount'] as int? ?? 0;
       final failCount = result['failCount'] as int? ?? 0;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             '已从 $successCount 张图片移除标签${failCount > 0 ? '，$failCount 张失败' : ''}',
@@ -526,6 +323,7 @@ class _GalleryContentState extends State<_GalleryContent> {
   Future<void> _generateAITags(BuildContext context) async {
     final selectionProvider = context.read<SelectionProvider>();
     final tagService = context.read<TagProvider>().tagService;
+    final messenger = ScaffoldMessenger.of(context);
     final imageIds = selectionProvider.selectedImageIds.toList();
     final count = imageIds.length;
 
@@ -533,11 +331,9 @@ class _GalleryContentState extends State<_GalleryContent> {
     Navigator.pop(context);
 
     // Show immediate feedback
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('AI标签生成任务已在后台启动 ($count张图片)')));
-    }
+    messenger.showSnackBar(
+      SnackBar(content: Text('AI标签生成任务已在后台启动 ($count张图片)')),
+    );
 
     // Exit selection mode
     selectionProvider.exitSelectionMode();

@@ -27,6 +27,23 @@ class TagBulkActionBar extends StatelessWidget {
 
         final lastResult = provider.lastBatchResult;
 
+        // Compute common level
+        final selectedRows = provider.governanceRows
+            .where((r) => provider.selectedGovernanceIds.contains(r.tagId))
+            .toList();
+
+        String? commonLevel;
+        bool isMixedLevel = false;
+        for (final row in selectedRows) {
+          final level = row.level ?? 'root';
+          if (commonLevel == null) {
+            commonLevel = level;
+          } else if (commonLevel != level) {
+            isMixedLevel = true;
+            break;
+          }
+        }
+
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           color: FluentTheme.of(
@@ -57,11 +74,19 @@ class TagBulkActionBar extends StatelessWidget {
                         : () => _handleCleanup(context, provider),
                     child: const Text('清理已选中'),
                   ),
-                  Button(
-                    onPressed: provider.isRunningGovernanceAction
-                        ? null
-                        : () => _showMergeTargetDialog(context, provider),
-                    child: const Text('合并到...'),
+                  Tooltip(
+                    message: isMixedLevel ? '选中的标签包含不同层级，无法批量合并' : '合并到同层级标签',
+                    child: Button(
+                      onPressed:
+                          provider.isRunningGovernanceAction || isMixedLevel
+                          ? null
+                          : () => _showMergeTargetDialog(
+                              context,
+                              provider,
+                              commonLevel,
+                            ),
+                      child: const Text('合并到...'),
+                    ),
                   ),
                   HyperlinkButton(
                     onPressed: () => provider.clearGovernanceSelection(),
@@ -103,9 +128,18 @@ class TagBulkActionBar extends StatelessWidget {
     await onCleanup();
   }
 
-  void _showMergeTargetDialog(BuildContext context, TagProvider provider) {
+  void _showMergeTargetDialog(
+    BuildContext context,
+    TagProvider provider,
+    String? commonLevel,
+  ) {
+    final targetLevel = commonLevel ?? 'root';
     final rows = provider.governanceRows
-        .where((r) => !provider.selectedGovernanceIds.contains(r.tagId))
+        .where(
+          (r) =>
+              !provider.selectedGovernanceIds.contains(r.tagId) &&
+              (r.level ?? 'root') == targetLevel,
+        )
         .toList();
 
     showDialog(
@@ -120,7 +154,7 @@ class TagBulkActionBar extends StatelessWidget {
               return ListTile(
                 title: Text(row.preferredLabel),
                 subtitle: Text(
-                  'selectedGovernanceIds: ${provider.selectedGovernanceIds.join(", ")}',
+                  'ID: ${row.tagId} | Level: ${row.level ?? "root"}',
                   style: const TextStyle(fontSize: 10),
                 ),
                 onPressed: () {

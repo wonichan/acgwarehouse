@@ -20,6 +20,10 @@ type tagAdminService interface {
 	MergeTags(ctx context.Context, sourceTagID, targetTagID int64) (*service.TagMergeResult, error)
 	GetDeletePreview(ctx context.Context, tagID int64) (*service.TagDeletePreview, error)
 	CleanupUnusedTags(ctx context.Context, tagIDs []int64) (*service.TagCleanupResult, error)
+	GetParentCandidates(ctx context.Context, targetLevel string) ([]*domain.Tag, error)
+	GetTagTree(ctx context.Context) ([]service.TagTreeNode, error)
+	ChangeLevel(ctx context.Context, tagID int64, targetLevel string, parentID *int64) (*domain.Tag, error)
+	ReparentTag(ctx context.Context, tagID int64, parentID *int64) (*domain.Tag, error)
 }
 
 const mergeOrReclassifyRequired = "merge_or_reclassify_required"
@@ -130,36 +134,35 @@ func (h *TagHandler) CreateTag(c *gin.Context) {
 	var req struct {
 		PreferredLabel  string `json:"preferred_label"`
 		PrimaryCategory string `json:"primary_category"`
+		Level           string `json:"level"`
+		ParentID        *int64 `json:"parent_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
-	tag := &domain.Tag{
-		PreferredLabel:  strings.TrimSpace(req.PreferredLabel),
-		PrimaryCategory: strings.TrimSpace(req.PrimaryCategory),
-		Slug:            makeSlug(req.PreferredLabel),
-		ReviewState:     "confirmed",
-	}
-	if tag.PreferredLabel == "" {
+	if strings.TrimSpace(req.PreferredLabel) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "preferred_label is required"})
 		return
 	}
-
-	// Check for duplicate label
-	existing, err := h.tagRepo.FindByLabel(c.Request.Context(), tag.PreferredLabel)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	tag, reused, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
+		PreferredLabel:  req.PreferredLabel,
+		PrimaryCategory: req.PrimaryCategory,
+		Level:           req.Level,
+		ParentID:        req.ParentID,
+		ReviewState:     "confirmed",
+	})
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, service.ErrInvalidHierarchy) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-	if existing != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "标签名已存在"})
-		return
-	}
-
-	if err := h.tagRepo.Save(c.Request.Context(), tag); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if reused {
+		c.JSON(http.StatusOK, gin.H{"id": tag.ID, "reused": true, "tag": tag})
 		return
 	}
 
@@ -182,9 +185,15 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 		PreferredLabel  string `json:"preferred_label"`
 		PrimaryCategory string `json:"primary_category"`
 		ReviewState     string `json:"review_state"`
+		Level           string `json:"level"`
+		ParentID        *int64 `json:"parent_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	if strings.TrimSpace(req.Level) != "" || req.ParentID != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "use hierarchy endpoints for level or parent changes"})
 		return
 	}
 
@@ -210,7 +219,6 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 	if state := strings.TrimSpace(req.ReviewState); state != "" {
 		tag.ReviewState = state
 	}
-
 	if err := h.tagRepo.Update(c.Request.Context(), tag); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -360,6 +368,45 @@ func (h *TagHandler) DeleteAlias(c *gin.Context) {
 // It returns governance statistics for tags including usage, source, and pending-review counts.
 func (h *TagHandler) GetTagStats(c *gin.Context) {
 	ctx := c.Request.Context()
+	if h.adminSvc != nil {
+		total, err := h.tagRepo.Count(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		rows, _, err := h.adminSvc.ListGovernanceTags(ctx, "", total, 0)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		stats := make([]gin.H, 0, len(rows))
+		for _, row := range rows {
+			stats = append(stats, gin.H{
+				"tag_id":                 row.TagID,
+				"preferred_label":        row.PreferredLabel,
+				"level":                  row.Level,
+				"parent_id":              row.ParentID,
+				"usage_count":            row.UsageCount,
+				"direct_usage_count":     row.DirectUsageCount,
+				"tree_usage_count":       row.TreeUsageCount,
+				"pending_count":          row.PendingCount,
+				"direct_pending_count":   row.DirectPendingCount,
+				"tree_pending_count":     row.TreePendingCount,
+				"confirmed_count":        row.ConfirmedCount,
+				"direct_confirmed_count": row.DirectConfirmedCount,
+				"tree_confirmed_count":   row.TreeConfirmedCount,
+				"rejected_count":         row.RejectedCount,
+				"ai_count":               row.AICount,
+				"direct_ai_count":        row.DirectAICount,
+				"tree_ai_count":          row.TreeAICount,
+				"manual_count":           row.ManualCount,
+				"direct_manual_count":    row.DirectManualCount,
+				"tree_manual_count":      row.TreeManualCount,
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"stats": stats})
+		return
+	}
 
 	// Get all tags
 	tags, err := h.tagRepo.FindAll(ctx, 100, 0)
@@ -378,6 +425,8 @@ func (h *TagHandler) GetTagStats(c *gin.Context) {
 		stats = append(stats, gin.H{
 			"tag_id":          tag.ID,
 			"preferred_label": tag.PreferredLabel,
+			"level":           tag.Level,
+			"parent_id":       tag.ParentID,
 			"usage_count":     tagStats.UsageCount,
 			"pending_count":   tagStats.PendingCount,
 			"confirmed_count": tagStats.ConfirmedCount,
@@ -437,6 +486,10 @@ func (h *TagHandler) MergeTag(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrMergeSameSourceTarget):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "source and target tags must be different"})
+		case errors.Is(err, service.ErrCrossLevelMerge):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "source and target tags must be at the same level"})
+		case errors.Is(err, service.ErrMergeSourceHasChildren):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "source tag has child tags"})
 		case errors.Is(err, service.ErrTagNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
 		default:
@@ -505,6 +558,96 @@ func (h *TagHandler) CleanUnusedTags(c *gin.Context) {
 		"blocked": result.Blocked,
 		"failed":  result.Failed,
 	})
+}
+
+func (h *TagHandler) GetTagTree(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "tag governance service unavailable"})
+		return
+	}
+	tree, err := h.adminSvc.GetTagTree(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tree": tree})
+}
+
+func (h *TagHandler) GetParentCandidates(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "tag governance service unavailable"})
+		return
+	}
+	level := strings.TrimSpace(c.Query("level"))
+	candidates, err := h.adminSvc.GetParentCandidates(c.Request.Context(), level)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"candidates": candidates})
+}
+
+func (h *TagHandler) ChangeTagLevel(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "tag governance service unavailable"})
+		return
+	}
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		Level    string `json:"level"`
+		ParentID *int64 `json:"parent_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	tag, err := h.adminSvc.ChangeLevel(c.Request.Context(), id, req.Level, req.ParentID)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrTagNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
+		case errors.Is(err, service.ErrInvalidHierarchy):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, tag)
+}
+
+func (h *TagHandler) ReparentTag(c *gin.Context) {
+	if h.adminSvc == nil {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "tag governance service unavailable"})
+		return
+	}
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		ParentID *int64 `json:"parent_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	tag, err := h.adminSvc.ReparentTag(c.Request.Context(), id, req.ParentID)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrTagNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
+		case errors.Is(err, service.ErrInvalidHierarchy):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, tag)
 }
 
 func parseIDParam(c *gin.Context, name string) (int64, bool) {

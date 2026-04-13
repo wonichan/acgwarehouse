@@ -111,6 +111,12 @@ func TestTagGovernanceMergeTagsCreatesPendingTagsByDefault(t *testing.T) {
 	if tag.ReviewState != "pending" {
 		t.Fatalf("ReviewState = %q, want pending", tag.ReviewState)
 	}
+	if tag.Level != domain.TagLevelChild {
+		t.Fatalf("Level = %q, want %q", tag.Level, domain.TagLevelChild)
+	}
+	if tag.ParentID != nil {
+		t.Fatalf("ParentID = %v, want nil", tag.ParentID)
+	}
 
 	items, err := imageTagRepo.FindByImageID(context.Background(), 1)
 	if err != nil {
@@ -118,6 +124,33 @@ func TestTagGovernanceMergeTagsCreatesPendingTagsByDefault(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].ReviewState != "pending" {
 		t.Fatalf("unexpected image tag review state: %+v", items)
+	}
+}
+
+func TestTagGovernanceMergeTagsReusesExistingTagsAcrossLevels(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, imageTagRepo := newTagGovernanceServiceForTest(t)
+	root := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "character", Slug: "character", Level: domain.TagLevelRoot, ReviewState: "confirmed"})
+	parent := mustSaveGovernanceTag(t, tagRepo, &domain.Tag{PreferredLabel: "protagonist", Slug: "protagonist", Level: domain.TagLevelParent, ParentID: &root.ID, ReviewState: "confirmed"})
+
+	if err := service.MergeTags(context.Background(), 1, []string{"character", "protagonist"}, 1, 0.9); err != nil {
+		t.Fatalf("MergeTags() error = %v", err)
+	}
+
+	items, err := imageTagRepo.FindByImageID(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("FindByImageID() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("len(items) = %d, want 2", len(items))
+	}
+	seen := map[int64]bool{}
+	for _, item := range items {
+		seen[item.TagID] = true
+	}
+	if !seen[root.ID] || !seen[parent.ID] {
+		t.Fatalf("expected reused root+parent tags, got %+v", items)
 	}
 }
 

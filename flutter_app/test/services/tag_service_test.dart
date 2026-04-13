@@ -221,6 +221,45 @@ void main() {
     });
 
     group('governance contracts', () {
+      test('createTag parses wrapped reused response contract', () async {
+        final responseBody = '''
+        {
+          "id": 101,
+          "reused": true,
+          "tag": {
+            "id": 101,
+            "preferred_label": "anime-girl",
+            "slug": "anime-girl",
+            "review_state": "confirmed",
+            "trust_score": 1.0,
+            "usage_count": 42,
+            "created_at": "2024-01-15T10:30:00Z",
+            "level": "child",
+            "parent_id": 10
+          }
+        }
+        ''';
+
+        when(
+          mockClient.post(
+            any,
+            headers: anyNamed('headers'),
+            body: anyNamed('body'),
+          ),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
+
+        final tag = await tagService.createTag(
+          preferredLabel: 'anime-girl',
+          level: 'child',
+          parentId: 10,
+        );
+
+        expect(tag.id, 101);
+        expect(tag.preferredLabel, 'anime-girl');
+        expect(tag.level, 'child');
+        expect(tag.parentId, 10);
+      });
+
       test('fetchGovernanceTags parses typed governance rows', () async {
         final responseBody = '''
         {
@@ -236,6 +275,10 @@ void main() {
               "rejected_count": 2,
               "ai_count": 28,
               "manual_count": 14,
+              "direct_ai_count": 12,
+              "tree_ai_count": 28,
+              "direct_manual_count": 6,
+              "tree_manual_count": 14,
               "affected_image_count": 42,
               "can_delete": false
             }
@@ -257,11 +300,16 @@ void main() {
         expect(rows.first.aliases, ['animegirl', '2d-girl']);
         expect(rows.first.affectedImageCount, 42);
         expect(rows.first.canDelete, false);
+        expect(rows.first.directAiCount, 12);
+        expect(rows.first.treeAiCount, 28);
+        expect(rows.first.directManualCount, 6);
+        expect(rows.first.treeManualCount, 14);
 
         final captured =
             verify(mockClient.get(captureAny)).captured.single as Uri;
         expect(captured.path, '/api/v1/tags/governance');
         expect(captured.queryParameters['search'], 'anime');
+        expect(captured.queryParameters['limit'], '500');
       });
 
       test('fetchDeletePreview parses delete preview contract', () async {

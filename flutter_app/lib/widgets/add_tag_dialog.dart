@@ -24,16 +24,45 @@ class _AddTagDialogState extends State<AddTagDialog> {
   final ScrollController _scrollController = ScrollController();
   List<Tag> _defaultTags = [];
   List<Tag> _searchResults = [];
+  List<Tag> _parentCandidates = [];
+  String? _selectedLevel;
+  int? _selectedParentId;
   bool _loading = false;
   bool _loadingMore = false;
   bool _isSearchMode = false;
   bool _hasMoreDefaultTags = true;
+  bool _isCreating = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_handleScroll);
     _loadDefaultTags();
+  }
+
+  Future<void> _loadParentCandidates() async {
+    if (_selectedLevel == null || _selectedLevel == 'root') {
+      if (mounted) {
+        setState(() {
+          _parentCandidates = [];
+          _selectedParentId = null;
+        });
+      }
+      return;
+    }
+    try {
+      final candidates = await widget.tagService.getParentCandidates(
+        _selectedLevel!,
+      );
+      if (mounted) {
+        setState(() {
+          _parentCandidates = candidates;
+          _selectedParentId = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load parent candidates: $e');
+    }
   }
 
   @override
@@ -62,14 +91,17 @@ class _AddTagDialogState extends State<AddTagDialog> {
     final displayedTags = _isSearchMode ? _searchResults : _defaultTags;
     final emptyMessage = _isSearchMode ? '未找到匹配标签' : '暂无可选标签';
 
+    final requiresParent = _selectedLevel == 'parent';
+
     return AlertDialog(
       backgroundColor: colorScheme.surfaceContainerHigh,
       title: const Text('添加标签'),
       content: Container(
         width: 400,
-        height: 340,
+        height: 500,
         color: colorScheme.surfaceContainerHigh,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TextField(
               controller: _controller,
@@ -78,6 +110,76 @@ class _AddTagDialogState extends State<AddTagDialog> {
                 prefixIcon: Icon(Icons.search),
               ),
               onChanged: _searchTags,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedLevel,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: '标签层级',
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    hint: const Text('请选择层级'),
+                    items: const [
+                      DropdownMenuItem(value: 'root', child: Text('祖级 (Root)')),
+                      DropdownMenuItem(
+                        value: 'parent',
+                        child: Text('父级 (Parent)'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'child',
+                        child: Text('子级 (Child)'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _selectedLevel = value;
+                          _selectedParentId = null;
+                        });
+                        _loadParentCandidates();
+                      }
+                    },
+                  ),
+                ),
+                if (_selectedLevel == 'parent' ||
+                    _selectedLevel == 'child') ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: DropdownButtonFormField<int?>(
+                      initialValue: _selectedParentId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: '父标签',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      items: [
+                        if (_selectedLevel == 'child')
+                          const DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('无父标签'),
+                          ),
+                        ..._parentCandidates.map(
+                          (tag) => DropdownMenuItem<int?>(
+                            value: tag.id,
+                            child: Text(tag.preferredLabel),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedParentId = value;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -99,8 +201,19 @@ class _AddTagDialogState extends State<AddTagDialog> {
           onPressed: () => Navigator.pop(context),
         ),
         ElevatedButton(
-          child: const Text('创建新标签'),
-          onPressed: () => _createNewTag(_controller.text),
+          onPressed:
+              _isCreating ||
+                  _selectedLevel == null ||
+                  (requiresParent && _selectedParentId == null)
+              ? null
+              : () => _createNewTag(_controller.text),
+          child: _isCreating
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('创建新标签'),
         ),
       ],
     );
@@ -197,23 +310,38 @@ class _AddTagDialogState extends State<AddTagDialog> {
 
   Future<void> _createNewTag(String label) async {
     if (label.trim().isEmpty) {
-      // Return error for empty input
       if (mounted) {
         Navigator.pop(context, {'success': false, 'error': '标签名称不能为空'});
       }
       return;
     }
+
+    if (_selectedLevel == 'parent' && _selectedParentId == null) {
+      if (mounted) {
+        Navigator.pop(context, {'success': false, 'error': '父级标签必须选择祖级父标签'});
+      }
+      return;
+    }
+
+    setState(() {
+      _isCreating = true;
+    });
+
     try {
       await widget.tagService.addImageTag(
         widget.imageId,
         tagLabel: label.trim(),
+        level: _selectedLevel,
+        parentId: _selectedParentId,
       );
       if (mounted) {
         Navigator.pop(context, true);
       }
     } catch (e) {
-      // Return error to caller for display
       if (mounted) {
+        setState(() {
+          _isCreating = false;
+        });
         Navigator.pop(context, {'success': false, 'error': e.toString()});
       }
     }

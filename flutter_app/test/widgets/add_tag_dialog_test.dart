@@ -25,6 +25,12 @@ void main() {
       trustScore: 0.9,
       usageCount: 100 - index,
       createdAt: DateTime.parse('2024-01-01T00:00:00Z'),
+      level: index == 0
+          ? 'parent'
+          : index == 1
+          ? 'child'
+          : null,
+      parentId: index == 1 ? 99 : null,
     ),
   );
 
@@ -51,6 +57,20 @@ void main() {
       trustScore: 0.95,
       usageCount: 120,
       createdAt: DateTime.parse('2024-01-04T00:00:00Z'),
+    ),
+  ];
+
+  final parentCandidates = [
+    Tag(
+      id: 99,
+      preferredLabel: 'characters',
+      slug: 'characters',
+      primaryCategory: 'meta',
+      reviewState: 'confirmed',
+      trustScore: 1,
+      usageCount: 50,
+      createdAt: DateTime.parse('2024-01-05T00:00:00Z'),
+      level: 'root',
     ),
   ];
 
@@ -95,8 +115,13 @@ void main() {
         any(),
         tagId: any(named: 'tagId'),
         tagLabel: any(named: 'tagLabel'),
+        level: any(named: 'level'),
+        parentId: any(named: 'parentId'),
       ),
     ).thenAnswer((_) async => defaultTags.first);
+    when(
+      () => mockTagService.getParentCandidates(any()),
+    ).thenAnswer((_) async => parentCandidates);
   });
 
   group('AddTagDialog', () {
@@ -114,6 +139,7 @@ void main() {
       ).called(1);
       expect(find.text('blue hair'), findsOneWidget);
       expect(find.text('school uniform'), findsOneWidget);
+      expect(find.text('父级'), findsWidgets);
     });
 
     testWidgets(
@@ -164,6 +190,42 @@ void main() {
         () => mockTagService.fetchTags(limit: any(named: 'limit'), offset: 20),
       ).called(1);
       expect(find.text('long hair', skipOffstage: false), findsOneWidget);
+    });
+
+    testWidgets('manual create passes explicit level and parent selection', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createTestWidget());
+
+      await tester.tap(find.text('Open Dialog'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, 'heroine');
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('父级 (Parent)').last);
+      await tester.pumpAndSettle();
+
+      verify(() => mockTagService.getParentCandidates('parent')).called(1);
+
+      await tester.tap(find.byType(DropdownButtonFormField<int?>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('characters').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('创建新标签'));
+      await tester.pumpAndSettle();
+
+      verify(
+        () => mockTagService.addImageTag(
+          123,
+          tagId: any(named: 'tagId'),
+          tagLabel: 'heroine',
+          level: 'parent',
+          parentId: 99,
+        ),
+      ).called(1);
     });
   });
 }
