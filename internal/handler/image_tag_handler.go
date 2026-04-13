@@ -109,7 +109,7 @@ func (h *ImageTagHandler) AddImageTag(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "tag_id or tag_label is required"})
 			return
 		}
-		tag, _, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
+		tag, _, _, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
 			PreferredLabel: label,
 			Level:          req.Level,
 			ParentID:       req.ParentID,
@@ -302,7 +302,7 @@ func (h *ImageTagHandler) MergeImageTag(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "target_tag_id or target_label is required"})
 			return
 		}
-		tag, _, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
+		tag, _, _, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
 			PreferredLabel: label,
 			Level:          req.TargetLevel,
 			ParentID:       req.TargetParentID,

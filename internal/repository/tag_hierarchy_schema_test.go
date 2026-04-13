@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -47,6 +48,56 @@ func TestTagHierarchyEnsureScanSchemaAddsColumnsIdempotently(t *testing.T) {
 	if !hasIndex(t, db, "tags", "idx_tags_parent_id") {
 		t.Fatal("missing idx_tags_parent_id after EnsureScanSchema")
 	}
+	assertTagLevelConstraintRejectsInvalidInsert(t, db)
+}
+
+func TestTagHierarchyEnsureScanSchemaRebuildsLegacyTagsWithLevelConstraint(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "tag-hierarchy-level-check.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	legacyScanSchemaSQL := strings.Replace(scanSchemaSQL, "level TEXT NOT NULL DEFAULT 'child' CHECK(level IN ('root', 'parent', 'child'))", "level TEXT NOT NULL DEFAULT 'child'", 1)
+	if _, err := db.Exec(legacyScanSchemaSQL); err != nil {
+		t.Fatalf("apply legacy scan schema: %v", err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO tags (preferred_label, slug, level, usage_count) VALUES ('legacy invalid', 'legacy-invalid', 'invalid', 0)`); err != nil {
+		t.Fatalf("seed legacy tag: %v", err)
+	}
+
+	if err := EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() first run error = %v", err)
+	}
+	if err := EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() second run error = %v", err)
+	}
+
+	assertTagsTableHasLevelCheckConstraint(t, db)
+
+	var level string
+	if err := db.QueryRow(`SELECT level FROM tags WHERE slug = 'legacy-invalid'`).Scan(&level); err != nil {
+		t.Fatalf("query normalized level: %v", err)
+	}
+	if level != "child" {
+		t.Fatalf("level = %q, want child", level)
+	}
+
+	if !hasIndex(t, db, "tags", "idx_tags_slug") {
+		t.Fatal("missing idx_tags_slug after tags rebuild")
+	}
+	if !hasIndex(t, db, "tags", "idx_tags_category") {
+		t.Fatal("missing idx_tags_category after tags rebuild")
+	}
+	if !hasIndex(t, db, "tags", "idx_tags_parent_id") {
+		t.Fatal("missing idx_tags_parent_id after tags rebuild")
+	}
+
+	assertTagLevelConstraintRejectsInvalidInsert(t, db)
+	assertTagUsageTriggersStillWorkAfterLevelConstraintMigration(t, db)
 }
 
 func TestTagHierarchyMigrationAddsColumnsAndBackfillsExistingRows(t *testing.T) {
@@ -175,4 +226,64 @@ func hasIndex(t *testing.T, db *sql.DB, table, index string) bool {
 	}
 
 	return false
+}
+
+func assertTagsTableHasLevelCheckConstraint(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	var createSQL string
+	if err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tags'`).Scan(&createSQL); err != nil {
+		t.Fatalf("query tags create SQL: %v", err)
+	}
+	if createSQL == "" {
+		t.Fatal("tags create SQL is empty")
+	}
+	if !containsTagLevelCheckConstraint(createSQL) {
+		t.Fatalf("tags create SQL = %q, want level CHECK constraint", createSQL)
+	}
+}
+
+func assertTagLevelConstraintRejectsInvalidInsert(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	assertTagsTableHasLevelCheckConstraint(t, db)
+
+	if _, err := db.Exec(`INSERT INTO tags (preferred_label, slug, level) VALUES ('invalid level', 'invalid-level', 'nope')`); err == nil {
+		t.Fatal("expected invalid tag level insert to fail")
+	}
+}
+
+func assertTagUsageTriggersStillWorkAfterLevelConstraintMigration(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	if _, err := db.Exec(`INSERT INTO images (id, path, filename, source_root) VALUES (1, '/tmp/1.png', '1.png', '/tmp')`); err != nil {
+		t.Fatalf("seed image: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO tags (id, preferred_label, slug, level, usage_count) VALUES (100, 'trigger tag', 'trigger-tag', 'child', 0)`); err != nil {
+		t.Fatalf("seed trigger tag: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO image_tags (image_id, tag_id, source, review_state) VALUES (1, 100, 'manual', 'pending')`); err != nil {
+		t.Fatalf("insert image tag: %v", err)
+	}
+
+	var usageCount int
+	if err := db.QueryRow(`SELECT usage_count FROM tags WHERE id = 100`).Scan(&usageCount); err != nil {
+		t.Fatalf("query usage count: %v", err)
+	}
+	if usageCount != 1 {
+		t.Fatalf("usage_count = %d, want 1", usageCount)
+	}
+}
+
+func containsTagLevelCheckConstraint(createSQL string) bool {
+	return containsNormalizedSQL(createSQL, "CHECK(level IN ('root', 'parent', 'child'))")
+}
+
+func containsNormalizedSQL(sqlText, want string) bool {
+	normalize := func(s string) string {
+		replacer := strings.NewReplacer(" ", "", "\n", "", "\r", "", "\t", "")
+		return strings.ToUpper(replacer.Replace(s))
+	}
+
+	return strings.Contains(normalize(sqlText), normalize(want))
 }

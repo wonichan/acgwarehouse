@@ -146,7 +146,7 @@ func (h *TagHandler) CreateTag(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "preferred_label is required"})
 		return
 	}
-	tag, reused, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
+	tag, reused, actualLevel, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
 		PreferredLabel:  req.PreferredLabel,
 		PrimaryCategory: req.PrimaryCategory,
 		Level:           req.Level,
@@ -162,7 +162,12 @@ func (h *TagHandler) CreateTag(c *gin.Context) {
 		return
 	}
 	if reused {
-		c.JSON(http.StatusOK, gin.H{"id": tag.ID, "reused": true, "tag": tag})
+		response := gin.H{"id": tag.ID, "reused": true, "tag": tag}
+		if req.Level != "" && actualLevel != req.Level {
+			response["requested_level"] = req.Level
+			response["actual_level"] = actualLevel
+		}
+		c.JSON(http.StatusOK, response)
 		return
 	}
 

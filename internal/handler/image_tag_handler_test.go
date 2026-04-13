@@ -365,14 +365,14 @@ func seedImageTagHandlerData(t *testing.T, db *sql.DB) {
 		t.Fatalf("seed images: %v", err)
 	}
 
-	tagRepo := repository.NewTagRepository(db)
 	for _, tag := range []*domain.Tag{
 		{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", Level: domain.TagLevelChild, ReviewState: "confirmed", UsageCount: 10},
 		{ID: 2, PreferredLabel: "sunrise", Slug: "sunrise", Level: domain.TagLevelChild, ReviewState: "pending", UsageCount: 5},
 		{ID: 3, PreferredLabel: "cloud", Slug: "cloud", Level: domain.TagLevelChild, ReviewState: "rejected", UsageCount: 2},
 		{ID: 4, PreferredLabel: "characters", Slug: "characters", Level: domain.TagLevelRoot, ReviewState: "confirmed", UsageCount: 1},
 	} {
-		if err := tagRepo.Save(context.Background(), tag); err != nil {
+		tag.CreatedAt = now
+		if err := insertSeedTag(db, tag); err != nil {
 			t.Fatalf("seed tag %d: %v", tag.ID, err)
 		}
 	}

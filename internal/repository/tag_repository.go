@@ -35,6 +35,7 @@ func NewTagRepository(db *sql.DB) TagRepository {
 	return &tagRepository{db: db}
 }
 
+// Save creates new tags with INSERT and delegates existing tags to Update to avoid replace-triggered cascade deletes.
 func (r *tagRepository) Save(ctx context.Context, tag *domain.Tag) error {
 	if tag.CreatedAt.IsZero() {
 		tag.CreatedAt = time.Now()
@@ -43,21 +44,14 @@ func (r *tagRepository) Save(ctx context.Context, tag *domain.Tag) error {
 		tag.Level = domain.TagLevelChild
 	}
 
-	var (
-		result sql.Result
-		err    error
-	)
 	if tag.ID > 0 {
-		result, err = r.db.ExecContext(ctx, `
-			INSERT OR REPLACE INTO tags (id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, tag.ID, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.CreatedAt)
-	} else {
-		result, err = r.db.ExecContext(ctx, `
-			INSERT OR REPLACE INTO tags (preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.CreatedAt)
+		return r.Update(ctx, tag)
 	}
+
+	result, err := r.db.ExecContext(ctx, `
+		INSERT INTO tags (preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -190,6 +184,7 @@ func (r *tagRepository) FindValidParentCandidates(ctx context.Context, targetLev
 	return scanTags(rows)
 }
 
+// ResolveDescendantIDs returns a map from each requested tagID to a slice containing the tag itself plus all its descendants. The tag's own ID is always included in the result.
 func (r *tagRepository) ResolveDescendantIDs(ctx context.Context, tagIDs []int64) (map[int64][]int64, error) {
 	resolved := make(map[int64][]int64, len(tagIDs))
 	for _, tagID := range tagIDs {
@@ -202,6 +197,7 @@ func (r *tagRepository) ResolveDescendantIDs(ctx context.Context, tagIDs []int64
 	return resolved, nil
 }
 
+// ResolveAllDescendantIDs returns a deduplicated slice containing each requested tag ID plus all of their descendants. Each requested tag's own ID is always included in the result.
 func (r *tagRepository) ResolveAllDescendantIDs(ctx context.Context, tagIDs []int64) ([]int64, error) {
 	resolved, err := r.ResolveDescendantIDs(ctx, tagIDs)
 	if err != nil {
@@ -249,6 +245,7 @@ func (r *tagRepository) Count(ctx context.Context) (int, error) {
 	return count, err
 }
 
+// resolveDescendantIDsForSingle returns a slice containing the requested tagID plus all of its descendants. The tag's own ID is always included in the result.
 func (r *tagRepository) resolveDescendantIDsForSingle(ctx context.Context, tagID int64) ([]int64, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		WITH RECURSIVE descendants(id) AS (

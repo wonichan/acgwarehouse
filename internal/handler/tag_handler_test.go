@@ -773,16 +773,16 @@ func seedTagHandlerData(t *testing.T, db *sql.DB) {
 		t.Fatalf("seed images: %v", err)
 	}
 
-	tagRepo := repository.NewTagRepository(db)
 	for _, tag := range []*domain.Tag{
 		{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", Level: domain.TagLevelChild, PrimaryCategory: "scene", ReviewState: "confirmed", UsageCount: 10},
 		{ID: 2, PreferredLabel: "sunrise", Slug: "sunrise", Level: domain.TagLevelChild, PrimaryCategory: "scene", ReviewState: "pending", UsageCount: 3},
 		{ID: 3, PreferredLabel: "cloud", Slug: "cloud", Level: domain.TagLevelChild, PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 1},
 		{ID: 4, PreferredLabel: "characters", Slug: "characters", Level: domain.TagLevelRoot, PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 2},
-		{ID: 5, PreferredLabel: "heroine child", Slug: "heroine-child", Level: domain.TagLevelChild, ParentID: int64PtrHandler(6), PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 1},
 		{ID: 6, PreferredLabel: "heroine group", Slug: "heroine-group", Level: domain.TagLevelParent, ParentID: int64PtrHandler(4), PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 1},
+		{ID: 5, PreferredLabel: "heroine child", Slug: "heroine-child", Level: domain.TagLevelChild, ParentID: int64PtrHandler(6), PrimaryCategory: "meta", ReviewState: "confirmed", UsageCount: 1},
 	} {
-		if err := tagRepo.Save(context.Background(), tag); err != nil {
+		tag.CreatedAt = now
+		if err := insertSeedTag(db, tag); err != nil {
 			t.Fatalf("seed tag %d: %v", tag.ID, err)
 		}
 	}
@@ -816,4 +816,18 @@ func decodeJSONResponse(t *testing.T, w *httptest.ResponseRecorder, target any) 
 	if err := json.Unmarshal(w.Body.Bytes(), target); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v; body = %s", err, w.Body.String())
 	}
+}
+
+func insertSeedTag(db *sql.DB, tag *domain.Tag) error {
+	if tag.Level == "" {
+		tag.Level = domain.TagLevelChild
+	}
+	if tag.CreatedAt.IsZero() {
+		tag.CreatedAt = time.Now()
+	}
+	_, err := db.Exec(`
+		INSERT INTO tags (id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, tag.ID, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.CreatedAt)
+	return err
 }

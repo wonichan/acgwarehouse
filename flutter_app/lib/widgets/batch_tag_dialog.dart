@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tag.dart';
@@ -21,6 +22,10 @@ class _BatchAddTagDialogState extends State<BatchAddTagDialog> {
   int? _selectedParentId;
   bool _loading = false;
   bool _processing = false;
+  bool _hasSearched = false;
+
+  Timer? _debounceTimer;
+  int _searchVersion = 0;
 
   bool get _requiresParent => _selectedLevel == 'parent';
 
@@ -31,6 +36,7 @@ class _BatchAddTagDialogState extends State<BatchAddTagDialog> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -59,20 +65,33 @@ class _BatchAddTagDialogState extends State<BatchAddTagDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AlertDialog(
       title: Text('添加标签 (${widget.imageIds.length} 张图片)'),
       content: SizedBox(
         width: 400,
-        height: 300,
+        height: 420,
         child: Column(
           children: [
             TextField(
               controller: _controller,
-              decoration: const InputDecoration(
+              autofocus: true,
+              decoration: InputDecoration(
                 hintText: '输入标签名称搜索',
-                prefixIcon: Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _loading
+                    ? const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
               ),
-              onChanged: _searchTags,
+              onChanged: _onSearchChanged,
             ),
             const SizedBox(height: 8),
             Row(
@@ -125,29 +144,8 @@ class _BatchAddTagDialogState extends State<BatchAddTagDialog> {
                 ],
               ],
             ),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: CircularProgressIndicator(),
-              )
-            else if (_suggestions.isNotEmpty)
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _suggestions.length,
-                  itemBuilder: (context, index) {
-                    final tag = _suggestions[index];
-                    return ListTile(
-                      dense: true,
-                      title: Text(tag.preferredLabel),
-                      subtitle: tag.primaryCategory != null
-                          ? Text(tag.primaryCategory!)
-                          : null,
-                      trailing: Text('${tag.usageCount}'),
-                      onTap: _processing ? null : () => _selectTag(tag.id),
-                    );
-                  },
-                ),
-              ),
+            const SizedBox(height: 8),
+            Expanded(child: _buildSuggestionsList(colorScheme)),
             if (_processing)
               const Padding(
                 padding: EdgeInsets.all(8.0),
@@ -185,23 +183,93 @@ class _BatchAddTagDialogState extends State<BatchAddTagDialog> {
     );
   }
 
-  Future<void> _searchTags(String query) async {
-    if (query.isEmpty) {
-      setState(() => _suggestions = []);
+  Widget _buildSuggestionsList(ColorScheme colorScheme) {
+    if (_loading && _suggestions.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_hasSearched && _suggestions.isEmpty) {
+      return Center(
+        child: Text(
+          '未找到匹配标签',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    if (_suggestions.isEmpty) {
+      return Center(
+        child: Text(
+          '输入标签名称以搜索',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListView.builder(
+        itemCount: _suggestions.length,
+        itemBuilder: (context, index) {
+          final tag = _suggestions[index];
+          return ListTile(
+            dense: true,
+            title: Text(tag.preferredLabel),
+            subtitle: tag.primaryCategory != null
+                ? Text(tag.primaryCategory!)
+                : null,
+            trailing: Text('${tag.usageCount}'),
+            onTap: _processing ? null : () => _selectTag(tag.id),
+          );
+        },
+      ),
+    );
+  }
+
+  void _onSearchChanged(String query) {
+    _debounceTimer?.cancel();
+
+    if (query.trim().isEmpty) {
+      setState(() {
+        _suggestions = [];
+        _loading = false;
+        _hasSearched = false;
+      });
       return;
     }
-    setState(() => _loading = true);
+
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _searchTags(query.trim());
+    });
+  }
+
+  Future<void> _searchTags(String query) async {
+    final version = ++_searchVersion;
+    setState(() {
+      _loading = true;
+      _hasSearched = true;
+    });
     final tagService = context.read<TagService>();
     try {
       final tags = await tagService.searchTags(query);
-      if (mounted) {
+      if (mounted && version == _searchVersion) {
         setState(() {
           _suggestions = tags;
           _loading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && version == _searchVersion) {
         setState(() => _loading = false);
       }
     }
@@ -283,53 +351,50 @@ class _BatchRemoveTagDialogState extends State<BatchRemoveTagDialog> {
   List<Tag> _suggestions = [];
   bool _loading = false;
   bool _processing = false;
+  bool _hasSearched = false;
+
+  Timer? _debounceTimer;
+  int _searchVersion = 0;
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AlertDialog(
       title: Text('移除标签 (${widget.imageIds.length} 张图片)'),
       content: SizedBox(
         width: 400,
-        height: 300,
+        height: 420,
         child: Column(
           children: [
             TextField(
               controller: _controller,
-              decoration: const InputDecoration(
+              autofocus: true,
+              decoration: InputDecoration(
                 hintText: '输入标签名称搜索',
-                prefixIcon: Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _loading
+                    ? const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
               ),
-              onChanged: _searchTags,
+              onChanged: _onSearchChanged,
             ),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: CircularProgressIndicator(),
-              )
-            else if (_suggestions.isNotEmpty)
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _suggestions.length,
-                  itemBuilder: (context, index) {
-                    final tag = _suggestions[index];
-                    return ListTile(
-                      dense: true,
-                      title: Text(tag.preferredLabel),
-                      subtitle: tag.primaryCategory != null
-                          ? Text(tag.primaryCategory!)
-                          : null,
-                      trailing: const Icon(Icons.remove_circle_outline),
-                      onTap: _processing ? null : () => _removeTag(tag.id),
-                    );
-                  },
-                ),
-              ),
+            const SizedBox(height: 8),
+            Expanded(child: _buildSuggestionsList(colorScheme)),
             if (_processing)
               const Padding(
                 padding: EdgeInsets.all(8.0),
@@ -358,23 +423,93 @@ class _BatchRemoveTagDialogState extends State<BatchRemoveTagDialog> {
     );
   }
 
-  Future<void> _searchTags(String query) async {
-    if (query.isEmpty) {
-      setState(() => _suggestions = []);
+  Widget _buildSuggestionsList(ColorScheme colorScheme) {
+    if (_loading && _suggestions.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_hasSearched && _suggestions.isEmpty) {
+      return Center(
+        child: Text(
+          '未找到匹配标签',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    if (_suggestions.isEmpty) {
+      return Center(
+        child: Text(
+          '输入标签名称以搜索',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListView.builder(
+        itemCount: _suggestions.length,
+        itemBuilder: (context, index) {
+          final tag = _suggestions[index];
+          return ListTile(
+            dense: true,
+            title: Text(tag.preferredLabel),
+            subtitle: tag.primaryCategory != null
+                ? Text(tag.primaryCategory!)
+                : null,
+            trailing: const Icon(Icons.remove_circle_outline),
+            onTap: _processing ? null : () => _removeTag(tag.id),
+          );
+        },
+      ),
+    );
+  }
+
+  void _onSearchChanged(String query) {
+    _debounceTimer?.cancel();
+
+    if (query.trim().isEmpty) {
+      setState(() {
+        _suggestions = [];
+        _loading = false;
+        _hasSearched = false;
+      });
       return;
     }
-    setState(() => _loading = true);
+
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _searchTags(query.trim());
+    });
+  }
+
+  Future<void> _searchTags(String query) async {
+    final version = ++_searchVersion;
+    setState(() {
+      _loading = true;
+      _hasSearched = true;
+    });
     final tagService = context.read<TagService>();
     try {
       final tags = await tagService.searchTags(query);
-      if (mounted) {
+      if (mounted && version == _searchVersion) {
         setState(() {
           _suggestions = tags;
           _loading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && version == _searchVersion) {
         setState(() => _loading = false);
       }
     }

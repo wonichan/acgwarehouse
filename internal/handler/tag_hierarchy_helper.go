@@ -19,18 +19,18 @@ type manualTagCreateInput struct {
 	ReviewState     string
 }
 
-func resolveOrCreateManualTag(ctx context.Context, tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, input manualTagCreateInput) (*domain.Tag, bool, error) {
+func resolveOrCreateManualTag(ctx context.Context, tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, input manualTagCreateInput) (*domain.Tag, bool, string, error) {
 	label := strings.TrimSpace(input.PreferredLabel)
 	if label == "" {
-		return nil, false, service.ErrInvalidHierarchy
+		return nil, false, "", service.ErrInvalidHierarchy
 	}
 
 	existing, err := tagRepo.FindByLabel(ctx, label)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, false, err
+		return nil, false, "", err
 	}
 	if existing != nil {
-		return existing, true, nil
+		return existing, true, existing.Level, nil
 	}
 
 	if aliasRepo != nil {
@@ -38,21 +38,21 @@ func resolveOrCreateManualTag(ctx context.Context, tagRepo repository.TagReposit
 		if aliasErr == nil {
 			tag, findErr := tagRepo.FindByID(ctx, alias.TagID)
 			if findErr != nil {
-				return nil, false, findErr
+				return nil, false, "", findErr
 			}
-			return tag, true, nil
+			return tag, true, tag.Level, nil
 		}
 		if !errors.Is(aliasErr, sql.ErrNoRows) {
-			return nil, false, aliasErr
+			return nil, false, "", aliasErr
 		}
 	}
 
 	level := strings.TrimSpace(input.Level)
 	if level == "" {
-		return nil, false, service.ErrInvalidHierarchy
+		return nil, false, "", service.ErrInvalidHierarchy
 	}
 	if err := validateManualTagHierarchy(ctx, tagRepo, level, input.ParentID); err != nil {
-		return nil, false, err
+		return nil, false, "", err
 	}
 
 	tag := &domain.Tag{
@@ -67,9 +67,9 @@ func resolveOrCreateManualTag(ctx context.Context, tagRepo repository.TagReposit
 		tag.ReviewState = "confirmed"
 	}
 	if err := tagRepo.Save(ctx, tag); err != nil {
-		return nil, false, err
+		return nil, false, "", err
 	}
-	return tag, false, nil
+	return tag, false, tag.Level, nil
 }
 
 func validateManualTagHierarchy(ctx context.Context, tagRepo repository.TagRepository, level string, parentID *int64) error {

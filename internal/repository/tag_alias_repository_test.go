@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
@@ -89,19 +90,19 @@ func newAliasRepositoryForTest(t *testing.T) (TagAliasRepository, TagRepository)
 	}
 
 	tagRepo := NewTagRepository(db)
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky"}); err != nil {
+	if err := insertSeedTag(db, &domain.Tag{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky"}); err != nil {
 		t.Fatalf("seed tag 1: %v", err)
 	}
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 2, PreferredLabel: "rain night", Slug: "rain-night"}); err != nil {
+	if err := insertSeedTag(db, &domain.Tag{ID: 2, PreferredLabel: "rain night", Slug: "rain-night"}); err != nil {
 		t.Fatalf("seed tag 2: %v", err)
 	}
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 3, PreferredLabel: "sunrise", Slug: "sunrise"}); err != nil {
+	if err := insertSeedTag(db, &domain.Tag{ID: 3, PreferredLabel: "sunrise", Slug: "sunrise"}); err != nil {
 		t.Fatalf("seed tag 3: %v", err)
 	}
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 4, PreferredLabel: "night rain", Slug: "night-rain"}); err != nil {
+	if err := insertSeedTag(db, &domain.Tag{ID: 4, PreferredLabel: "night rain", Slug: "night-rain"}); err != nil {
 		t.Fatalf("seed tag 4: %v", err)
 	}
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 5, PreferredLabel: "soft light", Slug: "soft-light"}); err != nil {
+	if err := insertSeedTag(db, &domain.Tag{ID: 5, PreferredLabel: "soft light", Slug: "soft-light"}); err != nil {
 		t.Fatalf("seed tag 5: %v", err)
 	}
 
@@ -116,4 +117,18 @@ func mustSaveAlias(t *testing.T, repo TagAliasRepository, alias *domain.TagAlias
 	}
 
 	return alias
+}
+
+func insertSeedTag(db *sql.DB, tag *domain.Tag) error {
+	if tag.Level == "" {
+		tag.Level = domain.TagLevelChild
+	}
+	if tag.CreatedAt.IsZero() {
+		tag.CreatedAt = time.Now()
+	}
+	_, err := db.Exec(`
+		INSERT INTO tags (id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, tag.ID, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.CreatedAt)
+	return err
 }

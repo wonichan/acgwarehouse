@@ -297,6 +297,70 @@ func TestTagAdminServiceGetTagTreeBuildsHierarchy(t *testing.T) {
 	}
 }
 
+func TestTagAdminServiceBatchResolveDescendantsReturnsSelfAndDescendants(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	result, err := service.batchResolveDescendants(context.Background(), []int64{4, 6})
+	if err != nil {
+		t.Fatalf("batchResolveDescendants() error = %v", err)
+	}
+
+	assertSameInt64Set(t, result[4], []int64{4, 5})
+	assertSameInt64Set(t, result[6], []int64{4, 5, 6, 7})
+}
+
+func TestTagAdminServiceBatchComputeHierarchyStatsPreservesDistinctImageCounts(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, imageTagRepo := newTagAdminServiceForTest(t)
+	if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: 4, Source: domain.ImageTagSourceAI, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("seed overlapping hierarchy image tag: %v", err)
+	}
+
+	descendants, err := service.batchResolveDescendants(context.Background(), []int64{1, 4, 6})
+	if err != nil {
+		t.Fatalf("batchResolveDescendants() error = %v", err)
+	}
+
+	stats, err := service.batchComputeHierarchyStats(context.Background(), descendants)
+	if err != nil {
+		t.Fatalf("batchComputeHierarchyStats() error = %v", err)
+	}
+
+	if stats[1].DirectUsageCount != 2 || stats[1].TreeUsageCount != 2 {
+		t.Fatalf("tag 1 usage counts = %+v, want direct=2 tree=2", *stats[1])
+	}
+	if stats[4].DirectUsageCount != 1 || stats[4].TreeUsageCount != 1 {
+		t.Fatalf("tag 4 usage counts = %+v, want direct=1 tree=1", *stats[4])
+	}
+	if stats[6].DirectUsageCount != 0 || stats[6].TreeUsageCount != 1 {
+		t.Fatalf("tag 6 usage counts = %+v, want direct=0 tree=1", *stats[6])
+	}
+	if stats[6].TreeConfirmedCount != 1 || stats[6].TreeAICount != 1 || stats[6].TreeManualCount != 1 {
+		t.Fatalf("tag 6 tree counts = %+v, want confirmed=1 ai=1 manual=1", *stats[6])
+	}
+}
+
+func TestTagAdminServiceBatchFindChildrenGroupsChildrenByParent(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+
+	childrenMap, err := service.batchFindChildren(context.Background(), []int64{4, 6})
+	if err != nil {
+		t.Fatalf("batchFindChildren() error = %v", err)
+	}
+
+	if len(childrenMap[4]) != 1 || childrenMap[4][0].ID != 5 {
+		t.Fatalf("childrenMap[4] = %+v, want only child 5", childrenMap[4])
+	}
+	if len(childrenMap[6]) != 2 || childrenMap[6][0].ID != 4 || childrenMap[6][1].ID != 7 {
+		t.Fatalf("childrenMap[6] = %+v, want children 4 and 7", childrenMap[6])
+	}
+}
+
 func TestTagAdminServiceChangeLevelUpdatesHierarchy(t *testing.T) {
 	t.Parallel()
 
@@ -456,17 +520,17 @@ func seedTagAdminData(t *testing.T, db *sql.DB) {
 		t.Fatalf("seed images: %v", err)
 	}
 
-	tagRepo := repository.NewTagRepository(db)
 	for _, tag := range []*domain.Tag{
 		{ID: 1, PreferredLabel: "alpha-source", Slug: "alpha-source", Level: domain.TagLevelChild, PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 7},
 		{ID: 2, PreferredLabel: "alpha-target", Slug: "alpha-target", Level: domain.TagLevelChild, PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 4},
 		{ID: 3, PreferredLabel: "unused", Slug: "unused", Level: domain.TagLevelChild, PrimaryCategory: "meta", ReviewState: "pending", UsageCount: 0},
+		{ID: 6, PreferredLabel: "franchise", Slug: "franchise", Level: domain.TagLevelRoot, PrimaryCategory: "copyright", ReviewState: "confirmed", UsageCount: 1},
 		{ID: 4, PreferredLabel: "characters", Slug: "characters", Level: domain.TagLevelParent, ParentID: int64Ptr(6), PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 1},
 		{ID: 5, PreferredLabel: "heroine", Slug: "heroine", Level: domain.TagLevelChild, ParentID: int64Ptr(4), PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 1},
-		{ID: 6, PreferredLabel: "franchise", Slug: "franchise", Level: domain.TagLevelRoot, PrimaryCategory: "copyright", ReviewState: "confirmed", UsageCount: 1},
 		{ID: 7, PreferredLabel: "outfit", Slug: "outfit", Level: domain.TagLevelParent, ParentID: int64Ptr(6), PrimaryCategory: "artist", ReviewState: "confirmed", UsageCount: 0},
 	} {
-		if err := tagRepo.Save(context.Background(), tag); err != nil {
+		tag.CreatedAt = now
+		if err := insertSeedTag(db, tag); err != nil {
 			t.Fatalf("seed tag %d: %v", tag.ID, err)
 		}
 	}
@@ -497,10 +561,48 @@ func int64Ptr(v int64) *int64 {
 	return &v
 }
 
+func assertSameInt64Set(t *testing.T, got, want []int64) {
+	t.Helper()
+
+	if len(got) != len(want) {
+		t.Fatalf("len(got) = %d, want %d (got=%v want=%v)", len(got), len(want), got, want)
+	}
+
+	seen := make(map[int64]int, len(got))
+	for _, id := range got {
+		seen[id]++
+	}
+	for _, id := range want {
+		if seen[id] == 0 {
+			t.Fatalf("missing id %d in %v", id, got)
+		}
+		seen[id]--
+	}
+	for id, remaining := range seen {
+		if remaining != 0 {
+			t.Fatalf("unexpected id %d in %v", id, got)
+		}
+	}
+}
+
 func mustSaveAdminTag(t *testing.T, repo repository.TagRepository, tag *domain.Tag) *domain.Tag {
 	t.Helper()
 	if err := repo.Save(context.Background(), tag); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
 	return tag
+}
+
+func insertSeedTag(db *sql.DB, tag *domain.Tag) error {
+	if tag.Level == "" {
+		tag.Level = domain.TagLevelChild
+	}
+	if tag.CreatedAt.IsZero() {
+		tag.CreatedAt = time.Now()
+	}
+	_, err := db.Exec(`
+		INSERT INTO tags (id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, tag.ID, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.CreatedAt)
+	return err
 }

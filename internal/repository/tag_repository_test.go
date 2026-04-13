@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
@@ -55,6 +56,80 @@ func TestTagRepositorySavePersistsHierarchyFields(t *testing.T) {
 	}
 	if tag.Level != domain.TagLevelChild {
 		t.Fatalf("tag.Level = %q, want %q", tag.Level, domain.TagLevelChild)
+	}
+}
+
+func TestTagRepositorySaveUpdatesExistingTagWithoutReplacingAssociations(t *testing.T) {
+	t.Parallel()
+
+	repo, db := newTagRepositoryWithDBForTest(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	if _, err := db.Exec(`
+		INSERT INTO images (id, path, filename, source_root, file_size, width, height, format, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, 1, "/images/1.png", "1.png", "/images", 100, 100, 100, "png", now, now); err != nil {
+		t.Fatalf("seed image: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO tags (id, preferred_label, slug, level, primary_category, review_state, trust_score, usage_count, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, 10, "blue sky", "blue-sky", domain.TagLevelChild, "", "confirmed", 0.9, 1, now); err != nil {
+		t.Fatalf("seed tag: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO tag_aliases (tag_id, label, normalized_label, alias_type)
+		VALUES (?, ?, ?, ?)
+	`, 10, "azure sky", "azure sky", "synonym"); err != nil {
+		t.Fatalf("seed alias: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO image_tags (image_id, tag_id, review_state)
+		VALUES (?, ?, ?)
+	`, 1, 10, "confirmed"); err != nil {
+		t.Fatalf("seed image tag: %v", err)
+	}
+
+	tag, err := repo.FindByID(ctx, 10)
+	if err != nil {
+		t.Fatalf("FindByID() before save error = %v", err)
+	}
+	tag.PreferredLabel = "blue sky updated"
+	tag.Slug = "blue-sky-updated"
+
+	if err := repo.Save(ctx, tag); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	stored, err := repo.FindByID(ctx, 10)
+	if err != nil {
+		t.Fatalf("FindByID() after save error = %v", err)
+	}
+	if stored.PreferredLabel != "blue sky updated" {
+		t.Fatalf("PreferredLabel = %q, want %q", stored.PreferredLabel, "blue sky updated")
+	}
+	if stored.Slug != "blue-sky-updated" {
+		t.Fatalf("Slug = %q, want %q", stored.Slug, "blue-sky-updated")
+	}
+	if stored.UsageCount != 2 {
+		t.Fatalf("UsageCount = %d, want 2", stored.UsageCount)
+	}
+
+	var aliasCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tag_aliases WHERE tag_id = ?`, 10).Scan(&aliasCount); err != nil {
+		t.Fatalf("count aliases: %v", err)
+	}
+	if aliasCount != 1 {
+		t.Fatalf("alias count = %d, want 1", aliasCount)
+	}
+
+	var imageTagCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM image_tags WHERE image_id = ? AND tag_id = ?`, 1, 10).Scan(&imageTagCount); err != nil {
+		t.Fatalf("count image tags: %v", err)
+	}
+	if imageTagCount != 1 {
+		t.Fatalf("image_tag count = %d, want 1", imageTagCount)
 	}
 }
 
@@ -244,6 +319,13 @@ func TestTagRepositoryResolveDescendantIDsReturnsSelfAndDescendants(t *testing.T
 func newTagRepositoryForTest(t *testing.T) TagRepository {
 	t.Helper()
 
+	repo, _ := newTagRepositoryWithDBForTest(t)
+	return repo
+}
+
+func newTagRepositoryWithDBForTest(t *testing.T) (TagRepository, *sql.DB) {
+	t.Helper()
+
 	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "tag-repo.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -254,7 +336,7 @@ func newTagRepositoryForTest(t *testing.T) TagRepository {
 		t.Fatalf("EnsureScanSchema() error = %v", err)
 	}
 
-	return NewTagRepository(db)
+	return NewTagRepository(db), db
 }
 
 func mustSaveTag(t *testing.T, repo TagRepository, tag *domain.Tag) *domain.Tag {

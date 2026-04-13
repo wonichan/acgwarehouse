@@ -154,15 +154,14 @@ func mustSeedImageTagData(t *testing.T, db *sql.DB) {
 		t.Fatalf("seed images: %v", err)
 	}
 
-	tagRepo := NewTagRepository(db)
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", UsageCount: 5}); err != nil {
+	if err := insertSeedTag(db, &domain.Tag{ID: 1, PreferredLabel: "blue sky", Slug: "blue-sky", UsageCount: 5}); err != nil {
 		t.Fatalf("seed tag 1: %v", err)
 	}
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 2, PreferredLabel: "rain night", Slug: "rain-night", UsageCount: 9}); err != nil {
+	if err := insertSeedTag(db, &domain.Tag{ID: 2, PreferredLabel: "rain night", Slug: "rain-night", UsageCount: 9}); err != nil {
 		t.Fatalf("seed tag 2: %v", err)
 	}
 	// Add tag 3 for merge tests
-	if err := tagRepo.Save(context.Background(), &domain.Tag{ID: 3, PreferredLabel: "sunset", Slug: "sunset", ReviewState: "confirmed"}); err != nil {
+	if err := insertSeedTag(db, &domain.Tag{ID: 3, PreferredLabel: "sunset", Slug: "sunset", ReviewState: "confirmed"}); err != nil {
 		t.Fatalf("seed tag 3: %v", err)
 	}
 
@@ -312,20 +311,4 @@ func TestImageTagRepositorySaveDefaultsSourceToManual(t *testing.T) {
 	if items[0].Source != domain.ImageTagSourceManual {
 		t.Fatalf("items[0].Source = %q, want %q", items[0].Source, domain.ImageTagSourceManual)
 	}
-}
-
-// getDBFromRepo extracts the underlying db from the repository test setup
-func getDBFromRepo(t *testing.T, repo ImageTagRepository) *sql.DB {
-	t.Helper()
-	// We need to recreate the db access for additional seeding
-	// This is a test helper, so we open a new connection
-	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "extra-tag.db"))
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if err := EnsureScanSchema(db); err != nil {
-		t.Fatalf("EnsureScanSchema() error = %v", err)
-	}
-	return db
 }

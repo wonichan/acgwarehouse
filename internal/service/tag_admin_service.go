@@ -103,6 +103,20 @@ type hierarchyStats struct {
 	ManualCount    int64
 }
 
+type hierarchyStatsResult struct {
+	DirectUsageCount     int64
+	DirectPendingCount   int64
+	DirectConfirmedCount int64
+	DirectAICount        int64
+	DirectManualCount    int64
+	TreeUsageCount       int64
+	TreePendingCount     int64
+	TreeConfirmedCount   int64
+	TreeAICount          int64
+	TreeManualCount      int64
+	DirectRejectedCount  int64
+}
+
 func NewTagAdminService(db *sql.DB, tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository) *TagAdminService {
 	return &TagAdminService{
 		db:           db,
@@ -126,38 +140,49 @@ func (s *TagAdminService) ListGovernanceTags(ctx context.Context, search string,
 		return nil, 0, err
 	}
 
+	if len(tags) == 0 {
+		return []TagGovernanceRow{}, total, nil
+	}
+
+	tagIDs := make([]int64, len(tags))
+	for i, t := range tags {
+		tagIDs[i] = t.ID
+	}
+
+	descMap, err := s.batchResolveDescendants(ctx, tagIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	statsMap, err := s.batchComputeHierarchyStats(ctx, descMap)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	childrenMap, err := s.batchFindChildren(ctx, tagIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	directAssocMap, err := s.batchCountDirectAssociations(ctx, tagIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	rows := make([]TagGovernanceRow, 0, len(tags))
 	for _, tag := range tags {
-		aliases, err := s.aliasRepo.FindByTagID(ctx, tag.ID)
-		if err != nil {
-			return nil, 0, err
+		aliases, aliasErr := s.aliasRepo.FindByTagID(ctx, tag.ID)
+		if aliasErr != nil {
+			return nil, 0, aliasErr
 		}
-
-		directStats, err := s.computeHierarchyStats(ctx, []int64{tag.ID})
-		if err != nil {
-			return nil, 0, err
-		}
-		treeTagIDs, err := s.tagRepo.ResolveAllDescendantIDs(ctx, []int64{tag.ID})
-		if err != nil {
-			return nil, 0, err
-		}
-		treeStats, err := s.computeHierarchyStats(ctx, treeTagIDs)
-		if err != nil {
-			return nil, 0, err
-		}
-		children, err := s.tagRepo.FindChildrenByParent(ctx, tag.ID)
-		if err != nil {
-			return nil, 0, err
-		}
-		directAssociationCount, err := s.countDirectAssociations(ctx, tag.ID)
-		if err != nil {
-			return nil, 0, err
-		}
-
 		aliasLabels := make([]string, 0, len(aliases))
 		for _, alias := range aliases {
 			aliasLabels = append(aliasLabels, alias.Label)
 		}
+
+		stats := statsMap[tag.ID]
+		children := childrenMap[tag.ID]
+		directAssoc := directAssocMap[tag.ID]
 
 		row := TagGovernanceRow{
 			TagID:                tag.ID,
@@ -166,24 +191,24 @@ func (s *TagAdminService) ListGovernanceTags(ctx context.Context, search string,
 			ParentID:             tag.ParentID,
 			PrimaryCategory:      tag.PrimaryCategory,
 			Aliases:              aliasLabels,
-			UsageCount:           directStats.UsageCount,
-			DirectUsageCount:     directStats.UsageCount,
-			TreeUsageCount:       treeStats.UsageCount,
-			PendingCount:         directStats.PendingCount,
-			DirectPendingCount:   directStats.PendingCount,
-			TreePendingCount:     treeStats.PendingCount,
-			ConfirmedCount:       directStats.ConfirmedCount,
-			DirectConfirmedCount: directStats.ConfirmedCount,
-			TreeConfirmedCount:   treeStats.ConfirmedCount,
-			RejectedCount:        directStats.RejectedCount,
-			AICount:              directStats.AICount,
-			DirectAICount:        directStats.AICount,
-			TreeAICount:          treeStats.AICount,
-			ManualCount:          directStats.ManualCount,
-			DirectManualCount:    directStats.ManualCount,
-			TreeManualCount:      treeStats.ManualCount,
-			AffectedImageCount:   directAssociationCount,
-			CanDelete:            directAssociationCount == 0 && len(children) == 0,
+			UsageCount:           stats.DirectUsageCount,
+			DirectUsageCount:     stats.DirectUsageCount,
+			TreeUsageCount:       stats.TreeUsageCount,
+			PendingCount:         stats.DirectPendingCount,
+			DirectPendingCount:   stats.DirectPendingCount,
+			TreePendingCount:     stats.TreePendingCount,
+			ConfirmedCount:       stats.DirectConfirmedCount,
+			DirectConfirmedCount: stats.DirectConfirmedCount,
+			TreeConfirmedCount:   stats.TreeConfirmedCount,
+			RejectedCount:        stats.DirectRejectedCount,
+			AICount:              stats.DirectAICount,
+			DirectAICount:        stats.DirectAICount,
+			TreeAICount:          stats.TreeAICount,
+			ManualCount:          stats.DirectManualCount,
+			DirectManualCount:    stats.DirectManualCount,
+			TreeManualCount:      stats.TreeManualCount,
+			AffectedImageCount:   directAssoc,
+			CanDelete:            directAssoc == 0 && len(children) == 0,
 		}
 		rows = append(rows, row)
 	}
@@ -383,25 +408,37 @@ func (s *TagAdminService) GetTagTree(ctx context.Context) ([]TagTreeNode, error)
 		return nil, err
 	}
 
+	if len(tags) == 0 {
+		return []TagTreeNode{}, nil
+	}
+
+	tagIDs := make([]int64, len(tags))
+	for i, t := range tags {
+		tagIDs[i] = t.ID
+	}
+
+	descMap, err := s.batchResolveDescendants(ctx, tagIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	statsMap, err := s.batchComputeHierarchyStats(ctx, descMap)
+	if err != nil {
+		return nil, err
+	}
+
 	nodes := make(map[int64]*TagTreeNode, len(tags))
 	childrenByParent := make(map[int64][]*TagTreeNode)
 	roots := make([]*TagTreeNode, 0)
 	for _, tag := range tags {
-		treeTagIDs, err := s.tagRepo.ResolveAllDescendantIDs(ctx, []int64{tag.ID})
-		if err != nil {
-			return nil, err
-		}
-		treeStats, err := s.computeHierarchyStats(ctx, treeTagIDs)
-		if err != nil {
-			return nil, err
-		}
+		treeStats := statsMap[tag.ID]
 		node := &TagTreeNode{
 			TagID:          tag.ID,
 			PreferredLabel: tag.PreferredLabel,
 			Level:          tag.Level,
 			ParentID:       tag.ParentID,
 			UsageCount:     int64(tag.UsageCount),
-			TreeUsageCount: treeStats.UsageCount,
+			TreeUsageCount: treeStats.TreeUsageCount,
 			Children:       []TagTreeNode{},
 		}
 		nodes[tag.ID] = node
@@ -412,8 +449,7 @@ func (s *TagAdminService) GetTagTree(ctx context.Context) ([]TagTreeNode, error)
 		childrenByParent[*tag.ParentID] = append(childrenByParent[*tag.ParentID], node)
 	}
 
-	for id, node := range nodes {
-		_ = node
+	for id := range nodes {
 		children := childrenByParent[id]
 		sort.Slice(children, func(i, j int) bool {
 			if children[i].UsageCount == children[j].UsageCount {
@@ -492,6 +528,10 @@ func (s *TagAdminService) ChangeLevel(ctx context.Context, tagID int64, targetLe
 	`, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.ID); err != nil {
 		return nil, err
 	}
+	// When a parent-level tag is promoted to root, its direct children must be detached.
+	// In the 3-level hierarchy model (root → parent → child), a parent tag can only have
+	// child-level tags as direct children. Child-level tags cannot have their own children,
+	// so detaching the direct children is sufficient — there are no grandchildren to handle.
 	if tag.Level == domain.TagLevelRoot && len(children) > 0 {
 		for _, child := range children {
 			child.ParentID = nil
@@ -524,11 +564,50 @@ func (s *TagAdminService) ReparentTag(ctx context.Context, tagID int64, parentID
 	if err := s.validateHierarchyAssignment(ctx, tag.ID, tag.Level, parentID); err != nil {
 		return nil, err
 	}
+	// Defensive cycle detection: reject if the proposed parent is a descendant of this tag.
+	if parentID != nil {
+		isDesc, err := s.isDescendantOf(ctx, *parentID, tag.ID)
+		if err != nil {
+			return nil, err
+		}
+		if isDesc {
+			return nil, ErrInvalidHierarchy
+		}
+	}
 	tag.ParentID = parentID
-	if err := s.tagRepo.Update(ctx, tag); err != nil {
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE tags
+		SET preferred_label = ?, slug = ?, level = ?, parent_id = ?, primary_category = ?, review_state = ?, trust_score = ?, usage_count = ?
+		WHERE id = ?
+	`, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return tag, nil
+}
+
+// isDescendantOf checks whether potentialDescendantID is in the descendant tree of ancestorID.
+// Returns true if potentialDescendantID is a descendant of (or equal to) ancestorID.
+func (s *TagAdminService) isDescendantOf(ctx context.Context, potentialDescendantID, ancestorID int64) (bool, error) {
+	descendants, err := s.tagRepo.ResolveAllDescendantIDs(ctx, []int64{ancestorID})
+	if err != nil {
+		return false, err
+	}
+	for _, id := range descendants {
+		if id == potentialDescendantID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *TagAdminService) deleteUnusedTag(ctx context.Context, tagID int64) error {
@@ -648,6 +727,307 @@ func (s *TagAdminService) computeHierarchyStats(ctx context.Context, tagIDs []in
 	}
 
 	return stats, nil
+}
+
+func (s *TagAdminService) batchResolveDescendants(ctx context.Context, tagIDs []int64) (map[int64][]int64, error) {
+	result := make(map[int64][]int64, len(tagIDs))
+	if len(tagIDs) == 0 {
+		return result, nil
+	}
+	for _, id := range tagIDs {
+		result[id] = []int64{}
+	}
+
+	placeholders := make([]string, len(tagIDs))
+	args := make([]any, len(tagIDs))
+	for i, id := range tagIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		WITH RECURSIVE descs(ancestor_id, descendant_id) AS (
+			SELECT id AS ancestor_id, id AS descendant_id
+			FROM tags
+			WHERE id IN (%s)
+			UNION ALL
+			SELECT d.ancestor_id, t.id
+			FROM descs d
+			JOIN tags t ON t.parent_id = d.descendant_id
+		)
+		SELECT ancestor_id, descendant_id
+		FROM descs
+		ORDER BY ancestor_id, descendant_id
+	`, strings.Join(placeholders, ", "))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ancestorID, descendantID int64
+		if err := rows.Scan(&ancestorID, &descendantID); err != nil {
+			return nil, err
+		}
+		result[ancestorID] = append(result[ancestorID], descendantID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s *TagAdminService) batchComputeHierarchyStats(ctx context.Context, descMap map[int64][]int64) (map[int64]*hierarchyStatsResult, error) {
+	result := make(map[int64]*hierarchyStatsResult, len(descMap))
+	if len(descMap) == 0 {
+		return result, nil
+	}
+
+	ancestorIDs := make([]int64, 0, len(descMap))
+	uniqueDescendants := make(map[int64]struct{})
+	descendantToAncestors := make(map[int64][]int64)
+	for ancestorID, descendants := range descMap {
+		result[ancestorID] = &hierarchyStatsResult{}
+		ancestorIDs = append(ancestorIDs, ancestorID)
+		for _, descendantID := range descendants {
+			uniqueDescendants[descendantID] = struct{}{}
+			descendantToAncestors[descendantID] = append(descendantToAncestors[descendantID], ancestorID)
+		}
+	}
+	sort.Slice(ancestorIDs, func(i, j int) bool { return ancestorIDs[i] < ancestorIDs[j] })
+
+	if err := s.batchLoadDirectHierarchyStats(ctx, ancestorIDs, result); err != nil {
+		return nil, err
+	}
+	if err := s.batchLoadTreeHierarchyStats(ctx, uniqueDescendants, descendantToAncestors, result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s *TagAdminService) batchFindChildren(ctx context.Context, tagIDs []int64) (map[int64][]*domain.Tag, error) {
+	result := make(map[int64][]*domain.Tag, len(tagIDs))
+	if len(tagIDs) == 0 {
+		return result, nil
+	}
+	for _, id := range tagIDs {
+		result[id] = []*domain.Tag{}
+	}
+
+	placeholders := make([]string, len(tagIDs))
+	args := make([]any, len(tagIDs))
+	for i, id := range tagIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(`
+		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
+		FROM tags
+		WHERE parent_id IN (%s)
+		ORDER BY usage_count DESC, id ASC
+	`, strings.Join(placeholders, ", "))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		tag := &domain.Tag{}
+		if err := rows.Scan(&tag.ID, &tag.PreferredLabel, &tag.Slug, &tag.Level, &tag.ParentID, &tag.PrimaryCategory, &tag.ReviewState, &tag.TrustScore, &tag.UsageCount, &tag.CreatedAt); err != nil {
+			return nil, err
+		}
+		if tag.ParentID != nil {
+			result[*tag.ParentID] = append(result[*tag.ParentID], tag)
+		}
+	}
+	return result, rows.Err()
+}
+
+func (s *TagAdminService) batchLoadDirectHierarchyStats(ctx context.Context, tagIDs []int64, result map[int64]*hierarchyStatsResult) error {
+	if len(tagIDs) == 0 {
+		return nil
+	}
+
+	placeholders := make([]string, len(tagIDs))
+	args := make([]any, len(tagIDs))
+	for i, id := range tagIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			tag_id,
+			COUNT(DISTINCT CASE WHEN review_state != 'rejected' THEN image_id END) AS usage_count,
+			COUNT(DISTINCT CASE WHEN review_state = 'pending' THEN image_id END) AS pending_count,
+			COUNT(DISTINCT CASE WHEN review_state = 'confirmed' THEN image_id END) AS confirmed_count,
+			COUNT(DISTINCT CASE WHEN review_state = 'rejected' THEN image_id END) AS rejected_count,
+			COUNT(DISTINCT CASE WHEN source = 'ai' AND review_state != 'rejected' THEN image_id END) AS ai_count,
+			COUNT(DISTINCT CASE WHEN COALESCE(source, 'manual') != 'ai' AND review_state != 'rejected' THEN image_id END) AS manual_count
+		FROM image_tags
+		WHERE tag_id IN (%s)
+		GROUP BY tag_id
+	`, strings.Join(placeholders, ", "))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tagID int64
+		var directUsage, directPending, directConfirmed, directRejected, directAI, directManual int64
+		if err := rows.Scan(&tagID, &directUsage, &directPending, &directConfirmed, &directRejected, &directAI, &directManual); err != nil {
+			return err
+		}
+		entry := result[tagID]
+		entry.DirectUsageCount = directUsage
+		entry.DirectPendingCount = directPending
+		entry.DirectConfirmedCount = directConfirmed
+		entry.DirectRejectedCount = directRejected
+		entry.DirectAICount = directAI
+		entry.DirectManualCount = directManual
+	}
+
+	return rows.Err()
+}
+
+func (s *TagAdminService) batchLoadTreeHierarchyStats(ctx context.Context, uniqueDescendants map[int64]struct{}, descendantToAncestors map[int64][]int64, result map[int64]*hierarchyStatsResult) error {
+	if len(uniqueDescendants) == 0 {
+		return nil
+	}
+
+	descendantIDs := make([]int64, 0, len(uniqueDescendants))
+	for id := range uniqueDescendants {
+		descendantIDs = append(descendantIDs, id)
+	}
+	sort.Slice(descendantIDs, func(i, j int) bool { return descendantIDs[i] < descendantIDs[j] })
+
+	placeholders := make([]string, len(descendantIDs))
+	args := make([]any, len(descendantIDs))
+	for i, id := range descendantIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT tag_id, image_id, review_state, COALESCE(source, 'manual')
+		FROM image_tags
+		WHERE tag_id IN (%s)
+	`, strings.Join(placeholders, ", "))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type imageSet map[int64]struct{}
+	type aggregateSets struct {
+		usage     imageSet
+		pending   imageSet
+		confirmed imageSet
+		ai        imageSet
+		manual    imageSet
+	}
+
+	aggregates := make(map[int64]*aggregateSets, len(result))
+	getAggregate := func(ancestorID int64) *aggregateSets {
+		if aggregates[ancestorID] == nil {
+			aggregates[ancestorID] = &aggregateSets{
+				usage:     imageSet{},
+				pending:   imageSet{},
+				confirmed: imageSet{},
+				ai:        imageSet{},
+				manual:    imageSet{},
+			}
+		}
+		return aggregates[ancestorID]
+	}
+
+	for rows.Next() {
+		var tagID, imageID int64
+		var reviewState, source string
+		if err := rows.Scan(&tagID, &imageID, &reviewState, &source); err != nil {
+			return err
+		}
+
+		for _, ancestorID := range descendantToAncestors[tagID] {
+			agg := getAggregate(ancestorID)
+			if reviewState != "rejected" {
+				agg.usage[imageID] = struct{}{}
+				if source == "ai" {
+					agg.ai[imageID] = struct{}{}
+				} else {
+					agg.manual[imageID] = struct{}{}
+				}
+			}
+			switch reviewState {
+			case "pending":
+				agg.pending[imageID] = struct{}{}
+			case "confirmed":
+				agg.confirmed[imageID] = struct{}{}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for ancestorID, agg := range aggregates {
+		entry := result[ancestorID]
+		entry.TreeUsageCount = int64(len(agg.usage))
+		entry.TreePendingCount = int64(len(agg.pending))
+		entry.TreeConfirmedCount = int64(len(agg.confirmed))
+		entry.TreeAICount = int64(len(agg.ai))
+		entry.TreeManualCount = int64(len(agg.manual))
+	}
+
+	return nil
+}
+
+func (s *TagAdminService) batchCountDirectAssociations(ctx context.Context, tagIDs []int64) (map[int64]int64, error) {
+	result := make(map[int64]int64, len(tagIDs))
+	if len(tagIDs) == 0 {
+		return result, nil
+	}
+	for _, id := range tagIDs {
+		result[id] = 0
+	}
+	placeholders := make([]string, len(tagIDs))
+	args := make([]any, len(tagIDs))
+	for i, id := range tagIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(`
+		SELECT tag_id, COUNT(DISTINCT image_id)
+		FROM image_tags
+		WHERE tag_id IN (%s)
+		GROUP BY tag_id
+	`, strings.Join(placeholders, ", "))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tagID, count int64
+		if err := rows.Scan(&tagID, &count); err != nil {
+			return nil, err
+		}
+		result[tagID] = count
+	}
+	return result, rows.Err()
 }
 
 func (s *TagAdminService) countDirectAssociations(ctx context.Context, tagID int64) (int64, error) {

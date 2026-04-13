@@ -87,6 +87,8 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 			tag = &domain.Tag{
 				PreferredLabel: normalized,
 				Slug:           slugify(normalized),
+				Level:          domain.TagLevelChild,
+				ParentID:       nil,
 				ReviewState:    "pending",
 				TrustScore:     confidence,
 			}

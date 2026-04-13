@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 const scanSchemaSQL = `
@@ -32,7 +33,7 @@ CREATE TABLE IF NOT EXISTS tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     preferred_label TEXT UNIQUE NOT NULL,
     slug TEXT UNIQUE NOT NULL,
-    level TEXT NOT NULL DEFAULT 'child',
+    level TEXT NOT NULL DEFAULT 'child' CHECK(level IN ('root', 'parent', 'child')),
     parent_id INTEGER REFERENCES tags(id) ON DELETE SET NULL,
     primary_category TEXT,
     review_state TEXT DEFAULT 'pending',
@@ -301,6 +302,9 @@ func EnsureScanSchema(db *sql.DB) error {
 	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_tags_parent_id ON tags(parent_id)`); err != nil {
 		return err
 	}
+	if err := ensureTagLevelCheckConstraint(db); err != nil {
+		return err
+	}
 	_, err := db.Exec(`
 		UPDATE tags
 		SET level = 'child'
@@ -319,8 +323,9 @@ func EnsureScanSchema(db *sql.DB) error {
 		return err
 	}
 
+	// Always recreate usage-count triggers to recover from any prior partial migration
 	if _, err := db.Exec(tagUsageMigrationSQL); err != nil {
-		return err
+		return fmt.Errorf("tag usage triggers: %w", err)
 	}
 
 	if _, err := db.Exec(`
@@ -331,6 +336,98 @@ func EnsureScanSchema(db *sql.DB) error {
 	`); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func ensureTagLevelCheckConstraint(db *sql.DB) (err error) {
+	var tableSQL sql.NullString
+	if err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='tags'`).Scan(&tableSQL); err != nil {
+		return err
+	}
+	if strings.Contains(strings.ToUpper(tableSQL.String), "CHECK(LEVEL IN") {
+		return nil
+	}
+
+	if _, err := db.Exec(`
+		UPDATE tags
+		SET level = 'child'
+		WHERE level IS NULL OR TRIM(level) = '' OR level NOT IN ('root', 'parent', 'child')
+	`); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	foreignKeysDisabled := true
+	defer func() {
+		if !foreignKeysDisabled {
+			return
+		}
+		if pragmaErr := setForeignKeysPragma(db, true); err == nil {
+			err = pragmaErr
+		}
+	}()
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if tx == nil {
+			return
+		}
+		_ = tx.Rollback()
+	}()
+
+	if _, err := tx.Exec(`
+		CREATE TABLE tags_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			preferred_label TEXT UNIQUE NOT NULL,
+			slug TEXT UNIQUE NOT NULL,
+			level TEXT NOT NULL DEFAULT 'child' CHECK(level IN ('root', 'parent', 'child')),
+			parent_id INTEGER REFERENCES tags(id) ON DELETE SET NULL,
+			primary_category TEXT,
+			review_state TEXT DEFAULT 'pending',
+			trust_score REAL DEFAULT 0.0,
+			usage_count INTEGER DEFAULT 0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO tags_new (id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at)
+		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
+		FROM tags
+	`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DROP TABLE tags`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE tags_new RENAME TO tags`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`CREATE INDEX idx_tags_slug ON tags(slug)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`CREATE INDEX idx_tags_category ON tags(primary_category)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`CREATE INDEX idx_tags_parent_id ON tags(parent_id)`); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	tx = nil
+
+	if err := setForeignKeysPragma(db, true); err != nil {
+		return err
+	}
+	foreignKeysDisabled = false
 
 	return nil
 }
@@ -363,5 +460,14 @@ func ensureColumnExists(db *sql.DB, tableName, columnName, definition string) er
 	}
 
 	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", tableName, columnName, definition))
+	return err
+}
+
+func setForeignKeysPragma(db *sql.DB, enabled bool) error {
+	value := "OFF"
+	if enabled {
+		value = "ON"
+	}
+	_, err := db.Exec("PRAGMA foreign_keys = " + value)
 	return err
 }
