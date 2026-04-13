@@ -173,13 +173,39 @@ func (a *App) initWorkerManager() error {
 func (a *App) registerThumbnailHandler() {
 	thumbnailSvc := service.NewThumbnailService()
 	taskPlatformSvc := a.newTaskPlatformService()
-	cosSvc, err := service.NewCOSService(&a.config.COS)
-	if err != nil {
-		log.Printf("thumbnail job handler not registered: %v", err)
-		return
+
+	var uploader worker.ThumbnailUploader
+	provider := a.config.ThumbnailStorageProvider
+	if provider == "" {
+		provider = "cos"
 	}
 
-	thumbnailHandler := worker.NewThumbnailHandler(thumbnailSvc, cosSvc, a.imageRepo)
+	switch provider {
+	case "minio":
+		minioSvc, err := service.NewMinioService(
+			a.config.Minio.Endpoint,
+			a.config.Minio.AccessKey,
+			a.config.Minio.SecretKey,
+			a.config.Minio.Bucket,
+			a.config.Minio.UseSSL,
+		)
+		if err != nil {
+			log.Printf("thumbnail job handler not registered: minio init failed: %v", err)
+			return
+		}
+		uploader = minioSvc
+		log.Printf("缩略图存储使用 MinIO: endpoint=%s bucket=%s", a.config.Minio.Endpoint, a.config.Minio.Bucket)
+	default:
+		cosSvc, err := service.NewCOSService(&a.config.COS)
+		if err != nil {
+			log.Printf("thumbnail job handler not registered: cos init failed: %v", err)
+			return
+		}
+		uploader = cosSvc
+		log.Printf("缩略图存储使用 COS: bucket=%s", a.config.COS.BucketURL)
+	}
+
+	thumbnailHandler := worker.NewThumbnailHandler(thumbnailSvc, uploader, a.imageRepo)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeThumbnailGenerate, thumbnailHandler.Handle)
 
 	// Register image_imported handler - auto-triggers thumbnail generation

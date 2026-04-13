@@ -13,13 +13,15 @@ import (
 )
 
 type Config struct {
-	Server     ServerConfig     `yaml:"server"`
-	Database   DatabaseConfig   `yaml:"database"`
-	Storage    StorageConfig    `yaml:"storage"`
-	AI         AIConfig         `yaml:"ai"`
-	COS        COSConfig        `yaml:"cos"`
-	Admin      AdminConfig      `yaml:"admin"`
-	WorkerPool WorkerPoolConfig `yaml:"worker_pool"`
+	Server                   ServerConfig     `yaml:"server"`
+	Database                 DatabaseConfig   `yaml:"database"`
+	Storage                  StorageConfig    `yaml:"storage"`
+	AI                       AIConfig         `yaml:"ai"`
+	ThumbnailStorageProvider string           `yaml:"thumbnail_storage_provider"`
+	COS                      COSConfig        `yaml:"cos"`
+	Minio                    MinioConfig      `yaml:"minio"`
+	Admin                    AdminConfig      `yaml:"admin"`
+	WorkerPool               WorkerPoolConfig `yaml:"worker_pool"`
 }
 
 type ServerConfig struct {
@@ -55,6 +57,14 @@ type COSConfig struct {
 	BucketURL string `yaml:"bucket_url"`
 	SecretID  string `yaml:"secret_id"`
 	SecretKey string `yaml:"secret_key"`
+}
+
+type MinioConfig struct {
+	Endpoint  string `yaml:"endpoint"`
+	AccessKey string `yaml:"access_key"`
+	SecretKey string `yaml:"secret_key"`
+	Bucket    string `yaml:"bucket"`
+	UseSSL    bool   `yaml:"use_ssl"`
 }
 
 // AdminConfig holds configuration for the admin dashboard access.
@@ -325,6 +335,11 @@ func applyEnvOverrides(cfg *Config) {
 		}
 	}
 
+	// 缩略图存储提供者
+	if v := os.Getenv("THUMBNAIL_STORAGE_PROVIDER"); v != "" {
+		cfg.ThumbnailStorageProvider = v
+	}
+
 	// COS 环境变量覆盖
 	if v := os.Getenv("COS_SECRET_ID"); v != "" {
 		cfg.COS.SecretID = v
@@ -334,6 +349,25 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("COS_BUCKET_URL"); v != "" {
 		cfg.COS.BucketURL = v
+	}
+
+	// MinIO 环境变量覆盖
+	if v := os.Getenv("MINIO_ENDPOINT"); v != "" {
+		cfg.Minio.Endpoint = v
+	}
+	if v := os.Getenv("MINIO_ACCESS_KEY"); v != "" {
+		cfg.Minio.AccessKey = v
+	}
+	if v := os.Getenv("MINIO_SECRET_KEY"); v != "" {
+		cfg.Minio.SecretKey = v
+	}
+	if v := os.Getenv("MINIO_BUCKET"); v != "" {
+		cfg.Minio.Bucket = v
+	}
+	if v := os.Getenv("MINIO_USE_SSL"); v != "" {
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			cfg.Minio.UseSSL = enabled
+		}
 	}
 
 	// Admin 环境变量覆盖

@@ -1,73 +1,59 @@
-# ACGWarehouse Configuration Example
-# Copy this file to config.yaml and edit with your settings
-#
-# Usage:
-#   1. cp deploy/config/config.example.yaml deploy/config/config.yaml
-#   2. Edit deploy/config/config.yaml with your actual values
-#   3. Run: docker compose up -d
-#
-# Note: All paths below are container-internal paths.
-#       The docker-compose.yml maps host directories to these paths.
-
 server:
-  # Server host and port (0.0.0.0 for all interfaces)
   host: "0.0.0.0"
   port: 8080
-  # Environment: "development" or "production"
   env: "production"
 
 database:
-  # Database type: "sqlite" (PostgreSQL not yet implemented)
   type: "sqlite"
-  # Container-internal path to SQLite database file
-  # This maps to ./data on the host via docker-compose volume
-  path: "/data/acgwarehouse.db"
-  # PostgreSQL connection string (not used with sqlite)
+  path: ""
   connection_string: ""
 
 storage:
-  # Image library scan roots (container-internal paths)
-  # These are mounted from host via docker-compose volumes
   scan_roots:
-    - "/library"
+    - "E:\\picture\\xp十环"
 
 ai:
-  # AI provider: "doubao" (ByteDance), "qwen" (Alibaba), or "zhipu" (智谱)
   provider: "doubao"
-  # Your AI API key - REPLACE WITH YOUR ACTUAL KEY
-  api_key: "YOUR_API_KEY_HERE"
-  # AI model name
-  model: "doubao-seed-2-0-lite-260215"
-  # Fallback models for Doubao (try in order if primary model fails)
+  api_key: ""
+  model: "doubao-seed-2-0-pro-260215"
   fallback_models:
-    - "doubao-seed-2-0-pro-260215"
+    - "doubao-seed-2-0-lite-260215"
     - "doubao-seed-2-0-mini-260215"
-  # Doubao-only image request mode:
-  # - single: never claim extra jobs, always use single-image requests
-  # - auto: keep current behavior (1 image = single request, multiple images = batch request)
-  # - multi: allow claiming extra jobs and force the batch request path even for one image
+  # provider: "qwen"
+  # api_key: ""
+  # model: "qwen-vl-max"
   doubao_batch_mode: "auto"
-  # Rate limiting: requests per minute (default: 60)
   requests_per_minute: 60
-  # 同时执行的最大AI请求数，默认3
-  max_concurrency: 3
-  # 导入后是否自动补扫并入队 AI 标签任务
-  auto_ai_tag_on_import: true
-  # 自动补扫间隔（分钟）
-  auto_scan_interval_minutes: 5
-  # 每次自动补扫最多入队图片数
-  auto_scan_batch_size: 100
+  max_concurrency: 3  # 同时执行的最大AI请求数，默认3
+  auto_scan_interval_minutes: 2      # 扫描间隔（分钟）
+  auto_scan_batch_size: 100          # 每批处理数量
+  auto_ai_tag_on_import: true        # 必须设为 true
 
-# Optional: Tencent Cloud COS for thumbnail storage
 # cos:
-#   bucket_url: "https://your-bucket.cos.ap-guangzhou.myqcloud.com"
-#   secret_id: "YOUR_COS_SECRET_ID"
-#   secret_key: "YOUR_COS_SECRET_KEY"
+#   bucket_url: ""
+#   secret_id: ""
+#   secret_key: ""
+
+# MinIO S3 存储配置（thumbnail_storage_provider 设为 "minio" 时生效）
+minio:
+  endpoint: ""
+  access_key: ""
+  secret_key: ""
+  bucket: ""
+  use_ssl: false
+
+# 缩略图存储后端: "cos" (默认) 或 "minio"
+# thumbnail_storage_provider: "cos"
+
+admin:
+  username: "admin"
+  password: "admin"
+
 
 # Worker pool configuration for background job processing
 worker_pool:
   # Number of concurrent workers processing jobs (default: 4)
-  worker_count: 4
+  worker_count: 10
   # Job queue buffer size (default: 512)
   queue_size: 512
   # How often to check for pending jobs to refill the queue, in seconds (default: 5)
@@ -75,6 +61,4 @@ worker_pool:
   # Refill is triggered when queue size drops below this fraction of queue_size (default: 0.5)
   # For example, 0.5 means refill when queue has less than half capacity
   refill_threshold: 0.5
-  # Maximum number of ready jobs loaded from the database into the in-memory queue per refill cycle
-  # Set to 0 to keep the historical behavior: keep loading until the queue is full or no ready jobs remain
   refill_batch_size: 0

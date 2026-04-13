@@ -15,7 +15,7 @@ type thumbnailGenerator interface {
 	GenerateBoth(imgPath string) (small, large *domain.Thumbnail, err error)
 }
 
-type thumbnailUploader interface {
+type ThumbnailUploader interface {
 	Upload(ctx context.Context, filename, size string, data []byte) (string, error)
 	DeleteByURL(ctx context.Context, objectURL string) error
 }
@@ -26,7 +26,7 @@ type thumbnailImageRepository interface {
 
 type ThumbnailHandler struct {
 	thumbnailSvc thumbnailGenerator
-	cosSvc       thumbnailUploader
+	uploader     ThumbnailUploader
 	imageRepo    thumbnailImageRepository
 }
 
@@ -36,12 +36,12 @@ type thumbnailJobPayload struct {
 	Filename string `json:"filename"`
 }
 
-func NewThumbnailHandler(thumbnailSvc thumbnailGenerator, cosSvc thumbnailUploader, imageRepo thumbnailImageRepository) *ThumbnailHandler {
-	return &ThumbnailHandler{thumbnailSvc: thumbnailSvc, cosSvc: cosSvc, imageRepo: imageRepo}
+func NewThumbnailHandler(thumbnailSvc thumbnailGenerator, uploader ThumbnailUploader, imageRepo thumbnailImageRepository) *ThumbnailHandler {
+	return &ThumbnailHandler{thumbnailSvc: thumbnailSvc, uploader: uploader, imageRepo: imageRepo}
 }
 
 func (h *ThumbnailHandler) Handle(ctx context.Context, jobID int64, payload string) error {
-	if h.thumbnailSvc == nil || h.cosSvc == nil || h.imageRepo == nil {
+	if h.thumbnailSvc == nil || h.uploader == nil || h.imageRepo == nil {
 		return fmt.Errorf("thumbnail handler dependencies are not initialized")
 	}
 
@@ -75,16 +75,16 @@ func (h *ThumbnailHandler) Handle(ctx context.Context, jobID int64, payload stri
 		large.Height,
 	)
 
-	smallURL, err := h.cosSvc.Upload(ctx, uploadName, "small", small.Data)
+	smallURL, err := h.uploader.Upload(ctx, uploadName, "small", small.Data)
 	if err != nil {
 		log.Printf("thumbnail upload failed: job_id=%d image_id=%d size=small error=%v", jobID, p.ImageID, err)
 		return fmt.Errorf("upload small thumbnail: %w", err)
 	}
 	log.Printf("thumbnail upload completed: job_id=%d image_id=%d size=small url=%s", jobID, p.ImageID, smallURL)
-	largeURL, err := h.cosSvc.Upload(ctx, uploadName, "large", large.Data)
+	largeURL, err := h.uploader.Upload(ctx, uploadName, "large", large.Data)
 	if err != nil {
 		log.Printf("thumbnail upload failed: job_id=%d image_id=%d size=large error=%v", jobID, p.ImageID, err)
-		if rollbackErr := h.cosSvc.DeleteByURL(ctx, smallURL); rollbackErr != nil {
+		if rollbackErr := h.uploader.DeleteByURL(ctx, smallURL); rollbackErr != nil {
 			log.Printf("thumbnail rollback failed: job_id=%d image_id=%d size=small url=%s error=%v", jobID, p.ImageID, smallURL, rollbackErr)
 			return fmt.Errorf("upload large thumbnail: %w", errors.Join(err, fmt.Errorf("rollback small thumbnail failed: %w", rollbackErr)))
 		}
