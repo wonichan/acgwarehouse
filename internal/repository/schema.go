@@ -263,28 +263,28 @@ END;
 
 func EnsureScanSchema(db *sql.DB) error {
 	if _, err := db.Exec(scanSchemaSQL); err != nil {
-		return err
+		return fmt.Errorf("exec scanSchemaSQL: %w", err)
 	}
 	if err := ensureColumnExists(db, "async_jobs", "platform_task_id", "INTEGER REFERENCES platform_tasks(id) ON DELETE SET NULL"); err != nil {
-		return err
+		return fmt.Errorf("ensureColumn async_jobs.platform_task_id: %w", err)
 	}
 	if err := ensureColumnExists(db, "tags", "level", "TEXT NOT NULL DEFAULT 'child'"); err != nil {
-		return err
+		return fmt.Errorf("ensureColumn tags.level: %w", err)
 	}
 	if err := ensureColumnExists(db, "tags", "parent_id", "INTEGER REFERENCES tags(id) ON DELETE SET NULL"); err != nil {
-		return err
+		return fmt.Errorf("ensureColumn tags.parent_id: %w", err)
 	}
 	if err := ensureColumnExists(db, "image_tags", "source", "TEXT NOT NULL DEFAULT 'manual'"); err != nil {
-		return err
+		return fmt.Errorf("ensureColumn image_tags.source: %w", err)
 	}
 	if err := ensureColumnExists(db, "images", "phash_hex", "TEXT"); err != nil {
-		return err
+		return fmt.Errorf("ensureColumn images.phash_hex: %w", err)
 	}
 	if err := ensureColumnExists(db, "images", "sha256", "TEXT"); err != nil {
-		return err
+		return fmt.Errorf("ensureColumn images.sha256: %w", err)
 	}
 	if err := ensureColumnExists(db, "images", "source_mtime_unix", "INTEGER"); err != nil {
-		return err
+		return fmt.Errorf("ensureColumn images.source_mtime_unix: %w", err)
 	}
 	if _, err := db.Exec(`
 		DELETE FROM collection_images
@@ -294,59 +294,62 @@ func EnsureScanSchema(db *sql.DB) error {
 			GROUP BY image_id
 		)
 	`); err != nil {
-		return err
+		return fmt.Errorf("clean collection_images duplicates: %w", err)
 	}
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_images_image_id_unique ON collection_images(image_id)`); err != nil {
-		return err
+		return fmt.Errorf("create idx_collection_images_image_id_unique: %w", err)
 	}
 	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_tags_parent_id ON tags(parent_id)`); err != nil {
-		return err
+		return fmt.Errorf("create idx_tags_parent_id: %w", err)
 	}
 	if err := ensureTagLevelCheckConstraint(db); err != nil {
-		return err
+		return fmt.Errorf("ensureTagLevelCheckConstraint: %w", err)
 	}
-	_, err := db.Exec(`
+	if _, err := db.Exec(`
 		UPDATE tags
 		SET level = 'child'
 		WHERE level IS NULL OR TRIM(level) = ''
-	`)
-	if err != nil {
-		return err
+	`); err != nil {
+		return fmt.Errorf("update tags level: %w", err)
 	}
-	_, err = db.Exec(`
+	if _, err := db.Exec(`
 		UPDATE image_tags
 		SET source = 'ai'
 		WHERE source_observation_id IS NOT NULL
 		  AND (source IS NULL OR source = '' OR source != 'ai')
-	`)
-	if err != nil {
-		return err
+	`); err != nil {
+		return fmt.Errorf("update image_tags source: %w", err)
 	}
-
-	// Always recreate usage-count triggers to recover from any prior partial migration
 	if _, err := db.Exec(tagUsageMigrationSQL); err != nil {
-		return fmt.Errorf("tag usage triggers: %w", err)
+		return fmt.Errorf("tagUsageMigrationSQL: %w", err)
 	}
-
 	if _, err := db.Exec(`
 		UPDATE tags
 		SET usage_count = (
 			SELECT COUNT(*) FROM image_tags WHERE tag_id = tags.id AND review_state != 'rejected'
 		)
 	`); err != nil {
-		return err
+		return fmt.Errorf("recalculate usage_count: %w", err)
 	}
 
 	return nil
 }
 
 func ensureTagLevelCheckConstraint(db *sql.DB) (err error) {
+	if err := recoverTagsTable(db); err != nil {
+		return fmt.Errorf("tags table recovery: %w", err)
+	}
+
 	var tableSQL sql.NullString
 	if err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='tags'`).Scan(&tableSQL); err != nil {
-		return err
+		return fmt.Errorf("check tags schema: %w", err)
 	}
-	if strings.Contains(strings.ToUpper(tableSQL.String), "CHECK(LEVEL IN") {
+	if tableSQL.Valid && strings.Contains(strings.ToUpper(tableSQL.String), "CHECK(LEVEL IN") {
 		return nil
+	}
+
+	if err := dropUsageCountTriggers(db); err != nil {
+		return fmt.Errorf("drop usage triggers before rebuild: %w", err)
 	}
 
 	if _, err := db.Exec(`
@@ -354,7 +357,7 @@ func ensureTagLevelCheckConstraint(db *sql.DB) (err error) {
 		SET level = 'child'
 		WHERE level IS NULL OR TRIM(level) = '' OR level NOT IN ('root', 'parent', 'child')
 	`); err != nil {
-		return err
+		return fmt.Errorf("clean invalid level values: %w", err)
 	}
 
 	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
@@ -372,7 +375,7 @@ func ensureTagLevelCheckConstraint(db *sql.DB) (err error) {
 
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("begin rebuild transaction: %w", err)
 	}
 	defer func() {
 		if tx == nil {
@@ -395,32 +398,32 @@ func ensureTagLevelCheckConstraint(db *sql.DB) (err error) {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`); err != nil {
-		return err
+		return fmt.Errorf("create tags_new: %w", err)
 	}
 	if _, err := tx.Exec(`
 		INSERT INTO tags_new (id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at)
 		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
 		FROM tags
 	`); err != nil {
-		return err
+		return fmt.Errorf("copy tags data: %w", err)
 	}
 	if _, err := tx.Exec(`DROP TABLE tags`); err != nil {
-		return err
+		return fmt.Errorf("drop old tags: %w", err)
 	}
 	if _, err := tx.Exec(`ALTER TABLE tags_new RENAME TO tags`); err != nil {
-		return err
+		return fmt.Errorf("rename tags_new to tags: %w", err)
 	}
 	if _, err := tx.Exec(`CREATE INDEX idx_tags_slug ON tags(slug)`); err != nil {
-		return err
+		return fmt.Errorf("create idx_tags_slug: %w", err)
 	}
 	if _, err := tx.Exec(`CREATE INDEX idx_tags_category ON tags(primary_category)`); err != nil {
-		return err
+		return fmt.Errorf("create idx_tags_category: %w", err)
 	}
 	if _, err := tx.Exec(`CREATE INDEX idx_tags_parent_id ON tags(parent_id)`); err != nil {
-		return err
+		return fmt.Errorf("create idx_tags_parent_id: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return fmt.Errorf("commit tags rebuild: %w", err)
 	}
 	tx = nil
 
@@ -429,6 +432,49 @@ func ensureTagLevelCheckConstraint(db *sql.DB) (err error) {
 	}
 	foreignKeysDisabled = false
 
+	return nil
+}
+
+func recoverTagsTable(db *sql.DB) error {
+	var tagsExists, tagsNewExists int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tags'`).Scan(&tagsExists); err != nil {
+		return err
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tags_new'`).Scan(&tagsNewExists); err != nil {
+		return err
+	}
+
+	if tagsNewExists == 0 {
+		return nil
+	}
+
+	if tagsExists == 0 {
+		if _, err := db.Exec(`ALTER TABLE tags_new RENAME TO tags`); err != nil {
+			return fmt.Errorf("rename tags_new to tags: %w", err)
+		}
+		_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_tags_slug ON tags(slug)`)
+		_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_tags_category ON tags(primary_category)`)
+		_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_tags_parent_id ON tags(parent_id)`)
+	} else {
+		if _, err := db.Exec(`DROP TABLE IF EXISTS tags_new`); err != nil {
+			return fmt.Errorf("drop residual tags_new: %w", err)
+		}
+	}
+	return nil
+}
+
+func dropUsageCountTriggers(db *sql.DB) error {
+	triggers := []string{
+		"trg_image_tags_after_insert",
+		"trg_image_tags_after_delete",
+		"trg_image_tags_after_update_tagid",
+		"trg_image_tags_after_update_review",
+	}
+	for _, name := range triggers {
+		if _, err := db.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS %s", name)); err != nil {
+			return fmt.Errorf("drop trigger %s: %w", name, err)
+		}
+	}
 	return nil
 }
 
