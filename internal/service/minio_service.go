@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -46,7 +47,7 @@ func NewMinioService(endpoint, accessKey, secretKey, bucket string, useSSL bool)
 
 func (s *MinioService) Upload(ctx context.Context, filename, size string, data []byte) (string, error) {
 	log.Printf("[service] MinIO Upload started: filename=%s size=%s", filename, size)
-	key := fmt.Sprintf("thumbnails/%s-%s.jpg", filename, size)
+	key := fmt.Sprintf("thumbnails/%s/%s-%s.jpg", time.Now().Format("20060102"), filename, size)
 
 	contentType := http.DetectContentType(data)
 	if contentType != "image/jpeg" {
