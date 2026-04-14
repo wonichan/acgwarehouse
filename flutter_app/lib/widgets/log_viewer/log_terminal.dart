@@ -35,10 +35,12 @@ class _LogTerminalState extends State<LogTerminal> {
   @override
   void didUpdateWidget(LogTerminal oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!widget.isPaused &&
-        !_userScrolledUp &&
-        widget.lines.length > oldWidget.lines.length) {
-      _scrollToBottom();
+    if (!widget.isPaused && !_userScrolledUp) {
+      // When unpausing, lines may have been trimmed to the same length
+      // (e.g. 1000 → 1000), so we also check the pause transition.
+      if (widget.lines.length > oldWidget.lines.length || oldWidget.isPaused) {
+        _scrollToBottom();
+      }
     }
   }
 

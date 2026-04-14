@@ -65,7 +65,11 @@ class _TagEditDialogState extends State<TagEditDialog> {
               .where((t) => t.id != widget.row?.tagId)
               .toList();
           if (!_parentCandidates.any((t) => t.id == _parentId)) {
-            _parentId = null;
+            // For parent level, auto-select the first valid candidate so the
+            // ComboBox always has a valid value and the save button works.
+            _parentId = _requiresParentSelection && _parentCandidates.isNotEmpty
+                ? _parentCandidates.first.id
+                : null;
           }
           _isLoadingParents = false;
         });
@@ -135,28 +139,38 @@ class _TagEditDialogState extends State<TagEditDialog> {
                 label: '父标签',
                 child: _isLoadingParents
                     ? const ProgressRing()
-                    : ComboBox<int?>(
+                    : _parentCandidates.isEmpty
+                    ? const Text(
+                        '没有可用的父标签',
+                        style: TextStyle(fontStyle: FontStyle.italic),
+                      )
+                    : ComboBox<int>(
+                        // Use a sentinel value (-1) to represent "no parent"
+                        // for child-level tags so ComboBox always has a valid value.
                         value: _parentCandidates.any((c) => c.id == _parentId)
-                            ? _parentId
-                            : null,
-                        placeholder: const Text('选择父标签'),
+                            ? _parentId!
+                            : (_level == 'child'
+                                  ? -1
+                                  : _parentCandidates.first.id),
                         items: [
                           if (_level == 'child')
-                            const ComboBoxItem<int?>(
-                              value: null,
+                            const ComboBoxItem<int>(
+                              value: -1,
                               child: Text('无父标签'),
                             ),
                           ..._parentCandidates.map(
-                            (c) => ComboBoxItem<int?>(
+                            (c) => ComboBoxItem<int>(
                               value: c.id,
                               child: Text(c.preferredLabel),
                             ),
                           ),
                         ],
                         onChanged: (val) {
-                          setState(() {
-                            _parentId = val;
-                          });
+                          if (val != null) {
+                            setState(() {
+                              _parentId = val == -1 ? null : val;
+                            });
+                          }
                         },
                         isExpanded: true,
                       ),

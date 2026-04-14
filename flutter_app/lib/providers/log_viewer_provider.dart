@@ -182,7 +182,11 @@ class LogViewerProvider extends ChangeNotifier {
       }
 
       _trimLines();
-      _notifySafely();
+      // When paused, accumulate lines silently without rebuilding the UI.
+      // togglePause() will notify when the user resumes.
+      if (!_isPaused) {
+        _notifySafely();
+      }
     } catch (_) {
       // Ignore malformed messages and keep the existing buffer intact.
     }

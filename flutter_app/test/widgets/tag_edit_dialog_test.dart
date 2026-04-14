@@ -107,11 +107,10 @@ void main() {
     await tester.tap(find.text('Parent (父级)').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(fluent.ComboBox<int?>).first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('characters').last);
-    await tester.pumpAndSettle();
-
+    // After selecting "Parent" level, parent candidates are auto-loaded.
+    // The first candidate ("characters", id=99) is auto-selected for parent level.
+    // We tap the ComboBox to change selection if needed, but auto-select means
+    // _parentId is already 99.
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
@@ -151,11 +150,8 @@ void main() {
     await tester.tap(find.text('Parent (父级)').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(fluent.ComboBox<int?>).first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('characters').last);
-    await tester.pumpAndSettle();
-
+    // After selecting "Parent" level, the first root candidate is auto-selected.
+    // No need to manually tap the parent ComboBox - save should work directly.
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
@@ -193,7 +189,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(fluent.ComboBox<int?>).first);
+    // The current parent is "appearance" (id=100). We want to select "无父标签"
+    // which is now represented by sentinel value -1 in ComboBox<int>.
+    await tester.tap(find.byType(fluent.ComboBox<int>).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('无父标签').last);
     await tester.pumpAndSettle();
