@@ -3,12 +3,11 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i4;
+import 'dart:async' as _i3;
 
-import 'package:gallery/models/image.dart' as _i5;
+import 'package:gallery/models/image.dart' as _i4;
 import 'package:gallery/services/api_service.dart' as _i2;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i3;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -40,24 +39,14 @@ class MockApiService extends _i1.Mock implements _i2.ApiService {
   }
 
   @override
-  String get baseUrl =>
-      (super.noSuchMethod(
-            Invocation.getter(#baseUrl),
-            returnValue: _i3.dummyValue<String>(
-              this,
-              Invocation.getter(#baseUrl),
-            ),
-          )
-          as String);
-
-  @override
-  _i4.Future<_i2.PaginationResponse<_i5.ImageModel>> fetchImages({
+  _i3.Future<_i2.PaginationResponse<_i4.ImageModel>> fetchImages({
     int? offset = 0,
     int? limit = 20,
     String? sortBy = 'created_at',
     String? sortDir = 'desc',
     List<int>? tagIds,
     bool? hasTags,
+    bool? hasPendingTags,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#fetchImages, [], {
@@ -67,10 +56,11 @@ class MockApiService extends _i1.Mock implements _i2.ApiService {
               #sortDir: sortDir,
               #tagIds: tagIds,
               #hasTags: hasTags,
+              #hasPendingTags: hasPendingTags,
             }),
             returnValue:
-                _i4.Future<_i2.PaginationResponse<_i5.ImageModel>>.value(
-                  _FakePaginationResponse_0<_i5.ImageModel>(
+                _i3.Future<_i2.PaginationResponse<_i4.ImageModel>>.value(
+                  _FakePaginationResponse_0<_i4.ImageModel>(
                     this,
                     Invocation.method(#fetchImages, [], {
                       #offset: offset,
@@ -79,11 +69,21 @@ class MockApiService extends _i1.Mock implements _i2.ApiService {
                       #sortDir: sortDir,
                       #tagIds: tagIds,
                       #hasTags: hasTags,
+                      #hasPendingTags: hasPendingTags,
                     }),
                   ),
                 ),
           )
-          as _i4.Future<_i2.PaginationResponse<_i5.ImageModel>>);
+          as _i3.Future<_i2.PaginationResponse<_i4.ImageModel>>);
+
+  @override
+  _i3.Future<void> permanentDeleteImage(int? imageId) =>
+      (super.noSuchMethod(
+            Invocation.method(#permanentDeleteImage, [imageId]),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
 
   @override
   void dispose() => super.noSuchMethod(
