@@ -327,6 +327,62 @@ func TestScannerCreatesNewBatchButSkipsUnchangedImageTasks(t *testing.T) {
 	}
 }
 
+func TestScannerHardDeletesStalePathAfterRename(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	oldPath := filepath.Join(root, "before.png")
+	newPath := filepath.Join(root, "after.png")
+	if err := os.WriteFile(oldPath, tinyPNGFixture(), 0o600); err != nil {
+		t.Fatalf("write old image fixture: %v", err)
+	}
+
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "scan-rename.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	metadataSvc := NewMetadataService()
+	imageRepo := repository.NewImageRepository(db)
+	jobRepo := repository.NewJobRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	taskPlatformSvc := NewTaskPlatformService(repository.NewTaskBatchRepository(db), taskRepo, jobRepo)
+	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, 1)
+
+	if _, err := scanner.Scan(context.Background(), []string{root}); err != nil {
+		t.Fatalf("first Scan() error = %v", err)
+	}
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		t.Fatalf("rename image file: %v", err)
+	}
+
+	if _, err := scanner.Scan(context.Background(), []string{root}); err != nil {
+		t.Fatalf("second Scan() error = %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM images`).Scan(&count); err != nil {
+		t.Fatalf("query images count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("images row count = %d, want 1", count)
+	}
+
+	var remainingPath string
+	if err := db.QueryRow(`SELECT path FROM images LIMIT 1`).Scan(&remainingPath); err != nil {
+		t.Fatalf("query remaining path: %v", err)
+	}
+	if remainingPath != newPath {
+		t.Fatalf("remaining path = %q, want %q", remainingPath, newPath)
+	}
+}
+
 func tinyPNGFixture() []byte {
 	return []byte{
 		0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
