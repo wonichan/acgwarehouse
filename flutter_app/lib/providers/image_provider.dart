@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../models/gallery_filter_state.dart';
 import '../models/image.dart';
 import '../services/api_service.dart';
 
@@ -17,9 +18,7 @@ class ImageListProvider extends ChangeNotifier {
   ViewMode _viewMode = ViewMode.grid;
   SortField _sortField = SortField.createdAt;
   bool _sortAsc = false;
-  List<int> _selectedTagIds = [];
-  bool? _hasTagsFilter;
-  bool? _hasPendingTagsFilter;
+  GalleryFilterState _filter = GalleryFilterState();
 
   ImageListProvider(this._apiService);
 
@@ -30,9 +29,10 @@ class ImageListProvider extends ChangeNotifier {
   ViewMode get viewMode => _viewMode;
   SortField get sortField => _sortField;
   bool get sortAsc => _sortAsc;
-  List<int> get selectedTagIds => _selectedTagIds;
-  bool? get hasTagsFilter => _hasTagsFilter;
-  bool? get hasPendingTagsFilter => _hasPendingTagsFilter;
+  GalleryFilterState get filter => _filter;
+  List<int> get selectedTagIds => _filter.exactTagIds.toList();
+  bool? get hasTagsFilter => _filter.hasTags;
+  bool? get hasPendingTagsFilter => _filter.hasPendingTags;
 
   int indexOfImage(int imageId) =>
       _images.indexWhere((image) => image.id == imageId);
@@ -55,7 +55,7 @@ class ImageListProvider extends ChangeNotifier {
       }
 
       debugPrint(
-        '加载图片: offset=$_currentOffset, tagIds=$_selectedTagIds, hasTags=$_hasTagsFilter, hasPendingTags=$_hasPendingTagsFilter, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}',
+        '加载图片: offset=$_currentOffset, tagIds=${_filter.exactTagIds.toList()}, hasTags=${_filter.hasTags}, hasPendingTags=${_filter.hasPendingTags}, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}',
       );
 
       final response = await _apiService.fetchImages(
@@ -66,9 +66,11 @@ class ImageListProvider extends ChangeNotifier {
             ? 'file_size'
             : 'filename',
         sortDir: _sortAsc ? 'asc' : 'desc',
-        tagIds: _selectedTagIds.isNotEmpty ? _selectedTagIds : null,
-        hasTags: _hasTagsFilter,
-        hasPendingTags: _hasPendingTagsFilter,
+        tagIds: _filter.exactTagIds.isNotEmpty
+            ? _filter.exactTagIds.toList()
+            : null,
+        hasTags: _filter.hasTags,
+        hasPendingTags: _filter.hasPendingTags,
       );
 
       if (refresh) {
@@ -112,21 +114,20 @@ class ImageListProvider extends ChangeNotifier {
     await loadImages(refresh: true);
   }
 
+  Future<void> applyFilter(GalleryFilterState next) async {
+    _filter = next.normalized();
+    _resetPaginationForFilterChange();
+    notifyListeners();
+    await loadImages(refresh: true);
+  }
+
   /// Sets the tag filter and reloads images with the new filter
   /// Preserves current sort settings and resets pagination
   Future<void> setTagFilter(List<int> tagIds) async {
     debugPrint('setTagFilter 被调用: tagIds=$tagIds');
-    _selectedTagIds = List.unmodifiable(tagIds);
-    // Clear hasTagsFilter when setting tag filter (mutually exclusive with untagged).
-    // Keep hasPendingTagsFilter so tag selection can be combined with pending tags filter.
-    _hasTagsFilter = null;
-    // Reset pagination when filter changes
-    _currentOffset = 0;
-    _hasMore = true;
-    // Clear images immediately to show empty state while loading
-    _images = [];
-    notifyListeners();
-    await loadImages(refresh: true);
+    await applyFilter(
+      _filter.copyWith(exactTagIds: tagIds.toSet(), hasTags: null),
+    );
   }
 
   /// Sets the hasTags filter and reloads images with the new filter
@@ -135,34 +136,23 @@ class ImageListProvider extends ChangeNotifier {
   /// Preserves current sort settings and resets pagination
   Future<void> setHasTagsFilter(bool? hasTags) async {
     debugPrint('setHasTagsFilter 被调用: hasTags=$hasTags');
-    _hasTagsFilter = hasTags;
-    // Clear tag selection and pending filter when setting hasTagsFilter (mutually exclusive)
-    if (hasTags != null) {
-      _selectedTagIds = [];
-      _hasPendingTagsFilter = null;
-    }
-    // Reset pagination when filter changes
-    _currentOffset = 0;
-    _hasMore = true;
-    // Clear images immediately to show empty state while loading
-    _images = [];
-    notifyListeners();
-    await loadImages(refresh: true);
+    await applyFilter(GalleryFilterState(hasTags: hasTags));
   }
 
   Future<void> setHasPendingTagsFilter(bool? hasPendingTags) async {
     debugPrint('setHasPendingTagsFilter 被调用: hasPendingTags=$hasPendingTags');
-    _hasPendingTagsFilter = hasPendingTags;
-    // Only clear hasTagsFilter (untagged) - mutually exclusive with pending tags.
-    // Keep selectedTagIds so pending tags can be combined with specific tag filters.
-    if (hasPendingTags != null) {
-      _hasTagsFilter = null;
-    }
+    await applyFilter(
+      _filter.copyWith(
+        hasPendingTags: hasPendingTags,
+        hasTags: hasPendingTags != null ? null : _filter.hasTags,
+      ),
+    );
+  }
+
+  void _resetPaginationForFilterChange() {
     _currentOffset = 0;
     _hasMore = true;
     _images = [];
-    notifyListeners();
-    await loadImages(refresh: true);
   }
 
   void removeImageById(int imageId) {

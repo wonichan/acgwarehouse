@@ -40,6 +40,7 @@ type ScanResult struct {
 	ImportedImageIDs           []int64
 	ImportedImagePaths         []string
 	CreatedPlatformTaskIDs     []int64
+	DeletedStale               int
 }
 
 type ScannerService struct {
@@ -163,6 +164,12 @@ func (s *ScannerService) Scan(ctx context.Context, roots []string) (*ScanResult,
 	close(fileCh)
 	wg.Wait()
 	result.SourceRoots = uniqueNonEmptyStrings(roots)
+	cleaned, err := s.cleanupStaleImages(ctx, result.SourceRoots, items)
+	if err != nil {
+		logger.Errorf("[service] Scan failed: stale cleanup error=%v", err)
+		return nil, err
+	}
+	result.DeletedStale = cleaned
 	result.PlannedTaskTypes = []string{domain.PlatformTaskTypeThumbnailGenerate}
 	result.TotalImagesInBatch = int64(len(items))
 	result.SummaryLabel = BuildTaskBatchSummaryLabel(domain.TaskBatchSourceImportScan, result.SourceRoots, len(items))
@@ -277,6 +284,60 @@ func (s *ScannerService) importFile(path, root string) (*importedImageResult, er
 	}
 
 	return &importedImageResult{Image: image, IsNew: isNew}, nil
+}
+
+func (s *ScannerService) cleanupStaleImages(ctx context.Context, sourceRoots []string, items []TaskPlatformPlanItem) (int, error) {
+	if len(sourceRoots) == 0 {
+		return 0, nil
+	}
+
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.SourceDescriptor) == "" {
+			continue
+		}
+		seen[item.SourceDescriptor] = struct{}{}
+	}
+
+	const pageSize = 1000
+	lastID := int64(0)
+	deleted := 0
+
+	for {
+		if ctx != nil {
+			select {
+			case <-ctx.Done():
+				return deleted, ctx.Err()
+			default:
+			}
+		}
+
+		images, err := s.imageRepo.FindBySourceRootsAfterID(pageSize, lastID, sourceRoots)
+		if err != nil {
+			return deleted, err
+		}
+		if len(images) == 0 {
+			break
+		}
+
+		for _, image := range images {
+			if _, ok := seen[image.Path]; ok {
+				continue
+			}
+			if err := s.imageRepo.Delete(image.ID); err != nil {
+				return deleted, err
+			}
+			deleted++
+		}
+
+		lastID = images[len(images)-1].ID
+	}
+
+	if deleted > 0 {
+		logger.Infof("[service] Scan stale cleanup completed: deleted=%d roots=%d", deleted, len(sourceRoots))
+	}
+
+	return deleted, nil
 }
 
 func sameOrChildPath(root, path string) bool {

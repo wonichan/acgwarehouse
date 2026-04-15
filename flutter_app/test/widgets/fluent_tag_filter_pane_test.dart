@@ -1,10 +1,9 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/widgets.dart' show StatefulBuilder;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gallery/models/gallery_filter_state.dart';
 import 'package:gallery/providers/tag_provider.dart';
-import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/services/tag_service.dart';
-import 'package:gallery/services/api_service.dart';
 import 'package:gallery/widgets/fluent_tag_filter_pane.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -30,20 +29,19 @@ void main() {
     final provider = TagProvider(
       TagService(baseUrl: 'http://localhost:8080', client: client),
     );
-    final imageProvider = ImageListProvider(
-      ApiService(baseUrl: 'http://localhost:8080'),
-    );
 
     await tester.pumpWidget(
       fluent.FluentApp(
         home: MultiProvider(
           providers: [
             ChangeNotifierProvider<TagProvider>.value(value: provider),
-            ChangeNotifierProvider<ImageListProvider>.value(
-              value: imageProvider,
-            ),
           ],
-          child: const fluent.ScaffoldPage(content: FluentTagFilterPane()),
+          child: fluent.ScaffoldPage(
+            content: FluentTagFilterPane(
+              initialFilter: GalleryFilterState(),
+              onApplyFilter: (_) {},
+            ),
+          ),
         ),
       ),
     );
@@ -64,7 +62,7 @@ void main() {
     expect(find.text('7'), findsWidgets);
   });
 
-  testWidgets('untagged toggle clears visible tag selection state', (
+  testWidgets('untagged toggle updates draft and waits for apply', (
     tester,
   ) async {
     final client = MockClient((request) async {
@@ -83,30 +81,23 @@ void main() {
     final provider = TagProvider(
       TagService(baseUrl: 'http://localhost:8080', client: client),
     );
-    final imageProvider = ImageListProvider(
-      ApiService(baseUrl: 'http://localhost:8080'),
-    );
-    bool? hasTagsFilter;
+    GalleryFilterState? appliedFilter;
 
     await tester.pumpWidget(
       fluent.FluentApp(
         home: MultiProvider(
           providers: [
             ChangeNotifierProvider<TagProvider>.value(value: provider),
-            ChangeNotifierProvider<ImageListProvider>.value(
-              value: imageProvider,
-            ),
           ],
           child: StatefulBuilder(
             builder: (context, setState) {
               return fluent.ScaffoldPage(
                 content: FluentTagFilterPane(
-                  hasTagsFilter: hasTagsFilter,
-                  onHasTagsChanged: (value) {
+                  initialFilter: GalleryFilterState(exactTagIds: {1}),
+                  onApplyFilter: (value) {
                     setState(() {
-                      hasTagsFilter = value;
+                      appliedFilter = value;
                     });
-                    imageProvider.setHasTagsFilter(value);
                   },
                 ),
               );
@@ -117,14 +108,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    provider.setSelection([1]);
-    await tester.pumpAndSettle();
-    expect(provider.selectedTagIds, {1});
-
     await tester.tap(find.byType(fluent.ToggleSwitch).first);
     await tester.pumpAndSettle();
 
-    expect(provider.selectedTagIds, isEmpty);
-    expect(imageProvider.hasTagsFilter, false);
+    expect(appliedFilter, isNull);
+
+    await tester.tap(find.text('应用筛选'));
+    await tester.pumpAndSettle();
+
+    expect(appliedFilter, isNotNull);
+    expect(appliedFilter!.exactTagIds, isEmpty);
+    expect(appliedFilter!.hasTags, isFalse);
+    expect(appliedFilter!.hasPendingTags, isNull);
   });
 }

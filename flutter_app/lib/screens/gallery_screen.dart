@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:provider/provider.dart';
+import '../models/gallery_filter_state.dart';
 import '../providers/image_provider.dart';
 import '../providers/selection_provider.dart';
 import '../providers/tag_provider.dart';
@@ -94,15 +95,10 @@ class _GalleryContentState extends State<_GalleryContent> {
                 : fluent.Brightness.light,
           ),
           child: FluentTagFilterPane(
-            hasTagsFilter: context.watch<ImageListProvider>().hasTagsFilter,
-            onHasTagsChanged: (value) {
-              context.read<ImageListProvider>().setHasTagsFilter(value);
-            },
-            hasPendingTagsFilter: context
-                .watch<ImageListProvider>()
-                .hasPendingTagsFilter,
-            onHasPendingTagsChanged: (value) {
-              context.read<ImageListProvider>().setHasPendingTagsFilter(value);
+            initialFilter: context.watch<ImageListProvider>().filter,
+            onApplyFilter: (value) {
+              context.read<ImageListProvider>().applyFilter(value);
+              Navigator.of(context).maybePop();
             },
           ),
         ),
@@ -141,10 +137,7 @@ class _GalleryContentState extends State<_GalleryContent> {
                     const SizedBox(height: 8),
                     TextButton.icon(
                       onPressed: () {
-                        context.read<TagProvider>().clearSelection();
-                        provider.setTagFilter([]);
-                        provider.setHasTagsFilter(null);
-                        provider.setHasPendingTagsFilter(null);
+                        provider.applyFilter(GalleryFilterState());
                       },
                       icon: const Icon(Icons.clear_all),
                       label: const Text('清除筛选'),

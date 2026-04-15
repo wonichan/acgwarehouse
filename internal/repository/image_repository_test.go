@@ -825,6 +825,54 @@ func TestFindByIDRange_ReturnsPagedAscendingResults(t *testing.T) {
 	}
 }
 
+func TestFindBySourceRootsAfterID_ReturnsFilteredPagedResults(t *testing.T) {
+	t.Parallel()
+
+	_, repo := newImageRepositoryTestDB(t)
+
+	insert := func(path, root string) *domain.Image {
+		img := &domain.Image{
+			Path:       path,
+			Filename:   filepath.Base(path),
+			SourceRoot: root,
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("SaveImage(%s): %v", path, err)
+		}
+		return img
+	}
+
+	a1 := insert(filepath.Join("/a", "1.png"), "/a")
+	a2 := insert(filepath.Join("/a", "2.png"), "/a")
+	_ = insert(filepath.Join("/b", "1.png"), "/b")
+	a3 := insert(filepath.Join("/a", "3.png"), "/a")
+
+	page1, err := repo.FindBySourceRootsAfterID(2, 0, []string{"/a"})
+	if err != nil {
+		t.Fatalf("FindBySourceRootsAfterID page1: %v", err)
+	}
+	if len(page1) != 2 {
+		t.Fatalf("len(page1) = %d, want 2", len(page1))
+	}
+	if page1[0].ID != a1.ID || page1[1].ID != a2.ID {
+		t.Fatalf("unexpected page1 IDs: got [%d,%d], want [%d,%d]", page1[0].ID, page1[1].ID, a1.ID, a2.ID)
+	}
+
+	page2, err := repo.FindBySourceRootsAfterID(2, page1[len(page1)-1].ID, []string{"/a"})
+	if err != nil {
+		t.Fatalf("FindBySourceRootsAfterID page2: %v", err)
+	}
+	if len(page2) != 1 {
+		t.Fatalf("len(page2) = %d, want 1", len(page2))
+	}
+	if page2[0].ID != a3.ID {
+		t.Fatalf("page2[0].ID = %d, want %d", page2[0].ID, a3.ID)
+	}
+}
+
 func TestFindUntaggedSupportsPagination(t *testing.T) {
 	t.Parallel()
 

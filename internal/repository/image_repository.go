@@ -35,6 +35,7 @@ type ImageRepository interface {
 	FindByPath(path string) (*domain.Image, error)
 	FindAll(limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	FindByIDRange(limit int, lastID int64) ([]domain.Image, error)
+	FindBySourceRootsAfterID(limit int, lastID int64, sourceRoots []string) ([]domain.Image, error)
 	FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
 	FindUntagged(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
@@ -260,6 +261,58 @@ func (r *sqliteImageRepository) FindByIDRange(limit int, lastID int64) ([]domain
 	defer rows.Close()
 
 	images := make([]domain.Image, 0, limit)
+	for rows.Next() {
+		var image domain.Image
+		if err := scanImage(rows, &image); err != nil {
+			return nil, err
+		}
+		images = append(images, image)
+	}
+
+	return images, rows.Err()
+}
+
+func (r *sqliteImageRepository) FindBySourceRootsAfterID(limit int, lastID int64, sourceRoots []string) ([]domain.Image, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+
+	roots := make([]string, 0, len(sourceRoots))
+	for _, root := range sourceRoots {
+		trimmed := strings.TrimSpace(root)
+		if trimmed == "" {
+			continue
+		}
+		roots = append(roots, trimmed)
+	}
+	if len(roots) == 0 {
+		return []domain.Image{}, nil
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(roots)), ",")
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM images i
+		LEFT JOIN collection_images ci ON ci.image_id = i.id
+		WHERE i.source_root IN (%s)
+		  AND i.id > ?
+		ORDER BY i.id ASC
+		LIMIT ?
+	`, imageSelectColumns, placeholders)
+
+	args := make([]any, 0, len(roots)+2)
+	for _, root := range roots {
+		args = append(args, root)
+	}
+	args = append(args, lastID, limit)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	images := make([]domain.Image, 0)
 	for rows.Next() {
 		var image domain.Image
 		if err := scanImage(rows, &image); err != nil {
