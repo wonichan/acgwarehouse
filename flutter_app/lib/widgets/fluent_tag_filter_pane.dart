@@ -1,23 +1,19 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../models/gallery_filter_state.dart';
 import '../providers/tag_provider.dart';
-import '../providers/image_provider.dart';
 
 /// Fluent 风格的标签筛选面板
 /// 从侧边弹出，提供标签多选筛选功能
 class FluentTagFilterPane extends StatefulWidget {
-  final bool? hasTagsFilter;
-  final Function(bool? hasTags)? onHasTagsChanged;
-  final bool? hasPendingTagsFilter;
-  final Function(bool? hasPendingTags)? onHasPendingTagsChanged;
+  final GalleryFilterState initialFilter;
+  final ValueChanged<GalleryFilterState> onApplyFilter;
 
   const FluentTagFilterPane({
     super.key,
-    this.hasTagsFilter,
-    this.onHasTagsChanged,
-    this.hasPendingTagsFilter,
-    this.onHasPendingTagsChanged,
+    required this.initialFilter,
+    required this.onApplyFilter,
   });
 
   @override
@@ -26,14 +22,23 @@ class FluentTagFilterPane extends StatefulWidget {
 
 class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
   final TextEditingController _searchController = TextEditingController();
+  late GalleryFilterState _draftFilter;
 
   @override
   void initState() {
     super.initState();
+    _draftFilter = widget.initialFilter.normalized();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TagProvider>().loadTagTree();
-      context.read<TagProvider>().loadTags();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant FluentTagFilterPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialFilter != widget.initialFilter) {
+      _draftFilter = widget.initialFilter.normalized();
+    }
   }
 
   @override
@@ -75,14 +80,11 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     );
   }
 
-  List<TreeViewItem> _buildTreeNodes(
-    List<dynamic> nodes,
-    TagProvider provider,
-  ) {
+  List<TreeViewItem> _buildTreeNodes(List<dynamic> nodes) {
     final theme = FluentTheme.of(context);
     return nodes.map((node) {
       final tagId = (node['tag_id'] ?? node['id']) as int;
-      final isSelected = provider.selectedTagIds.contains(tagId);
+      final isSelected = _draftFilter.exactTagIds.contains(tagId);
       final children = node['children'] as List<dynamic>? ?? [];
       final usageCount = node['tree_usage_count'] ?? node['usage_count'] ?? 0;
       final level = node['level'] as String?;
@@ -94,10 +96,18 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
             Checkbox(
               checked: isSelected,
               onChanged: (checked) {
-                provider.toggleTag(tagId);
-                context.read<ImageListProvider>().setTagFilter(
-                  provider.selectedTagIds.toList(),
-                );
+                final nextIds = _draftFilter.exactTagIds.toSet();
+                if (nextIds.contains(tagId)) {
+                  nextIds.remove(tagId);
+                } else {
+                  nextIds.add(tagId);
+                }
+
+                setState(() {
+                  _draftFilter = _draftFilter
+                      .copyWith(exactTagIds: nextIds, hasTags: null)
+                      .normalized();
+                });
               },
             ),
             const SizedBox(width: 8),
@@ -114,9 +124,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           ],
         ),
         value: tagId,
-        children: children.isNotEmpty
-            ? _buildTreeNodes(children, provider)
-            : [],
+        children: children.isNotEmpty ? _buildTreeNodes(children) : [],
       );
     }).toList();
   }
@@ -160,7 +168,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
               const Spacer(),
               Consumer<TagProvider>(
                 builder: (context, provider, _) {
-                  final count = provider.selectedTagIds.length;
+                  final count = _draftFilter.exactTagIds.length;
                   if (count == 0) return const SizedBox.shrink();
                   return Container(
                     padding: const EdgeInsets.symmetric(
@@ -216,26 +224,34 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           // 清空按钮
           Consumer<TagProvider>(
             builder: (context, provider, _) {
-              if (provider.selectedTagIds.isEmpty &&
-                  widget.hasTagsFilter != false &&
-                  widget.hasPendingTagsFilter != true) {
+              if (_draftFilter.isEmpty) {
                 return const SizedBox.shrink();
               }
-              return Button(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(FluentIcons.clear, size: 14),
-                    const SizedBox(width: 6),
-                    const Text('清空筛选'),
-                  ],
-                ),
-                onPressed: () {
-                  provider.clearSelection();
-                  context.read<ImageListProvider>().setTagFilter([]);
-                  widget.onHasTagsChanged?.call(null);
-                  widget.onHasPendingTagsChanged?.call(null);
-                },
+              return Row(
+                children: [
+                  Button(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(FluentIcons.clear, size: 14),
+                        const SizedBox(width: 6),
+                        const Text('清空筛选'),
+                      ],
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _draftFilter = _draftFilter.clear();
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    child: const Text('应用筛选'),
+                    onPressed: () {
+                      widget.onApplyFilter(_draftFilter.normalized());
+                    },
+                  ),
+                ],
               );
             },
           ),
@@ -285,7 +301,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                 }
 
                 return TreeView(
-                  items: _buildTreeNodes(visibleNodes, provider),
+                  items: _buildTreeNodes(visibleNodes),
                   selectionMode: TreeViewSelectionMode.multiple,
                 );
               },
@@ -300,12 +316,13 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     return Row(
       children: [
         ToggleSwitch(
-          checked: widget.hasTagsFilter == false,
+          checked: _draftFilter.hasTags == false,
           onChanged: (value) {
-            if (value) {
-              context.read<TagProvider>().clearSelection();
-            }
-            widget.onHasTagsChanged?.call(value ? false : null);
+            setState(() {
+              _draftFilter = value
+                  ? GalleryFilterState(hasTags: false).normalized()
+                  : _draftFilter.copyWith(hasTags: null).normalized();
+            });
           },
         ),
         const SizedBox(width: 8),
@@ -320,9 +337,16 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     return Row(
       children: [
         ToggleSwitch(
-          checked: widget.hasPendingTagsFilter == true,
+          checked: _draftFilter.hasPendingTags == true,
           onChanged: (value) {
-            widget.onHasPendingTagsChanged?.call(value ? true : null);
+            setState(() {
+              _draftFilter = _draftFilter
+                  .copyWith(
+                    hasPendingTags: value ? true : null,
+                    hasTags: value ? null : _draftFilter.hasTags,
+                  )
+                  .normalized();
+            });
           },
         ),
         const SizedBox(width: 8),
