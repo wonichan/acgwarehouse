@@ -18,14 +18,6 @@ type BackfillCandidateFilter struct {
 	SortDir string
 }
 
-// BackfillCandidateStats holds skip-reason counts for a backfill preview.
-type BackfillCandidateStats struct {
-	HitCount              int64
-	EnqueueableCount      int64
-	SkippedWithAITag      int64
-	SkippedWithActiveTask int64
-}
-
 type ImageRepository interface {
 	// SaveImage saves an image to the database.
 	// Returns (isNew, error) where isNew is true if a new record was inserted,
