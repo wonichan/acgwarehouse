@@ -41,13 +41,15 @@ type viewerWindowRequest struct {
 }
 
 type viewerWindowSnapshot struct {
-	SortBy         string  `json:"sort_by"`
-	SortDir        string  `json:"sort_dir"`
-	TagIDs         []int64 `json:"tag_ids"`
-	HasTags        *bool   `json:"has_tags"`
-	HasPendingTags *bool   `json:"has_pending_tags"`
-	Query          string  `json:"q"`
-	SortOrder      string  `json:"sort_order"`
+	SortBy            string  `json:"sort_by"`
+	SortDir           string  `json:"sort_dir"`
+	TagIDs            []int64 `json:"tag_ids"`
+	ExactTagIDs       []int64 `json:"exact_tag_ids"`
+	SubtreeRootTagIDs []int64 `json:"subtree_root_tag_ids"`
+	HasTags           *bool   `json:"has_tags"`
+	HasPendingTags    *bool   `json:"has_pending_tags"`
+	Query             string  `json:"q"`
+	SortOrder         string  `json:"sort_order"`
 }
 
 func NewImageHandler(imageRepo repository.ImageRepository, tagRepo repository.TagRepository, imageTagRepo repository.ImageTagRepository, depsOpt ...any) *ImageHandler {
@@ -84,9 +86,11 @@ func NewImageHandler(imageRepo repository.ImageRepository, tagRepo repository.Ta
 
 // ListImages handles GET /api/v1/images with optional tag_ids filtering.
 // When tag_ids query param is provided, returns images that have ALL specified tags (AND semantics).
+// When exact_tag_ids or subtree_root_tag_ids is provided, uses gallery filter with AND semantics.
 // When has_tags=false is provided, returns images that have NO tags.
 // When no filter is provided, returns all images with pagination.
-// has_tags=false is mutually exclusive with tag_ids parameter.
+// has_tags=false is mutually exclusive with tag_ids, exact_tag_ids, and subtree_root_tag_ids.
+// tag_ids is mutually exclusive with exact_tag_ids and subtree_root_tag_ids.
 func (h *ImageHandler) ListImages(c *gin.Context) {
 	ctx := c.Request.Context()
 	limit := parsePositiveInt(c.DefaultQuery("limit", "20"), 20)
@@ -128,23 +132,34 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 	}
 
 	tagIDsStr := strings.TrimSpace(c.Query("tag_ids"))
+	exactTagIDsStr := strings.TrimSpace(c.Query("exact_tag_ids"))
+	subtreeRootTagIDsStr := strings.TrimSpace(c.Query("subtree_root_tag_ids"))
 
-	// 验证互斥性：has_tags=false 与 tag_ids 不能同时使用
 	if hasTags != nil && !*hasTags && tagIDsStr != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "has_tags=false is incompatible with tag_ids parameter"})
+		return
+	}
+	if hasTags != nil && !*hasTags && exactTagIDsStr != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "has_tags=false is incompatible with exact_tag_ids parameter"})
+		return
+	}
+	if hasTags != nil && !*hasTags && subtreeRootTagIDsStr != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "has_tags=false is incompatible with subtree_root_tag_ids parameter"})
 		return
 	}
 	if hasPendingTags != nil && *hasPendingTags && hasTags != nil && !*hasTags {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "has_pending_tags=true is incompatible with has_tags=false"})
 		return
 	}
+	if tagIDsStr != "" && (exactTagIDsStr != "" || subtreeRootTagIDsStr != "") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tag_ids is mutually exclusive with exact_tag_ids and subtree_root_tag_ids"})
+		return
+	}
 
 	var images []any
 	var total int64
 
-	// 根据 has_tags 参数决定查询方式
 	if hasTags != nil && !*hasTags {
-		// 查询未打标签的图片
 		untaggedImages, err := h.imageRepo.FindUntagged(ctx, limit, offset, sortBy, sortDir)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -191,8 +206,31 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 		for _, img := range pendingImages {
 			images = append(images, rewriteImageForRequest(c.Request, img))
 		}
+	} else if exactTagIDsStr != "" || subtreeRootTagIDsStr != "" {
+		exactTagIDs, err := parseTagIDsOrNil(exactTagIDsStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid exact_tag_ids format"})
+			return
+		}
+		subtreeRootTagIDs, err := parseTagIDsOrNil(subtreeRootTagIDsStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid subtree_root_tag_ids format"})
+			return
+		}
+		filteredImages, err := h.imageRepo.FindByGalleryFilter(ctx, exactTagIDs, subtreeRootTagIDs, limit, offset, sortBy, sortDir)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		total, err = h.imageRepo.CountByGalleryFilter(ctx, exactTagIDs, subtreeRootTagIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, img := range filteredImages {
+			images = append(images, rewriteImageForRequest(c.Request, img))
+		}
 	} else if tagIDsStr != "" {
-		// Parse comma-separated tag IDs
 		tagIDs, err := parseTagIDs(tagIDsStr)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tag_ids format"})
@@ -392,6 +430,8 @@ func (h *ImageHandler) viewerWindowGallery(c *gin.Context, req viewerWindowReque
 		total, err = h.imageRepo.CountPendingTagsByTagIDs(ctx, req.Snapshot.TagIDs)
 	case req.Snapshot.HasPendingTags != nil && *req.Snapshot.HasPendingTags:
 		total, err = h.imageRepo.CountPendingTags(ctx)
+	case len(req.Snapshot.ExactTagIDs) > 0 || len(req.Snapshot.SubtreeRootTagIDs) > 0:
+		total, err = h.imageRepo.CountByGalleryFilter(ctx, req.Snapshot.ExactTagIDs, req.Snapshot.SubtreeRootTagIDs)
 	case len(req.Snapshot.TagIDs) > 0:
 		total, err = h.imageRepo.CountByTagIDs(ctx, req.Snapshot.TagIDs)
 	default:
@@ -433,6 +473,15 @@ func (h *ImageHandler) viewerWindowGallery(c *gin.Context, req viewerWindowReque
 			return
 		}
 		for _, image := range pending {
+			items = append(items, image)
+		}
+	case len(req.Snapshot.ExactTagIDs) > 0 || len(req.Snapshot.SubtreeRootTagIDs) > 0:
+		filtered, err := h.imageRepo.FindByGalleryFilter(ctx, req.Snapshot.ExactTagIDs, req.Snapshot.SubtreeRootTagIDs, limit, windowStart, sortBy, sortDir)
+		if err != nil {
+			respondViewerServerError(c)
+			return
+		}
+		for _, image := range filtered {
 			items = append(items, image)
 		}
 	case len(req.Snapshot.TagIDs) > 0:
@@ -568,4 +617,11 @@ func parseTagIDs(s string) ([]int64, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+func parseTagIDsOrNil(s string) ([]int64, error) {
+	if s == "" {
+		return nil, nil
+	}
+	return parseTagIDs(s)
 }

@@ -1182,3 +1182,260 @@ func performViewerWindowRequest(t *testing.T, router *gin.Engine, body map[strin
 	router.ServeHTTP(w, req)
 	return w
 }
+
+// seedGalleryFilterHierarchy creates a tag hierarchy for gallery filter tests:
+// parent "colors" (root) → children "red", "blue"
+// Images are tagged: img1=red, img2=blue, img3=untagged
+// Returns (parentID, child1ID, child2ID).
+func seedGalleryFilterHierarchy(t *testing.T, repos *imageHandlerTestRepos) (int64, int64, int64) {
+	t.Helper()
+	ctx := context.Background()
+
+	parent := &domain.Tag{PreferredLabel: "colors", Slug: "colors", Level: "root", ReviewState: "confirmed"}
+	if err := repos.tagRepo.Save(ctx, parent); err != nil {
+		t.Fatalf("save parent tag: %v", err)
+	}
+	child1 := &domain.Tag{PreferredLabel: "red", Slug: "red", ParentID: &parent.ID, Level: "child", ReviewState: "confirmed"}
+	if err := repos.tagRepo.Save(ctx, child1); err != nil {
+		t.Fatalf("save child1 tag: %v", err)
+	}
+	child2 := &domain.Tag{PreferredLabel: "blue", Slug: "blue", ParentID: &parent.ID, Level: "child", ReviewState: "confirmed"}
+	if err := repos.tagRepo.Save(ctx, child2); err != nil {
+		t.Fatalf("save child2 tag: %v", err)
+	}
+
+	// img1 has "red", img2 has "blue", img3 has no tags
+	if err := repos.imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: 1, TagID: child1.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag img1 with red: %v", err)
+	}
+	if err := repos.imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: 2, TagID: child2.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag img2 with blue: %v", err)
+	}
+
+	return parent.ID, child1.ID, child2.ID
+}
+
+func TestImageHandlerListImagesFiltersByExactTagIDs(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+	_, childRedID, childBlueID := seedGalleryFilterHierarchy(t, repos)
+
+	// exact_tag_ids=red → only img1 (NOT img2 which has sibling tag "blue")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?exact_tag_ids="+itoa(childRedID), nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Images []map[string]any `json:"images"`
+		Total  int64            `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Images) != 1 {
+		t.Fatalf("len(images) = %d, want 1 (exact match only)", len(resp.Images))
+	}
+	if resp.Images[0]["id"].(float64) != 1 {
+		t.Fatalf("images[0].id = %v, want 1", resp.Images[0]["id"])
+	}
+
+	// Also verify exact_tag_ids=blue → only img2
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/images?exact_tag_ids="+itoa(childBlueID), nil)
+	router.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w2.Code, http.StatusOK, w2.Body.String())
+	}
+
+	decodeJSONResponse(t, w2, &resp)
+	if len(resp.Images) != 1 {
+		t.Fatalf("len(images) = %d, want 1 (exact blue only)", len(resp.Images))
+	}
+	if resp.Images[0]["id"].(float64) != 2 {
+		t.Fatalf("images[0].id = %v, want 2", resp.Images[0]["id"])
+	}
+}
+
+func TestImageHandlerListImagesFiltersBySubtreeRootTagIDs(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+	parentID, _, _ := seedGalleryFilterHierarchy(t, repos)
+
+	// subtree_root_tag_ids=parent → expands to parent+all children → img1 (red) and img2 (blue)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?subtree_root_tag_ids="+itoa(parentID), nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Images []map[string]any `json:"images"`
+		Total  int64            `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if resp.Total != 2 {
+		t.Fatalf("total = %d, want 2 (subtree includes children)", resp.Total)
+	}
+	if len(resp.Images) != 2 {
+		t.Fatalf("len(images) = %d, want 2", len(resp.Images))
+	}
+}
+
+func TestImageHandlerListImagesFiltersByExactAndSubtreeTogether(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+	parentID, childRedID, _ := seedGalleryFilterHierarchy(t, repos)
+
+	// Tag img1 also with the parent tag so we can test AND semantics
+	// Currently img1 has "red" (child). We need img1 to also be in subtree of parent.
+	// img1 already has childRed, so subtree_root_tag_ids=parent will match img1.
+	// exact_tag_ids=childRed AND subtree_root_tag_ids=parent → img1 (has exact red AND is in colors subtree)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/images?exact_tag_ids="+itoa(childRedID)+"&subtree_root_tag_ids="+itoa(parentID), nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Images []map[string]any `json:"images"`
+		Total  int64            `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	// img1 has exact red AND is in colors subtree → matches
+	// img2 is in colors subtree but does NOT have exact red → does not match
+	if resp.Total != 1 {
+		t.Fatalf("total = %d, want 1 (AND semantics)", resp.Total)
+	}
+	if len(resp.Images) != 1 {
+		t.Fatalf("len(images) = %d, want 1", len(resp.Images))
+	}
+	if resp.Images[0]["id"].(float64) != 1 {
+		t.Fatalf("images[0].id = %v, want 1", resp.Images[0]["id"])
+	}
+}
+
+func TestImageHandlerListImagesExactTagIDsIncompatibleWithHasTagsFalse(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+	_, childRedID, _ := seedGalleryFilterHierarchy(t, repos)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_tags=false&exact_tag_ids="+itoa(childRedID), nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestImageHandlerListImagesSubtreeRootTagIDsIncompatibleWithHasTagsFalse(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+	parentID, _, _ := seedGalleryFilterHierarchy(t, repos)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_tags=false&subtree_root_tag_ids="+itoa(parentID), nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestImageHandlerListImagesTagIDsMutuallyExclusiveWithNewParams(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+	_, childRedID, _ := seedGalleryFilterHierarchy(t, repos)
+
+	// tag_ids + exact_tag_ids → 400
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/images?tag_ids="+itoa(childRedID)+"&exact_tag_ids="+itoa(childRedID), nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	decodeJSONResponse(t, w, &resp)
+	if resp["error"] == nil {
+		t.Fatal("response missing 'error' field")
+	}
+
+	// tag_ids + subtree_root_tag_ids → 400
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet,
+		"/api/v1/images?tag_ids="+itoa(childRedID)+"&subtree_root_tag_ids="+itoa(childRedID), nil)
+	router.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w2.Code, http.StatusBadRequest)
+	}
+}
+
+func TestImageHandlerListImagesBackwardCompatWithTagIDs(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+	_, childRedID, _ := seedGalleryFilterHierarchy(t, repos)
+
+	// Existing tag_ids param still works unchanged
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?tag_ids="+itoa(childRedID), nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Images []map[string]any `json:"images"`
+		Total  int64            `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Images) != 1 {
+		t.Fatalf("len(images) = %d, want 1 (backward compat)", len(resp.Images))
+	}
+	if resp.Images[0]["id"].(float64) != 1 {
+		t.Fatalf("images[0].id = %v, want 1", resp.Images[0]["id"])
+	}
+}
+
+func TestImageHandlerListImagesExactTagIDsInvalidFormat(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newImageHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?exact_tag_ids=abc", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+
+	var resp map[string]any
+	decodeJSONResponse(t, w, &resp)
+	if resp["error"] == nil {
+		t.Fatal("response missing 'error' field")
+	}
+}
