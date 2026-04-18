@@ -157,7 +157,7 @@ func TestTagAdminServiceMergeTagsUsesExplicitTargetWithoutFuzzySelection(t *test
 	}
 }
 
-func TestTagAdminServiceGetDeletePreviewBlocksUsedTag(t *testing.T) {
+func TestTagAdminServiceGetDeletePreviewReportsUsedTagWithoutBlocking(t *testing.T) {
 	t.Parallel()
 
 	service, _, _, _ := newTagAdminServiceForTest(t)
@@ -172,11 +172,14 @@ func TestTagAdminServiceGetDeletePreviewBlocksUsedTag(t *testing.T) {
 	if preview.AffectedImageCount == 0 {
 		t.Fatal("expected affected_image_count > 0 for used tag")
 	}
-	if preview.CanDelete {
-		t.Fatal("expected used tag to be blocked from delete")
+	if !preview.CanDelete {
+		t.Fatal("expected used tag preview to remain deletable")
 	}
-	if preview.BlockingReason != "merge_or_reclassify_required" {
-		t.Fatalf("blocking_reason = %q, want %q", preview.BlockingReason, "merge_or_reclassify_required")
+	if preview.BlockingReason != "" {
+		t.Fatalf("blocking_reason = %q, want empty", preview.BlockingReason)
+	}
+	if preview.ChildCount != 0 {
+		t.Fatalf("child_count = %d, want 0", preview.ChildCount)
 	}
 }
 
@@ -195,9 +198,12 @@ func TestTagAdminServiceGetDeletePreviewAllowsUnusedTag(t *testing.T) {
 	if preview.AffectedImageCount != 0 {
 		t.Fatalf("affected_image_count = %d, want 0", preview.AffectedImageCount)
 	}
+	if preview.ChildCount != 0 {
+		t.Fatalf("child_count = %d, want 0", preview.ChildCount)
+	}
 }
 
-func TestTagAdminServiceGetDeletePreviewBlocksTagWithChildren(t *testing.T) {
+func TestTagAdminServiceGetDeletePreviewReportsChildCountWithoutBlocking(t *testing.T) {
 	t.Parallel()
 
 	service, _, _, _ := newTagAdminServiceForTest(t)
@@ -206,15 +212,18 @@ func TestTagAdminServiceGetDeletePreviewBlocksTagWithChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDeletePreview() error = %v", err)
 	}
-	if preview.CanDelete {
-		t.Fatal("expected parent tag with children to be blocked")
+	if !preview.CanDelete {
+		t.Fatal("expected parent tag with children to remain deletable")
 	}
-	if preview.BlockingReason != "child_tags_exist" {
-		t.Fatalf("blocking_reason = %q, want %q", preview.BlockingReason, "child_tags_exist")
+	if preview.BlockingReason != "" {
+		t.Fatalf("blocking_reason = %q, want empty", preview.BlockingReason)
+	}
+	if preview.ChildCount != 1 {
+		t.Fatalf("child_count = %d, want 1", preview.ChildCount)
 	}
 }
 
-func TestTagAdminServiceGetDeletePreviewBlocksRejectedOnlyAssociation(t *testing.T) {
+func TestTagAdminServiceGetDeletePreviewCountsRejectedOnlyAssociationWithoutBlocking(t *testing.T) {
 	t.Parallel()
 
 	service, tagRepo, _, imageTagRepo := newTagAdminServiceForTest(t)
@@ -227,11 +236,100 @@ func TestTagAdminServiceGetDeletePreviewBlocksRejectedOnlyAssociation(t *testing
 	if err != nil {
 		t.Fatalf("GetDeletePreview() error = %v", err)
 	}
-	if preview.CanDelete {
-		t.Fatal("expected rejected-only direct association to still block delete")
+	if !preview.CanDelete {
+		t.Fatal("expected rejected-only direct association preview to remain deletable")
 	}
 	if preview.AffectedImageCount != 1 {
 		t.Fatalf("affected_image_count = %d, want 1", preview.AffectedImageCount)
+	}
+}
+
+func TestTagAdminServiceDeleteTagRemovesAssociationsAliasesAndTag(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, aliasRepo, imageTagRepo := newTagAdminServiceForTest(t)
+
+	result, err := service.DeleteTag(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("DeleteTag() error = %v", err)
+	}
+	if result.DeletedTagID != 1 {
+		t.Fatalf("deleted_tag_id = %d, want 1", result.DeletedTagID)
+	}
+	if result.AffectedImageCount != 2 {
+		t.Fatalf("affected_image_count = %d, want 2", result.AffectedImageCount)
+	}
+	if result.DetachedChildCount != 0 {
+		t.Fatalf("detached_child_count = %d, want 0", result.DetachedChildCount)
+	}
+
+	if _, err := tagRepo.FindByID(context.Background(), 1); err == nil {
+		t.Fatal("expected deleted tag to be removed")
+	}
+	aliases, err := aliasRepo.FindByTagID(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("FindByTagID() aliases error = %v", err)
+	}
+	if len(aliases) != 0 {
+		t.Fatalf("expected aliases to be removed, got %d", len(aliases))
+	}
+	associations, err := imageTagRepo.FindByTagID(context.Background(), 1, 10, 0)
+	if err != nil {
+		t.Fatalf("FindByTagID() associations error = %v", err)
+	}
+	if len(associations) != 0 {
+		t.Fatalf("expected image-tag associations to be removed, got %d", len(associations))
+	}
+	for _, imageID := range []int64{1, 2} {
+		exists, err := imageTagRepo.Exists(context.Background(), imageID, 1)
+		if err != nil {
+			t.Fatalf("Exists(image=%d, tag=1) error = %v", imageID, err)
+		}
+		if exists {
+			t.Fatalf("expected association image=%d tag=1 to be removed", imageID)
+		}
+	}
+}
+
+func TestTagAdminServiceDeleteTagDetachesDirectChildren(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, aliasRepo, imageTagRepo := newTagAdminServiceForTest(t)
+
+	result, err := service.DeleteTag(context.Background(), 4)
+	if err != nil {
+		t.Fatalf("DeleteTag() error = %v", err)
+	}
+	if result.DeletedTagID != 4 {
+		t.Fatalf("deleted_tag_id = %d, want 4", result.DeletedTagID)
+	}
+	if result.DetachedChildCount != 1 {
+		t.Fatalf("detached_child_count = %d, want 1", result.DetachedChildCount)
+	}
+
+	if _, err := tagRepo.FindByID(context.Background(), 4); err == nil {
+		t.Fatal("expected deleted parent tag to be removed")
+	}
+	child, err := tagRepo.FindByID(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("FindByID(child) error = %v", err)
+	}
+	if child.ParentID != nil {
+		t.Fatalf("child.ParentID = %v, want nil", child.ParentID)
+	}
+	aliases, err := aliasRepo.FindByTagID(context.Background(), 4)
+	if err != nil {
+		t.Fatalf("FindByTagID(parent aliases) error = %v", err)
+	}
+	if len(aliases) != 0 {
+		t.Fatalf("expected deleted parent aliases to be removed, got %d", len(aliases))
+	}
+	associations, err := imageTagRepo.FindByTagID(context.Background(), 4, 10, 0)
+	if err != nil {
+		t.Fatalf("FindByTagID(parent associations) error = %v", err)
+	}
+	if len(associations) != 0 {
+		t.Fatalf("expected deleted parent associations to be removed, got %d", len(associations))
 	}
 }
 
@@ -409,6 +507,85 @@ func TestTagAdminServiceBatchFindChildrenGroupsChildrenByParent(t *testing.T) {
 	}
 	if len(childrenMap[6]) != 2 || childrenMap[6][0].ID != 4 || childrenMap[6][1].ID != 7 {
 		t.Fatalf("childrenMap[6] = %+v, want children 4 and 7", childrenMap[6])
+	}
+}
+
+func TestTagAdminServiceBatchFindChildrenAllowsNullPrimaryCategory(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+	if _, err := service.db.Exec(`UPDATE tags SET primary_category = NULL WHERE id IN (?, ?)`, 4, 5); err != nil {
+		t.Fatalf("set primary_category null: %v", err)
+	}
+
+	childrenMap, err := service.batchFindChildren(context.Background(), []int64{4, 6})
+	if err != nil {
+		t.Fatalf("batchFindChildren() error = %v", err)
+	}
+
+	if len(childrenMap[4]) != 1 || childrenMap[4][0].ID != 5 {
+		t.Fatalf("childrenMap[4] = %+v, want only child 5", childrenMap[4])
+	}
+	if childrenMap[4][0].PrimaryCategory != "" {
+		t.Fatalf("childrenMap[4][0].PrimaryCategory = %q, want empty string", childrenMap[4][0].PrimaryCategory)
+	}
+	if len(childrenMap[6]) != 2 || childrenMap[6][0].ID != 4 || childrenMap[6][1].ID != 7 {
+		t.Fatalf("childrenMap[6] = %+v, want children 4 and 7", childrenMap[6])
+	}
+	if childrenMap[6][0].PrimaryCategory != "" {
+		t.Fatalf("childrenMap[6][0].PrimaryCategory = %q, want empty string", childrenMap[6][0].PrimaryCategory)
+	}
+}
+
+func TestQueryTagByIDTxAllowsNullPrimaryCategory(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+	if _, err := service.db.Exec(`UPDATE tags SET primary_category = NULL WHERE id = ?`, 1); err != nil {
+		t.Fatalf("set primary_category null: %v", err)
+	}
+
+	tx, err := service.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("BeginTx() error = %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	tag, err := queryTagByIDTx(context.Background(), tx, 1)
+	if err != nil {
+		t.Fatalf("queryTagByIDTx() error = %v", err)
+	}
+	if tag.ID != 1 {
+		t.Fatalf("tag.ID = %d, want 1", tag.ID)
+	}
+	if tag.PrimaryCategory != "" {
+		t.Fatalf("PrimaryCategory = %q, want empty string", tag.PrimaryCategory)
+	}
+}
+
+func TestQueryChildrenByParentTxAllowsNullPrimaryCategory(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+	if _, err := service.db.Exec(`UPDATE tags SET primary_category = NULL WHERE id = ?`, 5); err != nil {
+		t.Fatalf("set primary_category null: %v", err)
+	}
+
+	tx, err := service.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("BeginTx() error = %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	children, err := queryChildrenByParentTx(context.Background(), tx, 4)
+	if err != nil {
+		t.Fatalf("queryChildrenByParentTx() error = %v", err)
+	}
+	if len(children) != 1 || children[0].ID != 5 {
+		t.Fatalf("children = %+v, want only child 5", children)
+	}
+	if children[0].PrimaryCategory != "" {
+		t.Fatalf("PrimaryCategory = %q, want empty string", children[0].PrimaryCategory)
 	}
 }
 

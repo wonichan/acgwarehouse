@@ -61,8 +61,15 @@ type TagDeletePreview struct {
 	TagID              int64  `json:"tag_id"`
 	PreferredLabel     string `json:"preferred_label"`
 	AffectedImageCount int64  `json:"affected_image_count"`
+	ChildCount         int64  `json:"child_count"`
 	CanDelete          bool   `json:"can_delete"`
 	BlockingReason     string `json:"blocking_reason"`
+}
+
+type TagDeleteResult struct {
+	DeletedTagID       int64 `json:"deleted_tag_id"`
+	AffectedImageCount int64 `json:"affected_image_count"`
+	DetachedChildCount int64 `json:"detached_child_count"`
 }
 
 type TagCleanupEntry struct {
@@ -161,11 +168,6 @@ func (s *TagAdminService) ListGovernanceTags(ctx context.Context, search string,
 		return nil, 0, err
 	}
 
-	childrenMap, err := s.batchFindChildren(ctx, tagIDs)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	directAssocMap, err := s.batchCountDirectAssociations(ctx, tagIDs)
 	if err != nil {
 		return nil, 0, err
@@ -183,7 +185,6 @@ func (s *TagAdminService) ListGovernanceTags(ctx context.Context, search string,
 		}
 
 		stats := statsMap[tag.ID]
-		children := childrenMap[tag.ID]
 		directAssoc := directAssocMap[tag.ID]
 
 		row := TagGovernanceRow{
@@ -210,7 +211,7 @@ func (s *TagAdminService) ListGovernanceTags(ctx context.Context, search string,
 			DirectManualCount:    stats.DirectManualCount,
 			TreeManualCount:      stats.TreeManualCount,
 			AffectedImageCount:   directAssoc,
-			CanDelete:            directAssoc == 0 && len(children) == 0,
+			CanDelete:            true,
 		}
 		rows = append(rows, row)
 	}
@@ -333,15 +334,83 @@ func (s *TagAdminService) GetDeletePreview(ctx context.Context, tagID int64) (*T
 		TagID:              tag.ID,
 		PreferredLabel:     tag.PreferredLabel,
 		AffectedImageCount: directAssociationCount,
-		CanDelete:          directAssociationCount == 0 && len(children) == 0,
-	}
-	if len(children) > 0 {
-		preview.BlockingReason = "child_tags_exist"
-	} else if !preview.CanDelete {
-		preview.BlockingReason = "merge_or_reclassify_required"
+		ChildCount:         int64(len(children)),
+		CanDelete:          true,
 	}
 
 	return preview, nil
+}
+
+func (s *TagAdminService) DeleteTag(ctx context.Context, tagID int64) (*TagDeleteResult, error) {
+	if tagID <= 0 {
+		return nil, ErrTagNotFound
+	}
+	if s.db == nil {
+		return nil, errors.New("database is required")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err := queryTagByIDTx(ctx, tx, tagID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrTagNotFound
+		}
+		return nil, err
+	}
+
+	children, err := queryChildrenByParentTx(ctx, tx, tagID)
+	if err != nil {
+		return nil, err
+	}
+	affectedImageCount, err := countDirectAssociationsTx(ctx, tx, tagID)
+	if err != nil {
+		return nil, err
+	}
+	imageIDs, err := listImageIDsByTagTx(ctx, tx, tagID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, child := range children {
+		if _, err := tx.ExecContext(ctx, `UPDATE tags SET parent_id = NULL WHERE id = ?`, child.ID); err != nil {
+			return nil, err
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM image_tags WHERE tag_id = ?`, tagID); err != nil {
+		return nil, err
+	}
+	for _, imageID := range imageIDs {
+		if err := syncImageFTSForTx(ctx, tx, imageID); err != nil {
+			return nil, err
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tag_aliases WHERE tag_id = ?`, tagID); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE id = ?`, tagID); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	tx = nil
+
+	return &TagDeleteResult{
+		DeletedTagID:       tagID,
+		AffectedImageCount: affectedImageCount,
+		DetachedChildCount: int64(len(children)),
+	}, nil
 }
 
 func (s *TagAdminService) CleanupUnusedTags(ctx context.Context, tagIDs []int64) (*TagCleanupResult, error) {
@@ -366,12 +435,16 @@ func (s *TagAdminService) CleanupUnusedTags(ctx context.Context, tagIDs []int64)
 			continue
 		}
 
-		if !preview.CanDelete {
+		if preview.AffectedImageCount > 0 || preview.ChildCount > 0 {
+			blockingReason := "merge_or_reclassify_required"
+			if preview.ChildCount > 0 {
+				blockingReason = "child_tags_exist"
+			}
 			result.Blocked = append(result.Blocked, TagCleanupEntry{
 				TagID:              preview.TagID,
 				PreferredLabel:     preview.PreferredLabel,
 				AffectedImageCount: preview.AffectedImageCount,
-				BlockingReason:     preview.BlockingReason,
+				BlockingReason:     blockingReason,
 			})
 			continue
 		}
@@ -847,7 +920,7 @@ func (s *TagAdminService) batchFindChildren(ctx context.Context, tagIDs []int64)
 
 		for rows.Next() {
 			tag := &domain.Tag{}
-			if err := rows.Scan(&tag.ID, &tag.PreferredLabel, &tag.Slug, &tag.Level, &tag.ParentID, &tag.PrimaryCategory, &tag.ReviewState, &tag.TrustScore, &tag.UsageCount, &tag.CreatedAt); err != nil {
+			if err := scanServiceTag(rows, tag); err != nil {
 				rows.Close()
 				return nil, err
 			}
@@ -1262,22 +1335,11 @@ func (s *TagAdminService) mergeAliasesTx(ctx context.Context, tx *sql.Tx, source
 
 func queryTagByIDTx(ctx context.Context, tx *sql.Tx, id int64) (*domain.Tag, error) {
 	tag := &domain.Tag{}
-	err := tx.QueryRowContext(ctx, `
+	err := scanServiceTag(tx.QueryRowContext(ctx, `
 		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
 		FROM tags
 		WHERE id = ?
-	`, id).Scan(
-		&tag.ID,
-		&tag.PreferredLabel,
-		&tag.Slug,
-		&tag.Level,
-		&tag.ParentID,
-		&tag.PrimaryCategory,
-		&tag.ReviewState,
-		&tag.TrustScore,
-		&tag.UsageCount,
-		&tag.CreatedAt,
-	)
+	`, id), tag)
 	if err != nil {
 		return nil, err
 	}
@@ -1308,6 +1370,95 @@ func queryAliasesByTagIDTx(ctx context.Context, tx *sql.Tx, tagID int64) ([]*dom
 		return nil, err
 	}
 	return aliases, nil
+}
+
+func queryChildrenByParentTx(ctx context.Context, tx *sql.Tx, parentID int64) ([]*domain.Tag, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
+		FROM tags
+		WHERE parent_id = ?
+		ORDER BY usage_count DESC, id ASC
+	`, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	children := make([]*domain.Tag, 0)
+	for rows.Next() {
+		child := &domain.Tag{}
+		if err := scanServiceTag(rows, child); err != nil {
+			return nil, err
+		}
+		children = append(children, child)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return children, nil
+}
+
+func scanServiceTag(scanner interface{ Scan(dest ...any) error }, tag *domain.Tag) error {
+	var primaryCategory sql.NullString
+
+	if err := scanner.Scan(
+		&tag.ID,
+		&tag.PreferredLabel,
+		&tag.Slug,
+		&tag.Level,
+		&tag.ParentID,
+		&primaryCategory,
+		&tag.ReviewState,
+		&tag.TrustScore,
+		&tag.UsageCount,
+		&tag.CreatedAt,
+	); err != nil {
+		return err
+	}
+
+	if primaryCategory.Valid {
+		tag.PrimaryCategory = primaryCategory.String
+	} else {
+		tag.PrimaryCategory = ""
+	}
+
+	return nil
+}
+
+func countDirectAssociationsTx(ctx context.Context, tx *sql.Tx, tagID int64) (int64, error) {
+	var count int64
+	err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT image_id)
+		FROM image_tags
+		WHERE tag_id = ?
+	`, tagID).Scan(&count)
+	return count, err
+}
+
+func listImageIDsByTagTx(ctx context.Context, tx *sql.Tx, tagID int64) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT DISTINCT image_id
+		FROM image_tags
+		WHERE tag_id = ?
+		ORDER BY image_id ASC
+	`, tagID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	imageIDs := make([]int64, 0)
+	for rows.Next() {
+		var imageID int64
+		if err := rows.Scan(&imageID); err != nil {
+			return nil, err
+		}
+		imageIDs = append(imageIDs, imageID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return imageIDs, nil
 }
 
 func syncImageFTSForTx(ctx context.Context, tx *sql.Tx, imageID int64) error {

@@ -87,6 +87,7 @@ class TagDeletePreview {
   final int tagId;
   final String preferredLabel;
   final int affectedImageCount;
+  final int childCount;
   final bool canDelete;
   final String? blockingReason;
 
@@ -94,6 +95,7 @@ class TagDeletePreview {
     required this.tagId,
     required this.preferredLabel,
     required this.affectedImageCount,
+    this.childCount = 0,
     required this.canDelete,
     required this.blockingReason,
   });
@@ -103,6 +105,7 @@ class TagDeletePreview {
       tagId: json['tag_id'] as int,
       preferredLabel: json['preferred_label'] as String? ?? '',
       affectedImageCount: json['affected_image_count'] as int? ?? 0,
+      childCount: json['child_count'] as int? ?? 0,
       canDelete: json['can_delete'] as bool? ?? false,
       blockingReason: json['blocking_reason'] as String?,
     );

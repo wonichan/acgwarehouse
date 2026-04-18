@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -22,7 +24,12 @@ class FluentTagFilterPane extends StatefulWidget {
 class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
   final TextEditingController _searchController = TextEditingController();
   late GalleryFilterState _draftFilter;
-  final Set<int> _expandedParents = {};
+  final Set<int> _expandedNodes = {};
+
+  // Search state
+  List<Tag> _searchResults = [];
+  bool _isSearching = false;
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -46,17 +53,72 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
   @override
   void dispose() {
     _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
-  bool _isTagSelected(int tagId, String? level, int? parentId) {
+  // ---- Search ----
+
+  void _onSearchChanged(String query) {
+    _debounce?.cancel();
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+    setState(() {
+      _isSearching = true;
+    });
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      _performSearch(query.trim());
+    });
+  }
+
+  Future<void> _performSearch(String query) async {
+    final provider = context.read<TagProvider>();
+    try {
+      final results = await provider.tagService.searchTags(query);
+      if (!mounted) return;
+      // Only update if the query hasn't changed while we were waiting
+      if (_searchController.text.trim().toLowerCase() ==
+          query.toLowerCase()) {
+        setState(() {
+          _searchResults = results;
+          _isSearching = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+    }
+  }
+
+  void _clearSearch() {
+    _debounce?.cancel();
+    _searchController.clear();
+    setState(() {
+      _searchResults = [];
+      _isSearching = false;
+    });
+  }
+
+  bool get _hasSearchQuery => _searchController.text.trim().isNotEmpty;
+
+  // ---- Selection ----
+
+  bool _isTagSelected(int tagId, String? level) {
     if (level == 'root' || level == 'parent') {
       return _draftFilter.subtreeRootTagIds.contains(tagId);
     }
     return _draftFilter.exactTagIds.contains(tagId);
   }
 
-  void _toggleTag(int tagId, String? level, int? parentId) {
+  void _toggleTag(int tagId, String? level) {
     setState(() {
       if (level == 'root' || level == 'parent') {
         final nextIds = _draftFilter.subtreeRootTagIds.toSet();
@@ -82,16 +144,25 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     });
   }
 
-  void _loadChildrenIfNeeded(int parentId) {
-    final provider = context.read<TagProvider>();
-    if (!provider.treeChildrenByParent.containsKey(parentId)) {
-      provider.loadTreeChildren(parentId);
-    }
+  // ---- Tree expansion ----
+
+  void _toggleExpand(int nodeId, TagProvider provider) {
+    setState(() {
+      if (_expandedNodes.contains(nodeId)) {
+        _expandedNodes.remove(nodeId);
+      } else {
+        _expandedNodes.add(nodeId);
+        if (!provider.treeChildrenByParent.containsKey(nodeId)) {
+          provider.loadTreeChildren(nodeId);
+        }
+      }
+    });
   }
 
   int get _selectedCount =>
-      _draftFilter.exactTagIds.length +
-      _draftFilter.subtreeRootTagIds.length;
+      _draftFilter.exactTagIds.length + _draftFilter.subtreeRootTagIds.length;
+
+  // ---- Widgets ----
 
   Widget _buildLevelBadge(String? level, FluentThemeData theme) {
     if (level == null || level.isEmpty) return const SizedBox.shrink();
@@ -126,49 +197,77 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     );
   }
 
-  Widget _buildTagRow(TagBrowseNode node, {double indent = 0}) {
+  /// Recursively builds a tag row and its expanded children (tree view).
+  Widget _buildNodeTree(TagBrowseNode node, TagProvider provider,
+      {double indent = 0}) {
     final theme = FluentTheme.of(context);
-    final isSelected = _isTagSelected(node.id, node.level, node.parentId);
-    final isExpandable = node.hasChildren;
+    final isSelected = _isTagSelected(node.id, node.level);
+    final expanded = _expandedNodes.contains(node.id);
+    final children = provider.childrenOf(node.id);
+    final childrenLoaded = provider.treeChildrenByParent.containsKey(node.id);
 
-    return Padding(
-      padding: EdgeInsets.only(left: indent),
-      child: Row(
-        children: [
-          if (isExpandable)
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  if (_expandedParents.contains(node.id)) {
-                    _expandedParents.remove(node.id);
-                  } else {
-                    _expandedParents.add(node.id);
-                    _loadChildrenIfNeeded(node.id);
-                  }
-                });
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  _expandedParents.contains(node.id)
-                      ? FluentIcons.chevron_down
-                      : FluentIcons.chevron_right,
-                  size: 12,
-                  color: theme.resources.textFillColorSecondary,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(left: indent),
+          child: Row(
+            children: [
+              if (node.hasChildren)
+                GestureDetector(
+                  onTap: () => _toggleExpand(node.id, provider),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      expanded
+                          ? FluentIcons.chevron_down
+                          : FluentIcons.chevron_right,
+                      size: 12,
+                      color: theme.resources.textFillColorSecondary,
+                    ),
+                  ),
+                )
+              else
+                const SizedBox(width: 20),
+              Checkbox(
+                checked: isSelected,
+                onChanged: (_) => _toggleTag(node.id, node.level),
               ),
+              const SizedBox(width: 6),
+              Expanded(child: Text(node.preferredLabel)),
+              _buildLevelBadge(node.level, theme),
+            ],
+          ),
+        ),
+        if (expanded) ...[
+          if (!childrenLoaded && node.hasChildren)
+            const Padding(
+              padding: EdgeInsets.only(left: 40),
+              child: ProgressRing(),
             )
           else
-            const SizedBox(width: 20),
-          Checkbox(
-            checked: isSelected,
-            onChanged: (_) => _toggleTag(node.id, node.level, node.parentId),
-          ),
-          const SizedBox(width: 6),
-          Expanded(child: Text(node.preferredLabel)),
-          _buildLevelBadge(node.level, theme),
+            for (final child in children)
+              _buildNodeTree(child, provider, indent: indent + 20),
         ],
-      ),
+      ],
+    );
+  }
+
+  /// Builds a single search result row from a Tag object.
+  Widget _buildSearchResultRow(Tag tag) {
+    final theme = FluentTheme.of(context);
+    final isSelected = _isTagSelected(tag.id, tag.level);
+
+    return Row(
+      children: [
+        Checkbox(
+          checked: isSelected,
+          onChanged: (_) => _toggleTag(tag.id, tag.level),
+        ),
+        const SizedBox(width: 6),
+        Expanded(child: Text(tag.preferredLabel)),
+        _buildLevelBadge(tag.level, theme),
+      ],
     );
   }
 
@@ -182,26 +281,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final root in roots) ...[
-          _buildTagRow(root),
-          if (_expandedParents.contains(root.id)) ...[
-            Builder(builder: (context) {
-              final children = provider.childrenOf(root.id);
-              if (children.isEmpty && !provider.treeChildrenByParent.containsKey(root.id)) {
-                return const Padding(
-                  padding: EdgeInsets.only(left: 40),
-                  child: ProgressRing(),
-                );
-              }
-              return Column(
-                children: [
-                  for (final child in children)
-                    _buildTagRow(child, indent: 20),
-                ],
-              );
-            }),
-          ],
-        ],
+        for (final root in roots) _buildNodeTree(root, provider),
       ],
     );
   }
@@ -227,7 +307,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
             ),
           ),
         ),
-        for (final orphan in orphans) _buildTagRow(orphan),
+        for (final orphan in orphans) _buildNodeTree(orphan, provider),
         if (provider.hasMoreOrphans)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -238,6 +318,40 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
               child: const Text('加载更多...'),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildSearchResults() {
+    if (_isSearching) {
+      return const Center(child: ProgressRing());
+    }
+    if (_searchResults.isEmpty) {
+      return Center(
+        child: Text(
+          '未找到匹配标签',
+          style: TextStyle(
+            color: FluentTheme.of(context).resources.textFillColorSecondary,
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Text(
+            '搜索结果 (${_searchResults.length})',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color:
+                  FluentTheme.of(context).resources.textFillColorSecondary,
+            ),
+          ),
+        ),
+        for (final tag in _searchResults) _buildSearchResultRow(tag),
       ],
     );
   }
@@ -284,15 +398,10 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
             suffix: _searchController.text.isNotEmpty
                 ? IconButton(
                     icon: const Icon(FluentIcons.clear, size: 14),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() {});
-                    },
+                    onPressed: _clearSearch,
                   )
                 : null,
-            onChanged: (query) {
-              setState(() {});
-            },
+            onChanged: _onSearchChanged,
           ),
           const SizedBox(height: 12),
 
@@ -336,7 +445,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           Expanded(
             child: Consumer<TagProvider>(
               builder: (context, provider, _) {
-                if (provider.treeBrowseError != null) {
+                if (provider.treeBrowseError != null && !_hasSearchQuery) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -361,10 +470,21 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                   );
                 }
 
+                // When searching, show search results from backend API
+                if (_hasSearchQuery) {
+                  return ListView(
+                    children: [_buildSearchResults()],
+                  );
+                }
+
+                // Otherwise show the tree + orphan sections
                 final roots = provider.treeRoots;
                 final orphans = provider.orphanTags;
 
-                if (roots.isEmpty && orphans.isEmpty && !provider.isLoadingTreeRoots && !provider.isLoadingOrphans) {
+                if (roots.isEmpty &&
+                    orphans.isEmpty &&
+                    !provider.isLoadingTreeRoots &&
+                    !provider.isLoadingOrphans) {
                   return Center(
                     child: Text(
                       '暂无标签',

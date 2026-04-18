@@ -126,4 +126,64 @@ void main() {
     expect(appliedFilter!.hasTags, isFalse);
     expect(appliedFilter!.hasPendingTags, isNull);
   });
+
+  testWidgets('search triggers backend API and shows results', (
+    tester,
+  ) async {
+    final client = MockClient((request) async {
+      final path = request.url.path;
+      final query = request.url.queryParameters;
+
+      if (path.contains('tree/roots')) {
+        return http.Response(
+          '{"items":[{"id":1,"preferred_label":"characters","level":"root","has_children":true}]}',
+          200,
+        );
+      }
+      if (path.contains('orphans')) {
+        return http.Response(
+          '{"items":[],"total":0,"has_more":false}',
+          200,
+        );
+      }
+      // Search endpoint: GET /api/v1/tags?search=hero
+      if (path.endsWith('/tags') && query.containsKey('search')) {
+        return http.Response(
+          '{"tags":[{"id":3,"preferred_label":"heroine","slug":"heroine","primary_category":"c","review_state":"approved","trust_score":1.0,"usage_count":5,"created_at":"2023-01-01T00:00:00Z","level":"child","parent_id":1}],"total":1}',
+          200,
+        );
+      }
+      return http.Response('{}', 200);
+    });
+
+    final provider = TagProvider(
+      TagService(baseUrl: 'http://localhost:8080', client: client),
+    );
+
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<TagProvider>.value(value: provider),
+          ],
+          child: fluent.ScaffoldPage(
+            content: FluentTagFilterPane(
+              initialFilter: GalleryFilterState(),
+              onApplyFilter: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Enter search text
+    await tester.enterText(find.byType(fluent.TextBox), 'hero');
+    // Wait for debounce (300ms) + API call
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+
+    // Should show search results
+    expect(find.text('heroine'), findsOneWidget);
+    expect(find.text('搜索结果 (1)'), findsOneWidget);
+  });
 }

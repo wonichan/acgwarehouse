@@ -283,18 +283,7 @@ func (r *tagRepository) resolveDescendantIDsForSingle(ctx context.Context, tagID
 
 func (r *tagRepository) queryOne(ctx context.Context, query string, args ...any) (*domain.Tag, error) {
 	tag := &domain.Tag{}
-	err := r.db.QueryRowContext(ctx, query, args...).Scan(
-		&tag.ID,
-		&tag.PreferredLabel,
-		&tag.Slug,
-		&tag.Level,
-		&tag.ParentID,
-		&tag.PrimaryCategory,
-		&tag.ReviewState,
-		&tag.TrustScore,
-		&tag.UsageCount,
-		&tag.CreatedAt,
-	)
+	err := scanTag(r.db.QueryRowContext(ctx, query, args...), tag)
 	if err != nil {
 		return nil, err
 	}
@@ -306,18 +295,7 @@ func scanTags(rows *sql.Rows) ([]*domain.Tag, error) {
 	tags := make([]*domain.Tag, 0)
 	for rows.Next() {
 		tag := &domain.Tag{}
-		if err := rows.Scan(
-			&tag.ID,
-			&tag.PreferredLabel,
-			&tag.Slug,
-			&tag.Level,
-			&tag.ParentID,
-			&tag.PrimaryCategory,
-			&tag.ReviewState,
-			&tag.TrustScore,
-			&tag.UsageCount,
-			&tag.CreatedAt,
-		); err != nil {
+		if err := scanTag(rows, tag); err != nil {
 			return nil, err
 		}
 		tags = append(tags, tag)
@@ -326,14 +304,41 @@ func scanTags(rows *sql.Rows) ([]*domain.Tag, error) {
 	return tags, rows.Err()
 }
 
+func scanTag(scanner interface{ Scan(dest ...any) error }, tag *domain.Tag) error {
+	var primaryCategory sql.NullString
+
+	if err := scanner.Scan(
+		&tag.ID,
+		&tag.PreferredLabel,
+		&tag.Slug,
+		&tag.Level,
+		&tag.ParentID,
+		&primaryCategory,
+		&tag.ReviewState,
+		&tag.TrustScore,
+		&tag.UsageCount,
+		&tag.CreatedAt,
+	); err != nil {
+		return err
+	}
+
+	if primaryCategory.Valid {
+		tag.PrimaryCategory = primaryCategory.String
+	} else {
+		tag.PrimaryCategory = ""
+	}
+
+	return nil
+}
+
 type TagBrowseNode struct {
 	ID              int64     `json:"id"`
 	PreferredLabel  string    `json:"preferred_label"`
 	Slug            string    `json:"slug"`
 	Level           string    `json:"level"`
 	ParentID        *int64    `json:"parent_id,omitempty"`
-	PrimaryCategory string    `json:"primary_category"`
-	ReviewState     string    `json:"review_state"`
+	PrimaryCategory *string   `json:"primary_category,omitempty"`
+	ReviewState     *string   `json:"review_state,omitempty"`
 	TrustScore      float64   `json:"trust_score"`
 	UsageCount      int       `json:"usage_count"`
 	CreatedAt       time.Time `json:"created_at"`

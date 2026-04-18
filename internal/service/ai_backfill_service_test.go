@@ -327,6 +327,9 @@ func (m *mockBackfillImageRepo) FindByPath(_ string) (*domain.Image, error) { re
 func (m *mockBackfillImageRepo) FindByIDRange(_ int, _ int64) ([]domain.Image, error) {
 	return nil, nil
 }
+func (m *mockBackfillImageRepo) FindBySourceRootsAfterID(_ int, _ int64, _ []string) ([]domain.Image, error) {
+	return nil, nil
+}
 func (m *mockBackfillImageRepo) FindAll(_, _ int, _, _ string) ([]domain.Image, error) {
 	return nil, nil
 }
@@ -334,6 +337,9 @@ func (m *mockBackfillImageRepo) FindByTagIDs(_ context.Context, _ []int64, _, _ 
 	return nil, nil
 }
 func (m *mockBackfillImageRepo) CountByTagIDs(_ context.Context, _ []int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockBackfillImageRepo) CountByGalleryFilter(_ context.Context, _ []int64, _ []int64) (int64, error) {
 	return 0, nil
 }
 func (m *mockBackfillImageRepo) FindUntagged(_ context.Context, _, _ int, _, _ string) ([]domain.Image, error) {
@@ -349,6 +355,9 @@ func (m *mockBackfillImageRepo) FindPendingTagsByTagIDs(_ context.Context, _ []i
 }
 func (m *mockBackfillImageRepo) CountPendingTagsByTagIDs(_ context.Context, _ []int64) (int64, error) {
 	return 0, nil
+}
+func (m *mockBackfillImageRepo) FindByGalleryFilter(_ context.Context, _ []int64, _ []int64, _, _ int, _, _ string) ([]domain.Image, error) {
+	return nil, nil
 }
 func (m *mockBackfillImageRepo) FindImagesWithoutAITags(_ context.Context, _ int) ([]domain.Image, error) {
 	return nil, nil

@@ -225,11 +225,12 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
     if (!mounted) return;
 
     final preview = provider.deletePreview;
-    final bool canDelete = preview?.canDelete ?? row.canDelete;
-    final String blockingReason =
-        preview?.blockingReason ?? (row.canDelete ? '' : '标签正在被图片使用');
+    if (preview == null || provider.governanceError != null) {
+      return;
+    }
     final int affectedCount =
-        preview?.affectedImageCount ?? row.affectedImageCount;
+        preview.affectedImageCount;
+    final int childCount = preview.childCount;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -241,11 +242,13 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
           children: [
             Text('标签: ${row.preferredLabel}'),
             const SizedBox(height: 8),
-            Text('$affectedCount 张受影响的图片'),
-            if (blockingReason.isNotEmpty) ...[
+            Text('将从 $affectedCount 张受影响的图片中移除此标签'),
+            if (childCount > 0) ...[
               const SizedBox(height: 8),
-              Text(blockingReason, style: TextStyle(color: Colors.red)),
+              Text('$childCount 个直接子标签将变为顶级标签'),
             ],
+            const SizedBox(height: 8),
+            Text('此操作不可撤销', style: TextStyle(color: Colors.red)),
           ],
         ),
         actions: [
@@ -253,11 +256,10 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
             child: const Text('取消'),
             onPressed: () => Navigator.pop(context, false),
           ),
-          if (canDelete)
-            FilledButton(
-              child: const Text('删除'),
-              onPressed: () => Navigator.pop(context, true),
-            ),
+          FilledButton(
+            child: const Text('删除'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
         ],
       ),
     );

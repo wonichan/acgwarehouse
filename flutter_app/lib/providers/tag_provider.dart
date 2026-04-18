@@ -574,11 +574,13 @@ class TagProvider extends ChangeNotifier {
   Future<void> loadDeletePreview(int tagId) async {
     _isRunningGovernanceAction = true;
     _governanceError = null;
+    _deletePreview = null;
     notifyListeners();
 
     try {
       _deletePreview = await _tagService.fetchDeletePreview(tagId);
     } catch (e) {
+      _deletePreview = null;
       _governanceError = e.toString();
       debugPrint('Error loading delete preview: $e');
     } finally {

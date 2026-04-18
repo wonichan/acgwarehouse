@@ -280,7 +280,7 @@ void main() {
               "direct_manual_count": 6,
               "tree_manual_count": 14,
               "affected_image_count": 42,
-              "can_delete": false
+              "can_delete": true
             }
           ],
           "total": 1
@@ -299,7 +299,7 @@ void main() {
         expect(page.rows.first.primaryCategory, 'character');
         expect(page.rows.first.aliases, ['animegirl', '2d-girl']);
         expect(page.rows.first.affectedImageCount, 42);
-        expect(page.rows.first.canDelete, false);
+        expect(page.rows.first.canDelete, true);
         expect(page.rows.first.directAiCount, 12);
         expect(page.rows.first.treeAiCount, 28);
         expect(page.rows.first.directManualCount, 6);
@@ -318,8 +318,9 @@ void main() {
           "tag_id": 101,
           "preferred_label": "anime-girl",
           "affected_image_count": 42,
-          "can_delete": false,
-          "blocking_reason": "merge_or_reclassify_required"
+          "child_count": 2,
+          "can_delete": true,
+          "blocking_reason": ""
         }
         ''';
 
@@ -333,8 +334,9 @@ void main() {
         expect(preview.tagId, 101);
         expect(preview.preferredLabel, 'anime-girl');
         expect(preview.affectedImageCount, 42);
-        expect(preview.canDelete, false);
-        expect(preview.blockingReason, 'merge_or_reclassify_required');
+        expect(preview.childCount, 2);
+        expect(preview.canDelete, true);
+        expect(preview.blockingReason, '');
 
         final captured =
             verify(mockClient.get(captureAny)).captured.single as Uri;

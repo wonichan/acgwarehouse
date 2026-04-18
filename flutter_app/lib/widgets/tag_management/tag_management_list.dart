@@ -159,32 +159,24 @@ class _TagManagementListState extends State<TagManagementList> {
       if (matchedRow == null && childWidgets.isEmpty) {
         continue;
       }
-      final row = matchedRow ?? _rowFromNode(node, rowById);
-      widgets.add(
-        _GovernanceRowTile(
-          row: row,
-          depth: depth,
-          isSelected: provider.selectedGovernanceIds.contains(row.tagId),
-          onToggleSelect: () => provider.toggleGovernanceSelection(row.tagId),
-          onEdit: () => widget.onEdit(row),
-          onMerge: () => widget.onMerge(row),
-          onDelete: () => widget.onDelete(row),
-          onViewAffectedImages: () => widget.onViewAffectedImages(row),
-        ),
-      );
+      if (matchedRow != null) {
+        widgets.add(
+          _GovernanceRowTile(
+            row: matchedRow,
+            depth: depth,
+            isSelected: provider.selectedGovernanceIds.contains(matchedRow.tagId),
+            onToggleSelect: () => provider.toggleGovernanceSelection(matchedRow.tagId),
+            onEdit: () => widget.onEdit(matchedRow),
+            onMerge: () => widget.onMerge(matchedRow),
+            onDelete: () => widget.onDelete(matchedRow),
+            onViewAffectedImages: () => widget.onViewAffectedImages(matchedRow),
+          ),
+        );
+      }
 
       widgets.addAll(childWidgets);
     }
     return widgets;
-  }
-
-  TagGovernanceRow _rowFromNode(
-    dynamic rawNode,
-    Map<int, TagGovernanceRow> rowById,
-  ) {
-    final node = Map<String, dynamic>.from(rawNode as Map);
-    final tagId = (node['tag_id'] ?? node['id']) as int;
-    return rowById[tagId]!;
   }
 }
 

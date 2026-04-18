@@ -223,7 +223,7 @@ func TestTagUpdateTagRejectsHierarchyMutationFields(t *testing.T) {
 	}
 }
 
-func TestTagDeleteTagBlocksAndKeepsAssociationsWhenUsed(t *testing.T) {
+func TestTagDeleteTagDeletesUsedTagAndCleansAssociations(t *testing.T) {
 	t.Parallel()
 
 	router, repos := newTagHandlerTestRouter(t)
@@ -232,19 +232,39 @@ func TestTagDeleteTagBlocksAndKeepsAssociationsWhenUsed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tags/1", nil)
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusConflict)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	if _, err := repos.tagRepo.FindByID(context.Background(), 1); err != nil {
-		t.Fatalf("expected tag to remain when blocked: %v", err)
+	var resp struct {
+		Success            bool  `json:"success"`
+		DeletedTagID       int64 `json:"deleted_tag_id"`
+		AffectedImageCount int64 `json:"affected_image_count"`
+		DetachedChildCount int64 `json:"detached_child_count"`
+	}
+	decodeJSONResponse(t, w, &resp)
+	if !resp.Success {
+		t.Fatal("expected success=true")
+	}
+	if resp.DeletedTagID != 1 {
+		t.Fatalf("deleted_tag_id = %d, want 1", resp.DeletedTagID)
+	}
+	if resp.AffectedImageCount != 1 {
+		t.Fatalf("affected_image_count = %d, want 1", resp.AffectedImageCount)
+	}
+	if resp.DetachedChildCount != 0 {
+		t.Fatalf("detached_child_count = %d, want 0", resp.DetachedChildCount)
+	}
+
+	if _, err := repos.tagRepo.FindByID(context.Background(), 1); err == nil {
+		t.Fatal("expected tag to be deleted")
 	}
 	aliases, err := repos.aliasRepo.FindByTagID(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("FindByTagID() error = %v", err)
 	}
-	if len(aliases) == 0 {
-		t.Fatal("expected aliases to remain when deletion is blocked")
+	if len(aliases) != 0 {
+		t.Fatalf("expected aliases to be deleted, got %d", len(aliases))
 	}
 	items, err := repos.imageTagRepo.FindByImageID(context.Background(), 1)
 	if err != nil {
@@ -257,8 +277,8 @@ func TestTagDeleteTagBlocksAndKeepsAssociationsWhenUsed(t *testing.T) {
 			break
 		}
 	}
-	if !found {
-		t.Fatal("expected image tag association to remain when deletion is blocked")
+	if found {
+		t.Fatal("expected image tag association to be removed when tag is deleted")
 	}
 }
 
@@ -445,6 +465,37 @@ func TestTagGetParentCandidatesReturnsRootForParentLevel(t *testing.T) {
 	}
 }
 
+func TestTagGetParentCandidatesAllowsNullPrimaryCategoryForChildLevel(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newTagHandlerTestRouter(t)
+	if _, err := repos.db.Exec(`UPDATE tags SET primary_category = NULL WHERE id = ?`, 6); err != nil {
+		t.Fatalf("set primary_category null: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/parent-candidates?level=child", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Candidates []domain.Tag `json:"candidates"`
+	}
+	decodeJSONResponse(t, w, &resp)
+	if len(resp.Candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(resp.Candidates))
+	}
+	if resp.Candidates[0].ID != 6 {
+		t.Fatalf("candidate id = %d, want 6", resp.Candidates[0].ID)
+	}
+	if resp.Candidates[0].PrimaryCategory != "" {
+		t.Fatalf("PrimaryCategory = %q, want empty string", resp.Candidates[0].PrimaryCategory)
+	}
+}
+
 func TestTagChangeLevelUpdatesHierarchy(t *testing.T) {
 	t.Parallel()
 
@@ -570,6 +621,7 @@ func TestTagGetDeletePreviewReturnsBlockingReasonForUsedTag(t *testing.T) {
 		TagID              int64  `json:"tag_id"`
 		AffectedImageCount int64  `json:"affected_image_count"`
 		CanDelete          bool   `json:"can_delete"`
+		ChildCount         int64  `json:"child_count"`
 		BlockingReason     string `json:"blocking_reason"`
 	}
 	decodeJSONResponse(t, w, &resp)
@@ -580,42 +632,48 @@ func TestTagGetDeletePreviewReturnsBlockingReasonForUsedTag(t *testing.T) {
 	if resp.AffectedImageCount == 0 {
 		t.Fatal("expected affected_image_count > 0 for used tag")
 	}
-	if resp.CanDelete {
-		t.Fatal("expected used tag to be blocked")
+	if !resp.CanDelete {
+		t.Fatal("expected used tag preview to remain deletable")
 	}
-	if resp.BlockingReason != "merge_or_reclassify_required" {
-		t.Fatalf("blocking_reason = %q, want %q", resp.BlockingReason, "merge_or_reclassify_required")
+	if resp.BlockingReason != "" {
+		t.Fatalf("blocking_reason = %q, want empty", resp.BlockingReason)
+	}
+	if resp.ChildCount != 0 {
+		t.Fatalf("child_count = %d, want 0", resp.ChildCount)
 	}
 }
 
-func TestTagDeleteTagBlocksUsedTagWithAffectedImageCount(t *testing.T) {
+func TestTagDeleteTagDeletesUsedTagWithAffectedImageCount(t *testing.T) {
 	t.Parallel()
 
-	router, _ := newTagHandlerTestRouter(t)
+	router, repos := newTagHandlerTestRouter(t)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tags/1", nil)
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusConflict)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", w.Code, http.StatusOK, w.Body.String())
 	}
 
 	var resp struct {
-		Error              string `json:"error"`
+		Success            bool   `json:"success"`
 		AffectedImageCount int64  `json:"affected_image_count"`
-		BlockingReason     string `json:"blocking_reason"`
+		DetachedChildCount int64  `json:"detached_child_count"`
 	}
 	decodeJSONResponse(t, w, &resp)
 
-	if resp.Error != "tag is still in use" {
-		t.Fatalf("error = %q, want %q", resp.Error, "tag is still in use")
+	if !resp.Success {
+		t.Fatal("expected success=true")
 	}
-	if resp.AffectedImageCount == 0 {
-		t.Fatal("expected affected_image_count > 0")
+	if resp.AffectedImageCount != 1 {
+		t.Fatalf("affected_image_count = %d, want 1", resp.AffectedImageCount)
 	}
-	if resp.BlockingReason != "merge_or_reclassify_required" {
-		t.Fatalf("blocking_reason = %q, want %q", resp.BlockingReason, "merge_or_reclassify_required")
+	if resp.DetachedChildCount != 0 {
+		t.Fatalf("detached_child_count = %d, want 0", resp.DetachedChildCount)
+	}
+	if _, err := repos.tagRepo.FindByID(context.Background(), 1); err == nil {
+		t.Fatal("expected tag 1 to be deleted")
 	}
 }
 
@@ -636,6 +694,7 @@ func TestTagDeleteTagReturnsAffectedImageCountZeroWhenUnused(t *testing.T) {
 		Success            bool  `json:"success"`
 		DeletedTagID       int64 `json:"deleted_tag_id"`
 		AffectedImageCount int64 `json:"affected_image_count"`
+		DetachedChildCount int64 `json:"detached_child_count"`
 	}
 	decodeJSONResponse(t, w, &resp)
 
@@ -648,9 +707,54 @@ func TestTagDeleteTagReturnsAffectedImageCountZeroWhenUnused(t *testing.T) {
 	if resp.AffectedImageCount != 0 {
 		t.Fatalf("affected_image_count = %d, want 0", resp.AffectedImageCount)
 	}
+	if resp.DetachedChildCount != 0 {
+		t.Fatalf("detached_child_count = %d, want 0", resp.DetachedChildCount)
+	}
 
 	if _, err := repos.tagRepo.FindByID(context.Background(), 3); err == nil {
 		t.Fatal("expected tag 3 to be deleted")
+	}
+}
+
+func TestTagDeleteTagDetachesDirectChildrenWhenDeletingParent(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tags/4", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Success            bool  `json:"success"`
+		DeletedTagID       int64 `json:"deleted_tag_id"`
+		AffectedImageCount int64 `json:"affected_image_count"`
+		DetachedChildCount int64 `json:"detached_child_count"`
+	}
+	decodeJSONResponse(t, w, &resp)
+	if !resp.Success {
+		t.Fatal("expected success=true")
+	}
+	if resp.DeletedTagID != 4 {
+		t.Fatalf("deleted_tag_id = %d, want 4", resp.DeletedTagID)
+	}
+	if resp.DetachedChildCount != 1 {
+		t.Fatalf("detached_child_count = %d, want 1", resp.DetachedChildCount)
+	}
+
+	if _, err := repos.tagRepo.FindByID(context.Background(), 4); err == nil {
+		t.Fatal("expected tag 4 to be deleted")
+	}
+	child, err := repos.tagRepo.FindByID(context.Background(), 6)
+	if err != nil {
+		t.Fatalf("FindByID(child) error = %v", err)
+	}
+	if child.ParentID != nil {
+		t.Fatalf("child.ParentID = %v, want nil", child.ParentID)
 	}
 }
 

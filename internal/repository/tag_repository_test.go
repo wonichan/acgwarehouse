@@ -289,6 +289,48 @@ func TestTagRepositoryFindValidParentCandidatesUsesTargetLevel(t *testing.T) {
 	}
 }
 
+func TestTagRepositoryFindValidParentCandidatesAllowsNullPrimaryCategory(t *testing.T) {
+	t.Parallel()
+
+	repo, db := newTagRepositoryWithDBForTest(t)
+	root := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "series", Slug: "series", Level: domain.TagLevelRoot})
+	parent := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "heroine", Slug: "heroine", Level: domain.TagLevelParent, ParentID: &root.ID, PrimaryCategory: "meta"})
+
+	if _, err := db.Exec(`UPDATE tags SET primary_category = NULL WHERE id = ?`, parent.ID); err != nil {
+		t.Fatalf("set primary_category null: %v", err)
+	}
+
+	candidates, err := repo.FindValidParentCandidates(context.Background(), domain.TagLevelChild)
+	if err != nil {
+		t.Fatalf("FindValidParentCandidates() error = %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1", len(candidates))
+	}
+	if candidates[0].PrimaryCategory != "" {
+		t.Fatalf("PrimaryCategory = %q, want empty string", candidates[0].PrimaryCategory)
+	}
+}
+
+func TestTagRepositoryFindByIDAllowsNullPrimaryCategory(t *testing.T) {
+	t.Parallel()
+
+	repo, db := newTagRepositoryWithDBForTest(t)
+	tag := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "solo", Slug: "solo", Level: domain.TagLevelChild, PrimaryCategory: "meta"})
+
+	if _, err := db.Exec(`UPDATE tags SET primary_category = NULL WHERE id = ?`, tag.ID); err != nil {
+		t.Fatalf("set primary_category null: %v", err)
+	}
+
+	stored, err := repo.FindByID(context.Background(), tag.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if stored.PrimaryCategory != "" {
+		t.Fatalf("PrimaryCategory = %q, want empty string", stored.PrimaryCategory)
+	}
+}
+
 func TestTagRepositoryResolveDescendantIDsReturnsSelfAndDescendants(t *testing.T) {
 	t.Parallel()
 

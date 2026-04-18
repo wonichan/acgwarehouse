@@ -20,6 +20,7 @@ type tagAdminService interface {
 	ListGovernanceTags(ctx context.Context, search string, limit, offset int) ([]service.TagGovernanceRow, int, error)
 	MergeTags(ctx context.Context, sourceTagID, targetTagID int64) (*service.TagMergeResult, error)
 	GetDeletePreview(ctx context.Context, tagID int64) (*service.TagDeletePreview, error)
+	DeleteTag(ctx context.Context, tagID int64) (*service.TagDeleteResult, error)
 	CleanupUnusedTags(ctx context.Context, tagIDs []int64) (*service.TagCleanupResult, error)
 	GetParentCandidates(ctx context.Context, targetLevel string) ([]*domain.Tag, error)
 	GetTagTree(ctx context.Context) ([]service.TagTreeNode, error)
@@ -252,7 +253,7 @@ func (h *TagHandler) DeleteTag(c *gin.Context) {
 		return
 	}
 
-	preview, err := h.adminSvc.GetDeletePreview(c.Request.Context(), id)
+	result, err := h.adminSvc.DeleteTag(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrTagNotFound):
@@ -263,40 +264,11 @@ func (h *TagHandler) DeleteTag(c *gin.Context) {
 		return
 	}
 
-	if !preview.CanDelete {
-		blockingReason := preview.BlockingReason
-		if strings.TrimSpace(blockingReason) == "" {
-			blockingReason = mergeOrReclassifyRequired
-		}
-		c.JSON(http.StatusConflict, gin.H{
-			"error":                "tag is still in use",
-			"affected_image_count": preview.AffectedImageCount,
-			"blocking_reason":      blockingReason,
-		})
-		return
-	}
-
-	aliases, err := h.aliasRepo.FindByTagID(c.Request.Context(), id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	for _, alias := range aliases {
-		if err := h.aliasRepo.Delete(c.Request.Context(), alias.ID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
-	if err := h.tagRepo.Delete(c.Request.Context(), id); err != nil {
-		respondRepoError(c, err)
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"success":              true,
-		"deleted_tag_id":       id,
-		"affected_image_count": int64(0),
+		"deleted_tag_id":       result.DeletedTagID,
+		"affected_image_count": result.AffectedImageCount,
+		"detached_child_count": result.DetachedChildCount,
 	})
 }
 
@@ -660,6 +632,7 @@ func (h *TagHandler) ReparentTag(c *gin.Context) {
 func (h *TagHandler) GetTreeRoots(c *gin.Context) {
 	nodes, err := h.tagRepo.FindTreeRoots(c.Request.Context())
 	if err != nil {
+		logger.Errorf("GetTreeRoots failed: err=%v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -680,6 +653,7 @@ func (h *TagHandler) GetTreeChildren(c *gin.Context) {
 
 	nodes, err := h.tagRepo.FindTreeChildren(c.Request.Context(), parentID)
 	if err != nil {
+		logger.Errorf("GetTreeChildren failed: parentId=%d err=%v", parentID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -693,11 +667,13 @@ func (h *TagHandler) GetOrphans(c *gin.Context) {
 
 	nodes, err := h.tagRepo.ListOrphanTags(c.Request.Context(), search, limit, offset)
 	if err != nil {
+		logger.Errorf("GetOrphans (list) failed: search=%q limit=%d offset=%d err=%v", search, limit, offset, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	total, err := h.tagRepo.CountOrphanTags(c.Request.Context(), search)
 	if err != nil {
+		logger.Errorf("GetOrphans (count) failed: search=%q err=%v", search, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -398,7 +398,7 @@ void main() {
         aiCount: 30,
         manualCount: 12,
         affectedImageCount: 42,
-        canDelete: false,
+        canDelete: true,
       );
 
       test('loadGovernanceTags fetches and stores governance rows', () async {
@@ -446,15 +446,40 @@ void main() {
             tagId: 101,
             preferredLabel: 'anime-girl',
             affectedImageCount: 42,
-            canDelete: false,
-            blockingReason: 'merge_or_reclassify_required',
+            childCount: 2,
+            canDelete: true,
+            blockingReason: '',
           ),
         );
 
         await tagProvider.loadDeletePreview(101);
 
         expect(tagProvider.deletePreview?.tagId, 101);
-        expect(tagProvider.deletePreview?.canDelete, false);
+        expect(tagProvider.deletePreview?.childCount, 2);
+        expect(tagProvider.deletePreview?.canDelete, true);
+      });
+
+      test('loadDeletePreview clears stale preview when fetch fails', () async {
+        when(() => mockTagService.fetchDeletePreview(101)).thenAnswer(
+          (_) async => const TagDeletePreview(
+            tagId: 101,
+            preferredLabel: 'anime-girl',
+            affectedImageCount: 42,
+            childCount: 2,
+            canDelete: true,
+            blockingReason: '',
+          ),
+        );
+        await tagProvider.loadDeletePreview(101);
+
+        when(() => mockTagService.fetchDeletePreview(202)).thenThrow(
+          Exception('preview failed'),
+        );
+
+        await tagProvider.loadDeletePreview(202);
+
+        expect(tagProvider.deletePreview, isNull);
+        expect(tagProvider.governanceError, contains('preview failed'));
       });
 
       test(

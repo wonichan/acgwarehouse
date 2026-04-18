@@ -42,7 +42,7 @@ class _WorkspaceTagProvider extends TagProvider {
           aiCount: 30,
           manualCount: 12,
           affectedImageCount: 42,
-          canDelete: false,
+          canDelete: true,
           level: 'root',
         ),
         const TagGovernanceRow(
@@ -73,7 +73,7 @@ class _WorkspaceTagProvider extends TagProvider {
           aiCount: 10,
           manualCount: 5,
           affectedImageCount: 15,
-          canDelete: false,
+          canDelete: true,
           level: 'child',
           parentId: 20,
         ),
@@ -82,6 +82,9 @@ class _WorkspaceTagProvider extends TagProvider {
 
   final List<TagGovernanceRow> _rows;
   TagDeletePreview? _preview;
+  int deleteCalls = 0;
+  int governanceRefreshCalls = 0;
+  int treeRefreshCalls = 0;
 
   @override
   List<TagGovernanceRow> get governanceRows => _rows;
@@ -129,7 +132,9 @@ class _WorkspaceTagProvider extends TagProvider {
   TagDeletePreview? get deletePreview => _preview;
 
   @override
-  Future<void> loadGovernanceTags({String? search}) async {}
+  Future<void> loadGovernanceTags({String? search}) async {
+    governanceRefreshCalls++;
+  }
 
   @override
   Future<void> loadDeletePreview(int tagId) async {
@@ -138,13 +143,21 @@ class _WorkspaceTagProvider extends TagProvider {
       tagId: row.tagId,
       preferredLabel: row.preferredLabel,
       affectedImageCount: row.affectedImageCount,
-      canDelete: row.canDelete,
-      blockingReason: row.canDelete ? null : 'merge_or_reclassify_required',
+      childCount: row.tagId == 10 ? 1 : 0,
+      canDelete: true,
+      blockingReason: '',
     );
   }
 
   @override
-  Future<void> deleteTag(int tagId) async {}
+  Future<void> deleteTag(int tagId) async {
+    deleteCalls++;
+  }
+
+  @override
+  Future<void> loadTagTree() async {
+    treeRefreshCalls++;
+  }
 }
 
 class _SearchTreeWorkspaceTagProvider extends TagProvider {
@@ -263,6 +276,91 @@ class _SearchTreeWorkspaceTagProvider extends TagProvider {
   }
 }
 
+class _FailingDeletePreviewWorkspaceTagProvider extends _WorkspaceTagProvider {
+  _FailingDeletePreviewWorkspaceTagProvider({http.Client? client})
+    : super(client: client);
+
+  String? _localGovernanceError;
+
+  @override
+  String? get governanceError => _localGovernanceError;
+
+  @override
+  Future<void> loadDeletePreview(int tagId) async {
+    _localGovernanceError = 'preview failed';
+  }
+}
+
+class _PartialTreeWorkspaceTagProvider extends TagProvider {
+  _PartialTreeWorkspaceTagProvider({http.Client? client})
+    : super(TagService(baseUrl: 'http://localhost:8080', client: client));
+
+  final List<TagGovernanceRow> _rows = const [
+    TagGovernanceRow(
+      tagId: 30,
+      preferredLabel: 'school_uniform',
+      primaryCategory: 'clothing',
+      aliases: ['seifuku'],
+      usageCount: 15,
+      pendingCount: 2,
+      confirmedCount: 13,
+      rejectedCount: 0,
+      aiCount: 10,
+      manualCount: 5,
+      affectedImageCount: 15,
+      canDelete: true,
+      level: 'child',
+      parentId: 20,
+      directUsageCount: 15,
+      treeUsageCount: 15,
+      directAiCount: 10,
+      treeAiCount: 10,
+      directManualCount: 5,
+      treeManualCount: 5,
+    ),
+  ];
+
+  @override
+  List<TagGovernanceRow> get governanceRows => _rows;
+
+  @override
+  Map<String, dynamic>? get tagTree => {
+    'tree': [
+      {
+        'tag_id': 10,
+        'preferred_label': 'long_hair',
+        'level': 'root',
+        'children': [
+          {
+            'tag_id': 20,
+            'preferred_label': 'blue_eyes',
+            'level': 'parent',
+            'children': [
+              {
+                'tag_id': 30,
+                'preferred_label': 'school_uniform',
+                'level': 'child',
+                'children': [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  @override
+  bool get isRunningGovernanceAction => false;
+
+  @override
+  String? get governanceError => null;
+
+  @override
+  Future<void> loadGovernanceTags({String? search}) async {
+    notifyListeners();
+  }
+}
+
 void main() {
   testWidgets(
     'workspace shows summary stats, search box, governance list with row actions',
@@ -287,7 +385,8 @@ void main() {
           child: const fluent.FluentApp(home: TagManagementWorkspace()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Summary stats visible
       expect(find.text('总计使用量'), findsWidgets);
@@ -333,7 +432,8 @@ void main() {
         child: const fluent.FluentApp(home: TagManagementWorkspace()),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('root'), findsWidgets);
     expect(find.text('parent'), findsWidgets);
@@ -343,6 +443,39 @@ void main() {
     expect(find.text('school_uniform'), findsOneWidget);
     expect(find.text('landscape'), findsNothing);
   });
+
+  testWidgets(
+    'workspace still renders matched descendants when ancestors are not in current governance page',
+    (tester) async {
+      final mockClient = MockClient((request) async {
+        return http.Response('{"tags":[]}', 200);
+      });
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<TagProvider>(
+              create: (_) => _PartialTreeWorkspaceTagProvider(client: mockClient),
+            ),
+            ChangeNotifierProvider<NavigationProvider>(
+              create: (_) => NavigationProvider(),
+            ),
+            ChangeNotifierProvider<ImageListProvider>(
+              create: (_) => _TrackingImageListProvider(),
+            ),
+          ],
+          child: const fluent.FluentApp(home: TagManagementWorkspace()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('school_uniform'), findsOneWidget);
+      expect(find.text('long_hair'), findsNothing);
+      expect(find.text('blue_eyes'), findsNothing);
+    },
+  );
 
   testWidgets(
     'workspace search keeps matched descendant ancestor path visible',
@@ -368,10 +501,12 @@ void main() {
           child: const fluent.FluentApp(home: TagManagementWorkspace()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       await tester.enterText(find.byType(fluent.TextBox), 'school');
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('long_hair'), findsOneWidget);
       expect(find.text('blue_eyes'), findsOneWidget);
@@ -380,7 +515,7 @@ void main() {
   );
 
   testWidgets(
-    'delete confirmation shows affected image count and blocks used tags',
+    'delete confirmation shows impact summary and still allows deletion',
     (tester) async {
       final mockClient = MockClient((request) async {
         return http.Response('{"tags":[]}', 200);
@@ -401,21 +536,72 @@ void main() {
           child: const fluent.FluentApp(home: TagManagementWorkspace()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-      // Tap Delete on the first row (long_hair, canDelete=false, 42 affected images)
+      // Tap Delete on the first row (long_hair, 42 affected images, 1 direct child)
       final deleteButtons = find.text('删除');
       expect(deleteButtons, findsWidgets);
 
       await tester.tap(deleteButtons.first);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Confirmation dialog should show the exact affected image count
       expect(find.textContaining('42'), findsWidgets);
-      // And mention affected image context
+      // And mention affected image / child impact context while still allowing delete
       expect(find.textContaining('受影响的图片'), findsWidgets);
+      expect(find.textContaining('顶级标签'), findsWidgets);
+      expect(find.widgetWithText(fluent.FilledButton, '删除'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(fluent.FilledButton, '删除'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tagProvider.deleteCalls, 1);
+      expect(tagProvider.governanceRefreshCalls, 1);
+      expect(tagProvider.treeRefreshCalls, 1);
     },
   );
+
+  testWidgets('delete preview failure does not show stale confirmation dialog', (
+    tester,
+  ) async {
+    final mockClient = MockClient((request) async {
+      return http.Response('{"tags":[]}', 200);
+    });
+    final tagProvider = _FailingDeletePreviewWorkspaceTagProvider(
+      client: mockClient,
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<TagProvider>.value(value: tagProvider),
+          ChangeNotifierProvider<NavigationProvider>(
+            create: (_) => NavigationProvider(),
+          ),
+          ChangeNotifierProvider<ImageListProvider>(
+            create: (_) => _TrackingImageListProvider(),
+          ),
+        ],
+        child: const fluent.FluentApp(home: TagManagementWorkspace()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final deleteButtons = find.text('删除');
+    expect(deleteButtons, findsWidgets);
+
+    await tester.tap(deleteButtons.first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('删除标签'), findsNothing);
+    expect(find.textContaining('preview failed'), findsNothing);
+    expect(tagProvider.deleteCalls, 0);
+  });
 
   testWidgets(
     'View affected images applies tag filter and switches to gallery',
@@ -442,14 +628,16 @@ void main() {
           child: const fluent.FluentApp(home: TagManagementWorkspace()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Tap "View affected images" on the first row
       final viewButtons = find.text('查看受影响图片');
       expect(viewButtons, findsWidgets);
 
       await tester.tap(viewButtons.first);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Verify image provider received the tag filter
       expect(imageProvider.setTagFilterCalls, 1);
