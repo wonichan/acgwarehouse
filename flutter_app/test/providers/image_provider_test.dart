@@ -27,6 +27,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: [], nextCursor: null, hasMore: false, total: 0)
         );
@@ -62,6 +64,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: images, nextCursor: null, hasMore: false, total: 1)
         );
@@ -78,7 +82,7 @@ void main() {
           offset: 0,  // Reset offset
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
-          tagIds: [5, 10],
+          exactTagIds: [5, 10],
         )).called(1);
       });
 
@@ -90,6 +94,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: [], nextCursor: null, hasMore: false, total: 0)
         );
@@ -106,7 +112,7 @@ void main() {
           offset: 0,
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
-          tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
         )).called(greaterThanOrEqualTo(1));
       });
 
@@ -118,6 +124,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: [], nextCursor: null, hasMore: false, total: 0)
         );
@@ -143,6 +151,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: [], nextCursor: null, hasMore: false, total: 0)
         );
@@ -156,7 +166,7 @@ void main() {
           offset: anyNamed('offset'),
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
-          tagIds: [7, 8],
+          exactTagIds: [7, 8],
         )).called(1);
       });
     });
@@ -174,6 +184,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) => completer);
 
         // Act - start loading twice without waiting
@@ -189,6 +201,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).called(1);
       });
 
@@ -218,6 +232,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: testImages, nextCursor: '10', hasMore: true, total: 15)
         );
@@ -234,6 +250,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: testImages.sublist(0, 5), nextCursor: '', hasMore: false, total: 15)
         );
@@ -254,6 +272,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         ));
       });
 
@@ -265,6 +285,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: [], nextCursor: '20', hasMore: true, total: 40)
         );
@@ -283,6 +305,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).called(2); // Once for initial load, once for refresh
       });
 
@@ -294,6 +318,8 @@ void main() {
           sortBy: anyNamed('sortBy'),
           sortDir: anyNamed('sortDir'),
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
+          subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
         )).thenAnswer((_) async => 
           PaginationResponse<ImageModel>(items: [], nextCursor: null, hasMore: false, total: 0)
         );
@@ -310,6 +336,7 @@ void main() {
           sortBy: 'file_size',
           sortDir: 'asc',
           tagIds: anyNamed('tagIds'),
+          exactTagIds: anyNamed('exactTagIds'),
         )).called(1);
       });
     });

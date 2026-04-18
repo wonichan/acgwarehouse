@@ -10,20 +10,30 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  testWidgets('FluentTagFilterPane keeps tree semantics while searching', (
+  testWidgets('FluentTagFilterPane loads roots and orphans lazily', (
     tester,
   ) async {
     final client = MockClient((request) async {
-      if (request.url.path.contains('tree')) {
+      final path = request.url.path;
+      if (path.contains('tree/roots')) {
         return http.Response(
-          '{"tree":[{"id":1,"preferred_label":"characters","primary_category":"c","level":"root","slug":"characters","review_state":"approved","trust_score":1.0,"usage_count":1,"tree_usage_count":40,"created_at":"2023-01-01T00:00:00Z","children":[{"id":2,"preferred_label":"protagonist","primary_category":"c","level":"parent","slug":"protagonist","review_state":"approved","trust_score":1.0,"usage_count":1,"tree_usage_count":20,"created_at":"2023-01-01T00:00:00Z","children":[{"id":3,"preferred_label":"heroine","primary_category":"c","level":"child","slug":"heroine","review_state":"approved","trust_score":1.0,"usage_count":1,"tree_usage_count":7,"created_at":"2023-01-01T00:00:00Z"}]}]}]}',
+          '{"items":[{"id":1,"preferred_label":"characters","level":"root","has_children":true},{"id":2,"preferred_label":"props","level":"root","has_children":false}]}',
           200,
         );
       }
-      return http.Response(
-        '{"tags":[{"id":1,"preferred_label":"characters","primary_category":"c","level":"root","slug":"characters","review_state":"approved","trust_score":1.0,"usage_count":1,"created_at":"2023-01-01T00:00:00Z"},{"id":2,"preferred_label":"protagonist","primary_category":"c","level":"parent","slug":"protagonist","review_state":"approved","trust_score":1.0,"usage_count":1,"created_at":"2023-01-01T00:00:00Z"},{"id":3,"preferred_label":"heroine","primary_category":"c","level":"child","slug":"heroine","review_state":"approved","trust_score":1.0,"usage_count":1,"created_at":"2023-01-01T00:00:00Z"}],"total":3}',
-        200,
-      );
+      if (path.contains('tree/children')) {
+        return http.Response(
+          '{"items":[{"id":3,"preferred_label":"heroine","level":"child","parent_id":1,"has_children":false}]}',
+          200,
+        );
+      }
+      if (path.contains('orphans')) {
+        return http.Response(
+          '{"items":[],"total":0,"has_more":false}',
+          200,
+        );
+      }
+      return http.Response('{}', 200);
     });
 
     final provider = TagProvider(
@@ -47,35 +57,30 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(fluent.TreeView), findsOneWidget);
-    expect(find.text('R'), findsWidgets);
-    expect(find.text('P'), findsWidgets);
-    expect(find.text('C'), findsWidgets);
-
-    await tester.enterText(find.byType(fluent.TextBox), 'hero');
-    await tester.pumpAndSettle();
-
-    expect(find.byType(fluent.TreeView), findsOneWidget);
+    // Should show root tags with level badges
     expect(find.text('characters'), findsOneWidget);
-    expect(find.text('protagonist'), findsOneWidget);
-    expect(find.text('heroine'), findsOneWidget);
-    expect(find.text('7'), findsWidgets);
+    expect(find.text('props'), findsOneWidget);
+    expect(find.text('R'), findsWidgets);
   });
 
   testWidgets('untagged toggle updates draft and waits for apply', (
     tester,
   ) async {
     final client = MockClient((request) async {
-      if (request.url.path.contains('tree')) {
+      final path = request.url.path;
+      if (path.contains('tree/roots')) {
         return http.Response(
-          '{"tree":[{"id":1,"preferred_label":"characters","level":"root","tree_usage_count":2,"children":[]}]}',
+          '{"items":[{"id":1,"preferred_label":"characters","level":"root","has_children":false}]}',
           200,
         );
       }
-      return http.Response(
-        '{"tags":[{"id":1,"preferred_label":"characters","level":"root","slug":"characters","review_state":"approved","trust_score":1.0,"usage_count":2,"created_at":"2023-01-01T00:00:00Z"}],"total":1}',
-        200,
-      );
+      if (path.contains('orphans')) {
+        return http.Response(
+          '{"items":[],"total":0,"has_more":false}',
+          200,
+        );
+      }
+      return http.Response('{}', 200);
     });
 
     final provider = TagProvider(

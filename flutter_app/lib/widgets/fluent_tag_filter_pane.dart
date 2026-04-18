@@ -1,11 +1,10 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../models/tag.dart';
 import '../models/gallery_filter_state.dart';
 import '../providers/tag_provider.dart';
 
-/// Fluent 风格的标签筛选面板
-/// 从侧边弹出，提供标签多选筛选功能
 class FluentTagFilterPane extends StatefulWidget {
   final GalleryFilterState initialFilter;
   final ValueChanged<GalleryFilterState> onApplyFilter;
@@ -23,13 +22,16 @@ class FluentTagFilterPane extends StatefulWidget {
 class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
   final TextEditingController _searchController = TextEditingController();
   late GalleryFilterState _draftFilter;
+  final Set<int> _expandedParents = {};
 
   @override
   void initState() {
     super.initState();
     _draftFilter = widget.initialFilter.normalized();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<TagProvider>().loadTagTree();
+      final provider = context.read<TagProvider>();
+      provider.loadTreeRoots();
+      provider.loadOrphanTags();
     });
   }
 
@@ -46,6 +48,50 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     _searchController.dispose();
     super.dispose();
   }
+
+  bool _isTagSelected(int tagId, String? level, int? parentId) {
+    if (level == 'root' || level == 'parent') {
+      return _draftFilter.subtreeRootTagIds.contains(tagId);
+    }
+    return _draftFilter.exactTagIds.contains(tagId);
+  }
+
+  void _toggleTag(int tagId, String? level, int? parentId) {
+    setState(() {
+      if (level == 'root' || level == 'parent') {
+        final nextIds = _draftFilter.subtreeRootTagIds.toSet();
+        if (nextIds.contains(tagId)) {
+          nextIds.remove(tagId);
+        } else {
+          nextIds.add(tagId);
+        }
+        _draftFilter = _draftFilter
+            .copyWith(subtreeRootTagIds: nextIds, hasTags: null)
+            .normalized();
+      } else {
+        final nextIds = _draftFilter.exactTagIds.toSet();
+        if (nextIds.contains(tagId)) {
+          nextIds.remove(tagId);
+        } else {
+          nextIds.add(tagId);
+        }
+        _draftFilter = _draftFilter
+            .copyWith(exactTagIds: nextIds, hasTags: null)
+            .normalized();
+      }
+    });
+  }
+
+  void _loadChildrenIfNeeded(int parentId) {
+    final provider = context.read<TagProvider>();
+    if (!provider.treeChildrenByParent.containsKey(parentId)) {
+      provider.loadTreeChildren(parentId);
+    }
+  }
+
+  int get _selectedCount =>
+      _draftFilter.exactTagIds.length +
+      _draftFilter.subtreeRootTagIds.length;
 
   Widget _buildLevelBadge(String? level, FluentThemeData theme) {
     if (level == null || level.isEmpty) return const SizedBox.shrink();
@@ -80,117 +126,154 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     );
   }
 
-  List<TreeViewItem> _buildTreeNodes(List<dynamic> nodes) {
+  Widget _buildTagRow(TagBrowseNode node, {double indent = 0}) {
     final theme = FluentTheme.of(context);
-    return nodes.map((node) {
-      final tagId = (node['tag_id'] ?? node['id']) as int;
-      final isSelected = _draftFilter.exactTagIds.contains(tagId);
-      final children = node['children'] as List<dynamic>? ?? [];
-      final usageCount = node['tree_usage_count'] ?? node['usage_count'] ?? 0;
-      final level = node['level'] as String?;
+    final isSelected = _isTagSelected(node.id, node.level, node.parentId);
+    final isExpandable = node.hasChildren;
 
-      return TreeViewItem(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Checkbox(
-              checked: isSelected,
-              onChanged: (checked) {
-                final nextIds = _draftFilter.exactTagIds.toSet();
-                if (nextIds.contains(tagId)) {
-                  nextIds.remove(tagId);
-                } else {
-                  nextIds.add(tagId);
-                }
-
+    return Padding(
+      padding: EdgeInsets.only(left: indent),
+      child: Row(
+        children: [
+          if (isExpandable)
+            GestureDetector(
+              onTap: () {
                 setState(() {
-                  _draftFilter = _draftFilter
-                      .copyWith(exactTagIds: nextIds, hasTags: null)
-                      .normalized();
+                  if (_expandedParents.contains(node.id)) {
+                    _expandedParents.remove(node.id);
+                  } else {
+                    _expandedParents.add(node.id);
+                    _loadChildrenIfNeeded(node.id);
+                  }
                 });
               },
-            ),
-            const SizedBox(width: 8),
-            Text(node['preferred_label'] as String? ?? ''),
-            _buildLevelBadge(level, theme),
-            const SizedBox(width: 2),
-            Text(
-              '$usageCount',
-              style: TextStyle(
-                fontSize: 11,
-                color: theme.resources.textFillColorSecondary,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  _expandedParents.contains(node.id)
+                      ? FluentIcons.chevron_down
+                      : FluentIcons.chevron_right,
+                  size: 12,
+                  color: theme.resources.textFillColorSecondary,
+                ),
               ),
-            ),
-          ],
-        ),
-        value: tagId,
-        children: children.isNotEmpty ? _buildTreeNodes(children) : [],
-      );
-    }).toList();
+            )
+          else
+            const SizedBox(width: 20),
+          Checkbox(
+            checked: isSelected,
+            onChanged: (_) => _toggleTag(node.id, node.level, node.parentId),
+          ),
+          const SizedBox(width: 6),
+          Expanded(child: Text(node.preferredLabel)),
+          _buildLevelBadge(node.level, theme),
+        ],
+      ),
+    );
   }
 
-  List<dynamic> _filterTreeNodes(List<dynamic> nodes, String query) {
-    final normalized = query.trim().toLowerCase();
-    if (normalized.isEmpty) {
-      return nodes;
+  Widget _buildTreeSection(TagProvider provider) {
+    final roots = provider.treeRoots;
+    if (provider.isLoadingTreeRoots) {
+      return const Center(child: ProgressRing());
     }
+    if (roots.isEmpty) return const SizedBox.shrink();
 
-    final filtered = <dynamic>[];
-    for (final rawNode in nodes) {
-      final node = Map<String, dynamic>.from(rawNode as Map);
-      final label = (node['preferred_label'] as String? ?? '').toLowerCase();
-      final children = _filterTreeNodes(
-        node['children'] as List<dynamic>? ?? const [],
-        query,
-      );
-      if (label.contains(normalized) || children.isNotEmpty) {
-        node['children'] = children;
-        filtered.add(node);
-      }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final root in roots) ...[
+          _buildTagRow(root),
+          if (_expandedParents.contains(root.id)) ...[
+            Builder(builder: (context) {
+              final children = provider.childrenOf(root.id);
+              if (children.isEmpty && !provider.treeChildrenByParent.containsKey(root.id)) {
+                return const Padding(
+                  padding: EdgeInsets.only(left: 40),
+                  child: ProgressRing(),
+                );
+              }
+              return Column(
+                children: [
+                  for (final child in children)
+                    _buildTagRow(child, indent: 20),
+                ],
+              );
+            }),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _buildOrphanSection(TagProvider provider) {
+    final orphans = provider.orphanTags;
+    if (provider.isLoadingOrphans && orphans.isEmpty) {
+      return const Center(child: ProgressRing());
     }
-    return filtered;
+    if (orphans.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            '未分类标签',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: FluentTheme.of(context).resources.textFillColorSecondary,
+            ),
+          ),
+        ),
+        for (final orphan in orphans) _buildTagRow(orphan),
+        if (provider.hasMoreOrphans)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: HyperlinkButton(
+              onPressed: () => provider.loadOrphanTags(
+                offset: provider.orphanTags.length,
+              ),
+              child: const Text('加载更多...'),
+            ),
+          ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 标题行
           Row(
             children: [
               Text('标签筛选', style: theme.typography.title),
               const Spacer(),
-              Consumer<TagProvider>(
-                builder: (context, provider, _) {
-                  final count = _draftFilter.exactTagIds.length;
-                  if (count == 0) return const SizedBox.shrink();
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.accentColor.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '$count 个',
-                      style: TextStyle(fontSize: 12, color: theme.accentColor),
-                    ),
-                  );
-                },
-              ),
+              if (_selectedCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.accentColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$_selectedCount 个',
+                    style: TextStyle(fontSize: 12, color: theme.accentColor),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 12),
 
-          // 搜索框
           TextBox(
             controller: _searchController,
             placeholder: '搜索标签...',
@@ -213,60 +296,47 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           ),
           const SizedBox(height: 12),
 
-          // 未打标签开关
-          _buildUntaggedToggle(context, isDark),
+          _buildUntaggedToggle(context),
           const SizedBox(height: 12),
 
-          // 标签未确认开关
-          _buildPendingTagsToggle(context, isDark),
+          _buildPendingTagsToggle(context),
           const SizedBox(height: 12),
 
-          // 清空按钮
-          Consumer<TagProvider>(
-            builder: (context, provider, _) {
-              if (_draftFilter.isEmpty) {
-                return const SizedBox.shrink();
-              }
-              return Row(
-                children: [
-                  Button(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(FluentIcons.clear, size: 14),
-                        const SizedBox(width: 6),
-                        const Text('清空筛选'),
-                      ],
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _draftFilter = _draftFilter.clear();
-                      });
-                    },
+          if (!_draftFilter.isEmpty)
+            Row(
+              children: [
+                Button(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(FluentIcons.clear, size: 14),
+                      const SizedBox(width: 6),
+                      const Text('清空筛选'),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    child: const Text('应用筛选'),
-                    onPressed: () {
-                      widget.onApplyFilter(_draftFilter.normalized());
-                    },
-                  ),
-                ],
-              );
-            },
-          ),
+                  onPressed: () {
+                    setState(() {
+                      _draftFilter = _draftFilter.clear();
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  child: const Text('应用筛选'),
+                  onPressed: () {
+                    widget.onApplyFilter(_draftFilter.normalized());
+                  },
+                ),
+              ],
+            ),
           const SizedBox(height: 12),
           const Divider(),
           const SizedBox(height: 8),
 
-          // 标签列表/树
           Expanded(
             child: Consumer<TagProvider>(
               builder: (context, provider, _) {
-                if (provider.isLoading) {
-                  return const Center(child: ProgressRing());
-                }
-                if (provider.error != null) {
+                if (provider.treeBrowseError != null) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -277,19 +347,24 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                           color: theme.resources.systemFillColorCritical,
                         ),
                         const SizedBox(height: 8),
-                        Text('加载失败: ${provider.error}'),
+                        Text('加载失败: ${provider.treeBrowseError}'),
+                        const SizedBox(height: 8),
+                        HyperlinkButton(
+                          onPressed: () {
+                            provider.loadTreeRoots();
+                            provider.loadOrphanTags();
+                          },
+                          child: const Text('重试'),
+                        ),
                       ],
                     ),
                   );
                 }
 
-                final treeData =
-                    provider.tagTree?['tree'] as List<dynamic>? ?? [];
-                final visibleNodes = _filterTreeNodes(
-                  treeData,
-                  _searchController.text,
-                );
-                if (visibleNodes.isEmpty) {
+                final roots = provider.treeRoots;
+                final orphans = provider.orphanTags;
+
+                if (roots.isEmpty && orphans.isEmpty && !provider.isLoadingTreeRoots && !provider.isLoadingOrphans) {
                   return Center(
                     child: Text(
                       '暂无标签',
@@ -300,9 +375,13 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
                   );
                 }
 
-                return TreeView(
-                  items: _buildTreeNodes(visibleNodes),
-                  selectionMode: TreeViewSelectionMode.multiple,
+                return ListView(
+                  children: [
+                    _buildTreeSection(provider),
+                    if (roots.isNotEmpty && orphans.isNotEmpty)
+                      const Divider(),
+                    _buildOrphanSection(provider),
+                  ],
                 );
               },
             ),
@@ -312,7 +391,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     );
   }
 
-  Widget _buildUntaggedToggle(BuildContext context, bool isDark) {
+  Widget _buildUntaggedToggle(BuildContext context) {
     return Row(
       children: [
         ToggleSwitch(
@@ -333,7 +412,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
     );
   }
 
-  Widget _buildPendingTagsToggle(BuildContext context, bool isDark) {
+  Widget _buildPendingTagsToggle(BuildContext context) {
     return Row(
       children: [
         ToggleSwitch(

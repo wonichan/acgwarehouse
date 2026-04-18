@@ -30,6 +30,8 @@ void main() {
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
               tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: anyNamed('hasTags'),
             ),
           ).thenAnswer(
@@ -51,6 +53,8 @@ void main() {
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
               tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: false,
             ),
           ).called(1);
@@ -88,6 +92,8 @@ void main() {
             sortBy: anyNamed('sortBy'),
             sortDir: anyNamed('sortDir'),
             tagIds: anyNamed('tagIds'),
+            exactTagIds: anyNamed('exactTagIds'),
+            subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
             hasTags: anyNamed('hasTags'),
           ),
         ).called(1);
@@ -104,6 +110,8 @@ void main() {
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
               tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: anyNamed('hasTags'),
             ),
           ).thenAnswer(
@@ -156,6 +164,8 @@ void main() {
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
               tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: anyNamed('hasTags'),
             ),
           ).thenAnswer(
@@ -182,6 +192,8 @@ void main() {
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
               tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: false,
             ),
           ).called(1);
@@ -199,6 +211,8 @@ void main() {
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
               tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: anyNamed('hasTags'),
             ),
           ).thenAnswer(
@@ -220,6 +234,8 @@ void main() {
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
               tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: true,
             ),
           ).called(1);
@@ -261,6 +277,8 @@ void main() {
             sortBy: 'file_size',
             sortDir: 'asc',
             tagIds: anyNamed('tagIds'),
+            exactTagIds: anyNamed('exactTagIds'),
+            subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
             hasTags: false,
           ),
         ).called(1);
@@ -279,6 +297,8 @@ void main() {
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
               tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: anyNamed('hasTags'),
             ),
           ).thenAnswer(
@@ -312,6 +332,8 @@ void main() {
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
               tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: anyNamed('hasTags'),
             ),
           ).thenAnswer(
@@ -335,7 +357,8 @@ void main() {
               offset: 0,
               sortBy: anyNamed('sortBy'),
               sortDir: anyNamed('sortDir'),
-              tagIds: [7],
+              exactTagIds: [7],
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
               hasTags: captureAnyNamed('hasTags'),
             ),
           ).captured;
