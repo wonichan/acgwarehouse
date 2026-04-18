@@ -294,10 +294,10 @@ class TagService {
         .toList();
   }
 
-  /// 获取标签治理列表
-  Future<List<TagGovernanceRow>> fetchGovernanceTags({
+  /// 获取标签治理列表（分页）
+  Future<GovernanceTagsPage> fetchGovernanceTags({
     String? search,
-    int limit = 500,
+    int limit = 50,
     int offset = 0,
   }) async {
     final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/governance')
@@ -317,11 +317,13 @@ class TagService {
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return (json['rows'] as List? ?? [])
+    final rows = (json['rows'] as List? ?? [])
         .map(
           (entry) => TagGovernanceRow.fromJson(entry as Map<String, dynamic>),
         )
         .toList();
+    final total = json['total'] as int? ?? 0;
+    return GovernanceTagsPage(rows: rows, total: total);
   }
 
   /// 获取标签删除预览
@@ -564,5 +566,53 @@ class TagService {
     if (response.statusCode != 200) {
       throw Exception('Failed to delete tag: ${response.statusCode}');
     }
+  }
+
+  Future<List<TagBrowseNode>> fetchTreeRoots() async {
+    final response = await _client.get(
+      Uri.parse(ApiConfig.tagTreeRoots(_baseUrl)),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch tree roots: ${response.statusCode}');
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return (json['roots'] as List? ?? [])
+        .map((e) => TagBrowseNode.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<TagBrowseNode>> fetchTreeChildren({required int parentId}) async {
+    final uri = Uri.parse(ApiConfig.tagTreeChildren(_baseUrl)).replace(
+      queryParameters: {'parent_id': parentId.toString()},
+    );
+    final response = await _client.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch tree children: ${response.statusCode}');
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return (json['children'] as List? ?? [])
+        .map((e) => TagBrowseNode.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<OrphanTagsPage> fetchOrphanTags({
+    int limit = 20,
+    int offset = 0,
+    String? search,
+  }) async {
+    final uri = Uri.parse(ApiConfig.tagOrphans(_baseUrl)).replace(
+      queryParameters: {
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+        if (search != null && search.isNotEmpty) 'search': search,
+      },
+    );
+    final response = await _client.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch orphan tags: ${response.statusCode}');
+    }
+    return OrphanTagsPage.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
   }
 }

@@ -291,25 +291,25 @@ void main() {
           mockClient.get(any),
         ).thenAnswer((_) async => http.Response(responseBody, 200));
 
-        final rows = await tagService.fetchGovernanceTags(search: 'anime');
+        final page = await tagService.fetchGovernanceTags(search: 'anime');
 
-        expect(rows, hasLength(1));
-        expect(rows.first, isA<TagGovernanceRow>());
-        expect(rows.first.tagId, 101);
-        expect(rows.first.primaryCategory, 'character');
-        expect(rows.first.aliases, ['animegirl', '2d-girl']);
-        expect(rows.first.affectedImageCount, 42);
-        expect(rows.first.canDelete, false);
-        expect(rows.first.directAiCount, 12);
-        expect(rows.first.treeAiCount, 28);
-        expect(rows.first.directManualCount, 6);
-        expect(rows.first.treeManualCount, 14);
+        expect(page.rows, hasLength(1));
+        expect(page.rows.first, isA<TagGovernanceRow>());
+        expect(page.rows.first.tagId, 101);
+        expect(page.rows.first.primaryCategory, 'character');
+        expect(page.rows.first.aliases, ['animegirl', '2d-girl']);
+        expect(page.rows.first.affectedImageCount, 42);
+        expect(page.rows.first.canDelete, false);
+        expect(page.rows.first.directAiCount, 12);
+        expect(page.rows.first.treeAiCount, 28);
+        expect(page.rows.first.directManualCount, 6);
+        expect(page.rows.first.treeManualCount, 14);
 
         final captured =
             verify(mockClient.get(captureAny)).captured.single as Uri;
         expect(captured.path, '/api/v1/tags/governance');
         expect(captured.queryParameters['search'], 'anime');
-        expect(captured.queryParameters['limit'], '500');
+        expect(captured.queryParameters['limit'], '50');
       });
 
       test('fetchDeletePreview parses delete preview contract', () async {
@@ -458,6 +458,128 @@ void main() {
         final body = captured.captured[2] as String;
         expect(uri.path, '/api/v1/tags/batch/cleanup');
         expect(body, '{"tag_ids":[1,2,3]}');
+      });
+    });
+
+    group('lazy tree browse', () {
+      test('fetchTreeRoots hits /tags/tree/roots and parses nodes', () async {
+        final responseBody = '''
+        {
+          "roots": [
+            {"id": 1, "preferred_label": "colors", "level": "root", "parent_id": null, "has_children": true},
+            {"id": 2, "preferred_label": "styles", "level": "root", "parent_id": null, "has_children": false}
+          ]
+        }
+        ''';
+
+        when(mockClient.get(any))
+            .thenAnswer((_) async => http.Response(responseBody, 200));
+
+        final roots = await tagService.fetchTreeRoots();
+
+        expect(roots, hasLength(2));
+        expect(roots[0].id, 1);
+        expect(roots[0].preferredLabel, 'colors');
+        expect(roots[0].hasChildren, true);
+        expect(roots[1].id, 2);
+        expect(roots[1].hasChildren, false);
+
+        final captured =
+            verify(mockClient.get(captureAny)).captured.single as Uri;
+        expect(captured.path, '/api/v1/tags/tree/roots');
+      });
+
+      test('fetchTreeChildren sends parent_id and parses children', () async {
+        final responseBody = '''
+        {
+          "children": [
+            {"id": 10, "preferred_label": "red", "level": "child", "parent_id": 1, "has_children": false},
+            {"id": 11, "preferred_label": "blue", "level": "child", "parent_id": 1, "has_children": true}
+          ]
+        }
+        ''';
+
+        when(mockClient.get(any))
+            .thenAnswer((_) async => http.Response(responseBody, 200));
+
+        final children =
+            await tagService.fetchTreeChildren(parentId: 1);
+
+        expect(children, hasLength(2));
+        expect(children[0].id, 10);
+        expect(children[0].preferredLabel, 'red');
+        expect(children[0].parentId, 1);
+        expect(children[1].hasChildren, true);
+
+        final captured =
+            verify(mockClient.get(captureAny)).captured.single as Uri;
+        expect(captured.path, '/api/v1/tags/tree/children');
+        expect(captured.queryParameters['parent_id'], '1');
+      });
+
+      test('fetchOrphanTags sends paging params and parses page', () async {
+        final responseBody = '''
+        {
+          "items": [
+            {"id": 50, "preferred_label": "solo", "level": "child", "parent_id": null, "has_children": false}
+          ],
+          "total": 15,
+          "limit": 20,
+          "offset": 0,
+          "has_more": false
+        }
+        ''';
+
+        when(mockClient.get(any))
+            .thenAnswer((_) async => http.Response(responseBody, 200));
+
+        final page = await tagService.fetchOrphanTags(limit: 20, offset: 0);
+
+        expect(page.items, hasLength(1));
+        expect(page.items[0].id, 50);
+        expect(page.items[0].preferredLabel, 'solo');
+        expect(page.total, 15);
+        expect(page.hasMore, false);
+
+        final captured =
+            verify(mockClient.get(captureAny)).captured.single as Uri;
+        expect(captured.path, '/api/v1/tags/orphans');
+        expect(captured.queryParameters['limit'], '20');
+        expect(captured.queryParameters['offset'], '0');
+      });
+
+      test('fetchOrphanTags includes search param when provided', () async {
+        when(mockClient.get(any)).thenAnswer(
+          (_) async => http.Response('{"items":[],"total":0,"limit":20,"offset":0}', 200),
+        );
+
+        await tagService.fetchOrphanTags(search: 'hair');
+
+        final captured =
+            verify(mockClient.get(captureAny)).captured.single as Uri;
+        expect(captured.queryParameters['search'], 'hair');
+      });
+
+      test('fetchTreeRoots throws on non-200', () async {
+        when(mockClient.get(any))
+            .thenAnswer((_) async => http.Response('error', 500));
+
+        expect(() => tagService.fetchTreeRoots(), throwsA(isA<Exception>()));
+      });
+
+      test('fetchTreeChildren throws on non-200', () async {
+        when(mockClient.get(any))
+            .thenAnswer((_) async => http.Response('error', 500));
+
+        expect(() => tagService.fetchTreeChildren(parentId: 1),
+            throwsA(isA<Exception>()));
+      });
+
+      test('fetchOrphanTags throws on non-200', () async {
+        when(mockClient.get(any))
+            .thenAnswer((_) async => http.Response('error', 500));
+
+        expect(() => tagService.fetchOrphanTags(), throwsA(isA<Exception>()));
       });
     });
   });

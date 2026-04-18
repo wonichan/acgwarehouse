@@ -59,6 +59,14 @@ class ApiConfig {
   static String defaultAIPrompt(String baseUrl) =>
       '${baseUrlOf(baseUrl)}/ai-tags/default-prompt';
 
+  // ---- Lazy tag tree endpoints ----
+  static String tagTreeRoots(String baseUrl) =>
+      '${baseUrlOf(baseUrl)}/tags/tree/roots';
+  static String tagTreeChildren(String baseUrl) =>
+      '${baseUrlOf(baseUrl)}/tags/tree/children';
+  static String tagOrphans(String baseUrl) =>
+      '${baseUrlOf(baseUrl)}/tags/orphans';
+
   // ---- Search endpoints ----
   static String search(String baseUrl) => '${baseUrlOf(baseUrl)}/search';
   static String searchByFilename(String baseUrl) =>

@@ -105,6 +105,57 @@ class Tag {
   }
 }
 
+/// Lightweight tag node returned by lazy tree browse endpoints.
+class TagBrowseNode {
+  final int id;
+  final String preferredLabel;
+  final String? level;
+  final int? parentId;
+  final bool hasChildren;
+
+  const TagBrowseNode({
+    required this.id,
+    required this.preferredLabel,
+    this.level,
+    this.parentId,
+    required this.hasChildren,
+  });
+
+  factory TagBrowseNode.fromJson(Map<String, dynamic> json) {
+    return TagBrowseNode(
+      id: json['id'] as int,
+      preferredLabel: json['preferred_label'] as String,
+      level: json['level'] as String?,
+      parentId: json['parent_id'] as int?,
+      hasChildren: json['has_children'] as bool? ?? false,
+    );
+  }
+}
+
+/// Paged response for orphan tags endpoint.
+class OrphanTagsPage {
+  final List<TagBrowseNode> items;
+  final int total;
+  final bool hasMore;
+
+  const OrphanTagsPage({
+    required this.items,
+    required this.total,
+    required this.hasMore,
+  });
+
+  factory OrphanTagsPage.fromJson(Map<String, dynamic> json) {
+    final items = (json['items'] as List? ?? [])
+        .map((e) => TagBrowseNode.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return OrphanTagsPage(
+      items: items,
+      total: json['total'] as int? ?? 0,
+      hasMore: json['has_more'] as bool? ?? false,
+    );
+  }
+}
+
 /// Tag statistics for governance display
 class TagStatistics {
   final int tagId;
