@@ -465,7 +465,7 @@ void main() {
       test('fetchTreeRoots hits /tags/tree/roots and parses nodes', () async {
         final responseBody = '''
         {
-          "roots": [
+          "items": [
             {"id": 1, "preferred_label": "colors", "level": "root", "parent_id": null, "has_children": true},
             {"id": 2, "preferred_label": "styles", "level": "root", "parent_id": null, "has_children": false}
           ]
@@ -492,7 +492,7 @@ void main() {
       test('fetchTreeChildren sends parent_id and parses children', () async {
         final responseBody = '''
         {
-          "children": [
+          "items": [
             {"id": 10, "preferred_label": "red", "level": "child", "parent_id": 1, "has_children": false},
             {"id": 11, "preferred_label": "blue", "level": "child", "parent_id": 1, "has_children": true}
           ]

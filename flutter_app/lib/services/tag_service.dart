@@ -576,7 +576,7 @@ class TagService {
       throw Exception('Failed to fetch tree roots: ${response.statusCode}');
     }
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return (json['roots'] as List? ?? [])
+    return (json['items'] as List? ?? [])
         .map((e) => TagBrowseNode.fromJson(e as Map<String, dynamic>))
         .toList();
   }
@@ -590,7 +590,7 @@ class TagService {
       throw Exception('Failed to fetch tree children: ${response.statusCode}');
     }
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return (json['children'] as List? ?? [])
+    return (json['items'] as List? ?? [])
         .map((e) => TagBrowseNode.fromJson(e as Map<String, dynamic>))
         .toList();
   }
