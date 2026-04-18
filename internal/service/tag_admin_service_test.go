@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -294,6 +295,56 @@ func TestTagAdminServiceGetTagTreeBuildsHierarchy(t *testing.T) {
 	}
 	if root.TreeUsageCount < root.UsageCount {
 		t.Fatalf("tree usage should be >= direct usage, got tree=%d direct=%d", root.TreeUsageCount, root.UsageCount)
+	}
+}
+
+func TestTagAdminServiceGetTagTreeHandlesLargeOrphanPopulation(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, imageTagRepo := newTagAdminServiceForTest(t)
+
+	const extraOrphans = 33005
+	for i := 0; i < extraOrphans; i++ {
+		label := "orphan-large-" + strconv.Itoa(i)
+		tag := mustSaveAdminTag(t, tagRepo, &domain.Tag{
+			PreferredLabel:  label,
+			Slug:            label,
+			Level:           domain.TagLevelChild,
+			PrimaryCategory: "meta",
+			ReviewState:     "confirmed",
+		})
+		if i < 3 {
+			if err := imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: 1, TagID: tag.ID, Source: domain.ImageTagSourceManual, ReviewState: "confirmed"}); err != nil {
+				t.Fatalf("seed orphan image tag %d: %v", i, err)
+			}
+		}
+	}
+
+	tree, err := service.GetTagTree(context.Background())
+	if err != nil {
+		t.Fatalf("GetTagTree() error = %v", err)
+	}
+
+	wantRoots := 4 + extraOrphans
+	if len(tree) != wantRoots {
+		t.Fatalf("len(tree) = %d, want %d", len(tree), wantRoots)
+	}
+
+	var orphan *TagTreeNode
+	for i := range tree {
+		if tree[i].PreferredLabel == "orphan-large-0" {
+			orphan = &tree[i]
+			break
+		}
+	}
+	if orphan == nil {
+		t.Fatal("expected orphan-large-0 in root tree")
+	}
+	if len(orphan.Children) != 0 {
+		t.Fatalf("orphan-large-0 children = %+v, want none", orphan.Children)
+	}
+	if orphan.TreeUsageCount != 1 {
+		t.Fatalf("orphan-large-0 tree usage = %d, want 1", orphan.TreeUsageCount)
 	}
 }
 

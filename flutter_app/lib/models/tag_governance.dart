@@ -170,3 +170,11 @@ class TagMergeRequest {
     return {'target_tag_id': targetTagId};
   }
 }
+
+/// Governance tags 分页结果
+class GovernanceTagsPage {
+  final List<TagGovernanceRow> rows;
+  final int total;
+
+  const GovernanceTagsPage({required this.rows, required this.total});
+}

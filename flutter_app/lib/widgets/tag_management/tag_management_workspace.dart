@@ -153,29 +153,32 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _buildStatCard(context, '总计使用量', totalUsage),
+          _buildStatCard(
+            context,
+            '已加载',
+            '${rows.length}/${provider.governanceTotal}',
+          ),
           const SizedBox(width: 12),
-          _buildStatCard(context, 'AI 生成', totalAI),
+          _buildStatCard(context, '总计使用量', '$totalUsage'),
           const SizedBox(width: 12),
-          _buildStatCard(context, '手动', totalManual),
+          _buildStatCard(context, 'AI 生成', '$totalAI'),
           const SizedBox(width: 12),
-          _buildStatCard(context, '待处理', totalPending),
+          _buildStatCard(context, '手动', '$totalManual'),
+          const SizedBox(width: 12),
+          _buildStatCard(context, '待处理', '$totalPending'),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(BuildContext context, String label, int value) {
+  Widget _buildStatCard(BuildContext context, String label, String value) {
     return Expanded(
       child: Card(
         child: Padding(
           padding: const EdgeInsets.all(8),
           child: Column(
             children: [
-              Text(
-                '$value',
-                style: FluentTheme.of(context).typography.subtitle,
-              ),
+              Text(value, style: FluentTheme.of(context).typography.subtitle),
               Text(label),
             ],
           ),
@@ -193,6 +196,8 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
           setState(() {
             _searchQuery = value;
           });
+          // Trigger paginated reload with search
+          context.read<TagProvider>().loadGovernanceTags(search: value);
         },
       ),
     );

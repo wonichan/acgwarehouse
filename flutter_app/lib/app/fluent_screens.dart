@@ -95,13 +95,9 @@ class _FluentGalleryPageState extends State<FluentGalleryPage> {
                     ),
                   ),
                   child: FluentTagFilterPane(
-                    hasTagsFilter: imageProvider.hasTagsFilter,
-                    onHasTagsChanged: (value) {
-                      imageProvider.setHasTagsFilter(value);
-                    },
-                    hasPendingTagsFilter: imageProvider.hasPendingTagsFilter,
-                    onHasPendingTagsChanged: (value) {
-                      imageProvider.setHasPendingTagsFilter(value);
+                    initialFilter: imageProvider.filter,
+                    onApplyFilter: (filter) {
+                      imageProvider.applyFilter(filter);
                     },
                   ),
                 ),

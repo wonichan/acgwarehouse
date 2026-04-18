@@ -5,7 +5,10 @@ import '../../models/tag_governance.dart';
 import '../../providers/tag_provider.dart';
 
 /// Tree-aware governance list displaying hierarchy rows with inline actions.
-class TagManagementList extends StatelessWidget {
+///
+/// Supports infinite scroll via [ScrollController] – triggers load-more
+/// when the user scrolls within 200px of the bottom.
+class TagManagementList extends StatefulWidget {
   final void Function(TagGovernanceRow row) onEdit;
   final void Function(TagGovernanceRow row) onMerge;
   final void Function(TagGovernanceRow row) onDelete;
@@ -22,25 +25,57 @@ class TagManagementList extends StatelessWidget {
   });
 
   @override
+  State<TagManagementList> createState() => _TagManagementListState();
+}
+
+class _TagManagementListState extends State<TagManagementList> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (currentScroll >= maxScroll - 200) {
+      final provider = context.read<TagProvider>();
+      if (provider.hasMoreGovernance && !provider.isLoadingMoreGovernance) {
+        provider.loadMoreGovernanceTags();
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<TagProvider>(
       builder: (context, provider, _) {
         final rows = provider.governanceRows;
-        if (rows.isEmpty) {
+        if (rows.isEmpty && !provider.isLoadingMoreGovernance) {
           return const Center(child: Text('暂无治理标签'));
         }
 
         final rowById = {for (final row in rows) row.tagId: row};
         final tree = provider.tagTree?['tree'] as List<dynamic>?;
-        final filteredTree = _filterTree(tree ?? const [], searchQuery);
+        final filteredTree = _filterTree(tree ?? const [], widget.searchQuery);
         final items = (tree != null && tree.isNotEmpty)
             ? _buildTreeItems(filteredTree, rowById, provider, 0)
             : rows
                   .where(
                     (row) =>
-                        searchQuery.trim().isEmpty ||
+                        widget.searchQuery.trim().isEmpty ||
                         row.preferredLabel.toLowerCase().contains(
-                          searchQuery.trim().toLowerCase(),
+                          widget.searchQuery.trim().toLowerCase(),
                         ),
                   )
                   .map(
@@ -52,15 +87,33 @@ class TagManagementList extends StatelessWidget {
                       ),
                       onToggleSelect: () =>
                           provider.toggleGovernanceSelection(row.tagId),
-                      onEdit: () => onEdit(row),
-                      onMerge: () => onMerge(row),
-                      onDelete: () => onDelete(row),
-                      onViewAffectedImages: () => onViewAffectedImages(row),
+                      onEdit: () => widget.onEdit(row),
+                      onMerge: () => widget.onMerge(row),
+                      onDelete: () => widget.onDelete(row),
+                      onViewAffectedImages: () =>
+                          widget.onViewAffectedImages(row),
                     ),
                   )
                   .toList();
 
-        return ListView(children: items);
+        return ListView.builder(
+          controller: _scrollController,
+          itemCount:
+              items.length +
+              (provider.hasMoreGovernance || provider.isLoadingMoreGovernance
+                  ? 1
+                  : 0),
+          itemBuilder: (context, index) {
+            if (index == items.length) {
+              // Loading indicator at bottom
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: ProgressRing()),
+              );
+            }
+            return items[index];
+          },
+        );
       },
     );
   }
@@ -113,10 +166,10 @@ class TagManagementList extends StatelessWidget {
           depth: depth,
           isSelected: provider.selectedGovernanceIds.contains(row.tagId),
           onToggleSelect: () => provider.toggleGovernanceSelection(row.tagId),
-          onEdit: () => onEdit(row),
-          onMerge: () => onMerge(row),
-          onDelete: () => onDelete(row),
-          onViewAffectedImages: () => onViewAffectedImages(row),
+          onEdit: () => widget.onEdit(row),
+          onMerge: () => widget.onMerge(row),
+          onDelete: () => widget.onDelete(row),
+          onViewAffectedImages: () => widget.onViewAffectedImages(row),
         ),
       );
 
