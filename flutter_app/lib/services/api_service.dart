@@ -43,6 +43,8 @@ class ApiService {
     String sortBy = 'created_at',
     String sortDir = 'desc',
     List<int>? tagIds,
+    List<int>? exactTagIds,
+    List<int>? subtreeRootTagIds,
     bool? hasTags,
     bool? hasPendingTags,
   }) async {
@@ -57,12 +59,12 @@ class ApiService {
       queryParams['tag_ids'] = tagIds.join(',');
     }
 
-    if (hasTags != null) {
-      queryParams['has_tags'] = hasTags.toString();
+    if (exactTagIds != null && exactTagIds.isNotEmpty) {
+      queryParams['exact_tag_ids'] = exactTagIds.join(',');
     }
 
-    if (hasPendingTags != null) {
-      queryParams['has_pending_tags'] = hasPendingTags.toString();
+    if (subtreeRootTagIds != null && subtreeRootTagIds.isNotEmpty) {
+      queryParams['subtree_root_tag_ids'] = subtreeRootTagIds.join(',');
     }
 
     if (hasTags != null) {

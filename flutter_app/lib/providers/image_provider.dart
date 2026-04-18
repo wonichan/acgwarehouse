@@ -55,7 +55,7 @@ class ImageListProvider extends ChangeNotifier {
       }
 
       debugPrint(
-        '加载图片: offset=$_currentOffset, tagIds=${_filter.exactTagIds.toList()}, hasTags=${_filter.hasTags}, hasPendingTags=${_filter.hasPendingTags}, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}',
+        '加载图片: offset=$_currentOffset, exactTagIds=${_filter.exactTagIds.toList()}, subtreeRootTagIds=${_filter.subtreeRootTagIds.toList()}, hasTags=${_filter.hasTags}, hasPendingTags=${_filter.hasPendingTags}, sortBy=${_sortField.name}, sortDir=${_sortAsc ? 'asc' : 'desc'}',
       );
 
       final response = await _apiService.fetchImages(
@@ -66,8 +66,11 @@ class ImageListProvider extends ChangeNotifier {
             ? 'file_size'
             : 'filename',
         sortDir: _sortAsc ? 'asc' : 'desc',
-        tagIds: _filter.exactTagIds.isNotEmpty
+        exactTagIds: _filter.exactTagIds.isNotEmpty
             ? _filter.exactTagIds.toList()
+            : null,
+        subtreeRootTagIds: _filter.subtreeRootTagIds.isNotEmpty
+            ? _filter.subtreeRootTagIds.toList()
             : null,
         hasTags: _filter.hasTags,
         hasPendingTags: _filter.hasPendingTags,

@@ -195,24 +195,65 @@ void main() {
         expect(captured.queryParameters['sort_by'], 'filename');
         expect(captured.queryParameters['sort_dir'], 'asc');
       });
-    });
 
-    group('image actions', () {
-      test('openImageSourceFile sends POST to action endpoint', () async {
+      test('serializes exactTagIds into query parameters', () async {
+        final responseBody =
+            '{"images":[],"next_cursor":"","has_more":false,"total":0}';
+
         when(
-          mockClient.post(any, headers: anyNamed('headers')),
-        ).thenAnswer((_) async => http.Response('{"status":"ok"}', 200));
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
 
-        await apiService.openImageSourceFile(42);
+        await apiService.fetchImages(exactTagIds: [10, 20]);
 
         final captured =
             verify(
-                  mockClient.post(captureAny, headers: anyNamed('headers')),
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
                 ).captured.single
                 as Uri;
-        expect(captured.path, contains('/api/v1/images/42/open-source'));
+        expect(captured.queryParameters['exact_tag_ids'], '10,20');
+        expect(captured.queryParameters.containsKey('tag_ids'), isFalse);
       });
 
+      test('serializes subtreeRootTagIds into query parameters', () async {
+        final responseBody =
+            '{"images":[],"next_cursor":"","has_more":false,"total":0}';
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
+
+        await apiService.fetchImages(subtreeRootTagIds: [5]);
+
+        final captured =
+            verify(
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
+        expect(captured.queryParameters['subtree_root_tag_ids'], '5');
+      });
+
+      test('serializes exact and subtree together', () async {
+        final responseBody =
+            '{"images":[],"next_cursor":"","has_more":false,"total":0}';
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
+
+        await apiService.fetchImages(exactTagIds: [1], subtreeRootTagIds: [5]);
+
+        final captured =
+            verify(
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
+        expect(captured.queryParameters['exact_tag_ids'], '1');
+        expect(captured.queryParameters['subtree_root_tag_ids'], '5');
+      });
+    });
+
+    group('image actions', () {
       test('permanentDeleteImage sends DELETE to action endpoint', () async {
         when(
           mockClient.delete(any, headers: anyNamed('headers')),

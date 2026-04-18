@@ -12,6 +12,8 @@ class RecordingApiService extends ApiService {
   String? lastSortBy;
   String? lastSortDir;
   List<int>? lastTagIds;
+  List<int>? lastExactTagIds;
+  List<int>? lastSubtreeRootTagIds;
   bool? lastHasTags;
   bool? lastHasPendingTags;
 
@@ -22,6 +24,8 @@ class RecordingApiService extends ApiService {
     String sortBy = 'created_at',
     String sortDir = 'desc',
     List<int>? tagIds,
+    List<int>? exactTagIds,
+    List<int>? subtreeRootTagIds,
     bool? hasTags,
     bool? hasPendingTags,
   }) async {
@@ -30,6 +34,8 @@ class RecordingApiService extends ApiService {
     lastSortBy = sortBy;
     lastSortDir = sortDir;
     lastTagIds = tagIds;
+    lastExactTagIds = exactTagIds;
+    lastSubtreeRootTagIds = subtreeRootTagIds;
     lastHasTags = hasTags;
     lastHasPendingTags = hasPendingTags;
 
@@ -57,7 +63,7 @@ void main() {
         expect(provider.filter.exactTagIds, {2, 7});
         expect(provider.filter.hasPendingTags, isTrue);
         expect(provider.selectedTagIds, [2, 7]);
-        expect(api.lastTagIds, [2, 7]);
+        expect(api.lastExactTagIds, [2, 7]);
         expect(api.lastHasTags, isNull);
         expect(api.lastHasPendingTags, isTrue);
       },
@@ -80,7 +86,8 @@ void main() {
       expect(provider.filter.subtreeRootTagIds, isEmpty);
       expect(provider.filter.hasTags, isFalse);
       expect(provider.filter.hasPendingTags, isNull);
-      expect(api.lastTagIds, isNull);
+      expect(api.lastExactTagIds, isNull);
+      expect(api.lastSubtreeRootTagIds, isNull);
       expect(api.lastHasTags, isFalse);
       expect(api.lastHasPendingTags, isNull);
     });
@@ -97,7 +104,7 @@ void main() {
         expect(provider.filter.exactTagIds, {5});
         expect(provider.filter.hasTags, isNull);
         expect(provider.filter.hasPendingTags, isTrue);
-        expect(api.lastTagIds, [5]);
+        expect(api.lastExactTagIds, [5]);
         expect(api.lastHasTags, isNull);
         expect(api.lastHasPendingTags, isTrue);
       },
@@ -115,9 +122,26 @@ void main() {
       expect(provider.filter.exactTagIds, isEmpty);
       expect(provider.filter.hasTags, isFalse);
       expect(provider.filter.hasPendingTags, isNull);
-      expect(api.lastTagIds, isNull);
+      expect(api.lastExactTagIds, isNull);
       expect(api.lastHasTags, isFalse);
       expect(api.lastHasPendingTags, isNull);
+    });
+
+    test('applyFilter forwards subtree root tag ids to API', () async {
+      final api = RecordingApiService();
+      final provider = ImageListProvider(api);
+
+      await provider.applyFilter(
+        GalleryFilterState(
+          exactTagIds: {1},
+          subtreeRootTagIds: {5, 10},
+        ),
+      );
+
+      expect(provider.filter.exactTagIds, {1});
+      expect(provider.filter.subtreeRootTagIds, {5, 10});
+      expect(api.lastExactTagIds, [1]);
+      expect(api.lastSubtreeRootTagIds, [5, 10]);
     });
   });
 }
