@@ -404,7 +404,9 @@ void main() {
       test('loadGovernanceTags fetches and stores governance rows', () async {
         when(
           () => mockTagService.fetchGovernanceTags(search: 'anime'),
-        ).thenAnswer((_) async => [governanceRow]);
+        ).thenAnswer(
+          (_) async => GovernanceTagsPage(rows: [governanceRow], total: 1),
+        );
 
         await tagProvider.loadGovernanceTags(search: 'anime');
 
@@ -462,7 +464,9 @@ void main() {
             () => mockTagService.fetchGovernanceTags(
               search: any(named: 'search'),
             ),
-          ).thenAnswer((_) async => [governanceRow]);
+          ).thenAnswer(
+            (_) async => GovernanceTagsPage(rows: [governanceRow], total: 1),
+          );
           when(
             () => mockTagService.updateTag(101, primaryCategory: 'character'),
           ).thenAnswer((_) async => _buildTag(101, 'anime-girl'));
@@ -490,7 +494,9 @@ void main() {
             () => mockTagService.fetchGovernanceTags(
               search: any(named: 'search'),
             ),
-          ).thenAnswer((_) async => [governanceRow]);
+          ).thenAnswer(
+            (_) async => GovernanceTagsPage(rows: [governanceRow], total: 1),
+          );
           when(
             () => mockTagService.addTagAlias(101, 'heroine', 'synonym'),
           ).thenAnswer((_) async {});
@@ -515,7 +521,9 @@ void main() {
             () => mockTagService.fetchGovernanceTags(
               search: any(named: 'search'),
             ),
-          ).thenAnswer((_) async => [governanceRow]);
+          ).thenAnswer(
+            (_) async => GovernanceTagsPage(rows: [governanceRow], total: 1),
+          );
           when(() => mockTagService.batchCleanupTags([101, 102])).thenAnswer(
             (_) async => const TagGovernanceBatchResult(
               deletedTagIds: [101],
@@ -545,7 +553,9 @@ void main() {
             () => mockTagService.fetchGovernanceTags(
               search: any(named: 'search'),
             ),
-          ).thenAnswer((_) async => [governanceRow]);
+          ).thenAnswer(
+            (_) async => GovernanceTagsPage(rows: [governanceRow], total: 1),
+          );
           when(
             () => mockTagService.mergeTagInto(101, 999),
           ).thenAnswer((_) async {});
@@ -564,6 +574,136 @@ void main() {
           expect(tagProvider.selectedGovernanceIds, {101, 102});
         },
       );
+    });
+
+    group('Lazy Tree Browse', () {
+      final root1 = TagBrowseNode(
+        id: 1,
+        preferredLabel: 'colors',
+        level: 'root',
+        hasChildren: true,
+      );
+      final root2 = TagBrowseNode(
+        id: 2,
+        preferredLabel: 'styles',
+        level: 'root',
+        hasChildren: false,
+      );
+      final child1 = TagBrowseNode(
+        id: 10,
+        preferredLabel: 'red',
+        level: 'child',
+        parentId: 1,
+        hasChildren: false,
+      );
+
+      test('loadTreeRoots populates roots and clears loading', () async {
+        when(() => mockTagService.fetchTreeRoots())
+            .thenAnswer((_) async => [root1, root2]);
+
+        await tagProvider.loadTreeRoots();
+
+        expect(tagProvider.treeRoots, hasLength(2));
+        expect(tagProvider.treeRoots[0].id, 1);
+        expect(tagProvider.isLoadingTreeRoots, false);
+        expect(tagProvider.treeBrowseError, isNull);
+      });
+
+      test('loadTreeRoots sets error on failure', () async {
+        when(() => mockTagService.fetchTreeRoots())
+            .thenThrow(Exception('network'));
+
+        await tagProvider.loadTreeRoots();
+
+        expect(tagProvider.treeRoots, isEmpty);
+        expect(tagProvider.treeBrowseError, isNotNull);
+        expect(tagProvider.isLoadingTreeRoots, false);
+      });
+
+      test('loadTreeChildren stores children by parent id', () async {
+        when(() => mockTagService.fetchTreeChildren(parentId: 1))
+            .thenAnswer((_) async => [child1]);
+
+        await tagProvider.loadTreeChildren(1);
+
+        expect(tagProvider.childrenOf(1), hasLength(1));
+        expect(tagProvider.childrenOf(1).first.id, 10);
+        expect(tagProvider.childrenOf(999), isEmpty);
+      });
+
+      test('loadOrphanTags replaces list on first load', () async {
+        final orphan1 = TagBrowseNode(
+          id: 50,
+          preferredLabel: 'solo',
+          level: 'child',
+          hasChildren: false,
+        );
+        when(() => mockTagService.fetchOrphanTags(limit: 20, offset: 0))
+            .thenAnswer(
+          (_) async => OrphanTagsPage(
+            items: [orphan1],
+            total: 5,
+            hasMore: true,
+          ),
+        );
+
+        await tagProvider.loadOrphanTags();
+
+        expect(tagProvider.orphanTags, hasLength(1));
+        expect(tagProvider.orphanTotal, 5);
+        expect(tagProvider.hasMoreOrphans, true);
+      });
+
+      test('loadOrphanTags appends on subsequent pages', () async {
+        final orphan1 = TagBrowseNode(
+          id: 50,
+          preferredLabel: 'solo',
+          level: 'child',
+          hasChildren: false,
+        );
+        final orphan2 = TagBrowseNode(
+          id: 51,
+          preferredLabel: 'duo',
+          level: 'child',
+          hasChildren: false,
+        );
+        when(() => mockTagService.fetchOrphanTags(limit: 20, offset: 0))
+            .thenAnswer(
+          (_) async => OrphanTagsPage(items: [orphan1], total: 2, hasMore: true),
+        );
+        when(() => mockTagService.fetchOrphanTags(limit: 20, offset: 1))
+            .thenAnswer(
+          (_) async =>
+              OrphanTagsPage(items: [orphan2], total: 2, hasMore: false),
+        );
+
+        await tagProvider.loadOrphanTags();
+        await tagProvider.loadOrphanTags(limit: 20, offset: 1);
+
+        expect(tagProvider.orphanTags, hasLength(2));
+        expect(tagProvider.hasMoreOrphans, false);
+      });
+
+      test('loadTreeRoots error does not affect orphan state', () async {
+        final orphan1 = TagBrowseNode(
+          id: 50,
+          preferredLabel: 'solo',
+          level: 'child',
+          hasChildren: false,
+        );
+        when(() => mockTagService.fetchOrphanTags(limit: 20, offset: 0))
+            .thenAnswer(
+          (_) async => OrphanTagsPage(items: [orphan1], total: 1, hasMore: false),
+        );
+        when(() => mockTagService.fetchTreeRoots())
+            .thenThrow(Exception('fail'));
+
+        await tagProvider.loadOrphanTags();
+        await tagProvider.loadTreeRoots();
+
+        expect(tagProvider.orphanTags, hasLength(1));
+        expect(tagProvider.treeBrowseError, isNotNull);
+      });
     });
   });
 }

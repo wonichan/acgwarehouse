@@ -34,6 +34,23 @@ class TagProvider extends ChangeNotifier {
   bool _isRunningGovernanceAction = false;
   String? _governanceError;
 
+  // Governance pagination state
+  int _governanceOffset = 0;
+  int _governanceTotal = 0;
+  bool _hasMoreGovernance = true;
+  bool _isLoadingMoreGovernance = false;
+  String? _governanceSearch;
+
+  // Lazy tree browse state (gallery filter)
+  List<TagBrowseNode> _treeRoots = [];
+  Map<int, List<TagBrowseNode>> _treeChildrenByParent = {};
+  List<TagBrowseNode> _orphanTags = [];
+  int _orphanTotal = 0;
+  bool _hasMoreOrphans = false;
+  bool _isLoadingTreeRoots = false;
+  bool _isLoadingOrphans = false;
+  String? _treeBrowseError;
+
   TagProvider(this._tagService);
 
   // Getters
@@ -82,6 +99,22 @@ class TagProvider extends ChangeNotifier {
   TagGovernanceBatchResult? get lastBatchResult => _lastBatchResult;
   bool get isRunningGovernanceAction => _isRunningGovernanceAction;
   String? get governanceError => _governanceError;
+  int get governanceTotal => _governanceTotal;
+  bool get hasMoreGovernance => _hasMoreGovernance;
+  bool get isLoadingMoreGovernance => _isLoadingMoreGovernance;
+
+  // Lazy tree browse getters (gallery filter)
+  List<TagBrowseNode> get treeRoots => _treeRoots;
+  Map<int, List<TagBrowseNode>> get treeChildrenByParent =>
+      _treeChildrenByParent;
+  List<TagBrowseNode> get orphanTags => _orphanTags;
+  int get orphanTotal => _orphanTotal;
+  bool get hasMoreOrphans => _hasMoreOrphans;
+  bool get isLoadingTreeRoots => _isLoadingTreeRoots;
+  bool get isLoadingOrphans => _isLoadingOrphans;
+  String? get treeBrowseError => _treeBrowseError;
+  List<TagBrowseNode> childrenOf(int parentId) =>
+      _treeChildrenByParent[parentId] ?? const [];
 
   /// Calculates totals from current statistics
   Map<String, int> get totals {
@@ -374,9 +407,139 @@ class TagProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 加载治理标签列表
+  Future<void> loadTreeRoots() async {
+    _isLoadingTreeRoots = true;
+    _treeBrowseError = null;
+    notifyListeners();
+
+    try {
+      _treeRoots = await _tagService.fetchTreeRoots();
+    } catch (e) {
+      _treeBrowseError = e.toString();
+      debugPrint('Error loading tree roots: $e');
+    } finally {
+      _isLoadingTreeRoots = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadTreeChildren(int parentId) async {
+    _treeBrowseError = null;
+    notifyListeners();
+
+    try {
+      final children =
+          await _tagService.fetchTreeChildren(parentId: parentId);
+      _treeChildrenByParent[parentId] = children;
+    } catch (e) {
+      _treeBrowseError = e.toString();
+      debugPrint('Error loading tree children for $parentId: $e');
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadOrphanTags({int limit = 20, int offset = 0}) async {
+    _isLoadingOrphans = true;
+    _treeBrowseError = null;
+    notifyListeners();
+
+    try {
+      final page =
+          await _tagService.fetchOrphanTags(limit: limit, offset: offset);
+      if (offset == 0) {
+        _orphanTags = page.items;
+      } else {
+        _orphanTags = [..._orphanTags, ...page.items];
+      }
+      _orphanTotal = page.total;
+      _hasMoreOrphans = page.hasMore;
+    } catch (e) {
+      _treeBrowseError = e.toString();
+      debugPrint('Error loading orphan tags: $e');
+    } finally {
+      _isLoadingOrphans = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> searchOrphanTags(String query) async {
+    _isLoadingOrphans = true;
+    _treeBrowseError = null;
+    notifyListeners();
+
+    try {
+      final page = await _tagService.fetchOrphanTags(
+        search: query,
+        limit: 50,
+        offset: 0,
+      );
+      _orphanTags = page.items;
+      _orphanTotal = page.total;
+      _hasMoreOrphans = page.hasMore;
+    } catch (e) {
+      _treeBrowseError = e.toString();
+      debugPrint('Error searching orphan tags: $e');
+    } finally {
+      _isLoadingOrphans = false;
+      notifyListeners();
+    }
+  }
+
+  /// 加载治理标签列表（首页）
   Future<void> loadGovernanceTags({String? search}) async {
-    await _refreshGovernanceRows(search: search, asPrimaryAction: true);
+    _governanceSearch = search;
+    _governanceOffset = 0;
+    _governanceRows = [];
+    _hasMoreGovernance = true;
+    _isRunningGovernanceAction = true;
+    _governanceError = null;
+    notifyListeners();
+
+    try {
+      const pageSize = 50;
+      final page = await _tagService.fetchGovernanceTags(
+        search: search,
+        limit: pageSize,
+        offset: 0,
+      );
+      _governanceRows = page.rows;
+      _governanceTotal = page.total;
+      _governanceOffset = page.rows.length;
+      _hasMoreGovernance = _governanceOffset < _governanceTotal;
+    } catch (e) {
+      _governanceError = e.toString();
+      debugPrint('Error loading governance tags: $e');
+    } finally {
+      _isRunningGovernanceAction = false;
+      notifyListeners();
+    }
+  }
+
+  /// 加载更多治理标签（无限滚动触发）
+  Future<void> loadMoreGovernanceTags() async {
+    if (_isLoadingMoreGovernance || !_hasMoreGovernance) return;
+    _isLoadingMoreGovernance = true;
+    notifyListeners();
+
+    try {
+      const pageSize = 50;
+      final page = await _tagService.fetchGovernanceTags(
+        search: _governanceSearch,
+        limit: pageSize,
+        offset: _governanceOffset,
+      );
+      _governanceRows = [..._governanceRows, ...page.rows];
+      _governanceTotal = page.total;
+      _governanceOffset += page.rows.length;
+      _hasMoreGovernance = _governanceOffset < _governanceTotal;
+    } catch (e) {
+      _governanceError = e.toString();
+      debugPrint('Error loading more governance tags: $e');
+    } finally {
+      _isLoadingMoreGovernance = false;
+      notifyListeners();
+    }
   }
 
   /// 选择/取消选择治理标签
@@ -572,7 +735,11 @@ class TagProvider extends ChangeNotifier {
     String? search,
     bool asPrimaryAction = false,
   }) async {
-    const pageSize = 500;
+    // Reset to first page and reload
+    _governanceSearch = search ?? _governanceSearch;
+    _governanceOffset = 0;
+    _hasMoreGovernance = true;
+
     if (asPrimaryAction) {
       _isRunningGovernanceAction = true;
       _governanceError = null;
@@ -580,27 +747,24 @@ class TagProvider extends ChangeNotifier {
     }
 
     try {
-      final allRows = <TagGovernanceRow>[];
-      var offset = 0;
-      while (true) {
-        final page = await _tagService.fetchGovernanceTags(
-          search: search,
-          limit: pageSize,
-          offset: offset,
-        );
-        allRows.addAll(page);
-        if (page.length < pageSize) {
-          break;
-        }
-        offset += page.length;
-      }
-      _governanceRows = allRows;
+      const pageSize = 50;
+      final page = await _tagService.fetchGovernanceTags(
+        search: _governanceSearch,
+        limit: pageSize,
+        offset: 0,
+      );
+      _governanceRows = page.rows;
+      _governanceTotal = page.total;
+      _governanceOffset = page.rows.length;
+      _hasMoreGovernance = _governanceOffset < _governanceTotal;
     } catch (e) {
       _governanceError = e.toString();
       debugPrint('Error loading governance tags: $e');
     } finally {
       if (asPrimaryAction) {
         _isRunningGovernanceAction = false;
+        notifyListeners();
+      } else {
         notifyListeners();
       }
     }
