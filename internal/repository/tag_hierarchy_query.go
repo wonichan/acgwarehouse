@@ -51,3 +51,42 @@ func buildImageTagClauseFilters(clauses [][]int64, imageColumn string) (string, 
 
 	return strings.Join(parts, " AND "), args
 }
+
+// buildGalleryFilterClauses builds a WHERE clause that combines exact tag matching
+// with subtree tag matching using AND semantics.
+// - exactTagIDs: each ID matches if the image has that specific tag (no descendant expansion)
+// - subtreeRootTagIDs: each ID matches if the image has ANY tag in the subtree (root + descendants)
+// Both sets are AND-connected: the image must match ALL exact tags AND ALL subtree root tags.
+func buildGalleryFilterClauses(ctx context.Context, db *sql.DB, exactTagIDs, subtreeRootTagIDs []int64, imageColumn string) (string, []any, error) {
+	var parts []string
+	var args []any
+
+	// Exact clauses: each tag matches precisely (no descendant expansion)
+	for _, tagID := range exactTagIDs {
+		parts = append(parts, fmt.Sprintf(`%s IN (
+			SELECT it.image_id
+			FROM image_tags it
+			WHERE it.tag_id = ? AND it.review_state != 'rejected'
+		)`, imageColumn))
+		args = append(args, tagID)
+	}
+
+	// Subtree clauses: expand each root into its descendants
+	if len(subtreeRootTagIDs) > 0 {
+		clauses, err := expandHierarchicalTagClauses(ctx, db, subtreeRootTagIDs)
+		if err != nil {
+			return "", nil, err
+		}
+		subtreeWhere, subtreeArgs := buildImageTagClauseFilters(clauses, imageColumn)
+		if subtreeWhere != "" {
+			parts = append(parts, subtreeWhere)
+			args = append(args, subtreeArgs...)
+		}
+	}
+
+	if len(parts) == 0 {
+		return "", nil, nil
+	}
+
+	return strings.Join(parts, " AND "), args, nil
+}

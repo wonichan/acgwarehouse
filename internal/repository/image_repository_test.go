@@ -1621,3 +1621,214 @@ func seedAITagSourcesForFindImagesWithoutAITags(t *testing.T, db *sql.DB, imageI
 		t.Fatalf("insert ai image tag: %v", err)
 	}
 }
+
+func TestFindByGalleryFilterExactTagDoesNotExpandDescendants(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+	tagRepo := NewTagRepository(db)
+	imageTagRepo := NewImageTagRepository(db)
+
+	root := &domain.Tag{PreferredLabel: "character", Slug: "character", Level: domain.TagLevelRoot}
+	if err := tagRepo.Save(ctx, root); err != nil {
+		t.Fatalf("save root: %v", err)
+	}
+	parent := &domain.Tag{PreferredLabel: "protagonist", Slug: "protagonist", Level: domain.TagLevelParent, ParentID: &root.ID}
+	if err := tagRepo.Save(ctx, parent); err != nil {
+		t.Fatalf("save parent: %v", err)
+	}
+	child := &domain.Tag{PreferredLabel: "heroine", Slug: "heroine", Level: domain.TagLevelChild, ParentID: &parent.ID}
+	if err := tagRepo.Save(ctx, child); err != nil {
+		t.Fatalf("save child: %v", err)
+	}
+
+	imgWithTag := &domain.Image{Path: "/exact/1.png", Filename: "1.png", SourceRoot: "/exact", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	imgWithChild := &domain.Image{Path: "/exact/2.png", Filename: "2.png", SourceRoot: "/exact", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	imgWithRoot := &domain.Image{Path: "/exact/3.png", Filename: "3.png", SourceRoot: "/exact", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if _, err := repo.SaveImage(imgWithTag); err != nil {
+		t.Fatalf("save img1: %v", err)
+	}
+	if _, err := repo.SaveImage(imgWithChild); err != nil {
+		t.Fatalf("save img2: %v", err)
+	}
+	if _, err := repo.SaveImage(imgWithRoot); err != nil {
+		t.Fatalf("save img3: %v", err)
+	}
+
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: imgWithTag.ID, TagID: parent.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag img1 with parent: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: imgWithChild.ID, TagID: child.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag img2 with child: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: imgWithRoot.ID, TagID: root.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag img3 with root: %v", err)
+	}
+
+	filtered, err := repo.FindByGalleryFilter(ctx, []int64{parent.ID}, nil, 10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindByGalleryFilter(exact=parent): %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].ID != imgWithTag.ID {
+		t.Fatalf("exact parent should match only imgWithTag (not child's image), got %d images: %+v", len(filtered), imageIDs(filtered))
+	}
+
+	count, err := repo.CountByGalleryFilter(ctx, []int64{parent.ID}, nil)
+	if err != nil {
+		t.Fatalf("CountByGalleryFilter(exact=parent): %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("exact parent count = %d, want 1", count)
+	}
+}
+
+func TestFindByGalleryFilterSubtreeRootExpandsDescendants(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+	tagRepo := NewTagRepository(db)
+	imageTagRepo := NewImageTagRepository(db)
+
+	root := &domain.Tag{PreferredLabel: "character", Slug: "character", Level: domain.TagLevelRoot}
+	if err := tagRepo.Save(ctx, root); err != nil {
+		t.Fatalf("save root: %v", err)
+	}
+	parent := &domain.Tag{PreferredLabel: "protagonist", Slug: "protagonist", Level: domain.TagLevelParent, ParentID: &root.ID}
+	if err := tagRepo.Save(ctx, parent); err != nil {
+		t.Fatalf("save parent: %v", err)
+	}
+	child := &domain.Tag{PreferredLabel: "heroine", Slug: "heroine", Level: domain.TagLevelChild, ParentID: &parent.ID}
+	if err := tagRepo.Save(ctx, child); err != nil {
+		t.Fatalf("save child: %v", err)
+	}
+
+	imgWithRoot := &domain.Image{Path: "/sub/1.png", Filename: "1.png", SourceRoot: "/sub", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	imgWithParent := &domain.Image{Path: "/sub/2.png", Filename: "2.png", SourceRoot: "/sub", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	imgWithChild := &domain.Image{Path: "/sub/3.png", Filename: "3.png", SourceRoot: "/sub", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if _, err := repo.SaveImage(imgWithRoot); err != nil {
+		t.Fatalf("save img1: %v", err)
+	}
+	if _, err := repo.SaveImage(imgWithParent); err != nil {
+		t.Fatalf("save img2: %v", err)
+	}
+	if _, err := repo.SaveImage(imgWithChild); err != nil {
+		t.Fatalf("save img3: %v", err)
+	}
+
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: imgWithRoot.ID, TagID: root.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag img1: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: imgWithParent.ID, TagID: parent.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag img2: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: imgWithChild.ID, TagID: child.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag img3: %v", err)
+	}
+
+	filtered, err := repo.FindByGalleryFilter(ctx, nil, []int64{root.ID}, 10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindByGalleryFilter(subtree=root): %v", err)
+	}
+	if len(filtered) != 3 {
+		t.Fatalf("subtree root should match all 3 images (root + parent + child), got %d: %+v", len(filtered), imageIDs(filtered))
+	}
+
+	count, err := repo.CountByGalleryFilter(ctx, nil, []int64{root.ID})
+	if err != nil {
+		t.Fatalf("CountByGalleryFilter(subtree=root): %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("subtree root count = %d, want 3", count)
+	}
+}
+
+func TestFindByGalleryFilterMixedExactAndSubtreeKeepsAndSemantics(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+	tagRepo := NewTagRepository(db)
+	imageTagRepo := NewImageTagRepository(db)
+
+	seriesRoot := &domain.Tag{PreferredLabel: "series", Slug: "series", Level: domain.TagLevelRoot}
+	moodRoot := &domain.Tag{PreferredLabel: "mood", Slug: "mood", Level: domain.TagLevelRoot}
+	orphanTag := &domain.Tag{PreferredLabel: "solo", Slug: "solo", Level: domain.TagLevelChild}
+	if err := tagRepo.Save(ctx, seriesRoot); err != nil {
+		t.Fatalf("save seriesRoot: %v", err)
+	}
+	if err := tagRepo.Save(ctx, moodRoot); err != nil {
+		t.Fatalf("save moodRoot: %v", err)
+	}
+	if err := tagRepo.Save(ctx, orphanTag); err != nil {
+		t.Fatalf("save orphanTag: %v", err)
+	}
+	seriesChild := &domain.Tag{PreferredLabel: "lead", Slug: "lead", Level: domain.TagLevelChild, ParentID: &seriesRoot.ID}
+	if err := tagRepo.Save(ctx, seriesChild); err != nil {
+		t.Fatalf("save seriesChild: %v", err)
+	}
+
+	images := []*domain.Image{
+		{Path: "/mix/1.png", Filename: "1.png", SourceRoot: "/mix", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/mix/2.png", Filename: "2.png", SourceRoot: "/mix", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Path: "/mix/3.png", Filename: "3.png", SourceRoot: "/mix", Format: "png", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	for _, img := range images {
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image: %v", err)
+		}
+	}
+
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[0].ID, TagID: seriesChild.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[0].ID, TagID: orphanTag.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[1].ID, TagID: seriesChild.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag: %v", err)
+	}
+	if err := imageTagRepo.Save(ctx, &domain.ImageTag{ImageID: images[2].ID, TagID: orphanTag.ID, ReviewState: "confirmed"}); err != nil {
+		t.Fatalf("tag: %v", err)
+	}
+
+	filtered, err := repo.FindByGalleryFilter(ctx, []int64{orphanTag.ID}, []int64{seriesRoot.ID}, 10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindByGalleryFilter(exact=orphan, subtree=series): %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].ID != images[0].ID {
+		t.Fatalf("exact orphan + subtree series should match only img0, got %d: %+v", len(filtered), imageIDs(filtered))
+	}
+
+	count, err := repo.CountByGalleryFilter(ctx, []int64{orphanTag.ID}, []int64{seriesRoot.ID})
+	if err != nil {
+		t.Fatalf("CountByGalleryFilter: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+}
+
+func TestFindByGalleryFilterReturnsEmptyForEmptyInputs(t *testing.T) {
+	t.Parallel()
+
+	_, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	filtered, err := repo.FindByGalleryFilter(ctx, nil, nil, 10, 0, "id", "asc")
+	if err != nil {
+		t.Fatalf("FindByGalleryFilter(): %v", err)
+	}
+	if len(filtered) != 0 {
+		t.Fatalf("expected empty result for empty inputs, got %d", len(filtered))
+	}
+
+	count, err := repo.CountByGalleryFilter(ctx, nil, nil)
+	if err != nil {
+		t.Fatalf("CountByGalleryFilter(): %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 count for empty inputs, got %d", count)
+	}
+}

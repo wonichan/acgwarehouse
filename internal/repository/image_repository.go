@@ -44,6 +44,8 @@ type ImageRepository interface {
 	CountPendingTags(ctx context.Context) (int64, error)
 	FindPendingTagsByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountPendingTagsByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
+	FindByGalleryFilter(ctx context.Context, exactTagIDs, subtreeRootTagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
+	CountByGalleryFilter(ctx context.Context, exactTagIDs, subtreeRootTagIDs []int64) (int64, error)
 	FindImagesWithoutAITags(ctx context.Context, limit int) ([]domain.Image, error)
 	// FindBackfillCandidates returns images matching the filter that are eligible for AI backfill:
 	// no AI source tags and no active (pending/queued/running) AI tasks.
@@ -336,6 +338,80 @@ func (r *sqliteImageRepository) UpdateThumbnails(id int64, smallURL, largeURL st
 func (r *sqliteImageRepository) Count() (int64, error) {
 	var count int64
 	err := r.db.QueryRow(`SELECT COUNT(*) FROM images`).Scan(&count)
+	return count, err
+}
+
+func (r *sqliteImageRepository) FindByGalleryFilter(ctx context.Context, exactTagIDs, subtreeRootTagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error) {
+	if len(exactTagIDs) == 0 && len(subtreeRootTagIDs) == 0 {
+		return []domain.Image{}, nil
+	}
+
+	whereClause, args, err := buildGalleryFilterClauses(ctx, r.db, exactTagIDs, subtreeRootTagIDs, "i.id")
+	if err != nil {
+		return nil, err
+	}
+
+	validSortFields := map[string]string{
+		"created_at": "i.created_at",
+		"filename":   "i.filename",
+		"file_size":  "i.file_size",
+		"id":         "i.id",
+	}
+	sortColumn := validSortFields[sortBy]
+	if sortColumn == "" {
+		sortColumn = "i.id"
+	}
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM images i
+		LEFT JOIN collection_images ci ON ci.image_id = i.id
+		WHERE %s
+		ORDER BY %s %s, i.id %s
+		LIMIT ? OFFSET ?
+	`, imageSelectColumns, whereClause, sortColumn, sortDir, sortDir)
+
+	args = append(args, int64(limit), int64(offset))
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	images := make([]domain.Image, 0)
+	for rows.Next() {
+		var image domain.Image
+		if err := scanImage(rows, &image); err != nil {
+			return nil, err
+		}
+		images = append(images, image)
+	}
+
+	return images, rows.Err()
+}
+
+func (r *sqliteImageRepository) CountByGalleryFilter(ctx context.Context, exactTagIDs, subtreeRootTagIDs []int64) (int64, error) {
+	if len(exactTagIDs) == 0 && len(subtreeRootTagIDs) == 0 {
+		return 0, nil
+	}
+
+	whereClause, args, err := buildGalleryFilterClauses(ctx, r.db, exactTagIDs, subtreeRootTagIDs, "i.id")
+	if err != nil {
+		return 0, err
+	}
+
+	query := fmt.Sprintf(`
+		SELECT COUNT(DISTINCT i.id)
+		FROM images i
+		WHERE %s
+	`, whereClause)
+
+	var count int64
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
 }
 
