@@ -21,6 +21,8 @@ var (
 	ErrInvalidHierarchy       = errors.New("invalid tag hierarchy")
 )
 
+const sqliteBulkQueryChunkSize = 900
+
 type TagGovernanceRow struct {
 	TagID                int64    `json:"tag_id"`
 	PreferredLabel       string   `json:"preferred_label"`
@@ -738,43 +740,49 @@ func (s *TagAdminService) batchResolveDescendants(ctx context.Context, tagIDs []
 		result[id] = []int64{}
 	}
 
-	placeholders := make([]string, len(tagIDs))
-	args := make([]any, len(tagIDs))
-	for i, id := range tagIDs {
-		placeholders[i] = "?"
-		args[i] = id
-	}
+	for _, chunk := range chunkInt64IDs(tagIDs, sqliteBulkQueryChunkSize) {
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args[i] = id
+		}
 
-	query := fmt.Sprintf(`
-		WITH RECURSIVE descs(ancestor_id, descendant_id) AS (
-			SELECT id AS ancestor_id, id AS descendant_id
-			FROM tags
-			WHERE id IN (%s)
-			UNION ALL
-			SELECT d.ancestor_id, t.id
-			FROM descs d
-			JOIN tags t ON t.parent_id = d.descendant_id
-		)
-		SELECT ancestor_id, descendant_id
-		FROM descs
-		ORDER BY ancestor_id, descendant_id
-	`, strings.Join(placeholders, ", "))
+		query := fmt.Sprintf(`
+			WITH RECURSIVE descs(ancestor_id, descendant_id) AS (
+				SELECT id AS ancestor_id, id AS descendant_id
+				FROM tags
+				WHERE id IN (%s)
+				UNION ALL
+				SELECT d.ancestor_id, t.id
+				FROM descs d
+				JOIN tags t ON t.parent_id = d.descendant_id
+			)
+			SELECT ancestor_id, descendant_id
+			FROM descs
+			ORDER BY ancestor_id, descendant_id
+		`, strings.Join(placeholders, ", "))
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var ancestorID, descendantID int64
-		if err := rows.Scan(&ancestorID, &descendantID); err != nil {
+		rows, err := s.db.QueryContext(ctx, query, args...)
+		if err != nil {
 			return nil, err
 		}
-		result[ancestorID] = append(result[ancestorID], descendantID)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+
+		for rows.Next() {
+			var ancestorID, descendantID int64
+			if err := rows.Scan(&ancestorID, &descendantID); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			result[ancestorID] = append(result[ancestorID], descendantID)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
 	}
 
 	return result, nil
@@ -818,35 +826,44 @@ func (s *TagAdminService) batchFindChildren(ctx context.Context, tagIDs []int64)
 		result[id] = []*domain.Tag{}
 	}
 
-	placeholders := make([]string, len(tagIDs))
-	args := make([]any, len(tagIDs))
-	for i, id := range tagIDs {
-		placeholders[i] = "?"
-		args[i] = id
-	}
-	query := fmt.Sprintf(`
-		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
-		FROM tags
-		WHERE parent_id IN (%s)
-		ORDER BY usage_count DESC, id ASC
-	`, strings.Join(placeholders, ", "))
+	for _, chunk := range chunkInt64IDs(tagIDs, sqliteBulkQueryChunkSize) {
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+		query := fmt.Sprintf(`
+			SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
+			FROM tags
+			WHERE parent_id IN (%s)
+			ORDER BY usage_count DESC, id ASC
+		`, strings.Join(placeholders, ", "))
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		tag := &domain.Tag{}
-		if err := rows.Scan(&tag.ID, &tag.PreferredLabel, &tag.Slug, &tag.Level, &tag.ParentID, &tag.PrimaryCategory, &tag.ReviewState, &tag.TrustScore, &tag.UsageCount, &tag.CreatedAt); err != nil {
+		rows, err := s.db.QueryContext(ctx, query, args...)
+		if err != nil {
 			return nil, err
 		}
-		if tag.ParentID != nil {
-			result[*tag.ParentID] = append(result[*tag.ParentID], tag)
+
+		for rows.Next() {
+			tag := &domain.Tag{}
+			if err := rows.Scan(&tag.ID, &tag.PreferredLabel, &tag.Slug, &tag.Level, &tag.ParentID, &tag.PrimaryCategory, &tag.ReviewState, &tag.TrustScore, &tag.UsageCount, &tag.CreatedAt); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if tag.ParentID != nil {
+				result[*tag.ParentID] = append(result[*tag.ParentID], tag)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
 		}
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 func (s *TagAdminService) batchLoadDirectHierarchyStats(ctx context.Context, tagIDs []int64, result map[int64]*hierarchyStatsResult) error {
@@ -854,49 +871,59 @@ func (s *TagAdminService) batchLoadDirectHierarchyStats(ctx context.Context, tag
 		return nil
 	}
 
-	placeholders := make([]string, len(tagIDs))
-	args := make([]any, len(tagIDs))
-	for i, id := range tagIDs {
-		placeholders[i] = "?"
-		args[i] = id
-	}
+	for _, chunk := range chunkInt64IDs(tagIDs, sqliteBulkQueryChunkSize) {
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args[i] = id
+		}
 
-	query := fmt.Sprintf(`
-		SELECT
-			tag_id,
-			COUNT(DISTINCT CASE WHEN review_state != 'rejected' THEN image_id END) AS usage_count,
-			COUNT(DISTINCT CASE WHEN review_state = 'pending' THEN image_id END) AS pending_count,
-			COUNT(DISTINCT CASE WHEN review_state = 'confirmed' THEN image_id END) AS confirmed_count,
-			COUNT(DISTINCT CASE WHEN review_state = 'rejected' THEN image_id END) AS rejected_count,
-			COUNT(DISTINCT CASE WHEN source = 'ai' AND review_state != 'rejected' THEN image_id END) AS ai_count,
-			COUNT(DISTINCT CASE WHEN COALESCE(source, 'manual') != 'ai' AND review_state != 'rejected' THEN image_id END) AS manual_count
-		FROM image_tags
-		WHERE tag_id IN (%s)
-		GROUP BY tag_id
-	`, strings.Join(placeholders, ", "))
+		query := fmt.Sprintf(`
+			SELECT
+				tag_id,
+				COUNT(DISTINCT CASE WHEN review_state != 'rejected' THEN image_id END) AS usage_count,
+				COUNT(DISTINCT CASE WHEN review_state = 'pending' THEN image_id END) AS pending_count,
+				COUNT(DISTINCT CASE WHEN review_state = 'confirmed' THEN image_id END) AS confirmed_count,
+				COUNT(DISTINCT CASE WHEN review_state = 'rejected' THEN image_id END) AS rejected_count,
+				COUNT(DISTINCT CASE WHEN source = 'ai' AND review_state != 'rejected' THEN image_id END) AS ai_count,
+				COUNT(DISTINCT CASE WHEN COALESCE(source, 'manual') != 'ai' AND review_state != 'rejected' THEN image_id END) AS manual_count
+			FROM image_tags
+			WHERE tag_id IN (%s)
+			GROUP BY tag_id
+		`, strings.Join(placeholders, ", "))
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var tagID int64
-		var directUsage, directPending, directConfirmed, directRejected, directAI, directManual int64
-		if err := rows.Scan(&tagID, &directUsage, &directPending, &directConfirmed, &directRejected, &directAI, &directManual); err != nil {
+		rows, err := s.db.QueryContext(ctx, query, args...)
+		if err != nil {
 			return err
 		}
-		entry := result[tagID]
-		entry.DirectUsageCount = directUsage
-		entry.DirectPendingCount = directPending
-		entry.DirectConfirmedCount = directConfirmed
-		entry.DirectRejectedCount = directRejected
-		entry.DirectAICount = directAI
-		entry.DirectManualCount = directManual
+
+		for rows.Next() {
+			var tagID int64
+			var directUsage, directPending, directConfirmed, directRejected, directAI, directManual int64
+			if err := rows.Scan(&tagID, &directUsage, &directPending, &directConfirmed, &directRejected, &directAI, &directManual); err != nil {
+				rows.Close()
+				return err
+			}
+			entry := result[tagID]
+			entry.DirectUsageCount = directUsage
+			entry.DirectPendingCount = directPending
+			entry.DirectConfirmedCount = directConfirmed
+			entry.DirectRejectedCount = directRejected
+			entry.DirectAICount = directAI
+			entry.DirectManualCount = directManual
+		}
+
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
 	}
 
-	return rows.Err()
+	return nil
 }
 
 func (s *TagAdminService) batchLoadTreeHierarchyStats(ctx context.Context, uniqueDescendants map[int64]struct{}, descendantToAncestors map[int64][]int64, result map[int64]*hierarchyStatsResult) error {
@@ -909,25 +936,6 @@ func (s *TagAdminService) batchLoadTreeHierarchyStats(ctx context.Context, uniqu
 		descendantIDs = append(descendantIDs, id)
 	}
 	sort.Slice(descendantIDs, func(i, j int) bool { return descendantIDs[i] < descendantIDs[j] })
-
-	placeholders := make([]string, len(descendantIDs))
-	args := make([]any, len(descendantIDs))
-	for i, id := range descendantIDs {
-		placeholders[i] = "?"
-		args[i] = id
-	}
-
-	query := fmt.Sprintf(`
-		SELECT tag_id, image_id, review_state, COALESCE(source, 'manual')
-		FROM image_tags
-		WHERE tag_id IN (%s)
-	`, strings.Join(placeholders, ", "))
-
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
 
 	type imageSet map[int64]struct{}
 	type aggregateSets struct {
@@ -952,33 +960,58 @@ func (s *TagAdminService) batchLoadTreeHierarchyStats(ctx context.Context, uniqu
 		return aggregates[ancestorID]
 	}
 
-	for rows.Next() {
-		var tagID, imageID int64
-		var reviewState, source string
-		if err := rows.Scan(&tagID, &imageID, &reviewState, &source); err != nil {
+	for _, chunk := range chunkInt64IDs(descendantIDs, sqliteBulkQueryChunkSize) {
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+
+		query := fmt.Sprintf(`
+			SELECT tag_id, image_id, review_state, COALESCE(source, 'manual')
+			FROM image_tags
+			WHERE tag_id IN (%s)
+		`, strings.Join(placeholders, ", "))
+
+		rows, err := s.db.QueryContext(ctx, query, args...)
+		if err != nil {
 			return err
 		}
 
-		for _, ancestorID := range descendantToAncestors[tagID] {
-			agg := getAggregate(ancestorID)
-			if reviewState != "rejected" {
-				agg.usage[imageID] = struct{}{}
-				if source == "ai" {
-					agg.ai[imageID] = struct{}{}
-				} else {
-					agg.manual[imageID] = struct{}{}
+		for rows.Next() {
+			var tagID, imageID int64
+			var reviewState, source string
+			if err := rows.Scan(&tagID, &imageID, &reviewState, &source); err != nil {
+				rows.Close()
+				return err
+			}
+
+			for _, ancestorID := range descendantToAncestors[tagID] {
+				agg := getAggregate(ancestorID)
+				if reviewState != "rejected" {
+					agg.usage[imageID] = struct{}{}
+					if source == "ai" {
+						agg.ai[imageID] = struct{}{}
+					} else {
+						agg.manual[imageID] = struct{}{}
+					}
+				}
+				switch reviewState {
+				case "pending":
+					agg.pending[imageID] = struct{}{}
+				case "confirmed":
+					agg.confirmed[imageID] = struct{}{}
 				}
 			}
-			switch reviewState {
-			case "pending":
-				agg.pending[imageID] = struct{}{}
-			case "confirmed":
-				agg.confirmed[imageID] = struct{}{}
-			}
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
 	}
 
 	for ancestorID, agg := range aggregates {
@@ -1001,33 +1034,61 @@ func (s *TagAdminService) batchCountDirectAssociations(ctx context.Context, tagI
 	for _, id := range tagIDs {
 		result[id] = 0
 	}
-	placeholders := make([]string, len(tagIDs))
-	args := make([]any, len(tagIDs))
-	for i, id := range tagIDs {
-		placeholders[i] = "?"
-		args[i] = id
-	}
-	query := fmt.Sprintf(`
-		SELECT tag_id, COUNT(DISTINCT image_id)
-		FROM image_tags
-		WHERE tag_id IN (%s)
-		GROUP BY tag_id
-	`, strings.Join(placeholders, ", "))
+	for _, chunk := range chunkInt64IDs(tagIDs, sqliteBulkQueryChunkSize) {
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+		query := fmt.Sprintf(`
+			SELECT tag_id, COUNT(DISTINCT image_id)
+			FROM image_tags
+			WHERE tag_id IN (%s)
+			GROUP BY tag_id
+		`, strings.Join(placeholders, ", "))
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var tagID, count int64
-		if err := rows.Scan(&tagID, &count); err != nil {
+		rows, err := s.db.QueryContext(ctx, query, args...)
+		if err != nil {
 			return nil, err
 		}
-		result[tagID] = count
+
+		for rows.Next() {
+			var tagID, count int64
+			if err := rows.Scan(&tagID, &count); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			result[tagID] = count
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
 	}
-	return result, rows.Err()
+	return result, nil
+}
+
+func chunkInt64IDs(ids []int64, chunkSize int) [][]int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	if chunkSize <= 0 || len(ids) <= chunkSize {
+		return [][]int64{ids}
+	}
+
+	chunks := make([][]int64, 0, (len(ids)+chunkSize-1)/chunkSize)
+	for start := 0; start < len(ids); start += chunkSize {
+		end := start + chunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunks = append(chunks, ids[start:end])
+	}
+	return chunks
 }
 
 func (s *TagAdminService) countDirectAssociations(ctx context.Context, tagID int64) (int64, error) {

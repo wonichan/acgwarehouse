@@ -167,6 +167,9 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	tagGetStats := gin.HandlerFunc(placeholderHandler)
 	tagGetGovernance := gin.HandlerFunc(placeholderHandler)
 	tagGetTree := gin.HandlerFunc(placeholderHandler)
+	tagGetTreeRoots := gin.HandlerFunc(placeholderHandler)
+	tagGetTreeChildren := gin.HandlerFunc(placeholderHandler)
+	tagGetOrphans := gin.HandlerFunc(placeholderHandler)
 	tagGetParentCandidates := gin.HandlerFunc(placeholderHandler)
 	tagChangeLevel := gin.HandlerFunc(placeholderHandler)
 	tagReparent := gin.HandlerFunc(placeholderHandler)
@@ -186,6 +189,9 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 		tagGetStats = tagHandler.GetTagStats
 		tagGetGovernance = tagHandler.GetGovernanceTags
 		tagGetTree = tagHandler.GetTagTree
+		tagGetTreeRoots = tagHandler.GetTreeRoots
+		tagGetTreeChildren = tagHandler.GetTreeChildren
+		tagGetOrphans = tagHandler.GetOrphans
 		tagGetParentCandidates = tagHandler.GetParentCandidates
 		tagChangeLevel = tagHandler.ChangeTagLevel
 		tagReparent = tagHandler.ReparentTag
@@ -196,6 +202,9 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.GET("/tags", tagGet)
 	api.GET("/tags/governance", tagGetGovernance)
 	api.GET("/tags/tree", tagGetTree)
+	api.GET("/tags/tree/roots", tagGetTreeRoots)
+	api.GET("/tags/tree/children", tagGetTreeChildren)
+	api.GET("/tags/orphans", tagGetOrphans)
 	api.GET("/tags/parent-candidates", tagGetParentCandidates)
 	api.POST("/tags", tagCreate)
 	api.PUT("/tags/:id", tagUpdate)

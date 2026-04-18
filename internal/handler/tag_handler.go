@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
 )
@@ -456,6 +457,7 @@ func (h *TagHandler) GetGovernanceTags(c *gin.Context) {
 
 	rows, total, err := h.adminSvc.ListGovernanceTags(c.Request.Context(), search, limit, offset)
 	if err != nil {
+		logger.Errorf("GetGovernanceTags failed: limit=%d offset=%d search=%q err=%v", limit, offset, search, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -653,6 +655,59 @@ func (h *TagHandler) ReparentTag(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, tag)
+}
+
+func (h *TagHandler) GetTreeRoots(c *gin.Context) {
+	nodes, err := h.tagRepo.FindTreeRoots(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": nodes})
+}
+
+func (h *TagHandler) GetTreeChildren(c *gin.Context) {
+	parentIDStr := strings.TrimSpace(c.Query("parent_id"))
+	if parentIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "parent_id is required"})
+		return
+	}
+	parentID, err := strconv.ParseInt(parentIDStr, 10, 64)
+	if err != nil || parentID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid parent_id"})
+		return
+	}
+
+	nodes, err := h.tagRepo.FindTreeChildren(c.Request.Context(), parentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": nodes})
+}
+
+func (h *TagHandler) GetOrphans(c *gin.Context) {
+	limit := parsePositiveInt(c.DefaultQuery("limit", "20"), 20)
+	offset := parsePositiveInt(c.DefaultQuery("offset", "0"), 0)
+	search := strings.TrimSpace(c.Query("search"))
+
+	nodes, err := h.tagRepo.ListOrphanTags(c.Request.Context(), search, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	total, err := h.tagRepo.CountOrphanTags(c.Request.Context(), search)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	hasMore := offset+limit < total
+	c.JSON(http.StatusOK, gin.H{
+		"items":    nodes,
+		"total":    total,
+		"has_more": hasMore,
+	})
 }
 
 func parseIDParam(c *gin.Context, name string) (int64, bool) {

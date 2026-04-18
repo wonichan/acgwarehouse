@@ -747,6 +747,9 @@ func newTagHandlerTestRouter(t *testing.T) (*gin.Engine, *tagHandlerTestRepos) {
 	api.GET("/tags/stats", h.GetTagStats)
 	api.GET("/tags/tree", h.GetTagTree)
 	api.GET("/tags/parent-candidates", h.GetParentCandidates)
+	api.GET("/tags/tree/roots", h.GetTreeRoots)
+	api.GET("/tags/tree/children", h.GetTreeChildren)
+	api.GET("/tags/orphans", h.GetOrphans)
 	api.GET("/tags/:id/delete-preview", h.GetDeletePreview)
 	api.POST("/tags", h.CreateTag)
 	api.PUT("/tags/:id", h.UpdateTag)
@@ -815,6 +818,260 @@ func decodeJSONResponse(t *testing.T, w *httptest.ResponseRecorder, target any) 
 
 	if err := json.Unmarshal(w.Body.Bytes(), target); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v; body = %s", err, w.Body.String())
+	}
+}
+
+func TestTagGetTreeRootsReturnsRootTagsWithHasChildren(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/tree/roots", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Items []struct {
+			ID              int64  `json:"id"`
+			PreferredLabel  string `json:"preferred_label"`
+			Level           string `json:"level"`
+			HasChildren     bool   `json:"has_children"`
+			UsageCount      int    `json:"usage_count"`
+			PrimaryCategory string `json:"primary_category"`
+		} `json:"items"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Items) == 0 {
+		t.Fatal("expected at least one root tag")
+	}
+
+	found := false
+	for _, item := range resp.Items {
+		if item.ID == 4 {
+			found = true
+			if item.PreferredLabel != "characters" {
+				t.Fatalf("preferred_label = %q, want %q", item.PreferredLabel, "characters")
+			}
+			if !item.HasChildren {
+				t.Fatal("expected tag 4 (characters root) to have has_children=true")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected to find root tag with id=4 (characters)")
+	}
+}
+
+func TestTagGetTreeChildrenReturnsChildrenWithHasChildren(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/tree/children?parent_id=4", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Items []struct {
+			ID              int64  `json:"id"`
+			PreferredLabel  string `json:"preferred_label"`
+			Level           string `json:"level"`
+			HasChildren     bool   `json:"has_children"`
+			ParentID        *int64 `json:"parent_id"`
+		} `json:"items"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Items) == 0 {
+		t.Fatal("expected at least one child under parent_id=4")
+	}
+
+	found := false
+	for _, item := range resp.Items {
+		if item.ID == 6 {
+			found = true
+			if item.PreferredLabel != "heroine group" {
+				t.Fatalf("preferred_label = %q, want %q", item.PreferredLabel, "heroine group")
+			}
+			if item.ParentID == nil || *item.ParentID != 4 {
+				t.Fatalf("parent_id = %v, want 4", item.ParentID)
+			}
+			if !item.HasChildren {
+				t.Fatal("expected tag 6 (heroine group parent) to have has_children=true")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected to find child tag with id=6 (heroine group)")
+	}
+}
+
+func TestTagGetTreeChildrenReturns400WhenParentIDMissing(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/tree/children", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestTagGetTreeChildrenReturns400WhenParentIDInvalid(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/tree/children?parent_id=abc", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestTagGetTreeChildrenReturnsEmptyForLeafNode(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/tree/children?parent_id=1", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Items) != 0 {
+		t.Fatalf("expected 0 children for leaf tag, got %d", len(resp.Items))
+	}
+}
+
+func TestTagGetOrphansReturnsOrphanTagsWithPagination(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/orphans?limit=10&offset=0", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Items []struct {
+			ID              int64  `json:"id"`
+			PreferredLabel  string `json:"preferred_label"`
+			Level           string `json:"level"`
+			HasChildren     bool   `json:"has_children"`
+			PrimaryCategory string `json:"primary_category"`
+			UsageCount      int    `json:"usage_count"`
+		} `json:"items"`
+		Total   int  `json:"total"`
+		HasMore bool `json:"has_more"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if resp.Total == 0 {
+		t.Fatal("expected at least one orphan tag")
+	}
+	if len(resp.Items) == 0 {
+		t.Fatal("expected items in orphan response")
+	}
+
+	for _, item := range resp.Items {
+		if item.Level == "root" {
+			t.Fatalf("orphan tag %d (%q) should not be root level", item.ID, item.PreferredLabel)
+		}
+	}
+}
+
+func TestTagGetOrphansPaginationReturnsHasMore(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/orphans?limit=1&offset=0", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Items   []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+		Total   int  `json:"total"`
+		HasMore bool `json:"has_more"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if len(resp.Items) != 1 {
+		t.Fatalf("expected exactly 1 item with limit=1, got %d", len(resp.Items))
+	}
+	if resp.Total <= 1 {
+		t.Fatalf("expected total > 1 for has_more to be true, got total=%d", resp.Total)
+	}
+	if !resp.HasMore {
+		t.Fatal("expected has_more=true when more items exist beyond limit")
+	}
+}
+
+func TestTagGetOrphansSearchFiltersResults(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/orphans?search=blue", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Items []struct {
+			ID             int64  `json:"id"`
+			PreferredLabel string `json:"preferred_label"`
+		} `json:"items"`
+		Total   int  `json:"total"`
+		HasMore bool `json:"has_more"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if resp.Total == 0 {
+		t.Fatal("expected at least one orphan matching 'blue'")
+	}
+	for _, item := range resp.Items {
+		if item.PreferredLabel != "blue sky" {
+			t.Fatalf("expected only 'blue sky', got %q", item.PreferredLabel)
+		}
 	}
 }
 

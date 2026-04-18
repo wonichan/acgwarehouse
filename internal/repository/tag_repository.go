@@ -327,17 +327,17 @@ func scanTags(rows *sql.Rows) ([]*domain.Tag, error) {
 }
 
 type TagBrowseNode struct {
-	ID              int64
-	PreferredLabel  string
-	Slug            string
-	Level           string
-	ParentID        *int64
-	PrimaryCategory string
-	ReviewState     string
-	TrustScore      float64
-	UsageCount      int
-	CreatedAt       time.Time
-	HasChildren     bool
+	ID              int64     `json:"id"`
+	PreferredLabel  string    `json:"preferred_label"`
+	Slug            string    `json:"slug"`
+	Level           string    `json:"level"`
+	ParentID        *int64    `json:"parent_id,omitempty"`
+	PrimaryCategory string    `json:"primary_category"`
+	ReviewState     string    `json:"review_state"`
+	TrustScore      float64   `json:"trust_score"`
+	UsageCount      int       `json:"usage_count"`
+	CreatedAt       time.Time `json:"created_at"`
+	HasChildren     bool      `json:"has_children"`
 }
 
 func (r *tagRepository) FindTreeRoots(ctx context.Context) ([]*TagBrowseNode, error) {
