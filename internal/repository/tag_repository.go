@@ -25,6 +25,10 @@ type TagRepository interface {
 	DecrementUsageCount(ctx context.Context, id int64) error
 	Delete(ctx context.Context, id int64) error
 	Count(ctx context.Context) (int, error)
+	FindTreeRoots(ctx context.Context) ([]*TagBrowseNode, error)
+	FindTreeChildren(ctx context.Context, parentID int64) ([]*TagBrowseNode, error)
+	ListOrphanTags(ctx context.Context, search string, limit, offset int) ([]*TagBrowseNode, error)
+	CountOrphanTags(ctx context.Context, search string) (int, error)
 }
 
 type tagRepository struct {
@@ -320,4 +324,115 @@ func scanTags(rows *sql.Rows) ([]*domain.Tag, error) {
 	}
 
 	return tags, rows.Err()
+}
+
+type TagBrowseNode struct {
+	ID              int64
+	PreferredLabel  string
+	Slug            string
+	Level           string
+	ParentID        *int64
+	PrimaryCategory string
+	ReviewState     string
+	TrustScore      float64
+	UsageCount      int
+	CreatedAt       time.Time
+	HasChildren     bool
+}
+
+func (r *tagRepository) FindTreeRoots(ctx context.Context) ([]*TagBrowseNode, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at,
+			EXISTS (SELECT 1 FROM tags child WHERE child.parent_id = tags.id) AS has_children
+		FROM tags
+		WHERE level = ?
+		ORDER BY usage_count DESC, id ASC
+	`, domain.TagLevelRoot)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanBrowseNodes(rows)
+}
+
+func (r *tagRepository) FindTreeChildren(ctx context.Context, parentID int64) ([]*TagBrowseNode, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at,
+			EXISTS (SELECT 1 FROM tags child WHERE child.parent_id = tags.id) AS has_children
+		FROM tags
+		WHERE parent_id = ?
+		ORDER BY usage_count DESC, id ASC
+	`, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanBrowseNodes(rows)
+}
+
+func (r *tagRepository) ListOrphanTags(ctx context.Context, search string, limit, offset int) ([]*TagBrowseNode, error) {
+	query := `
+		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at,
+			EXISTS (SELECT 1 FROM tags child WHERE child.parent_id = tags.id) AS has_children
+		FROM tags
+		WHERE parent_id IS NULL AND level != ?
+	`
+	args := []any{domain.TagLevelRoot}
+
+	if search != "" {
+		query += ` AND preferred_label LIKE ?`
+		args = append(args, "%"+search+"%")
+	}
+
+	query += ` ORDER BY usage_count DESC, id ASC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanBrowseNodes(rows)
+}
+
+func (r *tagRepository) CountOrphanTags(ctx context.Context, search string) (int, error) {
+	query := `SELECT COUNT(*) FROM tags WHERE parent_id IS NULL AND level != ?`
+	args := []any{domain.TagLevelRoot}
+
+	if search != "" {
+		query += ` AND preferred_label LIKE ?`
+		args = append(args, "%"+search+"%")
+	}
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	return count, err
+}
+
+func scanBrowseNodes(rows *sql.Rows) ([]*TagBrowseNode, error) {
+	nodes := make([]*TagBrowseNode, 0)
+	for rows.Next() {
+		node := &TagBrowseNode{}
+		if err := rows.Scan(
+			&node.ID,
+			&node.PreferredLabel,
+			&node.Slug,
+			&node.Level,
+			&node.ParentID,
+			&node.PrimaryCategory,
+			&node.ReviewState,
+			&node.TrustScore,
+			&node.UsageCount,
+			&node.CreatedAt,
+			&node.HasChildren,
+		); err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	return nodes, rows.Err()
 }

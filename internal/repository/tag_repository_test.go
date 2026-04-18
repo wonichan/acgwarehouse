@@ -316,6 +316,223 @@ func TestTagRepositoryResolveDescendantIDsReturnsSelfAndDescendants(t *testing.T
 	assertIDsEqual(t, all, []int64{root.ID, parent.ID, child.ID})
 }
 
+func TestTagRepositoryFindTreeRootsReturnsRootsWithHasChildren(t *testing.T) {
+	t.Parallel()
+
+	repo := newTagRepositoryForTest(t)
+	root := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "series", Slug: "series", Level: domain.TagLevelRoot, UsageCount: 5})
+	root2 := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "artist", Slug: "artist", Level: domain.TagLevelRoot, UsageCount: 2})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "lead", Slug: "lead", Level: domain.TagLevelParent, ParentID: &root.ID})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "solo", Slug: "solo", Level: domain.TagLevelChild})
+
+	nodes, err := repo.FindTreeRoots(context.Background())
+	if err != nil {
+		t.Fatalf("FindTreeRoots() error = %v", err)
+	}
+	if len(nodes) != 2 {
+		t.Fatalf("len(nodes) = %d, want 2", len(nodes))
+	}
+
+	if nodes[0].ID != root.ID {
+		t.Fatalf("nodes[0].ID = %d, want %d", nodes[0].ID, root.ID)
+	}
+	if !nodes[0].HasChildren {
+		t.Fatalf("nodes[0].HasChildren = false, want true (root has a child)")
+	}
+	if nodes[0].Level != domain.TagLevelRoot {
+		t.Fatalf("nodes[0].Level = %q, want %q", nodes[0].Level, domain.TagLevelRoot)
+	}
+
+	if nodes[1].ID != root2.ID {
+		t.Fatalf("nodes[1].ID = %d, want %d", nodes[1].ID, root2.ID)
+	}
+	if nodes[1].HasChildren {
+		t.Fatalf("nodes[1].HasChildren = true, want false (root has no children)")
+	}
+}
+
+func TestTagRepositoryFindTreeChildrenReturnsChildrenWithHasChildren(t *testing.T) {
+	t.Parallel()
+
+	repo := newTagRepositoryForTest(t)
+	root := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "franchise", Slug: "franchise", Level: domain.TagLevelRoot})
+	parent1 := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "cast", Slug: "cast", Level: domain.TagLevelParent, ParentID: &root.ID, UsageCount: 7})
+	parent2 := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "setting", Slug: "setting", Level: domain.TagLevelParent, ParentID: &root.ID, UsageCount: 2})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "hero", Slug: "hero", Level: domain.TagLevelChild, ParentID: &parent1.ID})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "other", Slug: "other", Level: domain.TagLevelChild})
+
+	nodes, err := repo.FindTreeChildren(context.Background(), root.ID)
+	if err != nil {
+		t.Fatalf("FindTreeChildren() error = %v", err)
+	}
+	if len(nodes) != 2 {
+		t.Fatalf("len(nodes) = %d, want 2", len(nodes))
+	}
+
+	if nodes[0].ID != parent1.ID {
+		t.Fatalf("nodes[0].ID = %d, want %d", nodes[0].ID, parent1.ID)
+	}
+	if !nodes[0].HasChildren {
+		t.Fatalf("nodes[0].HasChildren = false, want true (parent1 has a child)")
+	}
+	if nodes[0].Level != domain.TagLevelParent {
+		t.Fatalf("nodes[0].Level = %q, want %q", nodes[0].Level, domain.TagLevelParent)
+	}
+
+	if nodes[1].ID != parent2.ID {
+		t.Fatalf("nodes[1].ID = %d, want %d", nodes[1].ID, parent2.ID)
+	}
+	if nodes[1].HasChildren {
+		t.Fatalf("nodes[1].HasChildren = true, want false (parent2 has no children)")
+	}
+}
+
+func TestTagRepositoryFindTreeChildrenReturnsEmptyForLeaf(t *testing.T) {
+	t.Parallel()
+
+	repo := newTagRepositoryForTest(t)
+	child := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "solo", Slug: "solo", Level: domain.TagLevelChild})
+
+	nodes, err := repo.FindTreeChildren(context.Background(), child.ID)
+	if err != nil {
+		t.Fatalf("FindTreeChildren() error = %v", err)
+	}
+	if len(nodes) != 0 {
+		t.Fatalf("len(nodes) = %d, want 0", len(nodes))
+	}
+}
+
+func TestTagRepositoryListOrphanTagsReturnsOnlyOrphans(t *testing.T) {
+	t.Parallel()
+
+	repo := newTagRepositoryForTest(t)
+	// root tag - NOT an orphan
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "series", Slug: "series", Level: domain.TagLevelRoot})
+	// orphan: no parent but level != root
+	orphan1 := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "drifter", Slug: "drifter", Level: domain.TagLevelChild, UsageCount: 3})
+	orphan2 := mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "wanderer", Slug: "wanderer", Level: domain.TagLevelParent, UsageCount: 1})
+
+	nodes, err := repo.ListOrphanTags(context.Background(), "", 10, 0)
+	if err != nil {
+		t.Fatalf("ListOrphanTags() error = %v", err)
+	}
+	if len(nodes) != 2 {
+		t.Fatalf("len(nodes) = %d, want 2", len(nodes))
+	}
+	// Order: usage_count DESC, id ASC
+	if nodes[0].ID != orphan1.ID {
+		t.Fatalf("nodes[0].ID = %d, want %d", nodes[0].ID, orphan1.ID)
+	}
+	if nodes[1].ID != orphan2.ID {
+		t.Fatalf("nodes[1].ID = %d, want %d", nodes[1].ID, orphan2.ID)
+	}
+	for _, n := range nodes {
+		if n.Level == domain.TagLevelRoot {
+			t.Fatalf("orphan node should not be root, got level=%q", n.Level)
+		}
+	}
+}
+
+func TestTagRepositoryListOrphanTagsSearchFiltersResults(t *testing.T) {
+	t.Parallel()
+
+	repo := newTagRepositoryForTest(t)
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "drifter alpha", Slug: "drifter-alpha", Level: domain.TagLevelChild})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "wanderer beta", Slug: "wanderer-beta", Level: domain.TagLevelParent})
+
+	nodes, err := repo.ListOrphanTags(context.Background(), "alpha", 10, 0)
+	if err != nil {
+		t.Fatalf("ListOrphanTags() error = %v", err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("len(nodes) = %d, want 1", len(nodes))
+	}
+	if nodes[0].PreferredLabel != "drifter alpha" {
+		t.Fatalf("nodes[0].PreferredLabel = %q, want %q", nodes[0].PreferredLabel, "drifter alpha")
+	}
+}
+
+func TestTagRepositoryListOrphanTagsPagination(t *testing.T) {
+	t.Parallel()
+
+	repo := newTagRepositoryForTest(t)
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "orphan-a", Slug: "orphan-a", Level: domain.TagLevelChild, UsageCount: 5})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "orphan-b", Slug: "orphan-b", Level: domain.TagLevelParent, UsageCount: 3})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "orphan-c", Slug: "orphan-c", Level: domain.TagLevelChild, UsageCount: 1})
+
+	page1, err := repo.ListOrphanTags(context.Background(), "", 2, 0)
+	if err != nil {
+		t.Fatalf("ListOrphanTags() page1 error = %v", err)
+	}
+	if len(page1) != 2 {
+		t.Fatalf("len(page1) = %d, want 2", len(page1))
+	}
+
+	page2, err := repo.ListOrphanTags(context.Background(), "", 2, 2)
+	if err != nil {
+		t.Fatalf("ListOrphanTags() page2 error = %v", err)
+	}
+	if len(page2) != 1 {
+		t.Fatalf("len(page2) = %d, want 1", len(page2))
+	}
+
+	if page2[0].ID == page1[0].ID || page2[0].ID == page1[1].ID {
+		t.Fatalf("page overlap detected: page1=[%d,%d] page2=[%d]", page1[0].ID, page1[1].ID, page2[0].ID)
+	}
+}
+
+func TestTagRepositoryListOrphanTagsExcludesTrueRoots(t *testing.T) {
+	t.Parallel()
+
+	repo := newTagRepositoryForTest(t)
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "root-tag", Slug: "root-tag", Level: domain.TagLevelRoot})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "orphan-tag", Slug: "orphan-tag", Level: domain.TagLevelChild})
+
+	nodes, err := repo.ListOrphanTags(context.Background(), "tag", 10, 0)
+	if err != nil {
+		t.Fatalf("ListOrphanTags() error = %v", err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("len(nodes) = %d, want 1 (only orphan, not root)", len(nodes))
+	}
+	if nodes[0].PreferredLabel != "orphan-tag" {
+		t.Fatalf("nodes[0].PreferredLabel = %q, want %q", nodes[0].PreferredLabel, "orphan-tag")
+	}
+}
+
+func TestTagRepositoryCountOrphanTagsReturnsCorrectCount(t *testing.T) {
+	t.Parallel()
+
+	repo := newTagRepositoryForTest(t)
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "series", Slug: "series", Level: domain.TagLevelRoot})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "drifter", Slug: "drifter", Level: domain.TagLevelChild})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "wanderer", Slug: "wanderer", Level: domain.TagLevelParent})
+
+	count, err := repo.CountOrphanTags(context.Background(), "")
+	if err != nil {
+		t.Fatalf("CountOrphanTags() error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("count = %d, want 2 (2 orphans, root excluded)", count)
+	}
+}
+
+func TestTagRepositoryCountOrphanTagsWithSearchFilter(t *testing.T) {
+	t.Parallel()
+
+	repo := newTagRepositoryForTest(t)
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "drifter alpha", Slug: "drifter-alpha", Level: domain.TagLevelChild})
+	mustSaveTag(t, repo, &domain.Tag{PreferredLabel: "wanderer beta", Slug: "wanderer-beta", Level: domain.TagLevelParent})
+
+	count, err := repo.CountOrphanTags(context.Background(), "alpha")
+	if err != nil {
+		t.Fatalf("CountOrphanTags() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+}
+
 func newTagRepositoryForTest(t *testing.T) TagRepository {
 	t.Helper()
 
