@@ -6,11 +6,10 @@ import 'package:gallery/services/collection_service.dart';
 import 'package:gallery/widgets/image_collection_picker_dialog.dart';
 
 class _FakeCollectionService extends CollectionService {
-  _FakeCollectionService({this.collections = const [], this.createdCollection})
+  _FakeCollectionService({this.collections = const []})
     : super(baseUrl: 'http://localhost:8080');
 
   final List<Collection> collections;
-  final Collection? createdCollection;
   final List<int> addedCollectionIds = <int>[];
   final List<int> addedImageIds = <int>[];
   final List<String> createdNames = <String>[];
@@ -29,16 +28,15 @@ class _FakeCollectionService extends CollectionService {
     String? description,
   }) async {
     createdNames.add(name);
-    return createdCollection ??
-        Collection(
-          id: 5,
-          name: name,
-          description: description,
-          coverImageId: null,
-          imageCount: 0,
-          createdAt: DateTime.parse('2026-04-07T00:00:00.000Z'),
-          updatedAt: DateTime.parse('2026-04-07T00:00:00.000Z'),
-        );
+    return Collection(
+      id: 5,
+      name: name,
+      description: description,
+      coverImageId: null,
+      imageCount: 0,
+      createdAt: DateTime.parse('2026-04-07T00:00:00.000Z'),
+      updatedAt: DateTime.parse('2026-04-07T00:00:00.000Z'),
+    );
   }
 
   @override

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
 
 /// A fullscreen image preview/lightbox widget with gesture support.
-/// 
+///
 /// Provides Weibo/Bilibili-style fullscreen image viewing with:
 /// - Pinch to zoom
 /// - Drag to pan
@@ -10,7 +10,7 @@ import 'package:extended_image/extended_image.dart';
 /// - Hero animation support
 class ImageLightbox {
   /// Shows a fullscreen image preview dialog.
-  /// 
+  ///
   /// [context] - The build context to show the dialog in.
   /// [imageUrl] - The URL of the image to display.
   /// [heroTag] - Optional tag for Hero animation transitions.
@@ -54,16 +54,11 @@ class _ImageLightboxContent extends StatefulWidget {
 
 class _ImageLightboxContentState extends State<_ImageLightboxContent> {
   double _dragOffset = 0;
-  bool _isDragging = false;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onVerticalDragStart: (_) {
-        setState(() {
-          _isDragging = true;
-        });
-      },
+      onVerticalDragStart: (_) {},
       onVerticalDragUpdate: (details) {
         setState(() {
           _dragOffset += details.delta.dy;
@@ -76,7 +71,6 @@ class _ImageLightboxContentState extends State<_ImageLightboxContent> {
         } else {
           setState(() {
             _dragOffset = 0;
-            _isDragging = false;
           });
         }
       },
@@ -161,7 +155,9 @@ class _ImageLightboxContentState extends State<_ImageLightboxContent> {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.black.withOpacity(0.5 * widget.animation.value),
+                            Colors.black.withOpacity(
+                              0.5 * widget.animation.value,
+                            ),
                             Colors.transparent,
                           ],
                         ),
@@ -197,7 +193,9 @@ class _ImageLightboxContentState extends State<_ImageLightboxContent> {
                         child: Text(
                           '向下滑动关闭',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.5 * widget.animation.value),
+                            color: Colors.white.withOpacity(
+                              0.5 * widget.animation.value,
+                            ),
                             fontSize: 12,
                           ),
                         ),

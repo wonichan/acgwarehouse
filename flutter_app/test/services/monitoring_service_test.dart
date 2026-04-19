@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gallery/config/api_config.dart';
 import 'package:gallery/models/monitoring_models.dart';
 import 'package:gallery/services/monitoring_service.dart';
 import 'package:http/http.dart' as http;

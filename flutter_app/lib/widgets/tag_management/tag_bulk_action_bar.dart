@@ -106,9 +106,6 @@ class TagBulkActionBar extends StatelessWidget {
   }
 
   Widget _buildResultSummary(TagGovernanceBatchResult result) {
-    final succeeded =
-        result.deletedTagIds.length +
-        (result.failures.isEmpty ? result.deletedTagIds.length : 0);
     final failed = result.failures.length;
     // Use the actual batch result fields for display
     final int successCount = result.deletedTagIds.isNotEmpty

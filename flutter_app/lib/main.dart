@@ -18,7 +18,6 @@ import 'app/adaptive_app.dart';
 import 'app/fluent_app_shell.dart';
 import 'app/material_app_shell.dart';
 import 'theme/app_theme.dart';
-import 'theme/app_theme.dart';
 import 'widgets/desktop_material_theme_bridge.dart';
 import 'widgets/startup/startup_failure_screen.dart';
 import 'widgets/startup/startup_progress_screen.dart';

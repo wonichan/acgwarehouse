@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 import '../../providers/log_viewer_provider.dart';
-import '../../models/log_models.dart';
 import 'log_terminal.dart';
 
 class LogViewerWorkspace extends StatefulWidget {
