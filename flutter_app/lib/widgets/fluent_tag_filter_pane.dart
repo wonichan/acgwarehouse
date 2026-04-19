@@ -128,7 +128,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           nextIds.add(tagId);
         }
         _draftFilter = _draftFilter
-            .copyWith(subtreeRootTagIds: nextIds, hasTags: null)
+            .copyWith(subtreeRootTagIds: nextIds)
             .normalized();
       } else {
         final nextIds = _draftFilter.exactTagIds.toSet();
@@ -138,7 +138,7 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           nextIds.add(tagId);
         }
         _draftFilter = _draftFilter
-            .copyWith(exactTagIds: nextIds, hasTags: null)
+            .copyWith(exactTagIds: nextIds)
             .normalized();
       }
     });
@@ -519,7 +519,9 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           onChanged: (value) {
             setState(() {
               _draftFilter = value
-                  ? GalleryFilterState(hasTags: false).normalized()
+                  ? _draftFilter
+                        .copyWith(hasTags: false, hasPendingTags: null)
+                        .normalized()
                   : _draftFilter.copyWith(hasTags: null).normalized();
             });
           },

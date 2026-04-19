@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/tag.dart';
 import '../models/tag_governance.dart';
+import '../models/tag_governance_filter.dart';
 
 class TagService {
   final http.Client _client;
@@ -299,15 +300,21 @@ class TagService {
     String? search,
     int limit = 50,
     int offset = 0,
+    TagGovernanceFilterState? filter,
   }) async {
+    final queryParams = <String, String>{
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+    };
+
+    if (filter != null && filter.isNotEmpty) {
+      queryParams.addAll(filter.toQueryParameters());
+    } else if (search != null && search.isNotEmpty) {
+      queryParams['search'] = search;
+    }
+
     final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/governance')
-        .replace(
-          queryParameters: {
-            if (search != null && search.isNotEmpty) 'search': search,
-            'limit': limit.toString(),
-            'offset': offset.toString(),
-          },
-        );
+        .replace(queryParameters: queryParams);
 
     final response = await _client.get(uri);
     if (response.statusCode != 200) {

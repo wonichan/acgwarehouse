@@ -122,9 +122,243 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(appliedFilter, isNotNull);
-    expect(appliedFilter!.exactTagIds, isEmpty);
+    expect(appliedFilter!.exactTagIds, {1});
     expect(appliedFilter!.hasTags, isFalse);
     expect(appliedFilter!.hasPendingTags, isNull);
+  });
+
+  testWidgets('pending then untagged keeps normal tags and clears pending', (
+    tester,
+  ) async {
+    final client = MockClient((request) async {
+      final path = request.url.path;
+      if (path.contains('tree/roots')) {
+        return http.Response(
+          '{"items":[{"id":1,"preferred_label":"characters","level":"root","has_children":false}]}',
+          200,
+        );
+      }
+      if (path.contains('orphans')) {
+        return http.Response('{"items":[],"total":0,"has_more":false}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final provider = TagProvider(
+      TagService(baseUrl: 'http://localhost:8080', client: client),
+    );
+    GalleryFilterState? appliedFilter;
+
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<TagProvider>.value(value: provider),
+          ],
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return fluent.ScaffoldPage(
+                content: FluentTagFilterPane(
+                  initialFilter: GalleryFilterState(exactTagIds: {1}),
+                  onApplyFilter: (value) {
+                    setState(() {
+                      appliedFilter = value;
+                    });
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final toggles = find.byType(fluent.ToggleSwitch);
+    await tester.tap(toggles.at(1)); // pending on
+    await tester.pumpAndSettle();
+    await tester.tap(toggles.at(0)); // untagged on, pending off
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('应用筛选'));
+    await tester.pumpAndSettle();
+
+    expect(appliedFilter, isNotNull);
+    expect(appliedFilter!.exactTagIds, {1});
+    expect(appliedFilter!.hasTags, isFalse);
+    expect(appliedFilter!.hasPendingTags, isNull);
+  });
+
+  testWidgets('untagged then pending keeps normal tags and clears hasTags', (
+    tester,
+  ) async {
+    final client = MockClient((request) async {
+      final path = request.url.path;
+      if (path.contains('tree/roots')) {
+        return http.Response(
+          '{"items":[{"id":1,"preferred_label":"characters","level":"root","has_children":false}]}',
+          200,
+        );
+      }
+      if (path.contains('orphans')) {
+        return http.Response('{"items":[],"total":0,"has_more":false}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final provider = TagProvider(
+      TagService(baseUrl: 'http://localhost:8080', client: client),
+    );
+    GalleryFilterState? appliedFilter;
+
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<TagProvider>.value(value: provider),
+          ],
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return fluent.ScaffoldPage(
+                content: FluentTagFilterPane(
+                  initialFilter: GalleryFilterState(exactTagIds: {1}),
+                  onApplyFilter: (value) {
+                    setState(() {
+                      appliedFilter = value;
+                    });
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final toggles = find.byType(fluent.ToggleSwitch);
+    await tester.tap(toggles.at(0)); // untagged on
+    await tester.pumpAndSettle();
+    await tester.tap(toggles.at(1)); // pending on, untagged off
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('应用筛选'));
+    await tester.pumpAndSettle();
+
+    expect(appliedFilter, isNotNull);
+    expect(appliedFilter!.exactTagIds, {1});
+    expect(appliedFilter!.hasTags, isNull);
+    expect(appliedFilter!.hasPendingTags, isTrue);
+  });
+
+  testWidgets('changing normal tags does not clear active pending filter', (
+    tester,
+  ) async {
+    final client = MockClient((request) async {
+      final path = request.url.path;
+      if (path.contains('tree/roots')) {
+        return http.Response(
+          '{"items":[{"id":1,"preferred_label":"characters","level":"root","has_children":false}]}',
+          200,
+        );
+      }
+      if (path.contains('orphans')) {
+        return http.Response('{"items":[],"total":0,"has_more":false}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final provider = TagProvider(
+      TagService(baseUrl: 'http://localhost:8080', client: client),
+    );
+    GalleryFilterState? appliedFilter;
+
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<TagProvider>.value(value: provider),
+          ],
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return fluent.ScaffoldPage(
+                content: FluentTagFilterPane(
+                  initialFilter: GalleryFilterState(hasPendingTags: true),
+                  onApplyFilter: (value) {
+                    setState(() {
+                      appliedFilter = value;
+                    });
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(fluent.Checkbox).first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('应用筛选'));
+    await tester.pumpAndSettle();
+
+    expect(appliedFilter, isNotNull);
+    expect(appliedFilter!.subtreeRootTagIds, {1});
+    expect(appliedFilter!.hasPendingTags, isTrue);
+    expect(appliedFilter!.hasTags, isNull);
+  });
+
+  testWidgets('clear filter clears normal and special states together', (
+    tester,
+  ) async {
+    final client = MockClient((request) async {
+      final path = request.url.path;
+      if (path.contains('tree/roots')) {
+        return http.Response(
+          '{"items":[{"id":1,"preferred_label":"characters","level":"root","has_children":false}]}',
+          200,
+        );
+      }
+      if (path.contains('orphans')) {
+        return http.Response('{"items":[],"total":0,"has_more":false}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    final provider = TagProvider(
+      TagService(baseUrl: 'http://localhost:8080', client: client),
+    );
+
+    await tester.pumpWidget(
+      fluent.FluentApp(
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<TagProvider>.value(value: provider),
+          ],
+          child: fluent.ScaffoldPage(
+            content: FluentTagFilterPane(
+              initialFilter: GalleryFilterState(
+                exactTagIds: {1},
+                hasPendingTags: true,
+              ),
+              onApplyFilter: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('清空筛选'), findsOneWidget);
+    await tester.tap(find.text('清空筛选'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('清空筛选'), findsNothing);
+    expect(find.text('应用筛选'), findsNothing);
+    expect(find.byType(fluent.ToggleSwitch).first, findsOneWidget);
+    expect(find.byType(fluent.ToggleSwitch).at(1), findsOneWidget);
   });
 
   testWidgets('search triggers backend API and shows results', (

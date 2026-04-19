@@ -1179,6 +1179,162 @@ func TestTagGetOrphansSearchFiltersResults(t *testing.T) {
 	}
 }
 
+func TestGetGovernanceTags_WithFilters(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		query    string
+		wantCode int
+	}{
+		{
+			name:     "filter by levels root,parent returns 200",
+			query:    "levels=root,parent&limit=50&offset=0",
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "filter orphan_only returns 200",
+			query:    "orphan_only=true&limit=50&offset=0",
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "filter by source_ai returns 200",
+			query:    "source_ai=true&limit=50&offset=0",
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "filter by source_manual returns 200",
+			query:    "source_manual=true&limit=50&offset=0",
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "filter by usage range returns 200",
+			query:    "min_usage_count=0&max_usage_count=100&limit=50&offset=0",
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "invalid level returns 400",
+			query:    "levels=grandpa&limit=50&offset=0",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "min > max returns 400",
+			query:    "min_usage_count=100&max_usage_count=10&limit=50&offset=0",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "negative usage count returns 400",
+			query:    "min_usage_count=-1&limit=50&offset=0",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "invalid boolean orphan_only returns 400",
+			query:    "orphan_only=yes&limit=50&offset=0",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "invalid boolean source_ai returns 400",
+			query:    "source_ai=yes&limit=50&offset=0",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "non-integer min_usage_count returns 400",
+			query:    "min_usage_count=abc&limit=50&offset=0",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "search plus filters returns 200",
+			query:    "search=blue&levels=child&source_ai=true&limit=50&offset=0",
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "all filters combined returns 200",
+			query:    "search=test&levels=root,parent,child&orphan_only=false&min_usage_count=0&max_usage_count=9999&source_ai=true&source_manual=true&limit=50&offset=0",
+			wantCode: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			router, _ := newTagHandlerTestRouter(t)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/governance?"+tt.query, nil)
+			router.ServeHTTP(w, req)
+
+			if w.Code != tt.wantCode {
+				t.Fatalf("status = %d, want %d, body=%s", w.Code, tt.wantCode, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestGetGovernanceTags_FilterByLevelsReturnsOnlyMatchingRows(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/governance?levels=root&limit=50&offset=0", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Rows []struct {
+			TagID int64  `json:"tag_id"`
+			Level string `json:"level"`
+		} `json:"rows"`
+		Total int `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if resp.Total == 0 {
+		t.Fatal("expected at least one root tag")
+	}
+	for _, row := range resp.Rows {
+		if row.Level != "root" {
+			t.Fatalf("expected only root level tags, got level=%q for tag_id=%d", row.Level, row.TagID)
+		}
+	}
+}
+
+func TestGetGovernanceTags_OrphanOnlyExcludesRoot(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTagHandlerTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags/governance?orphan_only=true&limit=50&offset=0", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Rows []struct {
+			TagID   int64  `json:"tag_id"`
+			Level   string `json:"level"`
+			ParentID *int64 `json:"parent_id"`
+		} `json:"rows"`
+		Total int `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	for _, row := range resp.Rows {
+		if row.Level == "root" {
+			t.Fatalf("orphan_only should exclude root tags, got root tag_id=%d", row.TagID)
+		}
+		if row.ParentID != nil {
+			t.Fatalf("orphan_only should only return tags with no parent, got tag_id=%d with parent_id=%d", row.TagID, *row.ParentID)
+		}
+	}
+}
+
 func insertSeedTag(db *sql.DB, tag *domain.Tag) error {
 	if tag.Level == "" {
 		tag.Level = domain.TagLevelChild

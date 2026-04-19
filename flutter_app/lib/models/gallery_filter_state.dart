@@ -41,8 +41,12 @@ class GalleryFilterState {
   }
 
   GalleryFilterState normalized() {
-    if (hasTags == false) {
-      return GalleryFilterState(hasTags: false);
+    if (hasTags == false && hasPendingTags == true) {
+      return GalleryFilterState(
+        exactTagIds: exactTagIds,
+        subtreeRootTagIds: subtreeRootTagIds,
+        hasPendingTags: true,
+      );
     }
 
     return GalleryFilterState(

@@ -4,6 +4,7 @@ import 'dart:ui' show Size;
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart' show Autocomplete, MaterialApp, Widget;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gallery/models/gallery_filter_state.dart';
 import 'package:gallery/models/tag.dart';
 import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/providers/navigation_provider.dart';
@@ -784,5 +785,49 @@ void main() {
 
     // Filter should be cleared (null means no filter)
     expect(imageProvider.hasTagsFilter, isNull);
+  });
+
+  testWidgets('FluentGalleryPage top untagged action keeps selected tags', (
+    tester,
+  ) async {
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/api/v1/images')) {
+        return http.Response('{"images":[],"total":0,"has_more":false}', 200);
+      }
+      if (request.url.path.endsWith('/api/v1/tags')) {
+        return http.Response(
+          '{"tags":[{"id":1,"preferred_label":"tag1","slug":"tag1","review_state":"confirmed","trust_score":0.9,"usage_count":10,"created_at":"2024-01-01T00:00:00Z"}]}',
+          200,
+        );
+      }
+      return http.Response('{}', 200);
+    });
+
+    final imageProvider = ImageListProvider(
+      ApiService(baseUrl: 'http://localhost:8080', client: mockClient),
+    );
+
+    await imageProvider.applyFilter(GalleryFilterState(exactTagIds: {1}));
+    expect(imageProvider.selectedTagIds, [1]);
+
+    await tester.pumpWidget(
+      buildFluentGalleryTestApp(client: mockClient, imageProvider: imageProvider),
+    );
+    await tester.pumpAndSettle();
+
+    final untaggedToggle = find.text('未打标签');
+    expect(untaggedToggle, findsOneWidget);
+
+    await tester.tap(untaggedToggle);
+    await tester.pumpAndSettle();
+
+    expect(imageProvider.hasTagsFilter, isFalse);
+    expect(imageProvider.selectedTagIds, [1]);
+
+    await tester.tap(untaggedToggle);
+    await tester.pumpAndSettle();
+
+    expect(imageProvider.hasTagsFilter, isNull);
+    expect(imageProvider.selectedTagIds, [1]);
   });
 }

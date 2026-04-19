@@ -128,9 +128,7 @@ class ImageListProvider extends ChangeNotifier {
   /// Preserves current sort settings and resets pagination
   Future<void> setTagFilter(List<int> tagIds) async {
     debugPrint('setTagFilter 被调用: tagIds=$tagIds');
-    await applyFilter(
-      _filter.copyWith(exactTagIds: tagIds.toSet(), hasTags: null),
-    );
+    await applyFilter(_filter.copyWith(exactTagIds: tagIds.toSet()));
   }
 
   /// Sets the hasTags filter and reloads images with the new filter
@@ -139,7 +137,12 @@ class ImageListProvider extends ChangeNotifier {
   /// Preserves current sort settings and resets pagination
   Future<void> setHasTagsFilter(bool? hasTags) async {
     debugPrint('setHasTagsFilter 被调用: hasTags=$hasTags');
-    await applyFilter(GalleryFilterState(hasTags: hasTags));
+    await applyFilter(
+      _filter.copyWith(
+        hasTags: hasTags,
+        hasPendingTags: hasTags == false ? null : _filter.hasPendingTags,
+      ),
+    );
   }
 
   Future<void> setHasPendingTagsFilter(bool? hasPendingTags) async {
@@ -147,7 +150,7 @@ class ImageListProvider extends ChangeNotifier {
     await applyFilter(
       _filter.copyWith(
         hasPendingTags: hasPendingTags,
-        hasTags: hasPendingTags != null ? null : _filter.hasTags,
+        hasTags: hasPendingTags == true ? null : _filter.hasTags,
       ),
     );
   }

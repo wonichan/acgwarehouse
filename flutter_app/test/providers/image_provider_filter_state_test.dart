@@ -69,7 +69,9 @@ void main() {
       },
     );
 
-    test('applyFilter normalizes untagged mode before calling API', () async {
+    test(
+      'applyFilter resolves conflicting special flags and keeps normal tags',
+      () async {
       final api = RecordingApiService();
       final provider = ImageListProvider(api);
 
@@ -82,14 +84,14 @@ void main() {
         ),
       );
 
-      expect(provider.filter.exactTagIds, isEmpty);
-      expect(provider.filter.subtreeRootTagIds, isEmpty);
-      expect(provider.filter.hasTags, isFalse);
-      expect(provider.filter.hasPendingTags, isNull);
-      expect(api.lastExactTagIds, isNull);
-      expect(api.lastSubtreeRootTagIds, isNull);
-      expect(api.lastHasTags, isFalse);
-      expect(api.lastHasPendingTags, isNull);
+      expect(provider.filter.exactTagIds, {1, 9});
+      expect(provider.filter.subtreeRootTagIds, {20});
+      expect(provider.filter.hasTags, isNull);
+      expect(provider.filter.hasPendingTags, isTrue);
+      expect(api.lastExactTagIds, [1, 9]);
+      expect(api.lastSubtreeRootTagIds, [20]);
+      expect(api.lastHasTags, isNull);
+      expect(api.lastHasPendingTags, isTrue);
     });
 
     test(
@@ -110,7 +112,7 @@ void main() {
       },
     );
 
-    test('setHasTagsFilter clears exact tags and pending flag', () async {
+    test('setHasTagsFilter keeps exact tags and clears pending flag', () async {
       final api = RecordingApiService();
       final provider = ImageListProvider(api);
 
@@ -119,13 +121,33 @@ void main() {
       );
       await provider.setHasTagsFilter(false);
 
-      expect(provider.filter.exactTagIds, isEmpty);
+      expect(provider.filter.exactTagIds, {3});
       expect(provider.filter.hasTags, isFalse);
       expect(provider.filter.hasPendingTags, isNull);
-      expect(api.lastExactTagIds, isNull);
+      expect(api.lastExactTagIds, [3]);
       expect(api.lastHasTags, isFalse);
       expect(api.lastHasPendingTags, isNull);
     });
+
+    test(
+      'setHasPendingTagsFilter(true) keeps exact tags and clears hasTags',
+      () async {
+        final api = RecordingApiService();
+        final provider = ImageListProvider(api);
+
+        await provider.applyFilter(
+          GalleryFilterState(exactTagIds: {8}, hasTags: false),
+        );
+        await provider.setHasPendingTagsFilter(true);
+
+        expect(provider.filter.exactTagIds, {8});
+        expect(provider.filter.hasTags, isNull);
+        expect(provider.filter.hasPendingTags, isTrue);
+        expect(api.lastExactTagIds, [8]);
+        expect(api.lastHasTags, isNull);
+        expect(api.lastHasPendingTags, isTrue);
+      },
+    );
 
     test('applyFilter forwards subtree root tag ids to API', () async {
       final api = RecordingApiService();
@@ -142,6 +164,31 @@ void main() {
       expect(provider.filter.subtreeRootTagIds, {5, 10});
       expect(api.lastExactTagIds, [1]);
       expect(api.lastSubtreeRootTagIds, [5, 10]);
+    });
+
+    test('applyFilter with empty state clears normal and special filters', () async {
+      final api = RecordingApiService();
+      final provider = ImageListProvider(api);
+
+      await provider.applyFilter(
+        GalleryFilterState(
+          exactTagIds: {1},
+          subtreeRootTagIds: {2},
+          hasTags: false,
+          hasPendingTags: true,
+        ),
+      );
+
+      await provider.applyFilter(GalleryFilterState());
+
+      expect(provider.filter.exactTagIds, isEmpty);
+      expect(provider.filter.subtreeRootTagIds, isEmpty);
+      expect(provider.filter.hasTags, isNull);
+      expect(provider.filter.hasPendingTags, isNull);
+      expect(api.lastExactTagIds, isNull);
+      expect(api.lastSubtreeRootTagIds, isNull);
+      expect(api.lastHasTags, isNull);
+      expect(api.lastHasPendingTags, isNull);
     });
   });
 }

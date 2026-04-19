@@ -100,7 +100,7 @@ void main() {
       });
 
       test(
-        'setHasTagsFilter(false) should clear selected tag IDs (mutually exclusive)',
+        'setHasTagsFilter(false) should preserve selected tag IDs',
         () async {
           // Arrange - first set some tags
           when(
@@ -130,8 +130,8 @@ void main() {
           // Act - switch to hasTags filter
           await provider.setHasTagsFilter(false);
 
-          // Assert - tag IDs should be cleared
-          expect(provider.selectedTagIds, isEmpty);
+          // Assert - normal tags should be preserved
+          expect(provider.selectedTagIds, [1, 2, 3]);
         },
       );
 
@@ -285,9 +285,9 @@ void main() {
       });
     });
 
-    group('setTagFilter mutual exclusivity', () {
+    group('setTagFilter with special filters', () {
       test(
-        'setTagFilter should clear hasTagsFilter when setting tag filter',
+        'setTagFilter should keep hasTagsFilter when setting tag filter',
         () async {
           // Arrange
           when(
@@ -317,13 +317,13 @@ void main() {
           // Act - switch to tag filter
           await provider.setTagFilter([1, 2]);
 
-          // Assert - hasTagsFilter should be cleared
-          expect(provider.hasTagsFilter, isNull);
+          // Assert - hasTagsFilter should be preserved for AND semantics
+          expect(provider.hasTagsFilter, false);
         },
       );
 
       test(
-        'setTagFilter from untagged mode should apply immediately with cleared hasTags',
+        'setTagFilter from untagged mode should keep hasTags for AND filtering',
         () async {
           when(
             mockApiService.fetchImages(
@@ -350,7 +350,7 @@ void main() {
 
           await provider.setTagFilter([7]);
 
-          expect(provider.hasTagsFilter, isNull);
+          expect(provider.hasTagsFilter, false);
           expect(provider.selectedTagIds, [7]);
           final captured = verify(
             mockApiService.fetchImages(
@@ -362,7 +362,42 @@ void main() {
               hasTags: captureAnyNamed('hasTags'),
             ),
           ).captured;
-          expect(captured.single, isNull);
+          expect(captured.single, isFalse);
+        },
+      );
+
+      test(
+        'setHasTagsFilter(false) should clear pending while preserving normal tags',
+        () async {
+          when(
+            mockApiService.fetchImages(
+              offset: anyNamed('offset'),
+              limit: anyNamed('limit'),
+              sortBy: anyNamed('sortBy'),
+              sortDir: anyNamed('sortDir'),
+              tagIds: anyNamed('tagIds'),
+              exactTagIds: anyNamed('exactTagIds'),
+              subtreeRootTagIds: anyNamed('subtreeRootTagIds'),
+              hasTags: anyNamed('hasTags'),
+              hasPendingTags: anyNamed('hasPendingTags'),
+            ),
+          ).thenAnswer(
+            (_) async => PaginationResponse<ImageModel>(
+              items: [],
+              nextCursor: null,
+              hasMore: false,
+              total: 0,
+            ),
+          );
+
+          await provider.setHasPendingTagsFilter(true);
+          await provider.setTagFilter([11]);
+
+          await provider.setHasTagsFilter(false);
+
+          expect(provider.hasTagsFilter, isFalse);
+          expect(provider.hasPendingTagsFilter, isNull);
+          expect(provider.selectedTagIds, [11]);
         },
       );
     });

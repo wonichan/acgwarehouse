@@ -71,13 +71,6 @@ class _TagManagementListState extends State<TagManagementList> {
         final items = (tree != null && tree.isNotEmpty)
             ? _buildTreeItems(filteredTree, rowById, provider, 0)
             : rows
-                  .where(
-                    (row) =>
-                        widget.searchQuery.trim().isEmpty ||
-                        row.preferredLabel.toLowerCase().contains(
-                          widget.searchQuery.trim().toLowerCase(),
-                        ),
-                  )
                   .map(
                     (row) => _GovernanceRowTile(
                       row: row,

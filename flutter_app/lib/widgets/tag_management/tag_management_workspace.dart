@@ -8,6 +8,7 @@ import 'tag_management_list.dart';
 import 'tag_merge_panel.dart';
 import 'tag_bulk_action_bar.dart';
 import 'tag_edit_dialog.dart';
+import 'tag_governance_filter_panel.dart';
 
 /// Fluent desktop tag-governance workspace.
 ///
@@ -101,6 +102,15 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
             children: [
               // Summary stats row
               _buildSummaryStats(context, tagProvider),
+              // Filter panel
+              TagGovernanceFilterPanel(
+                draftFilter: tagProvider.governanceDraftFilter,
+                appliedFilter: tagProvider.governanceAppliedFilter,
+                onDraftChanged: (draft) =>
+                    tagProvider.updateGovernanceDraft(draft),
+                onApply: () => tagProvider.applyGovernanceFilter(),
+                onReset: () => tagProvider.resetGovernanceFilter(),
+              ),
               // Search box
               _buildSearchBox(context),
               // Bulk action bar (visible only when rows are selected)
@@ -196,8 +206,10 @@ class _TagManagementWorkspaceState extends State<TagManagementWorkspace> {
           setState(() {
             _searchQuery = value;
           });
-          // Trigger paginated reload with search
-          context.read<TagProvider>().loadGovernanceTags(search: value);
+          final provider = context.read<TagProvider>();
+          provider.updateGovernanceDraft(
+            provider.governanceDraftFilter.copyWith(search: value),
+          );
         },
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/tag.dart';
 import '../models/tag_governance.dart';
+import '../models/tag_governance_filter.dart';
 import '../services/tag_service.dart';
 
 class TagProvider extends ChangeNotifier {
@@ -41,6 +42,10 @@ class TagProvider extends ChangeNotifier {
   bool _isLoadingMoreGovernance = false;
   String? _governanceSearch;
 
+  // Governance filter state (draft/applied dual-state)
+  TagGovernanceFilterState _governanceDraftFilter = const TagGovernanceFilterState();
+  TagGovernanceFilterState _governanceAppliedFilter = const TagGovernanceFilterState();
+
   // Lazy tree browse state (gallery filter)
   List<TagBrowseNode> _treeRoots = [];
   Map<int, List<TagBrowseNode>> _treeChildrenByParent = {};
@@ -69,6 +74,10 @@ class TagProvider extends ChangeNotifier {
   // Tag tree getters
   Map<String, dynamic>? _tagTree;
   Map<String, dynamic>? get tagTree => _tagTree;
+
+  // Governance filter getters
+  TagGovernanceFilterState get governanceDraftFilter => _governanceDraftFilter;
+  TagGovernanceFilterState get governanceAppliedFilter => _governanceAppliedFilter;
 
   // 加载标签树
   Future<void> loadTagTree() async {
@@ -500,6 +509,7 @@ class TagProvider extends ChangeNotifier {
       const pageSize = 50;
       final page = await _tagService.fetchGovernanceTags(
         search: search,
+        filter: _governanceAppliedFilter.isNotEmpty ? _governanceAppliedFilter : null,
         limit: pageSize,
         offset: 0,
       );
@@ -526,6 +536,7 @@ class TagProvider extends ChangeNotifier {
       const pageSize = 50;
       final page = await _tagService.fetchGovernanceTags(
         search: _governanceSearch,
+        filter: _governanceAppliedFilter.isNotEmpty ? _governanceAppliedFilter : null,
         limit: pageSize,
         offset: _governanceOffset,
       );
@@ -568,6 +579,53 @@ class TagProvider extends ChangeNotifier {
   void clearActiveMergeSource() {
     _activeMergeSource = null;
     notifyListeners();
+  }
+
+  /// Update draft filter without triggering a reload.
+  void updateGovernanceDraft(TagGovernanceFilterState draft) {
+    _governanceDraftFilter = draft;
+    notifyListeners();
+  }
+
+  /// Apply the draft filter: copy to applied, clear selection, reload first page.
+  Future<void> applyGovernanceFilter() async {
+    _governanceAppliedFilter = _governanceDraftFilter;
+    _selectedGovernanceIds.clear();
+    _activeMergeSource = null;
+    _governanceOffset = 0;
+    _governanceRows = [];
+    _hasMoreGovernance = true;
+    _isRunningGovernanceAction = true;
+    _governanceError = null;
+    notifyListeners();
+
+    try {
+      const pageSize = 50;
+      final page = await _tagService.fetchGovernanceTags(
+        filter: _governanceAppliedFilter.isNotEmpty ? _governanceAppliedFilter : null,
+        limit: pageSize,
+        offset: 0,
+      );
+      _governanceRows = page.rows;
+      _governanceTotal = page.total;
+      _governanceOffset = page.rows.length;
+      _hasMoreGovernance = _governanceOffset < _governanceTotal;
+    } catch (e) {
+      _governanceError = e.toString();
+      debugPrint('Error applying governance filter: $e');
+    } finally {
+      _isRunningGovernanceAction = false;
+      notifyListeners();
+    }
+  }
+
+  /// Reset both draft and applied filters, clear selection, reload default list.
+  Future<void> resetGovernanceFilter() async {
+    _governanceDraftFilter = const TagGovernanceFilterState();
+    _governanceAppliedFilter = const TagGovernanceFilterState();
+    _selectedGovernanceIds.clear();
+    _activeMergeSource = null;
+    await loadGovernanceTags();
   }
 
   /// 加载删除预览
@@ -737,7 +795,6 @@ class TagProvider extends ChangeNotifier {
     String? search,
     bool asPrimaryAction = false,
   }) async {
-    // Reset to first page and reload
     _governanceSearch = search ?? _governanceSearch;
     _governanceOffset = 0;
     _hasMoreGovernance = true;
@@ -752,6 +809,7 @@ class TagProvider extends ChangeNotifier {
       const pageSize = 50;
       final page = await _tagService.fetchGovernanceTags(
         search: _governanceSearch,
+        filter: _governanceAppliedFilter.isNotEmpty ? _governanceAppliedFilter : null,
         limit: pageSize,
         offset: 0,
       );
@@ -765,10 +823,8 @@ class TagProvider extends ChangeNotifier {
     } finally {
       if (asPrimaryAction) {
         _isRunningGovernanceAction = false;
-        notifyListeners();
-      } else {
-        notifyListeners();
       }
+      notifyListeners();
     }
   }
 

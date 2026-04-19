@@ -18,6 +18,7 @@ import (
 
 type tagAdminService interface {
 	ListGovernanceTags(ctx context.Context, search string, limit, offset int) ([]service.TagGovernanceRow, int, error)
+	ListGovernanceTagsFiltered(ctx context.Context, filter domain.GovernanceTagFilter) ([]service.TagGovernanceRow, int, error)
 	MergeTags(ctx context.Context, sourceTagID, targetTagID int64) (*service.TagMergeResult, error)
 	GetDeletePreview(ctx context.Context, tagID int64) (*service.TagDeletePreview, error)
 	DeleteTag(ctx context.Context, tagID int64) (*service.TagDeleteResult, error)
@@ -352,7 +353,11 @@ func (h *TagHandler) GetTagStats(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		rows, _, err := h.adminSvc.ListGovernanceTags(ctx, "", total, 0)
+		rows, _, err := h.adminSvc.ListGovernanceTagsFiltered(ctx, domain.GovernanceTagFilter{
+			Search: "",
+			Limit:  total,
+			Offset: 0,
+		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -427,9 +432,74 @@ func (h *TagHandler) GetGovernanceTags(c *gin.Context) {
 	offset := parsePositiveInt(c.DefaultQuery("offset", "0"), 0)
 	search := strings.TrimSpace(c.Query("search"))
 
-	rows, total, err := h.adminSvc.ListGovernanceTags(c.Request.Context(), search, limit, offset)
+	filter := domain.GovernanceTagFilter{
+		Search: search,
+		Limit:  limit,
+		Offset: offset,
+	}
+
+	// Parse levels (comma-delimited, trimmed, deduplicated)
+	if raw := strings.TrimSpace(c.Query("levels")); raw != "" {
+		parts := strings.Split(raw, ",")
+		seen := make(map[string]bool, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" && !seen[p] {
+				seen[p] = true
+				filter.Levels = append(filter.Levels, p)
+			}
+		}
+	}
+
+	// Parse booleans — reject any non-empty value that isn't "true" or "false"
+	if raw := c.Query("orphan_only"); raw != "" {
+		if raw != "true" && raw != "false" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "orphan_only must be true or false"})
+			return
+		}
+		filter.OrphanOnly = raw == "true"
+	}
+	if raw := c.Query("source_ai"); raw != "" {
+		if raw != "true" && raw != "false" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "source_ai must be true or false"})
+			return
+		}
+		filter.SourceAI = raw == "true"
+	}
+	if raw := c.Query("source_manual"); raw != "" {
+		if raw != "true" && raw != "false" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "source_manual must be true or false"})
+			return
+		}
+		filter.SourceManual = raw == "true"
+	}
+
+	// Parse usage range
+	if raw := c.Query("min_usage_count"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "min_usage_count must be an integer"})
+			return
+		}
+		filter.MinUsageCount = &v
+	}
+	if raw := c.Query("max_usage_count"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "max_usage_count must be an integer"})
+			return
+		}
+		filter.MaxUsageCount = &v
+	}
+
+	if err := filter.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	rows, total, err := h.adminSvc.ListGovernanceTagsFiltered(c.Request.Context(), filter)
 	if err != nil {
-		logger.Errorf("GetGovernanceTags failed: limit=%d offset=%d search=%q err=%v", limit, offset, search, err)
+		logger.Errorf("GetGovernanceTags failed: filter=%+v err=%v", filter, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

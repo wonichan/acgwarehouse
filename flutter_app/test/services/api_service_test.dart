@@ -251,6 +251,88 @@ void main() {
         expect(captured.queryParameters['exact_tag_ids'], '1');
         expect(captured.queryParameters['subtree_root_tag_ids'], '5');
       });
+
+      test('serializes exact_tag_ids with has_tags together', () async {
+        final responseBody =
+            '{"images":[],"next_cursor":"","has_more":false,"total":0}';
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
+
+        await apiService.fetchImages(exactTagIds: [1, 2], hasTags: false);
+
+        final captured =
+            verify(
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
+        expect(captured.queryParameters['exact_tag_ids'], '1,2');
+        expect(captured.queryParameters['has_tags'], 'false');
+      });
+
+      test('serializes exact_tag_ids with has_pending_tags together', () async {
+        final responseBody =
+            '{"images":[],"next_cursor":"","has_more":false,"total":0}';
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
+
+        await apiService.fetchImages(exactTagIds: [4], hasPendingTags: true);
+
+        final captured =
+            verify(
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
+        expect(captured.queryParameters['exact_tag_ids'], '4');
+        expect(captured.queryParameters['has_pending_tags'], 'true');
+      });
+
+      test('serializes subtree_root_tag_ids with has_tags together', () async {
+        final responseBody =
+            '{"images":[],"next_cursor":"","has_more":false,"total":0}';
+
+        when(
+          mockClient.get(any, headers: anyNamed('headers')),
+        ).thenAnswer((_) async => http.Response(responseBody, 200));
+
+        await apiService.fetchImages(subtreeRootTagIds: [9], hasTags: false);
+
+        final captured =
+            verify(
+                  mockClient.get(captureAny, headers: anyNamed('headers')),
+                ).captured.single
+                as Uri;
+        expect(captured.queryParameters['subtree_root_tag_ids'], '9');
+        expect(captured.queryParameters['has_tags'], 'false');
+      });
+
+      test(
+        'serializes subtree_root_tag_ids with has_pending_tags together',
+        () async {
+          final responseBody =
+              '{"images":[],"next_cursor":"","has_more":false,"total":0}';
+
+          when(
+            mockClient.get(any, headers: anyNamed('headers')),
+          ).thenAnswer((_) async => http.Response(responseBody, 200));
+
+          await apiService.fetchImages(
+            subtreeRootTagIds: [7, 8],
+            hasPendingTags: true,
+          );
+
+          final captured =
+              verify(
+                    mockClient.get(captureAny, headers: anyNamed('headers')),
+                  ).captured.single
+                  as Uri;
+          expect(captured.queryParameters['subtree_root_tag_ids'], '7,8');
+          expect(captured.queryParameters['has_pending_tags'], 'true');
+        },
+      );
     });
 
     group('image actions', () {
