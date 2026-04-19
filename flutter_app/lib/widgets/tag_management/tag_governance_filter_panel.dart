@@ -220,6 +220,7 @@ class _TagGovernanceFilterPanelState extends State<TagGovernanceFilterPanel> {
 
   Widget _buildSummaryChips() {
     final chips = widget.appliedFilter.summaryChips;
+    final theme = FluentTheme.of(context);
     return Wrap(
       spacing: 6,
       runSpacing: 4,
@@ -228,10 +229,20 @@ class _TagGovernanceFilterPanelState extends State<TagGovernanceFilterPanel> {
             (chip) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: FluentTheme.of(context).accentColor.lightest,
+                color: theme.accentColor.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: theme.accentColor.withValues(alpha: 0.35),
+                  width: 0.5,
+                ),
               ),
-              child: Text(chip, style: TextStyle(fontSize: 11)),
+              child: Text(
+                chip,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.resources.textFillColorPrimary,
+                ),
+              ),
             ),
           )
           .toList(),
