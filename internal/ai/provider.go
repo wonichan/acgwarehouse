@@ -55,15 +55,15 @@ func NewProvider(cfg *config.AIConfig) (AIProvider, error) {
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
-				Timeout:   120 * time.Second,
-				KeepAlive: 120 * time.Second,
+				Timeout:   360 * time.Second,
+				KeepAlive: 360 * time.Second,
 			}).DialContext,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          100,
-			IdleConnTimeout:       120 * time.Second,
+			IdleConnTimeout:       360 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			ResponseHeaderTimeout: 120 * time.Second,
+			ExpectContinueTimeout: 5 * time.Second,
+			ResponseHeaderTimeout: 360 * time.Second,
 		},
 	}
 
