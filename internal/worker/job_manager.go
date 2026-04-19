@@ -109,8 +109,6 @@ func (m *Manager) Start(ctx context.Context) {
 	// 创建 ants 协程池（带优化选项）
 	pool, err := ants.NewPool(
 		m.GetWorkerCount(),
-		// 预分配内存，提升高并发性能
-		ants.WithPreAlloc(true),
 		// 防止任务 panic 导致整个 pool 崩溃
 		ants.WithPanicHandler(func(i interface{}) {
 			logger.Errorf("[ANTS PANIC] task panicked: %v", i)
@@ -173,7 +171,7 @@ func (m *Manager) SetWorkerCount(ctx context.Context, newCount int) {
 
 	if pool == nil {
 		m.workerCount.Store(int32(newCount))
-		logger.Infof("Worker 数量已调整为 %d (pool 未启动)", newCount)
+		logger.Infof("Worker 调优目标已更新为 %d (pool 未启动)", newCount)
 		return
 	}
 
@@ -186,12 +184,12 @@ func (m *Manager) SetWorkerCount(ctx context.Context, newCount int) {
 	pool.Tune(newCount)
 
 	m.workerCount.Store(int32(newCount))
-	logger.Infof("Worker 数量已调整为 %d", newCount)
+	logger.Infof("Worker 调优目标已更新为 %d", newCount)
 }
 
-// GetWorkerCount returns the current number of workers.
+// GetWorkerCount returns the current configured worker target.
 func (m *Manager) GetWorkerCount() int {
-	// 返回配置值（更准确，因为 ants.Tune 是异步的）
+	// 返回当前保存的 worker 目标值，不表示实时活跃并发数。
 	return int(m.workerCount.Load())
 }
 

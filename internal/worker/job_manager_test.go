@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -451,6 +452,72 @@ func TestManager_SetWorkerCount(t *testing.T) {
 	mgr.SetWorkerCount(ctx, 1)
 	if count := mgr.GetWorkerCount(); count != 1 {
 		t.Fatalf("after decrease, worker count = %d, want 1", count)
+	}
+}
+
+func TestManager_SetWorkerCountChangesActualConcurrency(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", t.TempDir()+"/jobs.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	jobRepo := repository.NewJobRepository(db)
+	mgr := NewManagerWithConfig(jobRepo, 1, 32)
+
+	var running atomic.Int32
+	var peak atomic.Int32
+	startedCh := make(chan struct{}, 8)
+	releaseCh := make(chan struct{})
+
+	mgr.RegisterHandler("blocking_job", func(ctx context.Context, id int64, payload string) error {
+		current := running.Add(1)
+		for {
+			previousPeak := peak.Load()
+			if current <= previousPeak || peak.CompareAndSwap(previousPeak, current) {
+				break
+			}
+		}
+
+		startedCh <- struct{}{}
+		defer running.Add(-1)
+
+		<-releaseCh
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.Start(ctx)
+	defer func() {
+		close(releaseCh)
+		mgr.Stop()
+	}()
+
+	mgr.SetWorkerCount(ctx, 4)
+
+	for i := 0; i < 4; i++ {
+		if _, err := mgr.AddJob(ctx, "blocking_job", `{}`); err != nil {
+			t.Fatalf("AddJob() error = %v", err)
+		}
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for peak.Load() < 4 && time.Now().Before(deadline) {
+		select {
+		case <-startedCh:
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+
+	if got := peak.Load(); got < 4 {
+		t.Fatalf("peak concurrency = %d, want at least 4 after hot reload", got)
 	}
 }
 
