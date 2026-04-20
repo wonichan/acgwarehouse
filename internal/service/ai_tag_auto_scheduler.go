@@ -108,6 +108,7 @@ func (s *AITagAutoScheduler) ScanAndEnqueue(ctx context.Context) (int, error) {
 	if s == nil || s.config == nil || !s.config.AI.AutoAITagOnImport {
 		return 0, nil
 	}
+	thumbnailBaseURL := ResolveThumbnailBaseURL(s.config)
 	if s.imageFinder == nil || s.taskPlatform == nil {
 		return 0, nil
 	}
@@ -158,7 +159,7 @@ func (s *AITagAutoScheduler) ScanAndEnqueue(ctx context.Context) (int, error) {
 		}
 		payload, err := json.Marshal(map[string]any{
 			"image_id": image.ID,
-			"path":     ResolveAITagImagePath(&image),
+			"path":     ResolveAITagImagePath(&image, thumbnailBaseURL),
 		})
 		if err != nil {
 			return queued, fmt.Errorf("marshal AI tag payload: %w", err)

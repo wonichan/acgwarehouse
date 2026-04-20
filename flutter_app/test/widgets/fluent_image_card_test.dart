@@ -3,7 +3,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' show Material;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/image.dart';
+import 'package:gallery/providers/config_provider.dart';
+import 'package:gallery/widgets/cached_image_widget.dart';
 import 'package:gallery/widgets/fluent_image_card.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   final testImage = ImageModel(
@@ -168,5 +171,47 @@ void main() {
     );
 
     expect(find.byIcon(fluent.FluentIcons.favorite_star_fill), findsOneWidget);
+  });
+
+  testWidgets('resolves relative thumbnail URL with configured thumbnail base', (
+    tester,
+  ) async {
+    final relativeImage = ImageModel(
+      id: 3,
+      filename: 'relative.jpg',
+      path: '/path/to/relative.jpg',
+      sourceRoot: 'http://example.com/',
+      fileSize: 1024,
+      width: 800,
+      height: 600,
+      format: 'jpg',
+      phash: 333333,
+      collectionId: null,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      thumbnailSmallUrl: 'acg/thumbnails/20260419/relative-small.jpg',
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => ConfigProvider(
+          initialBaseUrl: 'http://localhost:8080',
+          initialThumbnailBaseUrl: 'http://118.25.139.30:19003',
+        ),
+        child: fluent.FluentApp(
+          home: fluent.ScaffoldPage(
+            content: Material(child: FluentImageCard(image: relativeImage)),
+          ),
+        ),
+      ),
+    );
+
+    final imageWidget = tester.widget<CachedImageWidget>(
+      find.byType(CachedImageWidget),
+    );
+    expect(
+      imageWidget.imageUrl,
+      'http://118.25.139.30:19003/acg/thumbnails/20260419/relative-small.jpg',
+    );
   });
 }

@@ -15,7 +15,7 @@ void main() {
     test('applies go.base_url from valid manifest before API usage', () async {
       final loader = RuntimeManifestLoader(
         readText: (_) async =>
-            '{"version":1,"generated_at":"2026-04-04T10:00:00Z","go":{"base_url":"http://127.0.0.1:51423","ready":true,"admin_basic_auth":"Basic ZGVtbzpkZW1v"}}',
+            '{"version":1,"generated_at":"2026-04-04T10:00:00Z","go":{"base_url":"http://127.0.0.1:51423","thumbnail_base_url":"http://127.0.0.1:19003","ready":true,"admin_basic_auth":"Basic ZGVtbzpkZW1v"}}',
       );
 
       final result = await loader.load(
@@ -23,10 +23,11 @@ void main() {
         isDesktopTarget: true,
       );
 
-      expect(result.source, RuntimeManifestSource.manifest);
-      expect(result.appliedBaseUrl, 'http://127.0.0.1:51423');
-      expect(result.appliedAdminBasicAuth, 'Basic ZGVtbzpkZW1v');
-    });
+        expect(result.source, RuntimeManifestSource.manifest);
+        expect(result.appliedBaseUrl, 'http://127.0.0.1:51423');
+        expect(result.appliedThumbnailBaseUrl, 'http://127.0.0.1:19003');
+        expect(result.appliedAdminBasicAuth, 'Basic ZGVtbzpkZW1v');
+      });
 
     test(
       'uses localhost fallback only in development when manifest missing',

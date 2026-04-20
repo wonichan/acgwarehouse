@@ -96,11 +96,14 @@ func TestAITagTriggerCreatesNewTaskWhenHistoricalCompletedTaskExists(t *testing.
 	}
 }
 
-func TestAITagTriggerUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
+func TestAITagTriggerUsesAbsoluteURLForRelativeLargeThumbnailPath(t *testing.T) {
 	t.Parallel()
 
-	router, repos := newAITagHandlerTestRouter(t)
-	if _, err := repos.db.Exec(`UPDATE images SET thumbnail_large_url = ? WHERE id = 1`, "https://cos.local/thumbnails/1-large.jpg"); err != nil {
+	router, repos := newAITagHandlerTestRouterWithConfig(t, &config.Config{
+		AI: config.AIConfig{AutoScanBatchSize: 100},
+		Minio: config.MinioConfig{Endpoint: "http://minio.internal:9000"},
+	})
+	if _, err := repos.db.Exec(`UPDATE images SET thumbnail_large_url = ? WHERE id = 1`, "acg/thumbnails/20260419/1-large.jpg"); err != nil {
 		t.Fatalf("seed large thumbnail url: %v", err)
 	}
 
@@ -129,8 +132,8 @@ func TestAITagTriggerUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
 	if err := json.Unmarshal([]byte(job.Payload), &payload); err != nil {
 		t.Fatalf("json.Unmarshal(payload) error = %v", err)
 	}
-	if payload.Path != "https://cos.local/thumbnails/1-large.jpg" {
-		t.Fatalf("payload.Path = %q, want large thumbnail url", payload.Path)
+	if payload.Path != "http://minio.internal:9000/acg/thumbnails/20260419/1-large.jpg" {
+		t.Fatalf("payload.Path = %q, want resolved absolute thumbnail url", payload.Path)
 	}
 }
 

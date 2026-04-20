@@ -378,10 +378,14 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
                     ),
                     clipBehavior: Clip.antiAlias,
                     child:
-                        img.thumbnailSmallUrl != null &&
-                            img.thumbnailSmallUrl!.isNotEmpty
+                        (context.watch<ConfigProvider>().resolveThumbnailUrl(
+                                  img.thumbnailSmallUrl,
+                                ) !=
+                                null)
                         ? CachedNetworkImage(
-                            imageUrl: img.thumbnailSmallUrl!,
+                            imageUrl: context
+                                .watch<ConfigProvider>()
+                                .resolveThumbnailUrl(img.thumbnailSmallUrl)!,
                             fit: BoxFit.cover,
                             placeholder: (ctx, url) => Container(
                               color: theme.colorScheme.surfaceContainerLowest,
@@ -420,7 +424,9 @@ class _ImageDetailScreenState extends State<ImageDetailScreen> {
         _opaqueColor(
           Theme.of(resolvedContext).colorScheme.surfaceContainerHighest,
         );
-    final largeUrl = _currentImage.thumbnailLargeUrl;
+    final largeUrl = resolvedContext.watch<ConfigProvider>().resolveThumbnailUrl(
+      _currentImage.thumbnailLargeUrl,
+    );
     final originalPath = _currentImage.path;
     final displayUrl = (largeUrl != null && largeUrl.isNotEmpty)
         ? largeUrl

@@ -1,5 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:provider/provider.dart';
 import '../models/image.dart';
+import '../providers/config_provider.dart';
 import 'cached_image_widget.dart';
 
 typedef FluentImageTapCallback = void Function(ImageModel image);
@@ -40,7 +42,9 @@ class _FluentImageCardState extends State<FluentImageCard> {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    final thumbnailUrl = widget.image.thumbnailSmallUrl;
+    final thumbnailUrl = context.watch<ConfigProvider?>()?.resolveThumbnailUrl(
+      widget.image.thumbnailSmallUrl,
+    );
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),

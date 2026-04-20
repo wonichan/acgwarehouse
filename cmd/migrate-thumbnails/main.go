@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,13 +13,20 @@ import (
 	_ "github.com/ncruces/go-sqlite3/embed"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/service"
 	"github.com/wonichan/acgwarehouse-backend/internal/sqliteutil"
 )
+
+type thumbnailRewriteResult struct {
+	ScannedImages   int64
+	RewrittenImages int64
+}
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to config file")
 	dryRun := flag.Bool("dry-run", false, "Preview changes without writing to database")
 	force := flag.Bool("force", false, "Run even if thumbnail URLs are already empty")
+	rewriteRelative := flag.Bool("rewrite-relative", false, "Rewrite existing absolute thumbnail URLs to relative storage paths")
 	flag.Parse()
 
 	cfg, err := config.LoadConfig(*configPath)
@@ -33,6 +41,21 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+
+	if *rewriteRelative {
+		result, err := rewriteThumbnailURLsToRelative(db, *dryRun)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "改写缩略图URL失败: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("=== 缩略图URL相对路径改写 ===")
+		fmt.Printf("扫描图片数: %d\n", result.ScannedImages)
+		fmt.Printf("改写图片数: %d\n", result.RewrittenImages)
+		if *dryRun {
+			fmt.Println("（dry-run 模式，未实际修改数据库）")
+		}
+		return
+	}
 
 	// ─── Step 0: Statistics ───
 	var totalImages int64
@@ -193,4 +216,67 @@ func main() {
 	fmt.Println("         use_ssl: false")
 	fmt.Println("  2. 启动服务，worker 池将自动处理缩略图生成和 MinIO 上传")
 	fmt.Println("  3. 可通过管理后台监控任务进度")
+}
+
+func rewriteThumbnailURLsToRelative(db *sql.DB, dryRun bool) (thumbnailRewriteResult, error) {
+	type thumbnailRow struct {
+		id       int64
+		smallURL string
+		largeURL string
+	}
+
+	rows, err := db.Query(`
+		SELECT id, COALESCE(thumbnail_small_url, ''), COALESCE(thumbnail_large_url, '')
+		FROM images
+		WHERE (thumbnail_small_url IS NOT NULL AND thumbnail_small_url != '')
+		   OR (thumbnail_large_url IS NOT NULL AND thumbnail_large_url != '')
+		ORDER BY id
+	`)
+	if err != nil {
+		return thumbnailRewriteResult{}, err
+	}
+
+	items := make([]thumbnailRow, 0)
+	for rows.Next() {
+		var item thumbnailRow
+		if err := rows.Scan(&item.id, &item.smallURL, &item.largeURL); err != nil {
+			_ = rows.Close()
+			return thumbnailRewriteResult{}, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return thumbnailRewriteResult{}, err
+	}
+	if err := rows.Close(); err != nil {
+		return thumbnailRewriteResult{}, err
+	}
+
+	result := thumbnailRewriteResult{}
+	for _, item := range items {
+		result.ScannedImages++
+
+		normalizedSmall := service.NormalizeThumbnailStoragePath(item.smallURL)
+		normalizedLarge := service.NormalizeThumbnailStoragePath(item.largeURL)
+		changed := normalizedSmall != item.smallURL || normalizedLarge != item.largeURL
+		if !changed {
+			continue
+		}
+		result.RewrittenImages++
+		if dryRun {
+			continue
+		}
+		if _, err := db.Exec(`
+			UPDATE images
+			SET thumbnail_small_url = ?,
+			    thumbnail_large_url = ?,
+			    updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`, normalizedSmall, normalizedLarge, item.id); err != nil {
+			return thumbnailRewriteResult{}, err
+		}
+	}
+
+	return result, nil
 }

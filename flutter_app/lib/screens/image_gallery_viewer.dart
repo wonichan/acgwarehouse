@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
+import 'package:provider/provider.dart';
 import '../models/image.dart';
+import '../providers/config_provider.dart';
 
 /// Fullscreen image viewer with swipe navigation.
 ///
@@ -82,7 +84,9 @@ class _ImageGalleryViewerState extends State<ImageGalleryViewer> {
 
   Widget _buildImagePage(ImageModel image) {
     // 优先使用缩略图，如果缩略图为空则回退到原始图片路径
-    final largeUrl = image.thumbnailLargeUrl;
+    final largeUrl = context.watch<ConfigProvider>().resolveThumbnailUrl(
+      image.thumbnailLargeUrl,
+    );
     final originalPath = image.path;
     final displayUrl = (largeUrl != null && largeUrl.isNotEmpty)
         ? largeUrl

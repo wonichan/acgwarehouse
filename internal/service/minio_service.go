@@ -62,14 +62,9 @@ func (s *MinioService) Upload(ctx context.Context, filename, size string, data [
 		return "", fmt.Errorf("upload thumbnail to minio: %w", err)
 	}
 
-	scheme := "http"
-	if s.useSSL {
-		scheme = "https"
-	}
-
-	finalURL := fmt.Sprintf("%s://%s/%s/%s", scheme, s.endpoint, s.bucket, key)
-	logger.Infof("[service] MinIO Upload completed: url=%s", finalURL)
-	return finalURL, nil
+	storedPath := NormalizeThumbnailStoragePath(fmt.Sprintf("%s/%s", s.bucket, key))
+	logger.Infof("[service] MinIO Upload completed: path=%s", storedPath)
+	return storedPath, nil
 }
 
 func (s *MinioService) DeleteByURL(ctx context.Context, objectURL string) error {
@@ -83,13 +78,10 @@ func (s *MinioService) DeleteByURL(ctx context.Context, objectURL string) error 
 		return nil
 	}
 
-	u, err := url.Parse(objectURL)
-	if err != nil {
-		logger.Errorf("[service] MinIO DeleteByURL url parse failure: url=%s error=%v", objectURL, err)
-		return fmt.Errorf("parse object url: %w", err)
+	key := NormalizeThumbnailStoragePath(objectURL)
+	if parsed, err := url.Parse(objectURL); err == nil && parsed.IsAbs() {
+		key = NormalizeThumbnailStoragePath(parsed.Path)
 	}
-
-	key := strings.TrimPrefix(u.Path, "/")
 	bucketPrefix := s.bucket + "/"
 	if strings.HasPrefix(key, bucketPrefix) {
 		key = strings.TrimPrefix(key, bucketPrefix)
@@ -99,7 +91,7 @@ func (s *MinioService) DeleteByURL(ctx context.Context, objectURL string) error 
 		return fmt.Errorf("invalid object key from url: %s", objectURL)
 	}
 
-	err = s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
+	err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
 		logger.Errorf("[service] MinIO DeleteByURL deletion failure: url=%s key=%s error=%v", objectURL, key, err)
 		return fmt.Errorf("delete object from minio: %w", err)

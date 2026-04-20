@@ -167,6 +167,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ...createAppProviders(
           manifestBaseUrl: manifestResult?.appliedBaseUrl,
+          manifestThumbnailBaseUrl: manifestResult?.appliedThumbnailBaseUrl,
           manifestAdminAuth: manifestResult?.appliedAdminBasicAuth,
         ),
       ],

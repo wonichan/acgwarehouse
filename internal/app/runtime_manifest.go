@@ -25,9 +25,10 @@ type RuntimeManifestPayload struct {
 }
 
 type runtimeManifestGoEntry struct {
-	BaseURL        string `json:"base_url"`
-	Ready          bool   `json:"ready"`
-	AdminBasicAuth string `json:"admin_basic_auth,omitempty"`
+	BaseURL          string `json:"base_url"`
+	ThumbnailBaseURL string `json:"thumbnail_base_url,omitempty"`
+	Ready            bool   `json:"ready"`
+	AdminBasicAuth   string `json:"admin_basic_auth,omitempty"`
 }
 
 var (
@@ -37,13 +38,20 @@ var (
 	runtimeManifestRemoveFile = os.Remove
 )
 
-func BuildRuntimeManifestPayload(baseURL, adminUsername, adminPassword string, generatedAt time.Time) (RuntimeManifestPayload, error) {
+func BuildRuntimeManifestPayload(baseURL, thumbnailBaseURL, adminUsername, adminPassword string, generatedAt time.Time) (RuntimeManifestPayload, error) {
 	trimmed := strings.TrimSpace(baseURL)
 	if trimmed == "" {
 		return RuntimeManifestPayload{}, fmt.Errorf("runtime manifest base URL is required")
 	}
 	if _, err := url.ParseRequestURI(trimmed); err != nil {
 		return RuntimeManifestPayload{}, fmt.Errorf("runtime manifest base URL is invalid: %w", err)
+	}
+
+	thumbnailBase := strings.TrimRight(strings.TrimSpace(thumbnailBaseURL), "/")
+	if thumbnailBase != "" {
+		if _, err := url.ParseRequestURI(thumbnailBase); err != nil {
+			return RuntimeManifestPayload{}, fmt.Errorf("runtime manifest thumbnail base URL is invalid: %w", err)
+		}
 	}
 
 	stamp := generatedAt.UTC()
@@ -60,9 +68,10 @@ func BuildRuntimeManifestPayload(baseURL, adminUsername, adminPassword string, g
 		Version:     RuntimeManifestSchemaVersion,
 		GeneratedAt: stamp.Format(time.RFC3339),
 		Go: runtimeManifestGoEntry{
-			BaseURL:        trimmed,
-			Ready:          true,
-			AdminBasicAuth: adminBasicAuth,
+			BaseURL:          trimmed,
+			ThumbnailBaseURL: thumbnailBase,
+			Ready:            true,
+			AdminBasicAuth:   adminBasicAuth,
 		},
 	}, nil
 }

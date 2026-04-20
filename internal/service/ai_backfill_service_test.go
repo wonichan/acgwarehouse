@@ -131,7 +131,7 @@ func TestExecuteBackfillReturnsNoOpForZeroEligible(t *testing.T) {
 	}
 }
 
-func TestExecuteBackfillUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
+func TestExecuteBackfillResolvesRelativeLargeThumbnailPathToAbsoluteURL(t *testing.T) {
 	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "ai-backfill.db"))
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
@@ -147,7 +147,9 @@ func TestExecuteBackfillUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
 	taskRepo := repository.NewPlatformTaskRepository(db)
 	batchRepo := repository.NewTaskBatchRepository(db)
 	taskPlatformSvc := NewTaskPlatformService(batchRepo, taskRepo, jobRepo)
-	svc := NewAIBackfillService(imageRepo, taskPlatformSvc, nil, nil)
+	svc := NewAIBackfillService(imageRepo, taskPlatformSvc, nil, func() *config.Config {
+		return &config.Config{Minio: config.MinioConfig{Endpoint: "http://minio.internal:9000"}}
+	})
 
 	image := &domain.Image{
 		Path:              "/images/original.png",
@@ -158,7 +160,7 @@ func TestExecuteBackfillUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
 		Height:            100,
 		Format:            "png",
 		PHash:             1,
-		ThumbnailLargeUrl: "https://cos.local/thumbnails/original-large.jpg",
+		ThumbnailLargeUrl: "acg/thumbnails/20260419/original-large.jpg",
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 	}
@@ -192,8 +194,8 @@ func TestExecuteBackfillUsesLargeThumbnailURLWhenAvailable(t *testing.T) {
 	if err := json.Unmarshal([]byte(jobs[0].Payload), &payload); err != nil {
 		t.Fatalf("json.Unmarshal(payload) error = %v", err)
 	}
-	if payload.Path != "https://cos.local/thumbnails/original-large.jpg" {
-		t.Fatalf("payload.Path = %q, want large thumbnail url", payload.Path)
+	if payload.Path != "http://minio.internal:9000/acg/thumbnails/20260419/original-large.jpg" {
+		t.Fatalf("payload.Path = %q, want resolved absolute thumbnail url", payload.Path)
 	}
 }
 

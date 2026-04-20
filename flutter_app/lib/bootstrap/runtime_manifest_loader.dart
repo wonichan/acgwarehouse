@@ -12,11 +12,13 @@ enum RuntimeManifestSource { manifest, devFallback, none }
 class RuntimeManifestLoadResult {
   final RuntimeManifestSource source;
   final String? appliedBaseUrl;
+  final String? appliedThumbnailBaseUrl;
   final String? appliedAdminBasicAuth;
 
   const RuntimeManifestLoadResult({
     required this.source,
     this.appliedBaseUrl,
+    this.appliedThumbnailBaseUrl,
     this.appliedAdminBasicAuth,
   });
 }
@@ -44,11 +46,13 @@ class RuntimeManifestLoader {
 
     final text = await _readText(_manifestPath);
     final discoveredBaseUrl = _extractGoBaseUrl(text);
+    final discoveredThumbnailBaseUrl = _extractThumbnailBaseUrl(text);
     final discoveredAdminBasicAuth = _extractAdminBasicAuth(text);
     if (discoveredBaseUrl != null) {
       return RuntimeManifestLoadResult(
         source: RuntimeManifestSource.manifest,
         appliedBaseUrl: discoveredBaseUrl,
+        appliedThumbnailBaseUrl: discoveredThumbnailBaseUrl,
         appliedAdminBasicAuth: discoveredAdminBasicAuth,
       );
     }
@@ -120,6 +124,44 @@ class RuntimeManifestLoader {
       }
 
       return adminBasicAuth.trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _extractThumbnailBaseUrl(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        return null;
+      }
+
+      final go = decoded['go'];
+      if (go is! Map<String, dynamic>) {
+        return null;
+      }
+
+      final thumbnailBaseUrl = go['thumbnail_base_url'];
+      if (thumbnailBaseUrl is! String || thumbnailBaseUrl.trim().isEmpty) {
+        return null;
+      }
+
+      final normalized = thumbnailBaseUrl.trim().endsWith('/')
+          ? thumbnailBaseUrl.trim().substring(
+              0,
+              thumbnailBaseUrl.trim().length - 1,
+            )
+          : thumbnailBaseUrl.trim();
+      final parsed = Uri.tryParse(normalized);
+      if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
+        return null;
+      }
+
+      return normalized;
     } catch (_) {
       return null;
     }

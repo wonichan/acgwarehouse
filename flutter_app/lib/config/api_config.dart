@@ -19,6 +19,34 @@ class ApiConfig {
   /// Returns base API URL with /api/v1 suffix.
   static String baseUrlOf(String baseUrl) => '$baseUrl/api/v1';
 
+  static String? resolveThumbnailUrl(
+    String? rawUrl, {
+    String? thumbnailBaseUrl,
+  }) {
+    final trimmed = rawUrl?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+
+    final parsed = Uri.tryParse(trimmed);
+    if (parsed != null && parsed.hasScheme && parsed.host.isNotEmpty) {
+      return trimmed;
+    }
+
+    final base = thumbnailBaseUrl?.trim();
+    if (base == null || base.isEmpty) {
+      return trimmed;
+    }
+
+    final normalizedBase = base.endsWith('/')
+        ? base.substring(0, base.length - 1)
+        : base;
+    final normalizedPath = trimmed.startsWith('/')
+        ? trimmed.substring(1)
+        : trimmed;
+    return '$normalizedBase/$normalizedPath';
+  }
+
   // ---- Image endpoints ----
   static String images(String baseUrl) => '${baseUrlOf(baseUrl)}/images';
   static String imageDetail(String baseUrl, int id) =>

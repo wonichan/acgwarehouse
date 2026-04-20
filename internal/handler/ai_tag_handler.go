@@ -267,12 +267,13 @@ func (h *AITagHandler) enqueueAITagBatch(ctx context.Context, sourceType, taskTy
 		CreatedTasks: len(plan.CreatedTasks),
 		SkippedTasks: len(items) - len(plan.CreatedTasks),
 	}
+	thumbnailBaseURL := service.ResolveThumbnailBaseURL(h.currentConfig())
 	for _, task := range plan.CreatedTasks {
 		image, err := h.imageRepo.FindByID(task.ImageID)
 		if err != nil {
 			return nil, err
 		}
-		payload, err := json.Marshal(worker.AITagPayload{ImageID: task.ImageID, Path: service.ResolveAITagImagePath(image), Prompt: prompt})
+		payload, err := json.Marshal(worker.AITagPayload{ImageID: task.ImageID, Path: service.ResolveAITagImagePath(image, thumbnailBaseURL), Prompt: prompt})
 		if err != nil {
 			return nil, err
 		}

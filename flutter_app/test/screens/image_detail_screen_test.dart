@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:gallery/models/image.dart';
 import 'package:gallery/providers/config_provider.dart';
 import 'package:gallery/screens/image_detail_screen.dart';
@@ -171,4 +172,53 @@ void main() {
       expect(find.text('已拒绝'), findsOneWidget);
     },
   );
+
+  testWidgets('detail screen resolves relative thumbnail URLs for filmstrip', (
+    WidgetTester tester,
+  ) async {
+    final relativeImage = ImageModel(
+      id: 7,
+      path: '/library/demo/relative.jpg',
+      filename: 'relative.jpg',
+      sourceRoot: '/library/demo',
+      fileSize: 2048,
+      width: 1920,
+      height: 1080,
+      format: 'jpeg',
+      phash: 777,
+      thumbnailSmallUrl: 'acg/thumbnails/20260419/relative-small.jpg',
+      thumbnailLargeUrl: 'acg/thumbnails/20260419/relative-large.jpg',
+      createdAt: DateTime.utc(2023, 1, 1),
+      updatedAt: DateTime.utc(2023, 1, 1),
+    );
+
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ConfigProvider>(
+        create: (_) => ConfigProvider(
+          initialBaseUrl: 'http://localhost:8080',
+          initialThumbnailBaseUrl: 'http://118.25.139.30:19003',
+        ),
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          home: ImageDetailScreen(
+            image: relativeImage,
+            images: [relativeImage],
+            initialIndex: 0,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final filmstripThumb = tester.widget<CachedNetworkImage>(
+      find.byType(CachedNetworkImage).first,
+    );
+    expect(
+      filmstripThumb.imageUrl,
+      'http://118.25.139.30:19003/acg/thumbnails/20260419/relative-small.jpg',
+    );
+  });
 }

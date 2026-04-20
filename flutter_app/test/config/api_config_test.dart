@@ -70,5 +70,25 @@ void main() {
     test('developmentFallbackHostUrl is the expected default', () {
       expect(ApiConfig.developmentFallbackHostUrl, 'http://localhost:8080');
     });
+
+    test('resolveThumbnailUrl builds absolute URL from relative path', () {
+      expect(
+        ApiConfig.resolveThumbnailUrl(
+          'acg/thumbnails/20260419/example-large.jpg',
+          thumbnailBaseUrl: 'http://118.25.139.30:19003',
+        ),
+        'http://118.25.139.30:19003/acg/thumbnails/20260419/example-large.jpg',
+      );
+    });
+
+    test('resolveThumbnailUrl keeps existing absolute URL', () {
+      expect(
+        ApiConfig.resolveThumbnailUrl(
+          'https://cdn.example.com/acg/thumbnails/example-large.jpg',
+          thumbnailBaseUrl: 'http://118.25.139.30:19003',
+        ),
+        'https://cdn.example.com/acg/thumbnails/example-large.jpg',
+      );
+    });
   });
 }

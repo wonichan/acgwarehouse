@@ -22,6 +22,7 @@ import '../services/tag_service.dart';
 /// discovered from the runtime manifest file (packaged desktop only).
 List<dynamic> createAppProviders({
   String? manifestBaseUrl,
+  String? manifestThumbnailBaseUrl,
   String? manifestAdminAuth,
 }) {
   return [
@@ -29,6 +30,7 @@ List<dynamic> createAppProviders({
     ChangeNotifierProvider(
       create: (_) => ConfigProvider(
         initialBaseUrl: manifestBaseUrl,
+        initialThumbnailBaseUrl: manifestThumbnailBaseUrl,
         initialAdminAuth: manifestAdminAuth,
       ),
     ),

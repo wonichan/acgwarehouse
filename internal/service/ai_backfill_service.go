@@ -132,6 +132,7 @@ func (s *AIBackfillService) ExecuteBackfill(ctx context.Context, filter reposito
 		return nil, fmt.Errorf("fetching backfill candidates: %w", err)
 	}
 	logger.Infof("AI 标签补跑候选图片已加载: candidate_count=%d", len(candidates))
+	thumbnailBaseURL := ResolveThumbnailBaseURL(s.currentConfig())
 
 	if len(candidates) == 0 {
 		logger.Infof("AI 标签补跑无候选图片: enqueueable_count=%d", preview.EnqueueableCount)
@@ -193,7 +194,7 @@ func (s *AIBackfillService) ExecuteBackfill(ctx context.Context, filter reposito
 		}
 		payload, err := json.Marshal(map[string]interface{}{
 			"image_id": task.ImageID,
-			"path":     ResolveAITagImagePath(matchImg),
+			"path":     ResolveAITagImagePath(matchImg, thumbnailBaseURL),
 			"prompt":   prompt,
 		})
 		if err != nil {

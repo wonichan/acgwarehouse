@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/image.dart';
+import '../providers/config_provider.dart';
 import '../providers/selection_provider.dart';
 import '../providers/image_provider.dart' show ViewMode;
 import '../utils/responsive_breakpoint.dart';
@@ -186,7 +188,9 @@ class ResponsiveImageGrid extends StatelessWidget {
   }
 
   Widget _buildImageTile(BuildContext context, ImageModel image) {
-    final thumbnailUrl = image.thumbnailSmallUrl;
+    final thumbnailUrl = context.watch<ConfigProvider?>()?.resolveThumbnailUrl(
+      image.thumbnailSmallUrl,
+    );
     final colorScheme = Theme.of(context).colorScheme;
 
     if (thumbnailUrl == null || thumbnailUrl.isEmpty) {
