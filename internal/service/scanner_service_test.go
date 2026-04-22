@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +14,19 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
+
+type recordingThumbnailDeleter struct {
+	deletedURLs []string
+	failURL     string
+}
+
+func (d *recordingThumbnailDeleter) DeleteByURL(_ context.Context, objectURL string) error {
+	d.deletedURLs = append(d.deletedURLs, objectURL)
+	if d.failURL != "" && d.failURL == objectURL {
+		return errors.New("delete remote thumbnail")
+	}
+	return nil
+}
 
 func TestScannerCreatesImportBatchAndPlatformTask(t *testing.T) {
 	t.Parallel()
@@ -46,7 +60,7 @@ func TestScannerCreatesImportBatchAndPlatformTask(t *testing.T) {
 		repository.NewPlatformTaskRepository(db),
 		jobRepo,
 	)
-	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, 1)
+	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, nil, 1)
 
 	result, err := scanner.Scan(context.Background(), []string{root})
 	if err != nil {
@@ -187,7 +201,7 @@ func TestScannerServiceScanQueuesThumbnailTasks(t *testing.T) {
 		repository.NewPlatformTaskRepository(db),
 		jobRepo,
 	)
-	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, 1)
+	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, nil, 1)
 
 	result, err := scanner.Scan(context.Background(), []string{root})
 	if err != nil {
@@ -281,7 +295,7 @@ func TestScannerCreatesNewBatchButSkipsUnchangedImageTasks(t *testing.T) {
 	jobRepo := repository.NewJobRepository(db)
 	taskRepo := repository.NewPlatformTaskRepository(db)
 	taskPlatformSvc := NewTaskPlatformService(repository.NewTaskBatchRepository(db), taskRepo, jobRepo)
-	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, 1)
+	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, nil, 1)
 
 	first, err := scanner.Scan(context.Background(), []string{root})
 	if err != nil {
@@ -352,7 +366,7 @@ func TestScannerHardDeletesStalePathAfterRename(t *testing.T) {
 	jobRepo := repository.NewJobRepository(db)
 	taskRepo := repository.NewPlatformTaskRepository(db)
 	taskPlatformSvc := NewTaskPlatformService(repository.NewTaskBatchRepository(db), taskRepo, jobRepo)
-	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, 1)
+	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, nil, 1)
 
 	if _, err := scanner.Scan(context.Background(), []string{root}); err != nil {
 		t.Fatalf("first Scan() error = %v", err)
@@ -380,6 +394,154 @@ func TestScannerHardDeletesStalePathAfterRename(t *testing.T) {
 	}
 	if remainingPath != newPath {
 		t.Fatalf("remaining path = %q, want %q", remainingPath, newPath)
+	}
+}
+
+func TestScannerDeletesRemoteThumbnailsBeforeDeletingStaleImage(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	oldPath := filepath.Join(root, "before.png")
+	newPath := filepath.Join(root, "after.png")
+	if err := os.WriteFile(oldPath, tinyPNGFixture(), 0o600); err != nil {
+		t.Fatalf("write old image fixture: %v", err)
+	}
+
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "scan-remote-delete.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	metadataSvc := NewMetadataService()
+	imageRepo := repository.NewImageRepository(db)
+	jobRepo := repository.NewJobRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	taskPlatformSvc := NewTaskPlatformService(repository.NewTaskBatchRepository(db), taskRepo, jobRepo)
+	deleter := &recordingThumbnailDeleter{}
+	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, deleter, 1)
+
+	if _, err := scanner.Scan(context.Background(), []string{root}); err != nil {
+		t.Fatalf("first Scan() error = %v", err)
+	}
+
+	staleImage, err := imageRepo.FindByPath(oldPath)
+	if err != nil {
+		t.Fatalf("FindByPath(oldPath) error = %v", err)
+	}
+	if err := imageRepo.UpdateThumbnails(staleImage.ID, "https://cdn.example/small.jpg", "https://cdn.example/large.jpg"); err != nil {
+		t.Fatalf("UpdateThumbnails() error = %v", err)
+	}
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		t.Fatalf("rename image file: %v", err)
+	}
+
+	result, err := scanner.Scan(context.Background(), []string{root})
+	if err != nil {
+		t.Fatalf("second Scan() error = %v", err)
+	}
+
+	if result.DeletedStale != 1 {
+		t.Fatalf("DeletedStale = %d, want 1", result.DeletedStale)
+	}
+	if len(deleter.deletedURLs) != 2 {
+		t.Fatalf("deletedURLs = %+v, want 2 deletions", deleter.deletedURLs)
+	}
+	if deleter.deletedURLs[0] != "https://cdn.example/small.jpg" || deleter.deletedURLs[1] != "https://cdn.example/large.jpg" {
+		t.Fatalf("deletedURLs = %+v, want small then large thumbnail urls", deleter.deletedURLs)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM images`).Scan(&count); err != nil {
+		t.Fatalf("query images count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("images row count = %d, want 1", count)
+	}
+
+	var remainingPath string
+	if err := db.QueryRow(`SELECT path FROM images LIMIT 1`).Scan(&remainingPath); err != nil {
+		t.Fatalf("query remaining path: %v", err)
+	}
+	if remainingPath != newPath {
+		t.Fatalf("remaining path = %q, want %q", remainingPath, newPath)
+	}
+}
+
+func TestScannerKeepsStaleImageWhenRemoteThumbnailDeleteFails(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	oldPath := filepath.Join(root, "before.png")
+	newPath := filepath.Join(root, "after.png")
+	if err := os.WriteFile(oldPath, tinyPNGFixture(), 0o600); err != nil {
+		t.Fatalf("write old image fixture: %v", err)
+	}
+
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "scan-remote-delete-fail.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	metadataSvc := NewMetadataService()
+	imageRepo := repository.NewImageRepository(db)
+	jobRepo := repository.NewJobRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	taskPlatformSvc := NewTaskPlatformService(repository.NewTaskBatchRepository(db), taskRepo, jobRepo)
+	deleter := &recordingThumbnailDeleter{failURL: "https://cdn.example/large.jpg"}
+	scanner := NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, deleter, 1)
+
+	if _, err := scanner.Scan(context.Background(), []string{root}); err != nil {
+		t.Fatalf("first Scan() error = %v", err)
+	}
+
+	staleImage, err := imageRepo.FindByPath(oldPath)
+	if err != nil {
+		t.Fatalf("FindByPath(oldPath) error = %v", err)
+	}
+	if err := imageRepo.UpdateThumbnails(staleImage.ID, "https://cdn.example/small.jpg", "https://cdn.example/large.jpg"); err != nil {
+		t.Fatalf("UpdateThumbnails() error = %v", err)
+	}
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		t.Fatalf("rename image file: %v", err)
+	}
+
+	result, err := scanner.Scan(context.Background(), []string{root})
+	if err == nil {
+		t.Fatal("second Scan() error = nil, want remote delete failure")
+	}
+	if result != nil {
+		t.Fatalf("second Scan() result = %+v, want nil on failure", result)
+	}
+
+	if len(deleter.deletedURLs) != 2 {
+		t.Fatalf("deletedURLs = %+v, want 2 attempted deletions", deleter.deletedURLs)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM images`).Scan(&count); err != nil {
+		t.Fatalf("query images count: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("images row count = %d, want 2 because stale image should remain", count)
+	}
+
+	if _, err := imageRepo.FindByPath(oldPath); err != nil {
+		t.Fatalf("FindByPath(oldPath) after failed cleanup error = %v, want stale row to remain", err)
+	}
+	if _, err := imageRepo.FindByPath(newPath); err != nil {
+		t.Fatalf("FindByPath(newPath) after failed cleanup error = %v", err)
 	}
 }
 

@@ -241,6 +241,7 @@ func TestAITagAutoSchedulerScanAndEnqueueResolvesRelativeLargeThumbnailPathToAbs
 	t.Parallel()
 
 	cfg := schedulerTestConfig()
+	cfg.ThumbnailStorageProvider = "minio"
 	cfg.Minio = config.MinioConfig{Endpoint: "http://minio.internal:9000"}
 	images := []domain.Image{{
 		ID:                1,
@@ -272,6 +273,44 @@ func TestAITagAutoSchedulerScanAndEnqueueResolvesRelativeLargeThumbnailPathToAbs
 	}
 	if payload.Path != "http://minio.internal:9000/acg/thumbnails/20260419/1-large.jpg" {
 		t.Fatalf("payload.Path = %q, want resolved absolute thumbnail url", payload.Path)
+	}
+}
+
+func TestAITagAutoSchedulerKeepsRelativeThumbnailPathWhenBaseURLIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	cfg := schedulerTestConfig()
+	cfg.ThumbnailStorageProvider = "cos"
+	cfg.COS = config.COSConfig{BucketURL: "not-a-url"}
+	images := []domain.Image{{
+		ID:                1,
+		Path:              "/images/1.png",
+		ThumbnailLargeUrl: "acg/thumbnails/20260419/1-large.jpg",
+		SourceRoot:        "/images",
+		FileSize:          10,
+	}}
+	finder := &fakeAITagImageFinder{images: images}
+	platform := &fakeAITagTaskPlatform{
+		planResult: &TaskPlatformPlanResult{CreatedTasks: []domain.PlatformTask{{ID: 11, ImageID: 1}}},
+	}
+	scheduler := NewAITagAutoScheduler(finder, platform, cfg)
+
+	queued, err := scheduler.ScanAndEnqueue(context.Background())
+	if err != nil {
+		t.Fatalf("ScanAndEnqueue() error = %v", err)
+	}
+	if queued != 1 {
+		t.Fatalf("queued = %d, want 1", queued)
+	}
+
+	var payload struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(platform.queuedPayloads[0]), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	if payload.Path != "acg/thumbnails/20260419/1-large.jpg" {
+		t.Fatalf("payload.Path = %q, want original relative path", payload.Path)
 	}
 }
 

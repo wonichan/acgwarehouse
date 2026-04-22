@@ -43,6 +43,42 @@ func TestBuildRuntimeManifestPayloadIncludesRequiredFields(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeManifestPayloadPreservesCOSBaseURL(t *testing.T) {
+	t.Parallel()
+
+	payload, err := BuildRuntimeManifestPayload(
+		"http://127.0.0.1:51423",
+		"https://acg-1250000000.cos.ap-shanghai.myqcloud.com/",
+		"admin",
+		"secret",
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeManifestPayload() error = %v", err)
+	}
+	if payload.Go.ThumbnailBaseURL != "https://acg-1250000000.cos.ap-shanghai.myqcloud.com" {
+		t.Fatalf("Go.ThumbnailBaseURL = %q, want trimmed COS base url", payload.Go.ThumbnailBaseURL)
+	}
+}
+
+func TestBuildRuntimeManifestPayloadAllowsEmptyThumbnailBaseURL(t *testing.T) {
+	t.Parallel()
+
+	payload, err := BuildRuntimeManifestPayload(
+		"http://127.0.0.1:51423",
+		"",
+		"",
+		"",
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeManifestPayload() error = %v", err)
+	}
+	if payload.Go.ThumbnailBaseURL != "" {
+		t.Fatalf("Go.ThumbnailBaseURL = %q, want empty", payload.Go.ThumbnailBaseURL)
+	}
+}
+
 func TestWriteRuntimeManifestAtomicUsesTempThenRename(t *testing.T) {
 	manifestPath := filepath.Join(t.TempDir(), "runtime-manifest.json")
 	payload, err := BuildRuntimeManifestPayload("http://127.0.0.1:51423", "http://127.0.0.1:19003", "admin", "secret", time.Now().UTC())

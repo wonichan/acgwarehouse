@@ -48,10 +48,15 @@ type ScannerService struct {
 	imageRepo   repository.ImageRepository
 	jobRepo     repository.JobRepository
 	taskSvc     *TaskPlatformService
+	deleter     thumbnailRemoteDeleter
 	workers     int
 }
 
-func NewScannerService(metadataSvc *MetadataService, imageRepo repository.ImageRepository, jobRepo repository.JobRepository, taskSvc *TaskPlatformService, workers int) *ScannerService {
+type thumbnailRemoteDeleter interface {
+	DeleteByURL(ctx context.Context, objectURL string) error
+}
+
+func NewScannerService(metadataSvc *MetadataService, imageRepo repository.ImageRepository, jobRepo repository.JobRepository, taskSvc *TaskPlatformService, deleter thumbnailRemoteDeleter, workers int) *ScannerService {
 	if workers < 1 {
 		workers = 1
 	}
@@ -60,6 +65,7 @@ func NewScannerService(metadataSvc *MetadataService, imageRepo repository.ImageR
 		imageRepo:   imageRepo,
 		jobRepo:     jobRepo,
 		taskSvc:     taskSvc,
+		deleter:     deleter,
 		workers:     workers,
 	}
 }
@@ -324,6 +330,9 @@ func (s *ScannerService) cleanupStaleImages(ctx context.Context, sourceRoots []s
 			if _, ok := seen[image.Path]; ok {
 				continue
 			}
+			if err := s.deleteStaleRemoteThumbnails(ctx, image); err != nil {
+				return deleted, err
+			}
 			if err := s.imageRepo.Delete(image.ID); err != nil {
 				return deleted, err
 			}
@@ -338,6 +347,39 @@ func (s *ScannerService) cleanupStaleImages(ctx context.Context, sourceRoots []s
 	}
 
 	return deleted, nil
+}
+
+func (s *ScannerService) deleteStaleRemoteThumbnails(ctx context.Context, image domain.Image) error {
+	urls := orderedUniqueThumbnailURLs(image.ThumbnailSmallUrl, image.ThumbnailLargeUrl)
+	if len(urls) == 0 {
+		return nil
+	}
+	if s.deleter == nil {
+		return fmt.Errorf("thumbnail remote deleter is not configured")
+	}
+	for _, objectURL := range urls {
+		if err := s.deleter.DeleteByURL(ctx, objectURL); err != nil {
+			return fmt.Errorf("delete stale remote thumbnail for image %d: %w", image.ID, err)
+		}
+	}
+	return nil
+}
+
+func orderedUniqueThumbnailURLs(values ...string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+	return result
 }
 
 func sameOrChildPath(root, path string) bool {

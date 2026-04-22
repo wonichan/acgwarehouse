@@ -50,7 +50,37 @@ func main() {
 	imageRepo := repository.NewImageRepository(db)
 	jobRepo := repository.NewJobRepository(db)
 	taskPlatformSvc := service.NewTaskPlatformService(repository.NewTaskBatchRepository(db), repository.NewPlatformTaskRepository(db), jobRepo)
-	scannerSvc := service.NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, *workers)
+	provider := cfg.ThumbnailStorageProvider
+	if provider == "" {
+		provider = "cos"
+	}
+
+	var thumbnailDeleter interface {
+		DeleteByURL(ctx context.Context, objectURL string) error
+	}
+
+	switch provider {
+	case "minio":
+		minioSvc, err := service.NewMinioService(
+			cfg.Minio.Endpoint,
+			cfg.Minio.AccessKey,
+			cfg.Minio.SecretKey,
+			cfg.Minio.Bucket,
+			cfg.Minio.UseSSL,
+		)
+		if err != nil {
+			logger.Fatalf("failed to initialize minio storage deleter: %v", err)
+		}
+		thumbnailDeleter = minioSvc
+	default:
+		cosSvc, err := service.NewCOSService(&cfg.COS)
+		if err != nil {
+			logger.Fatalf("failed to initialize cos storage deleter: %v", err)
+		}
+		thumbnailDeleter = cosSvc
+	}
+
+	scannerSvc := service.NewScannerService(metadataSvc, imageRepo, jobRepo, taskPlatformSvc, thumbnailDeleter, *workers)
 
 	result, err := scannerSvc.Scan(context.TODO(), paths)
 	if err != nil {

@@ -148,7 +148,7 @@ func TestExecuteBackfillResolvesRelativeLargeThumbnailPathToAbsoluteURL(t *testi
 	batchRepo := repository.NewTaskBatchRepository(db)
 	taskPlatformSvc := NewTaskPlatformService(batchRepo, taskRepo, jobRepo)
 	svc := NewAIBackfillService(imageRepo, taskPlatformSvc, nil, func() *config.Config {
-		return &config.Config{Minio: config.MinioConfig{Endpoint: "http://minio.internal:9000"}}
+		return &config.Config{ThumbnailStorageProvider: "minio", Minio: config.MinioConfig{Endpoint: "http://minio.internal:9000"}}
 	})
 
 	image := &domain.Image{
@@ -196,6 +196,74 @@ func TestExecuteBackfillResolvesRelativeLargeThumbnailPathToAbsoluteURL(t *testi
 	}
 	if payload.Path != "http://minio.internal:9000/acg/thumbnails/20260419/original-large.jpg" {
 		t.Fatalf("payload.Path = %q, want resolved absolute thumbnail url", payload.Path)
+	}
+}
+
+func TestExecuteBackfillKeepsRelativeThumbnailPathWhenBaseURLIsUnavailable(t *testing.T) {
+	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "ai-backfill-invalid-base.db"))
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := repository.EnsureScanSchema(db); err != nil {
+		t.Fatalf("EnsureScanSchema() error = %v", err)
+	}
+
+	imageRepo := repository.NewImageRepository(db)
+	jobRepo := repository.NewJobRepository(db)
+	taskRepo := repository.NewPlatformTaskRepository(db)
+	batchRepo := repository.NewTaskBatchRepository(db)
+	taskPlatformSvc := NewTaskPlatformService(batchRepo, taskRepo, jobRepo)
+	svc := NewAIBackfillService(imageRepo, taskPlatformSvc, nil, func() *config.Config {
+		return &config.Config{
+			ThumbnailStorageProvider: "cos",
+			COS:                      config.COSConfig{BucketURL: "not-a-url"},
+		}
+	})
+
+	image := &domain.Image{
+		Path:              "/images/original.png",
+		Filename:          "original.png",
+		SourceRoot:        "/images",
+		FileSize:          1024,
+		Width:             100,
+		Height:            100,
+		Format:            "png",
+		PHash:             1,
+		ThumbnailLargeUrl: "acg/thumbnails/20260419/original-large.jpg",
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
+	if _, err := imageRepo.SaveImage(image); err != nil {
+		t.Fatalf("SaveImage() error = %v", err)
+	}
+
+	result, err := svc.ExecuteBackfill(context.Background(), repository.BackfillCandidateFilter{HasTags: boolPtr(false)}, "")
+	if err != nil {
+		t.Fatalf("ExecuteBackfill() error = %v", err)
+	}
+	if !result.Success || result.CreatedTasks != 1 {
+		t.Fatalf("result = %+v, want one successful queued task", result)
+	}
+
+	jobs, err := jobRepo.FindByPlatformTaskID(result.CreatedTaskList[0].ID)
+	if err != nil {
+		t.Fatalf("FindByPlatformTaskID() error = %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("len(jobs) = %d, want 1", len(jobs))
+	}
+
+	var payload struct {
+		ImageID int64  `json:"image_id"`
+		Path    string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(jobs[0].Payload), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	if payload.Path != "acg/thumbnails/20260419/original-large.jpg" {
+		t.Fatalf("payload.Path = %q, want original relative path", payload.Path)
 	}
 }
 

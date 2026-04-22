@@ -100,8 +100,9 @@ func TestAITagTriggerUsesAbsoluteURLForRelativeLargeThumbnailPath(t *testing.T) 
 	t.Parallel()
 
 	router, repos := newAITagHandlerTestRouterWithConfig(t, &config.Config{
-		AI: config.AIConfig{AutoScanBatchSize: 100},
-		Minio: config.MinioConfig{Endpoint: "http://minio.internal:9000"},
+		AI:                       config.AIConfig{AutoScanBatchSize: 100},
+		ThumbnailStorageProvider: "minio",
+		Minio:                    config.MinioConfig{Endpoint: "http://minio.internal:9000"},
 	})
 	if _, err := repos.db.Exec(`UPDATE images SET thumbnail_large_url = ? WHERE id = 1`, "acg/thumbnails/20260419/1-large.jpg"); err != nil {
 		t.Fatalf("seed large thumbnail url: %v", err)
@@ -134,6 +135,47 @@ func TestAITagTriggerUsesAbsoluteURLForRelativeLargeThumbnailPath(t *testing.T) 
 	}
 	if payload.Path != "http://minio.internal:9000/acg/thumbnails/20260419/1-large.jpg" {
 		t.Fatalf("payload.Path = %q, want resolved absolute thumbnail url", payload.Path)
+	}
+}
+
+func TestAITagTriggerKeepsRelativeThumbnailPathWhenBaseURLIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newAITagHandlerTestRouterWithConfig(t, &config.Config{
+		ThumbnailStorageProvider: "cos",
+		COS:                      config.COSConfig{BucketURL: "not-a-url"},
+	})
+	if _, err := repos.db.Exec(`UPDATE images SET thumbnail_large_url = ? WHERE id = 1`, "acg/thumbnails/20260419/1-large.jpg"); err != nil {
+		t.Fatalf("seed large thumbnail url: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/images/1/ai-tags", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	var resp struct {
+		JobIDs []int64 `json:"job_ids"`
+	}
+	decodeAIJSONBody(t, w.Body.Bytes(), &resp)
+	if len(resp.JobIDs) != 1 {
+		t.Fatalf("job_ids = %+v, want one job id", resp.JobIDs)
+	}
+
+	job, err := repos.jobRepo.FindByID(resp.JobIDs[0])
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	var payload worker.AITagPayload
+	if err := json.Unmarshal([]byte(job.Payload), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(payload) error = %v", err)
+	}
+	if payload.Path != "acg/thumbnails/20260419/1-large.jpg" {
+		t.Fatalf("payload.Path = %q, want original relative path", payload.Path)
 	}
 }
 

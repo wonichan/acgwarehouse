@@ -29,6 +29,25 @@ void main() {
         expect(result.appliedAdminBasicAuth, 'Basic ZGVtbzpkZW1v');
       });
 
+    test('loads COS thumbnail_base_url from runtime manifest', () async {
+      final loader = RuntimeManifestLoader(
+        readText: (_) async =>
+            '{"version":1,"generated_at":"2026-04-22T10:00:00Z","go":{"base_url":"http://127.0.0.1:51423","thumbnail_base_url":"https://acg-1250000000.cos.ap-shanghai.myqcloud.com","ready":true}}',
+      );
+
+      final result = await loader.load(
+        isDevelopmentMode: false,
+        isDesktopTarget: true,
+      );
+
+      expect(result.source, RuntimeManifestSource.manifest);
+      expect(result.appliedBaseUrl, 'http://127.0.0.1:51423');
+      expect(
+        result.appliedThumbnailBaseUrl,
+        'https://acg-1250000000.cos.ap-shanghai.myqcloud.com',
+      );
+    });
+
     test(
       'uses localhost fallback only in development when manifest missing',
       () async {

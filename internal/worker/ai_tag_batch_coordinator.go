@@ -32,7 +32,7 @@ type aiTagBatchSubmission struct {
 
 func newAITagBatchCoordinator(maxBatchSize int, waitWindow time.Duration) *aiTagBatchCoordinator {
 	if maxBatchSize <= 0 {
-		maxBatchSize = aiTagBatchSize
+		maxBatchSize = AiTagBatchSize
 	}
 	if waitWindow <= 0 {
 		waitWindow = defaultAITagBatchWaitWindow

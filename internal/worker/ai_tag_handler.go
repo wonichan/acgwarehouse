@@ -16,7 +16,7 @@ import (
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
-const aiTagBatchSize = 4
+const AiTagBatchSize = 3
 
 const (
 	aiTagBatchModeSingle = "single"
@@ -132,7 +132,7 @@ func RegisterBatchAITagHandler(manager *Manager, repo aiTagBatchRepo, client ai.
 func NewBatchAITagJobHandler(_ aiTagBatchRepo, client ai.AIProvider, obsRepo repository.TagObservationRepository, governance TagGovernanceMerger, _ aiTagBatchPlatformSvc, _ aiTagBatchTaskRepo, aiTagChecker AITagPresenceChecker, batchMode string, coordinators ...*aiTagBatchCoordinator) JobFunc {
 	coordinator := firstAITagBatchCoordinator(coordinators...)
 	if coordinator == nil {
-		coordinator = newAITagBatchCoordinator(aiTagBatchSize, defaultAITagBatchWaitWindow)
+		coordinator = newAITagBatchCoordinator(AiTagBatchSize, defaultAITagBatchWaitWindow)
 	}
 	return func(ctx context.Context, id int64, payload string) error {
 		return handleQueuedAITagGeneration(ctx, id, payload, client, obsRepo, governance, aiTagChecker, batchMode, coordinator)

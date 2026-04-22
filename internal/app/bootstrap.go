@@ -174,35 +174,10 @@ func (a *App) registerThumbnailHandler() {
 	thumbnailSvc := service.NewThumbnailService()
 	taskPlatformSvc := a.newTaskPlatformService()
 
-	var uploader worker.ThumbnailUploader
-	provider := a.config.ThumbnailStorageProvider
-	if provider == "" {
-		provider = "cos"
-	}
-
-	switch provider {
-	case "minio":
-		minioSvc, err := service.NewMinioService(
-			a.config.Minio.Endpoint,
-			a.config.Minio.AccessKey,
-			a.config.Minio.SecretKey,
-			a.config.Minio.Bucket,
-			a.config.Minio.UseSSL,
-		)
-		if err != nil {
-			logger.Errorf("thumbnail job handler not registered: minio init failed: %v", err)
-			return
-		}
-		uploader = minioSvc
-		logger.Infof("缩略图存储使用 MinIO: endpoint=%s bucket=%s", a.config.Minio.Endpoint, a.config.Minio.Bucket)
-	default:
-		cosSvc, err := service.NewCOSService(&a.config.COS)
-		if err != nil {
-			logger.Errorf("thumbnail job handler not registered: cos init failed: %v", err)
-			return
-		}
-		uploader = cosSvc
-		logger.Infof("缩略图存储使用 COS: bucket=%s", a.config.COS.BucketURL)
+	uploader, err := a.newThumbnailUploader()
+	if err != nil {
+		logger.Errorf("thumbnail job handler not registered: storage init failed: %v", err)
+		return
 	}
 
 	thumbnailHandler := worker.NewThumbnailHandler(thumbnailSvc, uploader, a.imageRepo)
@@ -278,10 +253,45 @@ func (a *App) createImageImportedHandler(taskPlatformSvc *service.TaskPlatformSe
 // registerScanHandler registers the manual scan handler.
 func (a *App) registerScanHandler() {
 	metadataSvc := service.NewMetadataService()
-	scannerSvc := service.NewScannerService(metadataSvc, a.imageRepo, a.jobRepo, a.newTaskPlatformService(), 4)
+	uploader, err := a.newThumbnailUploader()
+	if err != nil {
+		logger.Errorf("manual_scan handler not registered: storage init failed: %v", err)
+		return
+	}
+	scannerSvc := service.NewScannerService(metadataSvc, a.imageRepo, a.jobRepo, a.newTaskPlatformService(), uploader, 4)
 	scanHandler := worker.NewScanHandler(scannerSvc, a.config.Storage.ScanRoots)
 	a.jobManager.RegisterHandler("manual_scan", scanHandler.Handle)
 	logger.Infof("已注册 manual_scan 处理器 - 支持手动触发扫描任务")
+}
+
+func (a *App) newThumbnailUploader() (worker.ThumbnailUploader, error) {
+	provider := a.config.ThumbnailStorageProvider
+	if provider == "" {
+		provider = "cos"
+	}
+
+	switch provider {
+	case "minio":
+		minioSvc, err := service.NewMinioService(
+			a.config.Minio.Endpoint,
+			a.config.Minio.AccessKey,
+			a.config.Minio.SecretKey,
+			a.config.Minio.Bucket,
+			a.config.Minio.UseSSL,
+		)
+		if err != nil {
+			return nil, err
+		}
+		logger.Infof("缩略图存储使用 MinIO: endpoint=%s bucket=%s", a.config.Minio.Endpoint, a.config.Minio.Bucket)
+		return minioSvc, nil
+	default:
+		cosSvc, err := service.NewCOSService(&a.config.COS)
+		if err != nil {
+			return nil, err
+		}
+		logger.Infof("缩略图存储使用 COS: bucket=%s", a.config.COS.BucketURL)
+		return cosSvc, nil
+	}
 }
 
 // registerAIHandlers registers AI-related handlers if configured.
@@ -298,7 +308,7 @@ func (a *App) registerAIHandlers() {
 
 	client := ai.NewRateLimitedClient(provider, a.config.AI.RequestsPerMinute)
 	a.aiRateLimitedClient = client
-	batchCoordinator := worker.NewAITagBatchCoordinator(4, 2*time.Second)
+	batchCoordinator := worker.NewAITagBatchCoordinator(0, 2*time.Second)
 
 	aiHandler := worker.NewBatchAITagJobHandler(a.jobRepo, client, a.obsRepo, a.governanceSvc, a.newTaskPlatformService(), repository.NewPlatformTaskRepository(a.db), a.imageTagRepo, a.config.AI.DoubaoBatchMode, batchCoordinator)
 	aiRegenerationHandler := worker.NewAITagRegenerationJobHandler(client, a.obsRepo, a.governanceSvc)

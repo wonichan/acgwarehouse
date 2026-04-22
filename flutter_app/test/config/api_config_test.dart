@@ -90,5 +90,26 @@ void main() {
         'https://cdn.example.com/acg/thumbnails/example-large.jpg',
       );
     });
+
+    test('resolveThumbnailUrl builds COS URL from relative path', () {
+      expect(
+        ApiConfig.resolveThumbnailUrl(
+          'thumbnails/example-large.jpg',
+          thumbnailBaseUrl:
+              'https://acg-1250000000.cos.ap-shanghai.myqcloud.com',
+        ),
+        'https://acg-1250000000.cos.ap-shanghai.myqcloud.com/thumbnails/example-large.jpg',
+      );
+    });
+
+    test('resolveThumbnailUrl keeps relative path when base URL is empty', () {
+      expect(
+        ApiConfig.resolveThumbnailUrl(
+          'acg/thumbnails/20260419/example-large.jpg',
+          thumbnailBaseUrl: '',
+        ),
+        'acg/thumbnails/20260419/example-large.jpg',
+      );
+    });
   });
 }

@@ -27,7 +27,24 @@ func ResolveThumbnailBaseURL(cfg *config.Config) string {
 	if cfg == nil {
 		return ""
 	}
-	return BuildThumbnailBaseURL(cfg.Minio.Endpoint, cfg.Minio.UseSSL)
+
+	provider := strings.ToLower(strings.TrimSpace(cfg.ThumbnailStorageProvider))
+	switch provider {
+	case "minio":
+		base := BuildThumbnailBaseURL(cfg.Minio.Endpoint, cfg.Minio.UseSSL)
+		if !isValidHTTPBaseURL(base) {
+			return ""
+		}
+		return base
+	case "cos":
+		base := strings.TrimRight(strings.TrimSpace(cfg.COS.BucketURL), "/")
+		if !isValidHTTPBaseURL(base) {
+			return ""
+		}
+		return base
+	default:
+		return ""
+	}
 }
 
 func ResolveThumbnailURL(baseURL, raw string) string {
@@ -39,7 +56,7 @@ func ResolveThumbnailURL(baseURL, raw string) string {
 		return trimmed
 	}
 	resolvedBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if resolvedBase == "" {
+	if !isValidHTTPBaseURL(resolvedBase) {
 		return trimmed
 	}
 	relative := strings.TrimLeft(strings.ReplaceAll(trimmed, "\\", "/"), "/")
@@ -47,6 +64,20 @@ func ResolveThumbnailURL(baseURL, raw string) string {
 		return trimmed
 	}
 	return resolvedBase + "/" + relative
+}
+
+func isValidHTTPBaseURL(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed == nil {
+		return false
+	}
+	if !parsed.IsAbs() || parsed.Host == "" {
+		return false
+	}
+	return parsed.Scheme == "http" || parsed.Scheme == "https"
 }
 
 func NormalizeThumbnailStoragePath(raw string) string {
