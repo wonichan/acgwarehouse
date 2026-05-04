@@ -47,6 +47,23 @@ func ResolveThumbnailBaseURL(cfg *config.Config) string {
 	}
 }
 
+// ResolveRelativeThumbnailBaseURL resolves the base URL used for relative thumbnail paths.
+// Compatibility rule:
+// 1) If MinIO base URL is configured and valid, always use it for relative paths.
+// 2) Otherwise fallback to provider-resolved base URL (e.g. COS when provider=cos).
+func ResolveRelativeThumbnailBaseURL(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+
+	minioBase := BuildThumbnailBaseURL(cfg.Minio.Endpoint, cfg.Minio.UseSSL)
+	if isValidHTTPBaseURL(minioBase) {
+		return minioBase
+	}
+
+	return ResolveThumbnailBaseURL(cfg)
+}
+
 func ResolveThumbnailURL(baseURL, raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

@@ -359,6 +359,8 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final canApplyCurrentDraft =
+        !_draftFilter.isEmpty || !widget.initialFilter.isEmpty;
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -411,25 +413,26 @@ class _FluentTagFilterPaneState extends State<FluentTagFilterPane> {
           _buildPendingTagsToggle(context),
           const SizedBox(height: 12),
 
-          if (!_draftFilter.isEmpty)
+          if (canApplyCurrentDraft)
             Row(
               children: [
-                Button(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(FluentIcons.clear, size: 14),
-                      const SizedBox(width: 6),
-                      const Text('清空筛选'),
-                    ],
+                if (!_draftFilter.isEmpty)
+                  Button(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(FluentIcons.clear, size: 14),
+                        const SizedBox(width: 6),
+                        const Text('清空筛选'),
+                      ],
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _draftFilter = _draftFilter.clear();
+                      });
+                    },
                   ),
-                  onPressed: () {
-                    setState(() {
-                      _draftFilter = _draftFilter.clear();
-                    });
-                  },
-                ),
-                const SizedBox(width: 8),
+                if (!_draftFilter.isEmpty) const SizedBox(width: 8),
                 FilledButton(
                   child: const Text('应用筛选'),
                   onPressed: () {

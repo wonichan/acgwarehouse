@@ -231,7 +231,7 @@ func (a *App) Run() error {
 	}
 	payload, err := BuildRuntimeManifestPayload(
 		manifestBaseURL,
-		service.ResolveThumbnailBaseURL(a.config),
+		service.ResolveRelativeThumbnailBaseURL(a.config),
 		a.config.Admin.Username,
 		a.config.Admin.Password,
 		time.Now().UTC(),

@@ -310,7 +310,7 @@ void main() {
     expect(appliedFilter!.hasTags, isNull);
   });
 
-  testWidgets('clear filter clears normal and special states together', (
+  testWidgets('clear filter keeps apply button to submit empty filter', (
     tester,
   ) async {
     final client = MockClient((request) async {
@@ -331,6 +331,8 @@ void main() {
       TagService(baseUrl: 'http://localhost:8080', client: client),
     );
 
+    GalleryFilterState? appliedFilter;
+
     await tester.pumpWidget(
       fluent.FluentApp(
         home: MultiProvider(
@@ -343,7 +345,9 @@ void main() {
                 exactTagIds: {1},
                 hasPendingTags: true,
               ),
-              onApplyFilter: (_) {},
+              onApplyFilter: (value) {
+                appliedFilter = value;
+              },
             ),
           ),
         ),
@@ -356,7 +360,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('清空筛选'), findsNothing);
-    expect(find.text('应用筛选'), findsNothing);
+    expect(find.text('应用筛选'), findsOneWidget);
+
+    await tester.tap(find.text('应用筛选'));
+    await tester.pumpAndSettle();
+
+    expect(appliedFilter, isNotNull);
+    expect(appliedFilter!.isEmpty, isTrue);
     expect(find.byType(fluent.ToggleSwitch).first, findsOneWidget);
     expect(find.byType(fluent.ToggleSwitch).at(1), findsOneWidget);
   });

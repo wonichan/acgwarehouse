@@ -267,7 +267,7 @@ func (h *AITagHandler) enqueueAITagBatch(ctx context.Context, sourceType, taskTy
 		CreatedTasks: len(plan.CreatedTasks),
 		SkippedTasks: len(items) - len(plan.CreatedTasks),
 	}
-	thumbnailBaseURL := service.ResolveThumbnailBaseURL(h.currentConfig())
+	thumbnailBaseURL := service.ResolveRelativeThumbnailBaseURL(h.currentConfig())
 	for _, task := range plan.CreatedTasks {
 		image, err := h.imageRepo.FindByID(task.ImageID)
 		if err != nil {

@@ -1594,6 +1594,78 @@ func TestBackfillCountsWithHasTagsFalseFilter(t *testing.T) {
 	}
 }
 
+func TestBackfillActiveTaskStatusesDriveEligibility(t *testing.T) {
+	t.Parallel()
+
+	db, repo := newImageRepositoryTestDB(t)
+	ctx := context.Background()
+
+	if _, err := db.Exec(`INSERT INTO task_batches (id, source_type, summary_label, status) VALUES (1, 'manual_batch', 'test', 'running')`); err != nil {
+		t.Fatalf("insert batch: %v", err)
+	}
+
+	cases := []struct {
+		name   string
+		status string
+		active bool
+	}{
+		{name: "pending", status: domain.PlatformTaskStatusPending, active: true},
+		{name: "queued", status: domain.PlatformTaskStatusQueued, active: true},
+		{name: "running", status: domain.PlatformTaskStatusRunning, active: true},
+		{name: "completed", status: domain.PlatformTaskStatusCompleted},
+		{name: "failed", status: domain.PlatformTaskStatusFailed},
+		{name: "cancelled", status: domain.PlatformTaskStatusCancelled},
+		{name: "skipped", status: domain.PlatformTaskStatusSkipped},
+	}
+
+	images := make([]*domain.Image, 0, len(cases))
+	for i, tc := range cases {
+		img := &domain.Image{
+			Path:       fmt.Sprintf("/active-status/%d.png", i),
+			Filename:   fmt.Sprintf("%d.png", i),
+			SourceRoot: "/active-status",
+			Format:     "png",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		if _, err := repo.SaveImage(img); err != nil {
+			t.Fatalf("save image %s: %v", tc.name, err)
+		}
+		images = append(images, img)
+		if _, err := db.Exec(`
+			INSERT INTO platform_tasks (batch_id, image_id, task_type, source_type, status, dedupe_key, image_version_key)
+			VALUES (1, ?, ?, 'manual_batch', ?, ?, ?)
+		`, img.ID, domain.PlatformTaskTypeAITagGeneration, tc.status, "dk-"+tc.name, "vk-"+tc.name); err != nil {
+			t.Fatalf("insert task %s: %v", tc.name, err)
+		}
+	}
+
+	hasTagsFalse := false
+	filter := BackfillCandidateFilter{HasTags: &hasTagsFalse}
+
+	skippedActive, err := repo.CountBackfillSkippedWithActiveTask(ctx, filter)
+	if err != nil {
+		t.Fatalf("CountBackfillSkippedWithActiveTask() error = %v", err)
+	}
+	if skippedActive != 3 {
+		t.Fatalf("skippedActive = %d, want 3", skippedActive)
+	}
+
+	candidates, err := repo.FindBackfillCandidates(ctx, filter)
+	if err != nil {
+		t.Fatalf("FindBackfillCandidates() error = %v", err)
+	}
+	for i, tc := range cases {
+		contains := containsImageID(candidates, images[i].ID)
+		if tc.active && contains {
+			t.Fatalf("%s task image should not be eligible, got %+v", tc.name, imageIDs(candidates))
+		}
+		if !tc.active && !contains {
+			t.Fatalf("%s task image should be eligible, got %+v", tc.name, imageIDs(candidates))
+		}
+	}
+}
+
 func seedAITagSourcesForFindImagesWithoutAITags(t *testing.T, db *sql.DB, imageIDs []int64) {
 	t.Helper()
 

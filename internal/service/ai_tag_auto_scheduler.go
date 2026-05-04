@@ -108,7 +108,7 @@ func (s *AITagAutoScheduler) ScanAndEnqueue(ctx context.Context) (int, error) {
 	if s == nil || s.config == nil || !s.config.AI.AutoAITagOnImport {
 		return 0, nil
 	}
-	thumbnailBaseURL := ResolveThumbnailBaseURL(s.config)
+	thumbnailBaseURL := ResolveRelativeThumbnailBaseURL(s.config)
 	if s.imageFinder == nil || s.taskPlatform == nil {
 		return 0, nil
 	}

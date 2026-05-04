@@ -130,6 +130,42 @@ func TestResolveThumbnailBaseURLReturnsEmptyForUnknownProvider(t *testing.T) {
 	}
 }
 
+func TestResolveRelativeThumbnailBaseURLPrefersMinIOWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		ThumbnailStorageProvider: "cos",
+		COS: config.COSConfig{
+			BucketURL: "https://acg-1250000000.cos.ap-shanghai.myqcloud.com",
+		},
+		Minio: config.MinioConfig{
+			Endpoint: "minio.internal:9000",
+			UseSSL:   false,
+		},
+	}
+
+	got := ResolveRelativeThumbnailBaseURL(cfg)
+	if got != "http://minio.internal:9000" {
+		t.Fatalf("ResolveRelativeThumbnailBaseURL() = %q, want %q", got, "http://minio.internal:9000")
+	}
+}
+
+func TestResolveRelativeThumbnailBaseURLFallsBackToProviderBaseWhenMinIOMissing(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		ThumbnailStorageProvider: "cos",
+		COS: config.COSConfig{
+			BucketURL: "https://acg-1250000000.cos.ap-shanghai.myqcloud.com",
+		},
+	}
+
+	got := ResolveRelativeThumbnailBaseURL(cfg)
+	if got != "https://acg-1250000000.cos.ap-shanghai.myqcloud.com" {
+		t.Fatalf("ResolveRelativeThumbnailBaseURL() = %q, want %q", got, "https://acg-1250000000.cos.ap-shanghai.myqcloud.com")
+	}
+}
+
 func TestResolveThumbnailURLKeepsAbsoluteURLWithoutRewriting(t *testing.T) {
 	t.Parallel()
 
