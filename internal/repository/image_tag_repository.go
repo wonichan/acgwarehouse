@@ -123,8 +123,8 @@ func (r *imageTagRepository) HasAITags(ctx context.Context, imageID int64) (bool
 	err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*)
 		FROM image_tags
-		WHERE image_id = ? AND source = ? AND review_state != 'rejected'
-	`, imageID, domain.ImageTagSourceAI).Scan(&count)
+		WHERE image_id = ? AND source = ? AND review_state != ?
+	`, imageID, domain.ImageTagSourceAI, domain.ReviewStateRejected).Scan(&count)
 	if err != nil {
 		return false, err
 	}
@@ -269,11 +269,11 @@ func (r *imageTagRepository) GetTagStats(ctx context.Context, tagID int64) (*Tag
 	err := r.db.QueryRowContext(ctx, `
 		SELECT 
 			COUNT(*) as usage_count,
-			COALESCE(SUM(CASE WHEN review_state = 'confirmed' THEN 1 ELSE 0 END), 0) as confirmed_count,
-			COALESCE(SUM(CASE WHEN review_state = 'pending' THEN 1 ELSE 0 END), 0) as pending_count,
-			COALESCE(SUM(CASE WHEN review_state = 'rejected' THEN 1 ELSE 0 END), 0) as rejected_count
+			COALESCE(SUM(CASE WHEN review_state = ? THEN 1 ELSE 0 END), 0) as confirmed_count,
+			COALESCE(SUM(CASE WHEN review_state = ? THEN 1 ELSE 0 END), 0) as pending_count,
+			COALESCE(SUM(CASE WHEN review_state = ? THEN 1 ELSE 0 END), 0) as rejected_count
 		FROM image_tags WHERE tag_id = ?
-	`, tagID).Scan(&stats.UsageCount, &stats.ConfirmedCount, &stats.PendingCount, &stats.RejectedCount)
+	`, domain.ReviewStateConfirmed, domain.ReviewStatePending, domain.ReviewStateRejected, tagID).Scan(&stats.UsageCount, &stats.ConfirmedCount, &stats.PendingCount, &stats.RejectedCount)
 	if err != nil {
 		return nil, err
 	}

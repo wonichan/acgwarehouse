@@ -157,6 +157,48 @@ func TestTagAdminServiceMergeTagsUsesExplicitTargetWithoutFuzzySelection(t *test
 	}
 }
 
+func TestTagAdminServiceMergeTagsDelegatesMutationToAdminStore(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+	store := &fakeTagAdminStore{
+		mergeResult: &repository.TagAdminMergeResult{
+			SourceTagID:               1,
+			TargetTagID:               2,
+			MigratedImageAssociations: 2,
+			MigratedAliases:           1,
+		},
+	}
+	service.adminStore = store
+
+	result, err := service.MergeTags(context.Background(), 1, 2)
+	if err != nil {
+		t.Fatalf("MergeTags() error = %v", err)
+	}
+	if store.mergeCalls != 1 || store.mergeSourceID != 1 || store.mergeTargetID != 2 {
+		t.Fatalf("store merge call = count:%d source:%d target:%d", store.mergeCalls, store.mergeSourceID, store.mergeTargetID)
+	}
+	if result.MigratedImageAssociations != 2 || result.MigratedAliases != 1 {
+		t.Fatalf("MergeTags() result = %+v", result)
+	}
+}
+
+func TestTagAdminServiceMergeTagsRejectsInvalidBeforeAdminStore(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+	store := &fakeTagAdminStore{}
+	service.adminStore = store
+
+	_, err := service.MergeTags(context.Background(), 4, 7)
+	if !errors.Is(err, ErrMergeSourceHasChildren) {
+		t.Fatalf("MergeTags() error = %v, want %v", err, ErrMergeSourceHasChildren)
+	}
+	if store.mergeCalls != 0 {
+		t.Fatalf("store merge calls = %d, want 0", store.mergeCalls)
+	}
+}
+
 func TestTagAdminServiceGetDeletePreviewReportsUsedTagWithoutBlocking(t *testing.T) {
 	t.Parallel()
 
@@ -241,6 +283,31 @@ func TestTagAdminServiceGetDeletePreviewCountsRejectedOnlyAssociationWithoutBloc
 	}
 	if preview.AffectedImageCount != 1 {
 		t.Fatalf("affected_image_count = %d, want 1", preview.AffectedImageCount)
+	}
+}
+
+func TestTagAdminServiceDeleteTagDelegatesMutationToAdminStore(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+	store := &fakeTagAdminStore{
+		deleteResult: &repository.TagAdminDeleteResult{
+			DeletedTagID:       1,
+			AffectedImageCount: 2,
+			DetachedChildCount: 1,
+		},
+	}
+	service.adminStore = store
+
+	result, err := service.DeleteTag(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("DeleteTag() error = %v", err)
+	}
+	if store.deleteCalls != 1 || store.deleteTagID != 1 {
+		t.Fatalf("store delete call = count:%d tag:%d", store.deleteCalls, store.deleteTagID)
+	}
+	if result.AffectedImageCount != 2 || result.DetachedChildCount != 1 {
+		t.Fatalf("DeleteTag() result = %+v", result)
 	}
 }
 
@@ -537,58 +604,6 @@ func TestTagAdminServiceBatchFindChildrenAllowsNullPrimaryCategory(t *testing.T)
 	}
 }
 
-func TestQueryTagByIDTxAllowsNullPrimaryCategory(t *testing.T) {
-	t.Parallel()
-
-	service, _, _, _ := newTagAdminServiceForTest(t)
-	if _, err := service.db.Exec(`UPDATE tags SET primary_category = NULL WHERE id = ?`, 1); err != nil {
-		t.Fatalf("set primary_category null: %v", err)
-	}
-
-	tx, err := service.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("BeginTx() error = %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	tag, err := queryTagByIDTx(context.Background(), tx, 1)
-	if err != nil {
-		t.Fatalf("queryTagByIDTx() error = %v", err)
-	}
-	if tag.ID != 1 {
-		t.Fatalf("tag.ID = %d, want 1", tag.ID)
-	}
-	if tag.PrimaryCategory != "" {
-		t.Fatalf("PrimaryCategory = %q, want empty string", tag.PrimaryCategory)
-	}
-}
-
-func TestQueryChildrenByParentTxAllowsNullPrimaryCategory(t *testing.T) {
-	t.Parallel()
-
-	service, _, _, _ := newTagAdminServiceForTest(t)
-	if _, err := service.db.Exec(`UPDATE tags SET primary_category = NULL WHERE id = ?`, 5); err != nil {
-		t.Fatalf("set primary_category null: %v", err)
-	}
-
-	tx, err := service.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("BeginTx() error = %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	children, err := queryChildrenByParentTx(context.Background(), tx, 4)
-	if err != nil {
-		t.Fatalf("queryChildrenByParentTx() error = %v", err)
-	}
-	if len(children) != 1 || children[0].ID != 5 {
-		t.Fatalf("children = %+v, want only child 5", children)
-	}
-	if children[0].PrimaryCategory != "" {
-		t.Fatalf("PrimaryCategory = %q, want empty string", children[0].PrimaryCategory)
-	}
-}
-
 func TestTagAdminServiceChangeLevelUpdatesHierarchy(t *testing.T) {
 	t.Parallel()
 
@@ -604,6 +619,26 @@ func TestTagAdminServiceChangeLevelUpdatesHierarchy(t *testing.T) {
 	}
 	if updated.ParentID == nil || *updated.ParentID != newRoot.ID {
 		t.Fatalf("ParentID = %v, want %d", updated.ParentID, newRoot.ID)
+	}
+}
+
+func TestTagAdminServiceChangeLevelDelegatesMutationToAdminStore(t *testing.T) {
+	t.Parallel()
+
+	service, tagRepo, _, _ := newTagAdminServiceForTest(t)
+	newRoot := mustSaveAdminTag(t, tagRepo, &domain.Tag{PreferredLabel: "meta-root", Slug: "meta-root", Level: domain.TagLevelRoot})
+	store := &fakeTagAdminStore{}
+	service.adminStore = store
+
+	updated, err := service.ChangeLevel(context.Background(), 3, domain.TagLevelParent, &newRoot.ID)
+	if err != nil {
+		t.Fatalf("ChangeLevel() error = %v", err)
+	}
+	if store.changeCalls != 1 || store.changeTagID != 3 {
+		t.Fatalf("store change call = count:%d tag:%d", store.changeCalls, store.changeTagID)
+	}
+	if updated.Level != domain.TagLevelParent || updated.ParentID == nil || *updated.ParentID != newRoot.ID {
+		t.Fatalf("ChangeLevel() result = %+v", updated)
 	}
 }
 
@@ -681,6 +716,25 @@ func TestTagAdminServiceReparentTagAllowsChildDetach(t *testing.T) {
 	}
 	if updated.ParentID != nil {
 		t.Fatalf("ParentID = %v, want nil", updated.ParentID)
+	}
+}
+
+func TestTagAdminServiceReparentTagDelegatesMutationToAdminStore(t *testing.T) {
+	t.Parallel()
+
+	service, _, _, _ := newTagAdminServiceForTest(t)
+	store := &fakeTagAdminStore{}
+	service.adminStore = store
+
+	updated, err := service.ReparentTag(context.Background(), 5, nil)
+	if err != nil {
+		t.Fatalf("ReparentTag() error = %v", err)
+	}
+	if store.reparentCalls != 1 || store.reparentTagID != 5 {
+		t.Fatalf("store reparent call = count:%d tag:%d", store.reparentCalls, store.reparentTagID)
+	}
+	if updated.ParentID != nil {
+		t.Fatalf("ReparentTag() result ParentID = %v, want nil", updated.ParentID)
 	}
 }
 
@@ -787,6 +841,67 @@ func seedTagAdminData(t *testing.T, db *sql.DB) {
 
 func int64Ptr(v int64) *int64 {
 	return &v
+}
+
+type fakeTagAdminStore struct {
+	changeResult *domain.Tag
+	changeErr    error
+	changeCalls  int
+	changeTagID  int64
+
+	countResult int64
+	countErr    error
+
+	deleteResult *repository.TagAdminDeleteResult
+	deleteErr    error
+	deleteCalls  int
+	deleteTagID  int64
+
+	mergeResult   *repository.TagAdminMergeResult
+	mergeErr      error
+	mergeCalls    int
+	mergeSourceID int64
+	mergeTargetID int64
+
+	reparentResult *domain.Tag
+	reparentErr    error
+	reparentCalls  int
+	reparentTagID  int64
+}
+
+func (s *fakeTagAdminStore) ChangeTagLevel(_ context.Context, tag *domain.Tag, _ []*domain.Tag) (*domain.Tag, error) {
+	s.changeCalls++
+	s.changeTagID = tag.ID
+	if s.changeResult != nil || s.changeErr != nil {
+		return s.changeResult, s.changeErr
+	}
+	return tag, nil
+}
+
+func (s *fakeTagAdminStore) CountDirectTagAssociations(_ context.Context, _ int64) (int64, error) {
+	return s.countResult, s.countErr
+}
+
+func (s *fakeTagAdminStore) DeleteTag(_ context.Context, tagID int64) (*repository.TagAdminDeleteResult, error) {
+	s.deleteCalls++
+	s.deleteTagID = tagID
+	return s.deleteResult, s.deleteErr
+}
+
+func (s *fakeTagAdminStore) MergeTags(_ context.Context, sourceTagID, targetTagID int64) (*repository.TagAdminMergeResult, error) {
+	s.mergeCalls++
+	s.mergeSourceID = sourceTagID
+	s.mergeTargetID = targetTagID
+	return s.mergeResult, s.mergeErr
+}
+
+func (s *fakeTagAdminStore) ReparentTag(_ context.Context, tag *domain.Tag) (*domain.Tag, error) {
+	s.reparentCalls++
+	s.reparentTagID = tag.ID
+	if s.reparentResult != nil || s.reparentErr != nil {
+		return s.reparentResult, s.reparentErr
+	}
+	return tag, nil
 }
 
 func assertSameInt64Set(t *testing.T, got, want []int64) {

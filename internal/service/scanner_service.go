@@ -45,18 +45,24 @@ type ScanResult struct {
 
 type ScannerService struct {
 	metadataSvc *MetadataService
-	imageRepo   repository.ImageRepository
+	imageRepo   scannerImageStore
 	jobRepo     repository.JobRepository
 	taskSvc     *TaskPlatformService
 	deleter     thumbnailRemoteDeleter
 	workers     int
 }
 
+type scannerImageStore interface {
+	SaveImage(image *domain.Image) (isNew bool, err error)
+	FindBySourceRootsAfterID(limit int, lastID int64, sourceRoots []string) ([]domain.Image, error)
+	Delete(id int64) error
+}
+
 type thumbnailRemoteDeleter interface {
 	DeleteByURL(ctx context.Context, objectURL string) error
 }
 
-func NewScannerService(metadataSvc *MetadataService, imageRepo repository.ImageRepository, jobRepo repository.JobRepository, taskSvc *TaskPlatformService, deleter thumbnailRemoteDeleter, workers int) *ScannerService {
+func NewScannerService(metadataSvc *MetadataService, imageRepo scannerImageStore, jobRepo repository.JobRepository, taskSvc *TaskPlatformService, deleter thumbnailRemoteDeleter, workers int) *ScannerService {
 	if workers < 1 {
 		workers = 1
 	}

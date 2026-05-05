@@ -34,6 +34,8 @@ func (a *App) initRepositories() {
 	a.imageTagRepo = repository.NewImageTagRepository(a.db)
 	a.searchRepo = repository.NewSearchRepository(a.db)
 	a.collectionRepo = repository.NewCollectionRepository(a.db)
+	a.taskRepo = repository.NewPlatformTaskRepository(a.db)
+	a.taskBatchRepo = repository.NewTaskBatchRepository(a.db)
 }
 
 // initServices initializes all services.
@@ -42,6 +44,9 @@ func (a *App) initServices() {
 	a.searchSvc = service.NewSearchService(a.imageRepo, a.tagRepo, a.searchRepo)
 	a.collectionSvc = service.NewCollectionService(a.collectionRepo)
 	a.batchSvc = service.NewBatchService(a.imageRepo, a.tagRepo, a.imageTagRepo, a.collectionRepo)
+	a.taskPlatformSvc = service.NewTaskPlatformService(a.taskBatchRepo, a.taskRepo, a.jobRepo)
+	a.tagAdminSvc = service.NewTagAdminService(a.db, a.tagRepo, a.aliasRepo, a.imageTagRepo)
+	a.searchMaintenanceSvc = service.NewSearchMaintenanceService(a.db)
 }
 
 func (a *App) initAutoScheduler(cfg *config.Config) {
@@ -310,13 +315,16 @@ func (a *App) registerAIHandlers() {
 	a.aiRateLimitedClient = client
 	batchCoordinator := worker.NewAITagBatchCoordinator(0, 2*time.Second)
 
-	aiHandler := worker.NewBatchAITagJobHandler(a.jobRepo, client, a.obsRepo, a.governanceSvc, a.newTaskPlatformService(), repository.NewPlatformTaskRepository(a.db), a.imageTagRepo, a.config.AI.DoubaoBatchMode, batchCoordinator)
+	aiHandler := worker.NewBatchAITagJobHandler(a.jobRepo, client, a.obsRepo, a.governanceSvc, a.newTaskPlatformService(), a.taskRepo, a.imageTagRepo, a.config.AI.DoubaoBatchMode, batchCoordinator)
 	aiRegenerationHandler := worker.NewAITagRegenerationJobHandler(client, a.obsRepo, a.governanceSvc)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagGeneration, aiHandler)
 	a.registerPlatformTaskHandler(domain.PlatformTaskTypeAITagRegeneration, aiRegenerationHandler)
 }
 
 func (a *App) newTaskPlatformService() *service.TaskPlatformService {
+	if a.taskPlatformSvc != nil {
+		return a.taskPlatformSvc
+	}
 	return service.NewTaskPlatformService(
 		repository.NewTaskBatchRepository(a.db),
 		repository.NewPlatformTaskRepository(a.db),

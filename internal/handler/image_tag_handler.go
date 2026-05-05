@@ -12,11 +12,12 @@ import (
 )
 
 type ImageTagHandler struct {
-	imageTagRepo  repository.ImageTagRepository
-	tagRepo       repository.TagRepository
-	aliasRepo     repository.TagAliasRepository
-	imageRepo     repository.ImageRepository
-	governanceSvc *service.TagGovernanceService
+	imageTagRepo   repository.ImageTagRepository
+	tagRepo        repository.TagRepository
+	aliasRepo      repository.TagAliasRepository
+	imageRepo      repository.ImageRepository
+	governanceSvc  *service.TagGovernanceService
+	tagCreationSvc tagCreationService
 }
 
 func NewImageTagHandler(
@@ -25,13 +26,25 @@ func NewImageTagHandler(
 	aliasRepo repository.TagAliasRepository,
 	imageRepo repository.ImageRepository,
 	governanceSvc *service.TagGovernanceService,
+	depsOpt ...any,
 ) *ImageTagHandler {
+	var tagCreationSvc tagCreationService
+	for _, dep := range depsOpt {
+		if v, ok := dep.(tagCreationService); ok {
+			tagCreationSvc = v
+		}
+	}
+	if tagCreationSvc == nil {
+		tagCreationSvc = service.NewTagCreationService(tagRepo, aliasRepo)
+	}
+
 	return &ImageTagHandler{
-		imageTagRepo:  imageTagRepo,
-		tagRepo:       tagRepo,
-		aliasRepo:     aliasRepo,
-		imageRepo:     imageRepo,
-		governanceSvc: governanceSvc,
+		imageTagRepo:   imageTagRepo,
+		tagRepo:        tagRepo,
+		aliasRepo:      aliasRepo,
+		imageRepo:      imageRepo,
+		governanceSvc:  governanceSvc,
+		tagCreationSvc: tagCreationSvc,
 	}
 }
 
@@ -109,7 +122,7 @@ func (h *ImageTagHandler) AddImageTag(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "tag_id or tag_label is required"})
 			return
 		}
-		tag, _, _, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
+		result, err := h.tagCreationSvc.ResolveOrCreateManualTag(c.Request.Context(), service.TagCreationRequest{
 			PreferredLabel: label,
 			Level:          req.Level,
 			ParentID:       req.ParentID,
@@ -123,7 +136,7 @@ func (h *ImageTagHandler) AddImageTag(c *gin.Context) {
 			c.JSON(status, gin.H{"error": err.Error()})
 			return
 		}
-		tagID = tag.ID
+		tagID = result.Tag.ID
 	}
 
 	tag, err := h.tagRepo.FindByID(c.Request.Context(), tagID)
@@ -302,7 +315,7 @@ func (h *ImageTagHandler) MergeImageTag(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "target_tag_id or target_label is required"})
 			return
 		}
-		tag, _, _, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
+		result, err := h.tagCreationSvc.ResolveOrCreateManualTag(c.Request.Context(), service.TagCreationRequest{
 			PreferredLabel: label,
 			Level:          req.TargetLevel,
 			ParentID:       req.TargetParentID,
@@ -316,7 +329,7 @@ func (h *ImageTagHandler) MergeImageTag(c *gin.Context) {
 			c.JSON(status, gin.H{"error": err.Error()})
 			return
 		}
-		targetTagID = tag.ID
+		targetTagID = result.Tag.ID
 	}
 
 	// Verify target tag exists

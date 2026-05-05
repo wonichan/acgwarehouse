@@ -40,14 +40,14 @@ type ExistingJobLoader interface {
 
 // AIBackfillService orchestrates filtered backfill preview and execution.
 type AIBackfillService struct {
-	imageRepo       repository.ImageRepository
+	imageRepo       repository.BackfillImageQuery
 	taskPlatformSvc *TaskPlatformService
 	jobLoader       ExistingJobLoader
 	configProvider  func() *config.Config
 }
 
 // NewAIBackfillService creates a new backfill service.
-func NewAIBackfillService(imageRepo repository.ImageRepository, taskPlatformSvc *TaskPlatformService, jobLoader ExistingJobLoader, configProvider func() *config.Config) *AIBackfillService {
+func NewAIBackfillService(imageRepo repository.BackfillImageQuery, taskPlatformSvc *TaskPlatformService, jobLoader ExistingJobLoader, configProvider func() *config.Config) *AIBackfillService {
 	return &AIBackfillService{
 		imageRepo:       imageRepo,
 		taskPlatformSvc: taskPlatformSvc,

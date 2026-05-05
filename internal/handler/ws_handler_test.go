@@ -29,6 +29,13 @@ func TestWSHandlerServeHTTPUpgradesAndStreamsEvents(t *testing.T) {
 	}
 	defer conn.Close()
 
+	assertEventually(t, time.Second, func() bool {
+		return wsSubscriberCount(bus) == 1
+	})
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline() error = %v", err)
+	}
+
 	want := service.MonitoringEvent{
 		Type:      "overview",
 		Payload:   json.RawMessage(`{"queue":{"queue_size":5}}`),

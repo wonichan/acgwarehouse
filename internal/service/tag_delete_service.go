@@ -45,71 +45,18 @@ func (s *TagAdminService) DeleteTag(ctx context.Context, tagID int64) (*TagDelet
 	if tagID <= 0 {
 		return nil, ErrTagNotFound
 	}
-	if s.db == nil {
-		return nil, errors.New("database is required")
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
+	result, err := s.adminStore.DeleteTag(ctx, tagID)
 	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if tx != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	if _, err := queryTagByIDTx(ctx, tx, tagID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrTagNotFound
 		}
 		return nil, err
 	}
 
-	children, err := queryChildrenByParentTx(ctx, tx, tagID)
-	if err != nil {
-		return nil, err
-	}
-	affectedImageCount, err := countDirectAssociationsTx(ctx, tx, tagID)
-	if err != nil {
-		return nil, err
-	}
-	imageIDs, err := listImageIDsByTagTx(ctx, tx, tagID)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, child := range children {
-		if _, err := tx.ExecContext(ctx, `UPDATE tags SET parent_id = NULL WHERE id = ?`, child.ID); err != nil {
-			return nil, err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM image_tags WHERE tag_id = ?`, tagID); err != nil {
-		return nil, err
-	}
-	for _, imageID := range imageIDs {
-		if err := syncImageFTSForTx(ctx, tx, imageID); err != nil {
-			return nil, err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tag_aliases WHERE tag_id = ?`, tagID); err != nil {
-		return nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE id = ?`, tagID); err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	tx = nil
-
 	return &TagDeleteResult{
-		DeletedTagID:       tagID,
-		AffectedImageCount: affectedImageCount,
-		DetachedChildCount: int64(len(children)),
+		DeletedTagID:       result.DeletedTagID,
+		AffectedImageCount: result.AffectedImageCount,
+		DetachedChildCount: result.DetachedChildCount,
 	}, nil
 }
 
@@ -186,11 +133,5 @@ func (s *TagAdminService) deleteUnusedTag(ctx context.Context, tagID int64) erro
 }
 
 func (s *TagAdminService) countDirectAssociations(ctx context.Context, tagID int64) (int64, error) {
-	var count int64
-	err := s.db.QueryRowContext(ctx, `
-		SELECT COUNT(DISTINCT image_id)
-		FROM image_tags
-		WHERE tag_id = ?
-	`, tagID).Scan(&count)
-	return count, err
+	return s.adminStore.CountDirectTagAssociations(ctx, tagID)
 }

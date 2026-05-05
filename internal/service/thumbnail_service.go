@@ -14,16 +14,6 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-const (
-	minSmallSize        = 200 * 1024
-	minLargeSize        = 500 * 1024
-	maxLargeSize        = 1024 * 1024
-	maxAdjustIterations = 10
-
-	smallFileThreshold  = 5 * 1024 * 1024
-	mediumFileThreshold = 10 * 1024 * 1024
-)
-
 type ThumbnailService struct {
 	SmallWidth   int
 	LargeWidth   int
@@ -88,14 +78,11 @@ func (s *ThumbnailService) GenerateThumbnailDynamic(imgPath string, size string)
 		return nil, err
 	}
 
-	kernel := selectResizeKernel(fileSize)
+	kernel := resizeKernelForProfile(selectThumbnailResizeProfile(fileSize))
 
 	workingImg := src
-	if fileSize >= mediumFileThreshold {
-		maxPreScaleWidth := width * 4
-		if s.LargeWidth > width {
-			maxPreScaleWidth = s.LargeWidth * 4
-		}
+	if shouldPreScaleThumbnail(fileSize) {
+		maxPreScaleWidth := maxDynamicPreScaleWidth(width, s.LargeWidth)
 		workingImg, err = preScaleForLargeImage(src, maxPreScaleWidth)
 		if err != nil {
 			return nil, err
@@ -115,150 +102,21 @@ func (s *ThumbnailService) GenerateThumbnailDynamic(imgPath string, size string)
 }
 
 func (s *ThumbnailService) generateSmallWithMinSize(src *vips.ImageRef, width, quality int, kernel vips.Kernel) (*domain.Thumbnail, error) {
-	currentWidth := width
-	currentQuality := quality
-	srcWidth := src.Width()
-
-	for i := 0; i < maxAdjustIterations; i++ {
-		thumb, err := s.generateThumbnail(src, currentWidth, currentQuality, "small", kernel)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(thumb.Data) >= minSmallSize {
-			return thumb, nil
-		}
-
-		if currentWidth < srcWidth {
-			newWidth := currentWidth + 100
-			if newWidth > srcWidth {
-				newWidth = srcWidth
-			}
-			currentWidth = newWidth
-			continue
-		}
-
-		if currentQuality < 100 {
-			currentQuality += 5
-			if currentQuality > 100 {
-				currentQuality = 100
-			}
-			continue
-		}
-
-		return thumb, nil
-	}
-
-	return s.generateThumbnail(src, currentWidth, currentQuality, "small", kernel)
+	return runSmallThumbnailPolicy(src.Width(), width, quality, func(currentWidth, currentQuality int) (*domain.Thumbnail, error) {
+		return s.generateThumbnail(src, currentWidth, currentQuality, "small", kernel)
+	})
 }
 
 func (s *ThumbnailService) generateLargeWithMaxSize(src *vips.ImageRef, width, quality int, smallSize int, kernel vips.Kernel) (*domain.Thumbnail, error) {
-	currentWidth := width
-	currentQuality := quality
-	srcWidth := src.Width()
-
-	for i := 0; i < maxAdjustIterations; i++ {
-		thumb, err := s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
-		if err != nil {
-			return nil, err
-		}
-
-		thumbSize := len(thumb.Data)
-		minRequired := minLargeSize
-		if smallSize >= minLargeSize {
-			minRequired = smallSize + 100*1024
-		}
-
-		if thumbSize >= minRequired && thumbSize <= maxLargeSize {
-			return thumb, nil
-		}
-
-		if thumbSize < minRequired {
-			if currentWidth < srcWidth {
-				newWidth := currentWidth + 100
-				if newWidth > srcWidth {
-					newWidth = srcWidth
-				}
-				currentWidth = newWidth
-				continue
-			}
-
-			if currentQuality < 100 {
-				currentQuality += 5
-				if currentQuality > 100 {
-					currentQuality = 100
-				}
-				continue
-			}
-
-			return thumb, nil
-		}
-
-		if thumbSize > maxLargeSize {
-			if currentQuality > 10 {
-				currentQuality -= 5
-				if currentQuality < 10 {
-					currentQuality = 10
-				}
-				continue
-			}
-			return thumb, nil
-		}
-	}
-
-	return s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
+	return runLargeThumbnailPolicy(src.Width(), width, quality, minLargeThumbnailSize(smallSize), func(currentWidth, currentQuality int) (*domain.Thumbnail, error) {
+		return s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
+	})
 }
 
 func (s *ThumbnailService) generateLargeStandalone(src *vips.ImageRef, width, quality int, kernel vips.Kernel) (*domain.Thumbnail, error) {
-	currentWidth := width
-	currentQuality := quality
-	srcWidth := src.Width()
-
-	for i := 0; i < maxAdjustIterations; i++ {
-		thumb, err := s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
-		if err != nil {
-			return nil, err
-		}
-
-		thumbSize := len(thumb.Data)
-		if thumbSize >= minLargeSize && thumbSize <= maxLargeSize {
-			return thumb, nil
-		}
-
-		if thumbSize < minLargeSize {
-			if currentWidth < srcWidth {
-				newWidth := currentWidth + 100
-				if newWidth > srcWidth {
-					newWidth = srcWidth
-				}
-				currentWidth = newWidth
-				continue
-			}
-
-			if currentQuality < 100 {
-				currentQuality += 5
-				if currentQuality > 100 {
-					currentQuality = 100
-				}
-				continue
-			}
-
-			return thumb, nil
-		}
-
-		if thumbSize > maxLargeSize {
-			if currentQuality > 10 {
-				currentQuality -= 5
-				if currentQuality < 10 {
-					currentQuality = 10
-				}
-				continue
-			}
-			return thumb, nil
-		}
-	}
-
-	return s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
+	return runLargeThumbnailPolicy(src.Width(), width, quality, minLargeSize, func(currentWidth, currentQuality int) (*domain.Thumbnail, error) {
+		return s.generateThumbnail(src, currentWidth, currentQuality, "large", kernel)
+	})
 }
 
 func (s *ThumbnailService) generateThumbnail(src *vips.ImageRef, width, quality int, size string, kernel vips.Kernel) (*domain.Thumbnail, error) {
@@ -323,11 +181,11 @@ func (s *ThumbnailService) GenerateBoth(imgPath string) (small, large *domain.Th
 	}
 	logger.Infof("thumbnail source loaded: path=%s file_size=%d width=%d height=%d", imgPath, fileSize, src.Width(), src.Height())
 
-	kernel := selectResizeKernel(fileSize)
+	kernel := resizeKernelForProfile(selectThumbnailResizeProfile(fileSize))
 
 	workingImg := src
-	if fileSize >= mediumFileThreshold {
-		maxPreScaleWidth := s.LargeWidth * 4
+	if shouldPreScaleThumbnail(fileSize) {
+		maxPreScaleWidth := maxGenerateBothPreScaleWidth(s.LargeWidth)
 		workingImg, err = preScaleForLargeImage(src, maxPreScaleWidth)
 		if err != nil {
 			logger.Errorf("thumbnail pre-scale failed: path=%s max_pre_scale_width=%d error=%v", imgPath, maxPreScaleWidth, err)
@@ -366,17 +224,6 @@ func (s *ThumbnailService) GenerateBoth(imgPath string) (small, large *domain.Th
 	return small, large, nil
 }
 
-func (s *ThumbnailService) paramsBySize(size string) (width, quality int, err error) {
-	switch size {
-	case "small":
-		return s.SmallWidth, s.SmallQuality, nil
-	case "large":
-		return s.LargeWidth, s.LargeQuality, nil
-	default:
-		return 0, 0, fmt.Errorf("unsupported thumbnail size: %s", size)
-	}
-}
-
 func getFileSize(filePath string) (int64, error) {
 	info, err := os.Stat(filePath)
 	if err != nil {
@@ -385,11 +232,11 @@ func getFileSize(filePath string) (int64, error) {
 	return info.Size(), nil
 }
 
-func selectResizeKernel(fileSize int64) vips.Kernel {
-	switch {
-	case fileSize < smallFileThreshold:
+func resizeKernelForProfile(profile thumbnailResizeProfile) vips.Kernel {
+	switch profile {
+	case thumbnailResizeHighQuality:
 		return vips.KernelLanczos3
-	case fileSize < mediumFileThreshold:
+	case thumbnailResizeBalanced:
 		return vips.KernelLinear
 	default:
 		return vips.KernelNearest

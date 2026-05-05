@@ -71,7 +71,7 @@ func (p *DoubaoProvider) GenerateTagsBatch(ctx context.Context, requests []TagRe
 		return nil, newProviderRequestError(fmt.Sprintf("service unavailable: %d", resp.StatusCode), true, fmt.Sprintf("http_%d", resp.StatusCode))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, newProviderRequestError(fmt.Sprintf("unexpected status code: %d, err:%s", resp.StatusCode, string(respBody)), false, fmt.Sprintf("http_%d", resp.StatusCode))
+		return nil, newProviderRequestError(fmt.Sprintf("unexpected status code: %d", resp.StatusCode), false, fmt.Sprintf("http_%d", resp.StatusCode))
 	}
 
 	var providerResp doubaoBatchResponse

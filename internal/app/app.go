@@ -41,17 +41,23 @@ type App struct {
 	imageTagRepo   repository.ImageTagRepository
 	searchRepo     repository.SearchRepository
 	collectionRepo repository.CollectionRepository
+	taskRepo       repository.PlatformTaskRepository
+	taskBatchRepo  repository.TaskBatchRepository
 
 	// Services
-	governanceSvc       *service.TagGovernanceService
-	searchSvc           *service.SearchService
-	collectionSvc       *service.CollectionService
-	batchSvc            *service.BatchService
-	adminSvc            *service.AdminService
-	monitoringBus       *service.MonitoringEventBus
-	logStreamSvc        *service.LogStreamService
-	autoScheduler       *service.AITagAutoScheduler
-	aiRateLimitedClient *ai.RateLimitedClient
+	governanceSvc        *service.TagGovernanceService
+	searchSvc            *service.SearchService
+	collectionSvc        *service.CollectionService
+	batchSvc             *service.BatchService
+	adminSvc             *service.AdminService
+	monitoringBus        *service.MonitoringEventBus
+	logStreamSvc         *service.LogStreamService
+	autoScheduler        *service.AITagAutoScheduler
+	aiRateLimitedClient  *ai.RateLimitedClient
+	taskPlatformSvc      *service.TaskPlatformService
+	backfillSvc          *service.AIBackfillService
+	tagAdminSvc          *service.TagAdminService
+	searchMaintenanceSvc *service.SearchMaintenanceService
 
 	// Background task control
 	refillStopMu         sync.Mutex
@@ -137,10 +143,13 @@ func New(cfgPath string) (*App, error) {
 		app.collectionRepo,
 		app.jobManager,
 		service.NewTaskReadService(repository.NewTaskBatchReadRepository(app.db)),
-		repository.NewTaskBatchRepository(app.db),
-		repository.NewPlatformTaskRepository(app.db),
+		app.taskBatchRepo,
+		app.taskRepo,
 	)
 	app.monitoringBus = service.NewMonitoringEventBus(app.adminSvc)
+	app.backfillSvc = service.NewAIBackfillService(app.imageRepo, app.taskPlatformSvc, app.jobManager, func() *config.Config {
+		return app.cfgReloader.Get()
+	})
 
 	return app, nil
 }
@@ -191,25 +200,29 @@ func (a *App) Run() error {
 	})
 
 	handler.SetupRoutes(r, &handler.Dependencies{
-		ImageRepo:      a.imageRepo,
-		JobRepo:        a.jobRepo,
-		TagRepo:        a.tagRepo,
-		AliasRepo:      a.aliasRepo,
-		ObsRepo:        a.obsRepo,
-		ImageTagRepo:   a.imageTagRepo,
-		SearchRepo:     a.searchRepo,
-		CollectionRepo: a.collectionRepo,
-		GovernanceSvc:  a.governanceSvc,
-		SearchSvc:      a.searchSvc,
-		CollectionSvc:  a.collectionSvc,
-		BatchSvc:       a.batchSvc,
-		MonitoringBus:  a.monitoringBus,
-		LogStreamSvc:   a.logStreamSvc,
-		JobManager:     a.jobManager,
-		AdminSvc:       a.adminSvc,
-		AdminCfg:       a.cfgReloader.Get(),
-		ConfigReloader: a.cfgReloader,
-		DB:             a.db,
+		ImageRepo:            a.imageRepo,
+		JobRepo:              a.jobRepo,
+		TagRepo:              a.tagRepo,
+		AliasRepo:            a.aliasRepo,
+		ObsRepo:              a.obsRepo,
+		ImageTagRepo:         a.imageTagRepo,
+		SearchRepo:           a.searchRepo,
+		CollectionRepo:       a.collectionRepo,
+		TaskRepo:             a.taskRepo,
+		GovernanceSvc:        a.governanceSvc,
+		SearchSvc:            a.searchSvc,
+		CollectionSvc:        a.collectionSvc,
+		BatchSvc:             a.batchSvc,
+		TaskPlatformSvc:      a.taskPlatformSvc,
+		BackfillSvc:          a.backfillSvc,
+		TagAdminSvc:          a.tagAdminSvc,
+		SearchMaintenanceSvc: a.searchMaintenanceSvc,
+		MonitoringBus:        a.monitoringBus,
+		LogStreamSvc:         a.logStreamSvc,
+		JobManager:           a.jobManager,
+		AdminSvc:             a.adminSvc,
+		AdminCfg:             a.cfgReloader.Get(),
+		ConfigReloader:       a.cfgReloader,
 	})
 
 	// Create HTTP server

@@ -12,15 +12,20 @@ import (
 
 // BatchService provides batch operations for images
 type BatchService struct {
-	imageRepo      repository.ImageRepository
+	imageRepo      batchImageStore
 	tagRepo        repository.TagRepository
 	imageTagRepo   repository.ImageTagRepository
 	collectionRepo repository.CollectionRepository
 }
 
+type batchImageStore interface {
+	FindByID(id int64) (*domain.Image, error)
+	Delete(id int64) error
+}
+
 // NewBatchService creates a new BatchService instance
 func NewBatchService(
-	imageRepo repository.ImageRepository,
+	imageRepo batchImageStore,
 	tagRepo repository.TagRepository,
 	imageTagRepo repository.ImageTagRepository,
 	collectionRepo repository.CollectionRepository,
@@ -81,7 +86,7 @@ func (s *BatchService) BatchAddTags(ctx context.Context, imageIDs, tagIDs []int6
 			imageTag := &domain.ImageTag{
 				ImageID:     imageID,
 				TagID:       tagID,
-				ReviewState: "pending",
+				ReviewState: domain.ReviewStatePending,
 			}
 			if err := s.imageTagRepo.Save(ctx, imageTag); err != nil {
 				logger.Errorf("[service] BatchAddTags failed: imageTagRepo.Save err=%v", err)

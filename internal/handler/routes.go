@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"database/sql"
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,27 +12,35 @@ import (
 )
 
 type Dependencies struct {
-	ImageRepo        repository.ImageRepository
-	JobRepo          repository.JobRepository
-	TagRepo          repository.TagRepository
-	AliasRepo        repository.TagAliasRepository
-	ObsRepo          repository.TagObservationRepository
-	ImageTagRepo     repository.ImageTagRepository
-	SearchRepo       repository.SearchRepository
-	CollectionRepo   repository.CollectionRepository
-	GovernanceSvc    *service.TagGovernanceService
-	SearchSvc        *service.SearchService
-	CollectionSvc    *service.CollectionService
-	BatchSvc         *service.BatchService
-	AdminSvc         AdminServiceInterface
-	MonitoringBus    *service.MonitoringEventBus
-	LogStreamSvc     *service.LogStreamService
-	JobManager       *worker.Manager
-	AdminCfg         *config.Config
-	ConfigReloader   *config.Reloader // For hot-reloadable config access
-	AITagProcessor   gin.HandlerFunc
-	DB               *sql.DB // for FTS rebuild and other direct DB operations
-	ImageFileActions imageFileActionExecutor
+	ImageRepo            repository.ImageRepository
+	JobRepo              repository.JobRepository
+	TagRepo              repository.TagRepository
+	AliasRepo            repository.TagAliasRepository
+	ObsRepo              repository.TagObservationRepository
+	ImageTagRepo         repository.ImageTagRepository
+	SearchRepo           repository.SearchRepository
+	CollectionRepo       repository.CollectionRepository
+	TaskRepo             repository.PlatformTaskRepository
+	GovernanceSvc        *service.TagGovernanceService
+	SearchSvc            *service.SearchService
+	CollectionSvc        *service.CollectionService
+	BatchSvc             *service.BatchService
+	TaskPlatformSvc      *service.TaskPlatformService
+	BackfillSvc          BackfillServiceInterface
+	TagAdminSvc          tagAdminService
+	SearchMaintenanceSvc searchMaintenanceService
+	AdminSvc             AdminServiceInterface
+	MonitoringBus        *service.MonitoringEventBus
+	LogStreamSvc         *service.LogStreamService
+	JobManager           *worker.Manager
+	AdminCfg             *config.Config
+	ConfigReloader       *config.Reloader // For hot-reloadable config access
+	AITagProcessor       gin.HandlerFunc
+	ImageFileActions     imageFileActionExecutor
+}
+
+type searchMaintenanceService interface {
+	RebuildFTSIndex(ctx context.Context) error
 }
 
 // SetupRoutes registers all HTTP routes.
@@ -59,13 +67,8 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	// Admin routes - protected with Basic Auth
 	var adminHandler *AdminHandler
 	if deps != nil && deps.AdminSvc != nil && deps.AdminCfg != nil {
-		// Create admin handler; wire backfill service if image repo and DB are available
-		if deps.ImageRepo != nil && deps.JobRepo != nil && deps.DB != nil {
-			taskRepo := repository.NewPlatformTaskRepository(deps.DB)
-			batchRepo := repository.NewTaskBatchRepository(deps.DB)
-			taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, deps.JobRepo)
-			backfillSvc := service.NewAIBackfillService(deps.ImageRepo, taskPlatformSvc, deps.JobManager, configProvider)
-			adminHandler = NewAdminHandlerWithBackfill(deps.AdminCfg, deps.AdminSvc, backfillSvc)
+		if deps.BackfillSvc != nil {
+			adminHandler = NewAdminHandlerWithBackfill(deps.AdminCfg, deps.AdminSvc, deps.BackfillSvc)
 		} else {
 			adminHandler = NewAdminHandler(deps.AdminCfg, deps.AdminSvc)
 		}
@@ -102,9 +105,9 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 			admin.POST("/actions/backfill/preview", adminHandler.BackfillPreview)
 			admin.POST("/actions/backfill/execute", adminHandler.BackfillExecute)
 			// FTS rebuild endpoint for fixing search index
-			if deps != nil && deps.DB != nil {
+			if deps != nil && deps.SearchMaintenanceSvc != nil {
 				admin.POST("/actions/search/rebuild-fts", func(c *gin.Context) {
-					if err := repository.RebuildFTSIndex(deps.DB); err != nil {
+					if err := deps.SearchMaintenanceSvc.RebuildFTSIndex(c.Request.Context()); err != nil {
 						c.JSON(http.StatusInternalServerError, gin.H{
 							"success": false,
 							"error":   "failed to rebuild FTS index: " + err.Error(),
@@ -177,8 +180,7 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	tagMerge := gin.HandlerFunc(placeholderHandler)
 	tagBatchCleanup := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.TagRepo != nil && deps.AliasRepo != nil && deps.ImageTagRepo != nil {
-		adminService := service.NewTagAdminService(deps.DB, deps.TagRepo, deps.AliasRepo, deps.ImageTagRepo)
-		tagHandler := NewTagHandler(deps.TagRepo, deps.AliasRepo, deps.ImageTagRepo, adminService)
+		tagHandler := NewTagHandler(deps.TagRepo, deps.AliasRepo, deps.ImageTagRepo, deps.TagAdminSvc)
 		tagGet = tagHandler.GetTags
 		tagCreate = tagHandler.CreateTag
 		tagUpdate = tagHandler.UpdateTag
@@ -246,11 +248,8 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	aiBatch := gin.HandlerFunc(placeholderHandler)
 	aiBatchRegenerate := gin.HandlerFunc(placeholderHandler)
 	aiDefaultPrompt := gin.HandlerFunc(placeholderHandler)
-	if deps != nil && deps.JobManager != nil && deps.ImageRepo != nil && deps.JobRepo != nil && deps.DB != nil {
-		taskRepo := repository.NewPlatformTaskRepository(deps.DB)
-		batchRepo := repository.NewTaskBatchRepository(deps.DB)
-		taskPlatformSvc := service.NewTaskPlatformService(batchRepo, taskRepo, deps.JobRepo)
-		aiTagHandler := NewAITagHandler(deps.JobManager, deps.ImageRepo, deps.JobRepo, taskRepo, taskPlatformSvc, configProvider)
+	if deps != nil && deps.JobManager != nil && deps.ImageRepo != nil && deps.JobRepo != nil && deps.TaskRepo != nil && deps.TaskPlatformSvc != nil {
+		aiTagHandler := NewAITagHandler(deps.JobManager, deps.ImageRepo, deps.JobRepo, deps.TaskRepo, deps.TaskPlatformSvc, configProvider)
 		aiTrigger = aiTagHandler.TriggerAITags
 		aiStatus = aiTagHandler.GetAITagStatus
 		aiBatch = aiTagHandler.BatchTriggerAITags

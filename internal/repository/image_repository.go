@@ -18,16 +18,16 @@ type BackfillCandidateFilter struct {
 	SortDir string
 }
 
-type ImageRepository interface {
-	// SaveImage saves an image to the database.
-	// Returns (isNew, error) where isNew is true if a new record was inserted,
-	// false if the image already existed (INSERT OR IGNORE took effect).
-	SaveImage(image *domain.Image) (isNew bool, err error)
+type ImageReader interface {
 	FindByID(id int64) (*domain.Image, error)
 	FindByPath(path string) (*domain.Image, error)
 	FindAll(limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	FindByIDRange(limit int, lastID int64) ([]domain.Image, error)
 	FindBySourceRootsAfterID(limit int, lastID int64, sourceRoots []string) ([]domain.Image, error)
+	Count() (int64, error)
+}
+
+type GalleryImageQuery interface {
 	FindByTagIDs(ctx context.Context, tagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
 	FindUntagged(ctx context.Context, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
@@ -38,23 +38,33 @@ type ImageRepository interface {
 	CountPendingTagsByTagIDs(ctx context.Context, tagIDs []int64) (int64, error)
 	FindByGalleryFilter(ctx context.Context, exactTagIDs, subtreeRootTagIDs []int64, limit, offset int, sortBy, sortDir string) ([]domain.Image, error)
 	CountByGalleryFilter(ctx context.Context, exactTagIDs, subtreeRootTagIDs []int64) (int64, error)
+}
+
+type BackfillImageQuery interface {
 	FindImagesWithoutAITags(ctx context.Context, limit int) ([]domain.Image, error)
-	// FindBackfillCandidates returns images matching the filter that are eligible for AI backfill:
-	// no AI source tags and no active (pending/queued/running) AI tasks.
 	FindBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) ([]domain.Image, error)
-	// CountBackfillCandidates returns the count of images matching the filter that are eligible for AI backfill.
 	CountBackfillCandidates(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
-	// CountBackfillSkippedWithAITag returns the count of images matching the filter that already have AI source tags.
 	CountBackfillSkippedWithAITag(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
-	// CountBackfillSkippedWithActiveTask returns the count of images matching the filter that already have active AI tasks.
 	CountBackfillSkippedWithActiveTask(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
-	// CountBackfillHitCount returns the total count of images matching the filter (before any skip classification).
 	CountBackfillHitCount(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
+}
+
+type ImageMutationStore interface {
+	// SaveImage saves an image to the database.
+	// Returns (isNew, error) where isNew is true if a new record was inserted,
+	// false if the image already existed (INSERT OR IGNORE took effect).
+	SaveImage(image *domain.Image) (isNew bool, err error)
 	UpdateImagePHashHex(imageID int64, phashHex string) error
 	UpdateImageDuplicateHashCache(imageID int64, sha256, phashHex string, sourceMTimeUnix int64) error
 	UpdateThumbnails(id int64, smallURL, largeURL string) error
-	Count() (int64, error)
 	Delete(id int64) error
+}
+
+type ImageRepository interface {
+	ImageReader
+	GalleryImageQuery
+	BackfillImageQuery
+	ImageMutationStore
 }
 
 type sqliteImageRepository struct {
@@ -517,13 +527,13 @@ func (r *sqliteImageRepository) FindUntagged(ctx context.Context, limit, offset 
 		FROM images i
 		LEFT JOIN collection_images ci ON ci.image_id = i.id
 		WHERE NOT EXISTS (
-			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state != 'rejected'
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state != ?
 		)
 		ORDER BY %s %s, i.id %s
 		LIMIT ? OFFSET ?
 	`, imageSelectColumns, sortColumn, sortDir, sortDir)
 
-	rows, err := r.db.QueryContext(ctx, query, int64(limit), int64(offset))
+	rows, err := r.db.QueryContext(ctx, query, domain.ReviewStateRejected, int64(limit), int64(offset))
 	if err != nil {
 		return nil, err
 	}
@@ -548,9 +558,9 @@ func (r *sqliteImageRepository) CountUntagged(ctx context.Context) (int64, error
 		SELECT COUNT(i.id)
 		FROM images i
 		WHERE NOT EXISTS (
-			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state != 'rejected'
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state != ?
 		)
-	`).Scan(&count)
+	`, domain.ReviewStateRejected).Scan(&count)
 	return count, err
 }
 
@@ -577,13 +587,13 @@ func (r *sqliteImageRepository) FindPendingTags(ctx context.Context, limit, offs
 		FROM images i
 		LEFT JOIN collection_images ci ON ci.image_id = i.id
 		WHERE EXISTS (
-			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = ?
 		)
 		ORDER BY %s %s, i.id %s
 		LIMIT ? OFFSET ?
 	`, imageSelectColumns, sortColumn, sortDir, sortDir)
 
-	rows, err := r.db.QueryContext(ctx, query, int64(limit), int64(offset))
+	rows, err := r.db.QueryContext(ctx, query, domain.ReviewStatePending, int64(limit), int64(offset))
 	if err != nil {
 		return nil, err
 	}
@@ -608,9 +618,9 @@ func (r *sqliteImageRepository) CountPendingTags(ctx context.Context) (int64, er
 		SELECT COUNT(i.id)
 		FROM images i
 		WHERE EXISTS (
-			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = ?
 		)
-	`).Scan(&count)
+	`, domain.ReviewStatePending).Scan(&count)
 	return count, err
 }
 
@@ -648,13 +658,14 @@ func (r *sqliteImageRepository) FindPendingTagsByTagIDs(ctx context.Context, tag
 		FROM images i
 		LEFT JOIN collection_images ci ON ci.image_id = i.id
 		WHERE EXISTS (
-			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = ?
 		)
 		AND %s
 		ORDER BY %s %s, i.id %s
 		LIMIT ? OFFSET ?
 	`, imageSelectColumns, tagWhereClause, sortColumn, sortDir, sortDir)
 
+	args = append([]any{domain.ReviewStatePending}, args...)
 	args = append(args, int64(limit), int64(offset))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -693,10 +704,11 @@ func (r *sqliteImageRepository) CountPendingTagsByTagIDs(ctx context.Context, ta
 		SELECT COUNT(i.id)
 		FROM images i
 		WHERE EXISTS (
-			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = 'pending'
+			SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state = ?
 		)
 		AND %s
 	`, tagWhereClause)
+	args = append([]any{domain.ReviewStatePending}, args...)
 	err = r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
 }
@@ -716,19 +728,19 @@ func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, lim
 			  SELECT 1
 			  FROM image_tags it
 			  WHERE it.image_id = i.id
-			    AND it.source = 'ai'
-			    AND it.review_state != 'rejected'
+			    AND it.source = ?
+			    AND it.review_state != ?
 		  )
 		  AND NOT EXISTS (
 			  SELECT 1
 			  FROM platform_tasks pt
 			  WHERE pt.image_id = i.id
-			    AND pt.task_type = 'ai_tag_generation'
-			    AND pt.status IN ('pending', 'queued', 'running')
+			    AND pt.task_type = ?
+			    AND pt.status IN (?, ?, ?)
 		  )
 		ORDER BY i.id ASC
 		LIMIT ?
-	`, int64(limit))
+	`, domain.ImageTagSourceAI, domain.ReviewStateRejected, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusPending, domain.PlatformTaskStatusQueued, domain.PlatformTaskStatusRunning, int64(limit))
 	if err != nil {
 		return nil, err
 	}

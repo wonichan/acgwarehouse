@@ -40,14 +40,19 @@ type ViewerWindowResult struct {
 
 // SearchService provides search functionality.
 type SearchService struct {
-	imageRepo  repository.ImageRepository
+	imageRepo  searchImageQuery
 	tagRepo    repository.TagRepository
 	searchRepo repository.SearchRepository
 }
 
+type searchImageQuery interface {
+	repository.ImageReader
+	repository.GalleryImageQuery
+}
+
 // NewSearchService creates a new search service.
 func NewSearchService(
-	imageRepo repository.ImageRepository,
+	imageRepo searchImageQuery,
 	tagRepo repository.TagRepository,
 	searchRepo repository.SearchRepository,
 ) *SearchService {

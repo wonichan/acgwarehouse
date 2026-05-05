@@ -1,12 +1,9 @@
 package service
 
 import (
-	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 
-	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -98,6 +95,8 @@ type TagAdminService struct {
 	tagRepo      repository.TagRepository
 	aliasRepo    repository.TagAliasRepository
 	imageTagRepo repository.ImageTagRepository
+	adminStore   repository.TagAdminStore
+	govQuery     repository.TagGovernanceQuery
 }
 
 type hierarchyStats struct {
@@ -124,174 +123,26 @@ type hierarchyStatsResult struct {
 }
 
 func NewTagAdminService(db *sql.DB, tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository) *TagAdminService {
+	return newTagAdminServiceWithStore(db, tagRepo, aliasRepo, imageTagRepo, nil, nil)
+}
+
+func newTagAdminServiceWithStore(db *sql.DB, tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository, adminStore repository.TagAdminStore, govQuery repository.TagGovernanceQuery) *TagAdminService {
+	if adminStore == nil {
+		adminStore = repository.NewTagAdminStore(db)
+	}
+	if govQuery == nil {
+		govQuery = repository.NewTagGovernanceQuery(db)
+	}
 	return &TagAdminService{
 		db:           db,
 		tagRepo:      tagRepo,
 		aliasRepo:    aliasRepo,
 		imageTagRepo: imageTagRepo,
+		adminStore:   adminStore,
+		govQuery:     govQuery,
 	}
 }
 
 func chunkInt64IDs(ids []int64, chunkSize int) [][]int64 {
-	if len(ids) == 0 {
-		return nil
-	}
-	if chunkSize <= 0 || len(ids) <= chunkSize {
-		return [][]int64{ids}
-	}
-
-	chunks := make([][]int64, 0, (len(ids)+chunkSize-1)/chunkSize)
-	for start := 0; start < len(ids); start += chunkSize {
-		end := start + chunkSize
-		if end > len(ids) {
-			end = len(ids)
-		}
-		chunks = append(chunks, ids[start:end])
-	}
-	return chunks
-}
-
-func queryTagByIDTx(ctx context.Context, tx *sql.Tx, id int64) (*domain.Tag, error) {
-	tag := &domain.Tag{}
-	err := scanServiceTag(tx.QueryRowContext(ctx, `
-		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
-		FROM tags
-		WHERE id = ?
-	`, id), tag)
-	if err != nil {
-		return nil, err
-	}
-	return tag, nil
-}
-
-func queryAliasesByTagIDTx(ctx context.Context, tx *sql.Tx, tagID int64) ([]*domain.TagAlias, error) {
-	rows, err := tx.QueryContext(ctx, `
-		SELECT id, tag_id, label, normalized_label, locale, alias_type, is_preferred
-		FROM tag_aliases
-		WHERE tag_id = ?
-		ORDER BY id ASC
-	`, tagID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	aliases := make([]*domain.TagAlias, 0)
-	for rows.Next() {
-		alias := &domain.TagAlias{}
-		if err := rows.Scan(&alias.ID, &alias.TagID, &alias.Label, &alias.NormalizedLabel, &alias.Locale, &alias.AliasType, &alias.IsPreferred); err != nil {
-			return nil, err
-		}
-		aliases = append(aliases, alias)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return aliases, nil
-}
-
-func queryChildrenByParentTx(ctx context.Context, tx *sql.Tx, parentID int64) ([]*domain.Tag, error) {
-	rows, err := tx.QueryContext(ctx, `
-		SELECT id, preferred_label, slug, level, parent_id, primary_category, review_state, trust_score, usage_count, created_at
-		FROM tags
-		WHERE parent_id = ?
-		ORDER BY usage_count DESC, id ASC
-	`, parentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	children := make([]*domain.Tag, 0)
-	for rows.Next() {
-		child := &domain.Tag{}
-		if err := scanServiceTag(rows, child); err != nil {
-			return nil, err
-		}
-		children = append(children, child)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return children, nil
-}
-
-func scanServiceTag(scanner interface{ Scan(dest ...any) error }, tag *domain.Tag) error {
-	var primaryCategory sql.NullString
-
-	if err := scanner.Scan(
-		&tag.ID,
-		&tag.PreferredLabel,
-		&tag.Slug,
-		&tag.Level,
-		&tag.ParentID,
-		&primaryCategory,
-		&tag.ReviewState,
-		&tag.TrustScore,
-		&tag.UsageCount,
-		&tag.CreatedAt,
-	); err != nil {
-		return err
-	}
-
-	if primaryCategory.Valid {
-		tag.PrimaryCategory = primaryCategory.String
-	} else {
-		tag.PrimaryCategory = ""
-	}
-
-	return nil
-}
-
-func countDirectAssociationsTx(ctx context.Context, tx *sql.Tx, tagID int64) (int64, error) {
-	var count int64
-	err := tx.QueryRowContext(ctx, `
-		SELECT COUNT(DISTINCT image_id)
-		FROM image_tags
-		WHERE tag_id = ?
-	`, tagID).Scan(&count)
-	return count, err
-}
-
-func listImageIDsByTagTx(ctx context.Context, tx *sql.Tx, tagID int64) ([]int64, error) {
-	rows, err := tx.QueryContext(ctx, `
-		SELECT DISTINCT image_id
-		FROM image_tags
-		WHERE tag_id = ?
-		ORDER BY image_id ASC
-	`, tagID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	imageIDs := make([]int64, 0)
-	for rows.Next() {
-		var imageID int64
-		if err := rows.Scan(&imageID); err != nil {
-			return nil, err
-		}
-		imageIDs = append(imageIDs, imageID)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return imageIDs, nil
-}
-
-func syncImageFTSForTx(ctx context.Context, tx *sql.Tx, imageID int64) error {
-	var tagsText string
-	err := tx.QueryRowContext(ctx, `
-		SELECT COALESCE(GROUP_CONCAT(t.preferred_label, ' '), '')
-		FROM image_tags it
-		JOIN tags t ON t.id = it.tag_id
-		WHERE it.image_id = ?
-	`, imageID).Scan(&tagsText)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE images_fts SET tags = ? WHERE image_id = ?`, tagsText, imageID); err != nil {
-		return fmt.Errorf("sync image fts: %w", err)
-	}
-	return nil
+	return repository.ChunkInt64IDs(ids, chunkSize)
 }

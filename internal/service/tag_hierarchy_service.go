@@ -126,40 +126,15 @@ func (s *TagAdminService) ChangeLevel(ctx context.Context, tagID int64, targetLe
 	if err := s.validateHierarchyAssignment(ctx, tag.ID, targetLevel, parentID); err != nil {
 		return nil, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
 
 	tag.Level = targetLevel
 	tag.ParentID = parentID
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE tags
-		SET preferred_label = ?, slug = ?, level = ?, parent_id = ?, primary_category = ?, review_state = ?, trust_score = ?, usage_count = ?
-		WHERE id = ?
-	`, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.ID); err != nil {
-		return nil, err
-	}
-	// Promoting a parent-level tag to root detaches its direct child-level tags.
+
+	childrenToDetach := []*domain.Tag(nil)
 	if tag.Level == domain.TagLevelRoot && len(children) > 0 {
-		for _, child := range children {
-			child.ParentID = nil
-			if _, err := tx.ExecContext(ctx, `
-				UPDATE tags
-				SET preferred_label = ?, slug = ?, level = ?, parent_id = ?, primary_category = ?, review_state = ?, trust_score = ?, usage_count = ?
-				WHERE id = ?
-			`, child.PreferredLabel, child.Slug, child.Level, child.ParentID, child.PrimaryCategory, child.ReviewState, child.TrustScore, child.UsageCount, child.ID); err != nil {
-				return nil, err
-			}
-		}
+		childrenToDetach = children
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return tag, nil
+	return s.adminStore.ChangeTagLevel(ctx, tag, childrenToDetach)
 }
 
 func (s *TagAdminService) ReparentTag(ctx context.Context, tagID int64, parentID *int64) (*domain.Tag, error) {
@@ -187,23 +162,7 @@ func (s *TagAdminService) ReparentTag(ctx context.Context, tagID int64, parentID
 	}
 	tag.ParentID = parentID
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE tags
-		SET preferred_label = ?, slug = ?, level = ?, parent_id = ?, primary_category = ?, review_state = ?, trust_score = ?, usage_count = ?
-		WHERE id = ?
-	`, tag.PreferredLabel, tag.Slug, tag.Level, tag.ParentID, tag.PrimaryCategory, tag.ReviewState, tag.TrustScore, tag.UsageCount, tag.ID); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return tag, nil
+	return s.adminStore.ReparentTag(ctx, tag)
 }
 
 func (s *TagAdminService) validateHierarchyAssignment(ctx context.Context, tagID int64, level string, parentID *int64) error {

@@ -391,44 +391,6 @@ type mockBackfillImageRepo struct {
 	err                   error
 }
 
-func (m *mockBackfillImageRepo) SaveImage(_ *domain.Image) (bool, error)    { return false, nil }
-func (m *mockBackfillImageRepo) FindByID(_ int64) (*domain.Image, error)    { return nil, nil }
-func (m *mockBackfillImageRepo) FindByPath(_ string) (*domain.Image, error) { return nil, nil }
-func (m *mockBackfillImageRepo) FindByIDRange(_ int, _ int64) ([]domain.Image, error) {
-	return nil, nil
-}
-func (m *mockBackfillImageRepo) FindBySourceRootsAfterID(_ int, _ int64, _ []string) ([]domain.Image, error) {
-	return nil, nil
-}
-func (m *mockBackfillImageRepo) FindAll(_, _ int, _, _ string) ([]domain.Image, error) {
-	return nil, nil
-}
-func (m *mockBackfillImageRepo) FindByTagIDs(_ context.Context, _ []int64, _, _ int, _, _ string) ([]domain.Image, error) {
-	return nil, nil
-}
-func (m *mockBackfillImageRepo) CountByTagIDs(_ context.Context, _ []int64) (int64, error) {
-	return 0, nil
-}
-func (m *mockBackfillImageRepo) CountByGalleryFilter(_ context.Context, _ []int64, _ []int64) (int64, error) {
-	return 0, nil
-}
-func (m *mockBackfillImageRepo) FindUntagged(_ context.Context, _, _ int, _, _ string) ([]domain.Image, error) {
-	return nil, nil
-}
-func (m *mockBackfillImageRepo) CountUntagged(_ context.Context) (int64, error) { return 0, nil }
-func (m *mockBackfillImageRepo) FindPendingTags(_ context.Context, _, _ int, _, _ string) ([]domain.Image, error) {
-	return nil, nil
-}
-func (m *mockBackfillImageRepo) CountPendingTags(_ context.Context) (int64, error) { return 0, nil }
-func (m *mockBackfillImageRepo) FindPendingTagsByTagIDs(_ context.Context, _ []int64, _, _ int, _, _ string) ([]domain.Image, error) {
-	return nil, nil
-}
-func (m *mockBackfillImageRepo) CountPendingTagsByTagIDs(_ context.Context, _ []int64) (int64, error) {
-	return 0, nil
-}
-func (m *mockBackfillImageRepo) FindByGalleryFilter(_ context.Context, _ []int64, _ []int64, _, _ int, _, _ string) ([]domain.Image, error) {
-	return nil, nil
-}
 func (m *mockBackfillImageRepo) FindImagesWithoutAITags(_ context.Context, _ int) ([]domain.Image, error) {
 	return nil, nil
 }
@@ -450,12 +412,5 @@ func (m *mockBackfillImageRepo) CountBackfillSkippedWithActiveTask(_ context.Con
 func (m *mockBackfillImageRepo) CountBackfillHitCount(_ context.Context, _ repository.BackfillCandidateFilter) (int64, error) {
 	return m.hitCount, m.err
 }
-func (m *mockBackfillImageRepo) UpdateImagePHashHex(_ int64, _ string) error { return nil }
-func (m *mockBackfillImageRepo) UpdateImageDuplicateHashCache(_ int64, _, _ string, _ int64) error {
-	return nil
-}
-func (m *mockBackfillImageRepo) UpdateThumbnails(_ int64, _, _ string) error { return nil }
-func (m *mockBackfillImageRepo) Count() (int64, error)                       { return 0, nil }
-func (m *mockBackfillImageRepo) Delete(_ int64) error                        { return nil }
 
 func boolPtr(v bool) *bool { return &v }

@@ -12,6 +12,8 @@ thirdparty/
 .svn/
 .swiftpm/
 .opencode/
+.codex*/
+.codX*/
 migrate_working_dir/
 
 # IntelliJ related

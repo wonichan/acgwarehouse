@@ -32,23 +32,38 @@ type tagAdminService interface {
 const mergeOrReclassifyRequired = "merge_or_reclassify_required"
 
 type TagHandler struct {
-	tagRepo      repository.TagRepository
-	aliasRepo    repository.TagAliasRepository
-	imageTagRepo repository.ImageTagRepository
-	adminSvc     tagAdminService
+	tagRepo        repository.TagRepository
+	aliasRepo      repository.TagAliasRepository
+	imageTagRepo   repository.ImageTagRepository
+	adminSvc       tagAdminService
+	tagCreationSvc tagCreationService
 }
 
-func NewTagHandler(tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository, adminSvcOpt ...tagAdminService) *TagHandler {
+type tagCreationService interface {
+	ResolveOrCreateManualTag(ctx context.Context, req service.TagCreationRequest) (*service.TagCreationResult, error)
+}
+
+func NewTagHandler(tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository, depsOpt ...any) *TagHandler {
 	var adminSvc tagAdminService
-	if len(adminSvcOpt) > 0 {
-		adminSvc = adminSvcOpt[0]
+	var tagCreationSvc tagCreationService
+	for _, dep := range depsOpt {
+		switch v := dep.(type) {
+		case tagAdminService:
+			adminSvc = v
+		case tagCreationService:
+			tagCreationSvc = v
+		}
+	}
+	if tagCreationSvc == nil {
+		tagCreationSvc = service.NewTagCreationService(tagRepo, aliasRepo)
 	}
 
 	return &TagHandler{
-		tagRepo:      tagRepo,
-		aliasRepo:    aliasRepo,
-		imageTagRepo: imageTagRepo,
-		adminSvc:     adminSvc,
+		tagRepo:        tagRepo,
+		aliasRepo:      aliasRepo,
+		imageTagRepo:   imageTagRepo,
+		adminSvc:       adminSvc,
+		tagCreationSvc: tagCreationSvc,
 	}
 }
 
@@ -149,7 +164,7 @@ func (h *TagHandler) CreateTag(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "preferred_label is required"})
 		return
 	}
-	tag, reused, actualLevel, err := resolveOrCreateManualTag(c.Request.Context(), h.tagRepo, h.aliasRepo, manualTagCreateInput{
+	result, err := h.tagCreationSvc.ResolveOrCreateManualTag(c.Request.Context(), service.TagCreationRequest{
 		PreferredLabel:  req.PreferredLabel,
 		PrimaryCategory: req.PrimaryCategory,
 		Level:           req.Level,
@@ -164,17 +179,17 @@ func (h *TagHandler) CreateTag(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-	if reused {
-		response := gin.H{"id": tag.ID, "reused": true, "tag": tag}
-		if req.Level != "" && actualLevel != req.Level {
+	if result.Reused {
+		response := gin.H{"id": result.Tag.ID, "reused": true, "tag": result.Tag}
+		if req.Level != "" && result.ActualLevel != req.Level {
 			response["requested_level"] = req.Level
-			response["actual_level"] = actualLevel
+			response["actual_level"] = result.ActualLevel
 		}
 		c.JSON(http.StatusOK, response)
 		return
 	}
 
-	c.JSON(http.StatusCreated, tag)
+	c.JSON(http.StatusCreated, result.Tag)
 }
 
 func (h *TagHandler) UpdateTag(c *gin.Context) {

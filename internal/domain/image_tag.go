@@ -5,6 +5,12 @@ const (
 	ImageTagSourceManual = "manual"
 )
 
+const (
+	ReviewStatePending   = "pending"
+	ReviewStateConfirmed = "confirmed"
+	ReviewStateRejected  = "rejected"
+)
+
 type ImageTag struct {
 	ImageID             int64   `json:"image_id"`
 	TagID               int64   `json:"tag_id"`

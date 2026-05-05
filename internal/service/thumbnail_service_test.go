@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 )
 
 func TestThumbnailServiceGenerateThumbnailReturnsDataAndDimensions(t *testing.T) {
@@ -113,6 +115,117 @@ func TestThumbnailServiceGenerateBoth(t *testing.T) {
 	}
 	if small.Size != "small" || large.Size != "large" {
 		t.Fatalf("unexpected sizes: small=%q large=%q", small.Size, large.Size)
+	}
+}
+
+func TestThumbnailPolicyParamsBySize(t *testing.T) {
+	t.Parallel()
+
+	svc := &ThumbnailService{
+		SmallWidth:   240,
+		LargeWidth:   960,
+		SmallQuality: 80,
+		LargeQuality: 92,
+	}
+
+	width, quality, err := svc.paramsBySize("small")
+	if err != nil {
+		t.Fatalf("paramsBySize(small) error = %v", err)
+	}
+	if width != 240 || quality != 80 {
+		t.Fatalf("paramsBySize(small) = %d/%d, want 240/80", width, quality)
+	}
+
+	width, quality, err = svc.paramsBySize("large")
+	if err != nil {
+		t.Fatalf("paramsBySize(large) error = %v", err)
+	}
+	if width != 960 || quality != 92 {
+		t.Fatalf("paramsBySize(large) = %d/%d, want 960/92", width, quality)
+	}
+
+	if _, _, err := svc.paramsBySize("medium"); err == nil {
+		t.Fatal("paramsBySize(medium) expected error")
+	}
+}
+
+func TestThumbnailPolicySelectResizeProfile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		fileSize int64
+		want     thumbnailResizeProfile
+	}{
+		{name: "small file", fileSize: smallFileThreshold - 1, want: thumbnailResizeHighQuality},
+		{name: "medium file", fileSize: smallFileThreshold, want: thumbnailResizeBalanced},
+		{name: "large file", fileSize: mediumFileThreshold, want: thumbnailResizeFast},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := selectThumbnailResizeProfile(tt.fileSize); got != tt.want {
+				t.Fatalf("selectThumbnailResizeProfile() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestThumbnailPolicyLargeMinimumSizeTracksSmallThumbnail(t *testing.T) {
+	t.Parallel()
+
+	if got := minLargeThumbnailSize(minLargeSize - 1); got != minLargeSize {
+		t.Fatalf("minLargeThumbnailSize(below minimum) = %d, want %d", got, minLargeSize)
+	}
+
+	smallSize := minLargeSize + 8
+	want := smallSize + 100*1024
+	if got := minLargeThumbnailSize(smallSize); got != want {
+		t.Fatalf("minLargeThumbnailSize(large small) = %d, want %d", got, want)
+	}
+}
+
+func TestThumbnailPolicyAdjustsSmallWidthBeforeQuality(t *testing.T) {
+	t.Parallel()
+
+	var attempts []struct {
+		width   int
+		quality int
+	}
+
+	thumb, err := runSmallThumbnailPolicy(450, 200, 85, func(width, quality int) (*domain.Thumbnail, error) {
+		attempts = append(attempts, struct {
+			width   int
+			quality int
+		}{width: width, quality: quality})
+		return &domain.Thumbnail{Data: make([]byte, 10)}, nil
+	})
+	if err != nil {
+		t.Fatalf("runSmallThumbnailPolicy() error = %v", err)
+	}
+	if len(thumb.Data) != 10 {
+		t.Fatalf("thumb data length = %d, want 10", len(thumb.Data))
+	}
+
+	want := []struct {
+		width   int
+		quality int
+	}{
+		{width: 200, quality: 85},
+		{width: 300, quality: 85},
+		{width: 400, quality: 85},
+		{width: 450, quality: 85},
+		{width: 450, quality: 90},
+	}
+	if len(attempts) < len(want) {
+		t.Fatalf("attempt count = %d, want at least %d", len(attempts), len(want))
+	}
+	for i := range want {
+		if attempts[i] != want[i] {
+			t.Fatalf("attempt[%d] = %+v, want %+v", i, attempts[i], want[i])
+		}
 	}
 }
 

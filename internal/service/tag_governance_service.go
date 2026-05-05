@@ -89,7 +89,7 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 				Slug:           slugify(normalized),
 				Level:          domain.TagLevelChild,
 				ParentID:       nil,
-				ReviewState:    "pending",
+				ReviewState:    domain.ReviewStatePending,
 				TrustScore:     confidence,
 			}
 			if err := s.tagRepo.Save(ctx, tag); err != nil {
@@ -116,12 +116,12 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 			Source:              source,
 			SourceObservationID: sourceObservationID,
 			Confidence:          confidence,
-			ReviewState:         "pending",
+			ReviewState:         domain.ReviewStatePending,
 		}); err != nil {
 			logger.Errorf("[service] MergeTags imageTagRepo.Save error: %v", err)
 			return err
 		}
-		existingByTagID[tag.ID] = &domain.ImageTag{ImageID: imageID, TagID: tag.ID, Source: source, SourceObservationID: sourceObservationID, Confidence: confidence, ReviewState: "pending"}
+		existingByTagID[tag.ID] = &domain.ImageTag{ImageID: imageID, TagID: tag.ID, Source: source, SourceObservationID: sourceObservationID, Confidence: confidence, ReviewState: domain.ReviewStatePending}
 	}
 
 	logger.Infof("[service] MergeTags completed: image_id=%d tags_merged=%d", imageID, len(tags))
@@ -130,12 +130,12 @@ func (s *TagGovernanceService) MergeTags(ctx context.Context, imageID int64, tag
 
 func (s *TagGovernanceService) RemovePendingAITags(ctx context.Context, imageID int64) error {
 	logger.Infof("[service] RemovePendingAITags started: image_id=%d", imageID)
-	return s.removeAITagsByState(ctx, imageID, "pending")
+	return s.removeAITagsByState(ctx, imageID, domain.ReviewStatePending)
 }
 
 func (s *TagGovernanceService) RemoveRejectedAITags(ctx context.Context, imageID int64) error {
 	logger.Infof("[service] RemoveRejectedAITags started: image_id=%d", imageID)
-	return s.removeAITagsByState(ctx, imageID, "rejected")
+	return s.removeAITagsByState(ctx, imageID, domain.ReviewStateRejected)
 }
 
 func (s *TagGovernanceService) removeAITagsByState(ctx context.Context, imageID int64, state string) error {

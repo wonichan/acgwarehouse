@@ -49,10 +49,11 @@ func buildBackfillBaseWhere(ctx context.Context, db *sql.DB, filter BackfillCand
 
 	if filter.HasTags != nil {
 		if !*filter.HasTags {
-			conds = append(conds, `NOT EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id AND it2.review_state != 'rejected')`)
+			conds = append(conds, `NOT EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id AND it2.review_state != ?)`)
 		} else {
-			conds = append(conds, `EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id AND it2.review_state != 'rejected')`)
+			conds = append(conds, `EXISTS (SELECT 1 FROM image_tags it2 WHERE it2.image_id = i.id AND it2.review_state != ?)`)
 		}
+		args = append(args, domain.ReviewStateRejected)
 	}
 
 	if len(conds) > 0 {
@@ -99,8 +100,8 @@ func backfillAcceptedAITagExists() (string, []any) {
 			SELECT 1 FROM image_tags it3
 			WHERE it3.image_id = i.id
 			  AND it3.source = ?
-			  AND it3.review_state != 'rejected'
-		`, []any{domain.ImageTagSourceAI}
+			  AND it3.review_state != ?
+		`, []any{domain.ImageTagSourceAI, domain.ReviewStateRejected}
 }
 
 func backfillActiveAITagTaskExists() (string, []any) {
