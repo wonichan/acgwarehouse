@@ -44,7 +44,7 @@ void main() {
       expect(provider.currentPageTitle, equals('图库'));
     });
 
-    test('currentPageTitle 随索引切换更新 (7-item navigation)', () {
+    test('currentPageTitle 随索引切换更新 (8-item navigation)', () {
       final provider = NavigationProvider();
 
       // Index 0: Gallery
@@ -73,12 +73,16 @@ void main() {
       // Index 6: Collections
       provider.setSelectedIndex(6);
       expect(provider.currentPageTitle, equals('收藏'));
+
+      // Index 7: Image move
+      provider.setSelectedIndex(7);
+      expect(provider.currentPageTitle, equals('移动'));
     });
 
     test('throws error for invalid index', () {
       final provider = NavigationProvider();
 
-      expect(() => provider.setSelectedIndex(7), throwsRangeError);
+      expect(() => provider.setSelectedIndex(8), throwsRangeError);
       expect(() => provider.setSelectedIndex(-1), throwsRangeError);
     });
 
@@ -90,10 +94,11 @@ void main() {
       expect(NavigationProvider.operationsMonitoringIndex, 4);
       expect(NavigationProvider.logViewerIndex, 5);
       expect(NavigationProvider.collectionsIndex, 6);
+      expect(NavigationProvider.imageMoveIndex, 7);
     });
 
-    test('itemCount is 7', () {
-      expect(NavigationProvider.itemCount, 7);
+    test('itemCount is 8', () {
+      expect(NavigationProvider.itemCount, 8);
     });
   });
 }

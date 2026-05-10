@@ -14,10 +14,12 @@ import 'package:provider/provider.dart';
 
 void main() {
   group('MaterialAppShell', () {
-    Widget createTestWidget() {
+    Widget createTestWidget({NavigationProvider? navigationProvider}) {
       return MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => NavigationProvider()),
+          ChangeNotifierProvider(
+            create: (_) => navigationProvider ?? NavigationProvider(),
+          ),
           ChangeNotifierProvider(
             create: (_) =>
                 ImageListProvider(ApiService(baseUrl: 'http://localhost:8080')),
@@ -122,6 +124,24 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(SettingsScreen), findsOneWidget);
+    });
+
+    testWidgets('falls back to gallery content for desktop-only index', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.reset());
+
+      final navProvider = NavigationProvider()
+        ..setSelectedIndex(NavigationProvider.imageMoveIndex);
+
+      await tester.pumpWidget(createTestWidget(navigationProvider: navProvider));
+      await tester.pumpAndSettle();
+
+      final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
+      expect(navBar.selectedIndex, NavigationProvider.galleryIndex);
+      expect(find.byType(SettingsScreen), findsNothing);
     });
   });
 }

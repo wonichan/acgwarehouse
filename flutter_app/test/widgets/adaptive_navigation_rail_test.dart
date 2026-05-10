@@ -43,6 +43,17 @@ void main() {
       expect(rail.labelType, NavigationRailLabelType.selected);
     });
 
+    testWidgets('falls back to gallery for desktop-only navigation index', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestWidget(selectedIndex: NavigationProvider.imageMoveIndex),
+      );
+
+      final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
+      expect(rail.selectedIndex, NavigationProvider.galleryIndex);
+    });
+
     testWidgets('navigates on tap', (tester) async {
       await tester.pumpWidget(createTestWidget());
 

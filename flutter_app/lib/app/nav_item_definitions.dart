@@ -17,7 +17,7 @@ class NavItemDefinition {
 
 /// Core navigation items used by both NavigationBar (phone) and
 /// NavigationRail (tablet). Desktop Fluent shell maintains its own
-/// 7-item list with platform-specific bodies.
+/// 8-item list with platform-specific bodies.
 const List<NavItemDefinition> coreNavigationItems = [
   NavItemDefinition(
     icon: Icons.photo_library_outlined,

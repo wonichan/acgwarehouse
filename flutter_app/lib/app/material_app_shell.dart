@@ -41,7 +41,10 @@ class MaterialAppShell extends StatelessWidget {
               SettingsScreen(),
             ];
 
-            final content = screens[navProvider.selectedIndex];
+            final materialIndex = navProvider.selectedIndex < screens.length
+                ? navProvider.selectedIndex
+                : NavigationProvider.galleryIndex;
+            final content = screens[materialIndex];
 
             // Responsive layout: NavigationBar vs NavigationRail
             if (isCompact) {

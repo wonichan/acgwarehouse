@@ -12,6 +12,7 @@ import '../widgets/fluent_collections_content.dart';
 import '../widgets/fluent_search_content.dart';
 import '../widgets/fluent_tag_filter_pane.dart';
 import '../widgets/monitoring/monitoring_workspace.dart';
+import '../widgets/image_move/image_move_workspace.dart';
 import '../widgets/log_viewer/log_viewer_workspace.dart';
 import '../widgets/tag_management/tag_management_workspace.dart';
 import '../models/image.dart';
@@ -915,6 +916,15 @@ class FluentCollectionsPage extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => ImageDetailScreen(image: image)));
+  }
+}
+
+class FluentImageMovePage extends StatelessWidget {
+  const FluentImageMovePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const ImageMoveWorkspace();
   }
 }
 

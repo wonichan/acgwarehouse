@@ -38,6 +38,17 @@ void main() {
       expect(navBar.selectedIndex, 1);
     });
 
+    testWidgets('falls back to gallery for desktop-only navigation index', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestWidget(selectedIndex: NavigationProvider.imageMoveIndex),
+      );
+
+      final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
+      expect(navBar.selectedIndex, NavigationProvider.galleryIndex);
+    });
+
     testWidgets('navigates on tap', (tester) async {
       await tester.pumpWidget(createTestWidget());
 

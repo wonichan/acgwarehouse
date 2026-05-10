@@ -17,8 +17,12 @@ class AdaptiveNavigationRail extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<NavigationProvider>(
       builder: (context, navProvider, child) {
+        final selectedIndex =
+            navProvider.selectedIndex < coreNavigationItems.length
+            ? navProvider.selectedIndex
+            : NavigationProvider.galleryIndex;
         return NavigationRail(
-          selectedIndex: navProvider.selectedIndex,
+          selectedIndex: selectedIndex,
           onDestinationSelected: navProvider.setSelectedIndex,
           labelType: NavigationRailLabelType.selected,
           minWidth: 72,

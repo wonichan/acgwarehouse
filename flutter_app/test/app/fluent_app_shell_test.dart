@@ -60,7 +60,7 @@ class _ShellLogViewerProvider extends LogViewerProvider {
 }
 
 void main() {
-  testWidgets('FluentAppShell exposes 收藏 navigation and matching pages', (
+  testWidgets('FluentAppShell exposes 收藏 and 移动 navigation pages', (
     tester,
   ) async {
     final navProvider = NavigationProvider();
@@ -136,7 +136,7 @@ void main() {
     expect(find.byType(FluentGalleryPage), findsOneWidget);
     expect(find.text('搜索图片和标签'), findsOneWidget);
     expect(find.byIcon(fluent.FluentIcons.filter), findsNothing);
-    expect(NavigationProvider.itemCount, 7);
+    expect(NavigationProvider.itemCount, 8);
 
     navProvider.setSelectedIndex(1);
     await tester.pumpAndSettle();
@@ -170,5 +170,12 @@ void main() {
     expect(find.byType(FluentCollectionsPage), findsOneWidget);
     expect(navProvider.currentPageTitle, '收藏');
     expect(find.text('ACGWarehouse - 收藏'), findsOneWidget);
+
+    navProvider.setSelectedIndex(7);
+    await tester.pumpAndSettle();
+    expect(find.byType(FluentImageMovePage), findsOneWidget);
+    expect(navProvider.currentPageTitle, '移动');
+    expect(find.text('ACGWarehouse - 移动'), findsOneWidget);
+    expect(find.text('来源目录'), findsOneWidget);
   });
 }

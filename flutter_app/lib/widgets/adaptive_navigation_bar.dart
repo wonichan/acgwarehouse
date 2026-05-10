@@ -14,8 +14,12 @@ class AdaptiveNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<NavigationProvider>(
       builder: (context, navProvider, child) {
+        final selectedIndex =
+            navProvider.selectedIndex < coreNavigationItems.length
+            ? navProvider.selectedIndex
+            : NavigationProvider.galleryIndex;
         return NavigationBar(
-          selectedIndex: navProvider.selectedIndex,
+          selectedIndex: selectedIndex,
           onDestinationSelected: navProvider.setSelectedIndex,
           destinations: coreNavigationItems
               .map(

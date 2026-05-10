@@ -117,6 +117,15 @@ class _FluentAppShellState extends State<FluentAppShell> {
                   ),
                 ),
               ),
+              PaneItem(
+                icon: const Icon(FluentIcons.move_to_folder),
+                title: const Text('移动'),
+                body: _ShellPage(
+                  onImportLibrary: widget.onImportLibrary,
+                  importService: widget.importService,
+                  child: const FluentImageMovePage(),
+                ),
+              ),
             ],
             displayMode: navProvider.sidebarCollapsed
                 ? PaneDisplayMode.compact
