@@ -217,6 +217,39 @@ CREATE TABLE IF NOT EXISTS collection_images (
 CREATE INDEX IF NOT EXISTS idx_collection_images_image_id ON collection_images(image_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_images_image_id_unique ON collection_images(image_id);
 CREATE INDEX IF NOT EXISTS idx_collection_images_added_at ON collection_images(added_at);
+
+CREATE TABLE IF NOT EXISTS image_move_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag_id INTEGER NOT NULL,
+    source_dirs_json TEXT NOT NULL,
+    target_dir TEXT NOT NULL,
+    conflict_strategy TEXT NOT NULL,
+    total_matched INTEGER DEFAULT 0,
+    moved INTEGER DEFAULT 0,
+    skipped INTEGER DEFAULT 0,
+    failed INTEGER DEFAULT 0,
+    status TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_image_move_batches_created_at ON image_move_batches(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_image_move_batches_status ON image_move_batches(status);
+
+CREATE TABLE IF NOT EXISTS image_move_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER NOT NULL,
+    image_id INTEGER NOT NULL,
+    source_path TEXT NOT NULL,
+    target_path TEXT NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (batch_id) REFERENCES image_move_batches(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_image_move_items_batch_id ON image_move_items(batch_id);
+CREATE INDEX IF NOT EXISTS idx_image_move_items_status ON image_move_items(status);
 `
 
 const tagUsageMigrationSQL = `

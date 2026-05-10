@@ -265,13 +265,25 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 
 	imageMovePreview := gin.HandlerFunc(placeholderHandler)
 	imageMoveExecute := gin.HandlerFunc(placeholderHandler)
+	imageMoveCreateJob := gin.HandlerFunc(placeholderHandler)
+	imageMoveGetJob := gin.HandlerFunc(placeholderHandler)
+	imageMoveCancelJob := gin.HandlerFunc(placeholderHandler)
+	imageMoveHistory := gin.HandlerFunc(placeholderHandler)
 	if deps != nil && deps.ImageMoveSvc != nil {
 		imageMoveHandler := NewImageMoveHandler(deps.ImageMoveSvc)
 		imageMovePreview = imageMoveHandler.PreviewMove
 		imageMoveExecute = imageMoveHandler.ExecuteMove
+		imageMoveCreateJob = imageMoveHandler.CreateMoveJob
+		imageMoveGetJob = imageMoveHandler.GetMoveJob
+		imageMoveCancelJob = imageMoveHandler.CancelMoveJob
+		imageMoveHistory = imageMoveHandler.ListHistory
 	}
 	api.POST("/image-moves/preview", imageMovePreview)
 	api.POST("/image-moves/execute", imageMoveExecute)
+	api.POST("/image-moves/jobs", imageMoveCreateJob)
+	api.GET("/image-moves/jobs/:id", imageMoveGetJob)
+	api.POST("/image-moves/jobs/:id/cancel", imageMoveCancelJob)
+	api.GET("/image-moves/history", imageMoveHistory)
 
 	// Search routes
 	searchHandler := gin.HandlerFunc(placeholderHandler)

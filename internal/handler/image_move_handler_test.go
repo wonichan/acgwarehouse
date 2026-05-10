@@ -54,6 +54,7 @@ func setupImageMoveHandlerTest(t *testing.T) *imageMoveHandlerTestEnv {
 	}
 
 	imageRepo := repository.NewImageRepository(db)
+	historyRepo := repository.NewImageMoveHistoryRepository(db)
 	tagRepo := repository.NewTagRepository(db)
 	imageTagRepo := repository.NewImageTagRepository(db)
 	tag := &domain.Tag{PreferredLabel: "target", Slug: "target", ReviewState: "confirmed"}
@@ -61,7 +62,7 @@ func setupImageMoveHandlerTest(t *testing.T) *imageMoveHandlerTestEnv {
 		t.Fatalf("save tag: %v", err)
 	}
 
-	svc := service.NewImageMoveService(imageRepo, tagRepo, func() *config.Config {
+	svc := service.NewImageMoveService(imageRepo, tagRepo, historyRepo, func() *config.Config {
 		return &config.Config{Storage: config.StorageConfig{ScanRoots: []string{targetDir}}}
 	})
 	handler := NewImageMoveHandler(svc)
@@ -69,6 +70,10 @@ func setupImageMoveHandlerTest(t *testing.T) *imageMoveHandlerTestEnv {
 	api := router.Group("/api/v1")
 	api.POST("/image-moves/preview", handler.PreviewMove)
 	api.POST("/image-moves/execute", handler.ExecuteMove)
+	api.POST("/image-moves/jobs", handler.CreateMoveJob)
+	api.GET("/image-moves/jobs/:id", handler.GetMoveJob)
+	api.POST("/image-moves/jobs/:id/cancel", handler.CancelMoveJob)
+	api.GET("/image-moves/history", handler.ListHistory)
 
 	return &imageMoveHandlerTestEnv{
 		router:       router,

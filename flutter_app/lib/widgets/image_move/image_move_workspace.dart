@@ -1,7 +1,8 @@
 import 'dart:ui' show FontFeature;
 
-import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/image_move.dart';
@@ -38,11 +39,17 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
   String? _targetDir;
   ImageMovePreview? _preview;
   ImageMoveResult? _result;
+  List<ImageMoveBatch> _history = const <ImageMoveBatch>[];
+  ImageMoveBatch? _activeJob;
   bool _isPreviewLoading = false;
   bool _isExecuting = false;
+  bool _isHistoryLoading = false;
+  bool _allowTargetInsideSource = false;
   String? _errorMessage;
   String? _successMessage;
   String _tagQuery = '';
+  String _conflict = 'skip';
+  int _selectedTabIndex = 0;
 
   bool get _isBusy => _isPreviewLoading || _isExecuting;
 
@@ -61,7 +68,7 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
     _ownsService = widget.imageMoveService == null;
     _directoryPicker =
         widget.directoryPicker ??
-        () => FilePicker.platform.getDirectoryPath();
+        () => file_picker.FilePicker.getDirectoryPath();
 
     _service =
         widget.imageMoveService ??
@@ -119,6 +126,9 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
       if (!mounted) return;
       setState(() {
         _preview = preview;
+        if (preview.totalMatched > 1000) {
+          _successMessage = '命中数量较大，可创建后台任务执行';
+        }
       });
     } catch (error) {
       if (!mounted) return;
@@ -135,6 +145,10 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
 
   Future<void> _executeMove() async {
     if (!_canExecute) return;
+    if (_conflict == 'overwrite') {
+      final confirmed = await _confirmOverwrite();
+      if (!confirmed) return;
+    }
     setState(() {
       _isExecuting = true;
       _errorMessage = null;
@@ -161,11 +175,90 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
     }
   }
 
+  Future<void> _createJob() async {
+    if (!_canPreview) return;
+    if (_conflict == 'overwrite') {
+      final confirmed = await _confirmOverwrite();
+      if (!confirmed) return;
+    }
+    setState(() {
+      _isExecuting = true;
+      _errorMessage = null;
+      _successMessage = null;
+    });
+    try {
+      final job = await _service.createJob(_buildRequest());
+      if (!mounted) return;
+      setState(() {
+        _activeJob = job;
+        _selectedTabIndex = 1;
+        _successMessage = '后台任务已创建';
+      });
+      await _loadHistory();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = _friendlyError(error);
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isExecuting = false;
+      });
+    }
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() {
+      _isHistoryLoading = true;
+    });
+    try {
+      final history = await _service.history();
+      if (!mounted) return;
+      setState(() {
+        _history = history;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = _friendlyError(error);
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isHistoryLoading = false;
+      });
+    }
+  }
+
+  Future<bool> _confirmOverwrite() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('确认覆盖'),
+        content: const Text('覆盖会替换目标目录中的同名文件。'),
+        actions: [
+          Button(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          FilledButton(
+            child: const Text('确认覆盖'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   ImageMoveRequest _buildRequest() {
     return ImageMoveRequest(
       sourceDirs: List<String>.from(_sourceDirs),
       tagId: _selectedTag!.id,
       targetDir: _targetDir!,
+      conflict: _conflict,
+      allowTargetInsideSource: _allowTargetInsideSource,
     );
   }
 
@@ -215,6 +308,11 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
                   label: const Text('开始移动'),
                   onPressed: _canExecute ? _executeMove : null,
                 ),
+                CommandBarButton(
+                  icon: const Icon(FluentIcons.cloud_import_export),
+                  label: const Text('后台任务'),
+                  onPressed: _canPreview ? _createJob : null,
+                ),
               ],
             ),
           ),
@@ -237,85 +335,175 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                _SelectionPanel(
-                  title: '来源目录',
-                  action: Button(
-                    onPressed: _isBusy ? null : _addSourceDir,
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(FluentIcons.folder_open, size: 16),
-                        SizedBox(width: 6),
-                        Text('添加来源目录'),
-                      ],
+                Row(
+                  children: [
+                    ToggleButton(
+                      checked: _selectedTabIndex == 0,
+                      onChanged: (_) {
+                        setState(() {
+                          _selectedTabIndex = 0;
+                        });
+                      },
+                      child: const Text('移动任务'),
                     ),
-                  ),
-                  child: _buildSourceDirs(),
-                ),
-                const SizedBox(height: 12),
-                _SelectionPanel(
-                  title: '指定标签',
-                  action: tagProvider.isLoading
-                      ? const ProgressRing(strokeWidth: 2)
-                      : Button(
-                          onPressed: _isBusy ? null : tagProvider.loadTags,
-                          child: const Text('刷新标签'),
-                        ),
-                  child: _buildTagSelector(tagProvider),
-                ),
-                const SizedBox(height: 12),
-                _SelectionPanel(
-                  title: '目标目录',
-                  action: Button(
-                    onPressed: _isBusy ? null : _chooseTargetDir,
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(FluentIcons.folder_open, size: 16),
-                        SizedBox(width: 6),
-                        Text('选择目标目录'),
-                      ],
+                    const SizedBox(width: 8),
+                    ToggleButton(
+                      checked: _selectedTabIndex == 1,
+                      onChanged: (_) {
+                        setState(() {
+                          _selectedTabIndex = 1;
+                        });
+                        _loadHistory();
+                      },
+                      child: const Text('历史记录'),
                     ),
-                  ),
-                  child: _PathLine(path: _targetDir ?? '尚未选择'),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                _ResultPanel(
-                  title: '预览结果',
-                  summary: _preview == null
-                      ? null
-                      : [
-                          _Metric('命中', _preview!.totalMatched),
-                          _Metric('可移动', _preview!.movable),
-                          _Metric('跳过', _preview!.skipped),
-                        ],
-                  loading: _isPreviewLoading,
-                  emptyText: _preview == null
-                      ? '完成三项选择后点击预览'
-                      : _preview!.items.isEmpty
-                      ? '没有命中图片'
-                      : null,
-                  items: _preview?.items ?? const <ImageMoveItem>[],
-                ),
-                const SizedBox(height: 12),
-                _ResultPanel(
-                  title: '执行结果',
-                  summary: _result == null
-                      ? null
-                      : [
-                          _Metric('已移动', _result!.moved),
-                          _Metric('跳过', _result!.skipped),
-                          _Metric('失败', _result!.failed),
-                        ],
-                  loading: _isExecuting,
-                  emptyText: _result == null ? '预览后可开始移动' : null,
-                  items: _result?.items ?? const <ImageMoveItem>[],
-                ),
+                if (_selectedTabIndex == 0)
+                  _buildMoveTab(tagProvider)
+                else
+                  _buildHistoryTab(),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMoveTab(TagProvider tagProvider) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SelectionPanel(
+            title: '来源目录',
+            action: Button(
+              onPressed: _isBusy ? null : _addSourceDir,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(FluentIcons.folder_open, size: 16),
+                  SizedBox(width: 6),
+                  Text('添加来源目录'),
+                ],
+              ),
+            ),
+            child: _buildSourceDirs(),
+          ),
+          const SizedBox(height: 12),
+          _SelectionPanel(
+            title: '指定标签',
+            action: tagProvider.isLoading
+                ? const ProgressRing(strokeWidth: 2)
+                : Button(
+                    onPressed: _isBusy ? null : tagProvider.loadTags,
+                    child: const Text('刷新标签'),
+                  ),
+            child: _buildTagSelector(tagProvider),
+          ),
+          const SizedBox(height: 12),
+          _SelectionPanel(
+            title: '目标与策略',
+            action: Button(
+              onPressed: _isBusy ? null : _chooseTargetDir,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(FluentIcons.folder_open, size: 16),
+                  SizedBox(width: 6),
+                  Text('选择目标目录'),
+                ],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _PathLine(path: _targetDir ?? '尚未选择'),
+                const SizedBox(height: 10),
+                ComboBox<String>(
+                  value: _conflict,
+                  items: const [
+                    ComboBoxItem(value: 'skip', child: Text('跳过同名文件')),
+                    ComboBoxItem(value: 'rename', child: Text('自动重命名')),
+                    ComboBoxItem(value: 'overwrite', child: Text('覆盖同名文件')),
+                  ],
+                  onChanged: _isBusy
+                      ? null
+                      : (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _conflict = value;
+                            _clearResponses();
+                          });
+                        },
+                ),
+                const SizedBox(height: 8),
+                Checkbox(
+                  checked: _allowTargetInsideSource,
+                  content: const Text('允许目标目录位于来源目录内部'),
+                  onChanged: _isBusy
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _allowTargetInsideSource = value ?? false;
+                            _clearResponses();
+                          });
+                        },
+                ),
+              ],
+            ),
+          ),
+          if (_activeJob != null) ...[
+            const SizedBox(height: 12),
+            _JobPanel(batch: _activeJob!),
+          ],
+          const SizedBox(height: 16),
+          _ResultPanel(
+            title: '预览结果',
+            summary: _preview == null
+                ? null
+                : [
+                    _Metric('命中', _preview!.totalMatched),
+                    _Metric('可移动', _preview!.movable),
+                    _Metric('跳过', _preview!.skipped),
+                  ],
+            loading: _isPreviewLoading,
+            emptyText: _preview == null
+                ? '完成三项选择后点击预览'
+                : _preview!.items.isEmpty
+                ? '没有命中图片'
+                : null,
+            items: _preview?.items ?? const <ImageMoveItem>[],
+          ),
+          const SizedBox(height: 12),
+          _ResultPanel(
+            title: '执行结果',
+            summary: _result == null
+                ? null
+                : [
+                    _Metric('已移动', _result!.moved),
+                    _Metric('跳过', _result!.skipped),
+                    _Metric('失败', _result!.failed),
+                  ],
+            loading: _isExecuting,
+            emptyText: _result == null ? '预览后可开始移动' : null,
+            items: _result?.items ?? const <ImageMoveItem>[],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryTab() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: _HistoryPanel(
+        loading: _isHistoryLoading,
+        batches: _history,
+        onRefresh: _loadHistory,
+      ),
     );
   }
 
@@ -587,12 +775,141 @@ class _MoveItemList extends StatelessWidget {
                 _PathLine(path: item.targetPath),
                 if (item.reason != null && item.reason!.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text('原因：${_reasonLabel(item.reason!)}'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '原因：${_reasonLabel(item.reason!)}${item.retryable ? ' · 可重试' : ''}',
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(FluentIcons.copy),
+                        onPressed: () => Clipboard.setData(
+                          ClipboardData(text: item.sourcePath),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (item.overwritten) ...[
+                  const SizedBox(height: 4),
+                  const Text('将覆盖目标同名文件'),
                 ],
               ],
             ),
           ),
       ],
+    );
+  }
+}
+
+class _JobPanel extends StatelessWidget {
+  final ImageMoveBatch batch;
+
+  const _JobPanel({required this.batch});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = batch.progress.total == 0 ? 1 : batch.progress.total;
+    final value = batch.progress.processed / total;
+    return _SelectionPanel(
+      title: '后台任务 #${batch.id}',
+      action: _StatusBadge(status: batch.status),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ProgressBar(value: value.clamp(0.0, 1.0) * 100),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MetricPill(metric: _Metric('已处理', batch.progress.processed)),
+              _MetricPill(metric: _Metric('已移动', batch.progress.moved)),
+              _MetricPill(metric: _Metric('跳过', batch.progress.skipped)),
+              _MetricPill(metric: _Metric('失败', batch.progress.failed)),
+            ],
+          ),
+          if ((batch.progress.currentPath ?? '').isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _PathLine(path: batch.progress.currentPath!),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryPanel extends StatelessWidget {
+  final bool loading;
+  final List<ImageMoveBatch> batches;
+  final VoidCallback onRefresh;
+
+  const _HistoryPanel({
+    required this.loading,
+    required this.batches,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _SelectionPanel(
+      title: '最近移动记录',
+      action: loading
+          ? const ProgressRing(strokeWidth: 2)
+          : Button(onPressed: onRefresh, child: const Text('刷新')),
+      child: batches.isEmpty
+          ? const _MutedText('暂无移动记录')
+          : Column(
+              children: [
+                for (final batch in batches)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: FluentTheme.of(
+                        context,
+                      ).resources.cardBackgroundFillColorSecondary,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '#${batch.id} ${batch.targetDir}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: FluentTheme.of(
+                                  context,
+                                ).typography.bodyStrong,
+                              ),
+                            ),
+                            _StatusBadge(status: batch.status),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _MetricPill(metric: _Metric('命中', batch.totalMatched)),
+                            _MetricPill(metric: _Metric('已移动', batch.moved)),
+                            _MetricPill(metric: _Metric('跳过', batch.skipped)),
+                            _MetricPill(metric: _Metric('失败', batch.failed)),
+                          ],
+                        ),
+                        if (batch.items.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          _MoveItemList(items: batch.items.take(20).toList()),
+                        ],
+                      ],
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }
@@ -690,6 +1007,10 @@ String _statusLabel(String status) {
     'moved' => '已移动',
     'skipped' => '跳过',
     'failed' => '失败',
+    'queued' => '排队中',
+    'running' => '执行中',
+    'completed' => '已完成',
+    'cancelled' => '已取消',
     _ => status,
   };
 }
@@ -701,6 +1022,7 @@ String _reasonLabel(String reason) {
     'permission_denied' => '权限不足',
     'invalid_source_dir' => '来源目录无效',
     'invalid_target_dir' => '目标目录无效',
+    'system_target_dir' => '系统关键目录',
     'db_update_failed' => '数据库更新失败',
     'rollback_failed' => '回滚失败',
     'move_failed' => '移动失败',

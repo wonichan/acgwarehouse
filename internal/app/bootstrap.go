@@ -34,6 +34,7 @@ func (a *App) initRepositories() {
 	a.imageTagRepo = repository.NewImageTagRepository(a.db)
 	a.searchRepo = repository.NewSearchRepository(a.db)
 	a.collectionRepo = repository.NewCollectionRepository(a.db)
+	a.imageMoveHistoryRepo = repository.NewImageMoveHistoryRepository(a.db)
 	a.taskRepo = repository.NewPlatformTaskRepository(a.db)
 	a.taskBatchRepo = repository.NewTaskBatchRepository(a.db)
 }
@@ -47,7 +48,7 @@ func (a *App) initServices() {
 	a.taskPlatformSvc = service.NewTaskPlatformService(a.taskBatchRepo, a.taskRepo, a.jobRepo)
 	a.tagAdminSvc = service.NewTagAdminService(a.db, a.tagRepo, a.aliasRepo, a.imageTagRepo)
 	a.searchMaintenanceSvc = service.NewSearchMaintenanceService(a.db)
-	a.imageMoveSvc = service.NewImageMoveService(a.imageRepo, a.tagRepo, func() *config.Config {
+	a.imageMoveSvc = service.NewImageMoveService(a.imageRepo, a.tagRepo, a.imageMoveHistoryRepo, func() *config.Config {
 		return a.cfgReloader.Get()
 	})
 }

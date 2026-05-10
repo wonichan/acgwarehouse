@@ -30,6 +30,10 @@ func TestRoutesRegistersTagAndImageTagEndpoints(t *testing.T) {
 		{method: http.MethodPost, path: "/api/v1/images/batch-ai-tags/regenerate"},
 		{method: http.MethodPost, path: "/api/v1/image-moves/preview"},
 		{method: http.MethodPost, path: "/api/v1/image-moves/execute"},
+		{method: http.MethodPost, path: "/api/v1/image-moves/jobs"},
+		{method: http.MethodGet, path: "/api/v1/image-moves/jobs/1"},
+		{method: http.MethodPost, path: "/api/v1/image-moves/jobs/1/cancel"},
+		{method: http.MethodGet, path: "/api/v1/image-moves/history"},
 	} {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(tc.method, tc.path, nil)

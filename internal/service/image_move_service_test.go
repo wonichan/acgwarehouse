@@ -48,6 +48,7 @@ func setupImageMoveServiceTest(t *testing.T) *imageMoveServiceTestEnv {
 	}
 
 	imageRepo := repository.NewImageRepository(db)
+	historyRepo := repository.NewImageMoveHistoryRepository(db)
 	tagRepo := repository.NewTagRepository(db)
 	imageTagRepo := repository.NewImageTagRepository(db)
 	tag := &domain.Tag{PreferredLabel: "target", Slug: "target", ReviewState: "confirmed"}
@@ -55,7 +56,7 @@ func setupImageMoveServiceTest(t *testing.T) *imageMoveServiceTestEnv {
 		t.Fatalf("save tag: %v", err)
 	}
 
-	svc := NewImageMoveService(imageRepo, tagRepo, func() *config.Config {
+	svc := NewImageMoveService(imageRepo, tagRepo, historyRepo, func() *config.Config {
 		return &config.Config{Storage: config.StorageConfig{ScanRoots: []string{targetDir}}}
 	})
 
@@ -159,6 +160,112 @@ func TestImageMoveServiceExecuteMovesFileAndKeepsTagAssociation(t *testing.T) {
 	}
 }
 
+func TestImageMoveServicePreviewSupportsRenameAndOverwriteConflicts(t *testing.T) {
+	t.Parallel()
+	env := setupImageMoveServiceTest(t)
+	ctx := context.Background()
+
+	renameImage := env.saveImageWithFile(t, "conflict.png", env.sourceDir, "rename")
+	overwriteImage := env.saveImageWithFile(t, "overwrite.png", env.sourceDir, "overwrite")
+	env.saveImageTag(t, renameImage.ID)
+	env.saveImageTag(t, overwriteImage.ID)
+	if err := os.WriteFile(filepath.Join(env.targetDir, "conflict.png"), []byte("exists"), 0644); err != nil {
+		t.Fatalf("write conflict target: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(env.targetDir, "overwrite.png"), []byte("old"), 0644); err != nil {
+		t.Fatalf("write overwrite target: %v", err)
+	}
+
+	renamePreview, err := env.svc.PreviewMove(ctx, domain.ImageMoveRequest{
+		SourceDirs: []string{env.sourceDir},
+		TagID:      env.tag.ID,
+		TargetDir:  env.targetDir,
+		Conflict:   domain.ImageMoveConflictRename,
+	})
+	if err != nil {
+		t.Fatalf("PreviewMove(rename) error = %v", err)
+	}
+	renamed := findImageMoveItem(t, renamePreview.Items, renameImage.ID)
+	if renamed.Status != domain.ImageMoveStatusMovable || renamed.TargetPath != filepath.Join(env.targetDir, "conflict (1).png") {
+		t.Fatalf("rename item = %+v", renamed)
+	}
+
+	overwritePreview, err := env.svc.PreviewMove(ctx, domain.ImageMoveRequest{
+		SourceDirs: []string{env.sourceDir},
+		TagID:      env.tag.ID,
+		TargetDir:  env.targetDir,
+		Conflict:   domain.ImageMoveConflictOverwrite,
+	})
+	if err != nil {
+		t.Fatalf("PreviewMove(overwrite) error = %v", err)
+	}
+	overwrite := findImageMoveItem(t, overwritePreview.Items, overwriteImage.ID)
+	if overwrite.Status != domain.ImageMoveStatusMovable || !overwrite.Overwritten {
+		t.Fatalf("overwrite item = %+v, want movable overwritten", overwrite)
+	}
+}
+
+func TestImageMoveServiceExecuteRecordsHistory(t *testing.T) {
+	t.Parallel()
+	env := setupImageMoveServiceTest(t)
+	ctx := context.Background()
+
+	image := env.saveImageWithFile(t, "history.png", env.sourceDir, "payload")
+	env.saveImageTag(t, image.ID)
+
+	job, err := env.svc.CreateMoveJob(ctx, domain.ImageMoveRequest{
+		SourceDirs: []string{env.sourceDir},
+		TagID:      env.tag.ID,
+		TargetDir:  env.targetDir,
+	})
+	if err != nil {
+		t.Fatalf("CreateMoveJob() error = %v", err)
+	}
+
+	var refreshed *domain.ImageMoveBatch
+	for i := 0; i < 50; i++ {
+		refreshed, err = env.svc.GetMoveJob(ctx, job.ID)
+		if err != nil {
+			t.Fatalf("GetMoveJob() error = %v", err)
+		}
+		if refreshed.Status == domain.ImageMoveBatchStatusCompleted || refreshed.Status == domain.ImageMoveBatchStatusFailed {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if refreshed.Status != domain.ImageMoveBatchStatusCompleted {
+		t.Fatalf("job status = %q, want completed; job=%+v", refreshed.Status, refreshed)
+	}
+	if refreshed.Moved != 1 || len(refreshed.Items) != 1 || refreshed.Items[0].Status != domain.ImageMoveStatusMoved {
+		t.Fatalf("job history = %+v", refreshed)
+	}
+}
+
+func TestImageMoveServiceRejectsUnsafeTargetDirs(t *testing.T) {
+	t.Parallel()
+	env := setupImageMoveServiceTest(t)
+	ctx := context.Background()
+
+	_, err := env.svc.PreviewMove(ctx, domain.ImageMoveRequest{
+		SourceDirs: []string{env.sourceDir},
+		TagID:      env.tag.ID,
+		TargetDir:  filepath.Join(env.sourceDir, "nested"),
+	})
+	if !errors.Is(err, ErrImageMoveInvalidRequest) {
+		t.Fatalf("PreviewMove nested target error = %v, want invalid request", err)
+	}
+
+	_, err = env.svc.PreviewMove(ctx, domain.ImageMoveRequest{
+		SourceDirs:              []string{env.sourceDir},
+		TagID:                   env.tag.ID,
+		TargetDir:               filepath.Join(env.sourceDir, "nested"),
+		AllowTargetInsideSource: true,
+	})
+	if err != nil {
+		t.Fatalf("PreviewMove allow nested target error = %v", err)
+	}
+}
+
 func TestImageMoveServiceExecuteRollsBackFileWhenDBUpdateFails(t *testing.T) {
 	t.Parallel()
 	env := setupImageMoveServiceTest(t)
@@ -168,7 +275,7 @@ func TestImageMoveServiceExecuteRollsBackFileWhenDBUpdateFails(t *testing.T) {
 	env.saveImageTag(t, image.ID)
 
 	failingRepo := &failingImageMoveRepo{ImageMoveQuery: env.imageRepo, updateErr: errors.New("db down")}
-	svc := NewImageMoveService(failingRepo, env.tagRepo, func() *config.Config {
+	svc := NewImageMoveService(failingRepo, env.tagRepo, nil, func() *config.Config {
 		return &config.Config{Storage: config.StorageConfig{ScanRoots: []string{env.targetDir}}}
 	})
 
@@ -239,14 +346,20 @@ func (r *failingImageMoveRepo) UpdateImageLocation(ctx context.Context, imageID 
 
 func assertImageMoveItem(t *testing.T, items []domain.ImageMoveItem, imageID int64, status, reason string) {
 	t.Helper()
+	item := findImageMoveItem(t, items, imageID)
+	if item.Status != status || item.Reason != reason {
+		t.Fatalf("item %d status/reason = %q/%q, want %q/%q", imageID, item.Status, item.Reason, status, reason)
+	}
+}
+
+func findImageMoveItem(t *testing.T, items []domain.ImageMoveItem, imageID int64) domain.ImageMoveItem {
+	t.Helper()
 	for _, item := range items {
 		if item.ImageID != imageID {
 			continue
 		}
-		if item.Status != status || item.Reason != reason {
-			t.Fatalf("item %d status/reason = %q/%q, want %q/%q", imageID, item.Status, item.Reason, status, reason)
-		}
-		return
+		return item
 	}
 	t.Fatalf("item %d not found in %+v", imageID, items)
+	return domain.ImageMoveItem{}
 }

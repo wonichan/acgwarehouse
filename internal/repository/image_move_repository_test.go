@@ -97,6 +97,54 @@ func TestImageMoveRepositoryUpdateImageLocationOnlyTouchesTargetImage(t *testing
 	}
 }
 
+func TestImageMoveHistoryRepositoryPersistsBatchAndItems(t *testing.T) {
+	t.Parallel()
+
+	db, _ := newImageRepositoryTestDB(t)
+	repo := NewImageMoveHistoryRepository(db)
+	ctx := context.Background()
+	batch := &domain.ImageMoveBatch{
+		TagID:            7,
+		SourceDirs:       []string{`E:\src`},
+		TargetDir:        `E:\dst`,
+		ConflictStrategy: domain.ImageMoveConflictRename,
+		TotalMatched:     1,
+		Status:           domain.ImageMoveBatchStatusRunning,
+	}
+	if err := repo.CreateImageMoveBatch(ctx, batch); err != nil {
+		t.Fatalf("CreateImageMoveBatch() error = %v", err)
+	}
+	if err := repo.AddImageMoveItem(ctx, batch.ID, domain.ImageMoveItem{
+		ImageID:    10,
+		Filename:   "a.png",
+		SourcePath: filepath.Join(`E:\src`, "a.png"),
+		TargetPath: filepath.Join(`E:\dst`, "a.png"),
+		Status:     domain.ImageMoveStatusFailed,
+		Reason:     domain.ImageMoveReasonMoveFailed,
+	}); err != nil {
+		t.Fatalf("AddImageMoveItem() error = %v", err)
+	}
+	batch.Failed = 1
+	batch.Status = domain.ImageMoveBatchStatusFailed
+	if err := repo.UpdateImageMoveBatch(ctx, batch); err != nil {
+		t.Fatalf("UpdateImageMoveBatch() error = %v", err)
+	}
+
+	got, err := repo.FindImageMoveBatch(ctx, batch.ID)
+	if err != nil {
+		t.Fatalf("FindImageMoveBatch() error = %v", err)
+	}
+	if got.Status != domain.ImageMoveBatchStatusFailed || got.Progress.Processed != 1 || len(got.Items) != 1 {
+		t.Fatalf("batch = %+v", got)
+	}
+	if !got.Items[0].Retryable {
+		t.Fatalf("item retryable = false, want true")
+	}
+	if got.FinishedAt == nil {
+		t.Fatalf("FinishedAt = nil, want timestamp")
+	}
+}
+
 func saveImageMoveRepoImage(t *testing.T, repo ImageRepository, path, sourceRoot string) *domain.Image {
 	t.Helper()
 	image := &domain.Image{

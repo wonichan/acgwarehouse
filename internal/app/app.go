@@ -33,16 +33,17 @@ type App struct {
 	jobManager  *worker.Manager
 
 	// Repositories
-	imageRepo      repository.ImageRepository
-	jobRepo        repository.JobRepository
-	tagRepo        repository.TagRepository
-	aliasRepo      repository.TagAliasRepository
-	obsRepo        repository.TagObservationRepository
-	imageTagRepo   repository.ImageTagRepository
-	searchRepo     repository.SearchRepository
-	collectionRepo repository.CollectionRepository
-	taskRepo       repository.PlatformTaskRepository
-	taskBatchRepo  repository.TaskBatchRepository
+	imageRepo            repository.ImageRepository
+	jobRepo              repository.JobRepository
+	tagRepo              repository.TagRepository
+	aliasRepo            repository.TagAliasRepository
+	obsRepo              repository.TagObservationRepository
+	imageTagRepo         repository.ImageTagRepository
+	searchRepo           repository.SearchRepository
+	collectionRepo       repository.CollectionRepository
+	imageMoveHistoryRepo repository.ImageMoveHistoryRepository
+	taskRepo             repository.PlatformTaskRepository
+	taskBatchRepo        repository.TaskBatchRepository
 
 	// Services
 	governanceSvc        *service.TagGovernanceService

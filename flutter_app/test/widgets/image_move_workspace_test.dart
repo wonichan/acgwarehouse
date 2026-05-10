@@ -135,6 +135,7 @@ void main() {
         expect(body['source_dirs'], ['E:/picture/output']);
         expect(body['tag_id'], 7);
         expect(body['target_dir'], 'E:/picture/archive');
+        expect(body['conflict'], 'skip');
         return http.Response(
           jsonEncode({
             'total_matched': 2,

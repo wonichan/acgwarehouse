@@ -115,5 +115,83 @@ void main() {
       expect(result.items.last.status, 'failed');
       expect(result.items.last.reason, 'move_failed');
     });
+
+    test('createJob and history use phase 3 endpoints', () async {
+      final service = ImageMoveService(
+        baseUrl: 'http://localhost:8080',
+        client: MockClient((request) async {
+          if (request.url.path == '/api/v1/image-moves/jobs') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            expect(body['conflict'], 'rename');
+            return http.Response(
+              jsonEncode({
+                'id': 12,
+                'tag_id': 7,
+                'source_dirs': ['E:/src'],
+                'target_dir': 'E:/dst',
+                'conflict_strategy': 'rename',
+                'total_matched': 2,
+                'moved': 0,
+                'skipped': 0,
+                'failed': 0,
+                'status': 'queued',
+                'created_at': '2026-05-10 00:00:00',
+                'progress': {
+                  'total': 2,
+                  'processed': 0,
+                  'moved': 0,
+                  'skipped': 0,
+                  'failed': 0,
+                },
+              }),
+              202,
+            );
+          }
+
+          expect(request.url.path, '/api/v1/image-moves/history');
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'id': 12,
+                  'tag_id': 7,
+                  'source_dirs': ['E:/src'],
+                  'target_dir': 'E:/dst',
+                  'conflict_strategy': 'rename',
+                  'total_matched': 2,
+                  'moved': 2,
+                  'skipped': 0,
+                  'failed': 0,
+                  'status': 'completed',
+                  'created_at': '2026-05-10 00:00:00',
+                  'progress': {
+                    'total': 2,
+                    'processed': 2,
+                    'moved': 2,
+                    'skipped': 0,
+                    'failed': 0,
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+
+      final job = await service.createJob(
+        const ImageMoveRequest(
+          sourceDirs: ['E:/src'],
+          tagId: 7,
+          targetDir: 'E:/dst',
+          conflict: 'rename',
+        ),
+      );
+      expect(job.id, 12);
+      expect(job.status, 'queued');
+
+      final history = await service.history();
+      expect(history.single.status, 'completed');
+    });
   });
 }

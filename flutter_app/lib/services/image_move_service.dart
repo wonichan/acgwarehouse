@@ -32,6 +32,44 @@ class ImageMoveService {
     );
   }
 
+  Future<ImageMoveBatch> createJob(ImageMoveRequest request) async {
+    final response = await _post('/image-moves/jobs', request);
+    return ImageMoveBatch.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
+  Future<ImageMoveBatch> getJob(int id) async {
+    final response = await _client.get(
+      Uri.parse('$_apiPrefix/image-moves/jobs/$id'),
+    );
+    ensureHttpResponse(response, '/image-moves/jobs/$id');
+    return ImageMoveBatch.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
+  Future<ImageMoveBatch> cancelJob(int id) async {
+    final response = await _client.post(
+      Uri.parse('$_apiPrefix/image-moves/jobs/$id/cancel'),
+    );
+    ensureHttpResponse(response, '/image-moves/jobs/$id/cancel');
+    return ImageMoveBatch.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
+  Future<List<ImageMoveBatch>> history({int limit = 20}) async {
+    final response = await _client.get(
+      Uri.parse('$_apiPrefix/image-moves/history?limit=$limit'),
+    );
+    ensureHttpResponse(response, '/image-moves/history');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return (body['items'] as List? ?? const [])
+        .map((item) => ImageMoveBatch.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<http.Response> _post(String path, ImageMoveRequest request) async {
     final response = await _client.post(
       Uri.parse('$_apiPrefix$path'),
