@@ -4,7 +4,7 @@ import '../models/image.dart';
 
 /// Provider for search state management
 class SearchProvider with ChangeNotifier {
-  final SearchService _service;
+  SearchService _service;
 
   List<ImageModel> _results = [];
   List<String> _searchHistory = [];
@@ -33,6 +33,24 @@ class SearchProvider with ChangeNotifier {
 
   int indexOfResult(int imageId) =>
       _results.indexWhere((image) => image.id == imageId);
+
+  void updateService(SearchService service) {
+    if (identical(_service, service)) {
+      return;
+    }
+    _service = service;
+    _results = [];
+    _searchHistory = [];
+    _isLoading = false;
+    _error = null;
+    _totalResults = 0;
+    _currentOffset = 0;
+    if (_currentQuery.isNotEmpty || _currentTagIds.isNotEmpty) {
+      search(refresh: true);
+    } else {
+      notifyListeners();
+    }
+  }
 
   /// Search images
   Future<void> search({

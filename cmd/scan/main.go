@@ -6,11 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/d1client"
 	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 	"github.com/wonichan/acgwarehouse-backend/internal/service"
@@ -36,20 +38,11 @@ func main() {
 		logger.Fatal("no scan roots configured")
 	}
 
-	db, err := openDatabase(cfg)
-	if err != nil {
-		logger.Fatalf("failed to open database: %v", err)
-	}
-	defer db.Close()
-
-	if err := repository.EnsureScanSchema(db); err != nil {
-		logger.Fatalf("failed to ensure scan schema: %v", err)
-	}
-
 	metadataSvc := service.NewMetadataService()
-	imageRepo := repository.NewImageRepository(db)
-	jobRepo := repository.NewJobRepository(db)
-	taskPlatformSvc := service.NewTaskPlatformService(repository.NewTaskBatchRepository(db), repository.NewPlatformTaskRepository(db), jobRepo)
+	imageRepo, jobRepo, taskPlatformSvc, closeDB := initScanStores(cfg)
+	if closeDB != nil {
+		defer closeDB()
+	}
 	provider := cfg.ThumbnailStorageProvider
 	if provider == "" {
 		provider = "cos"
@@ -103,4 +96,33 @@ func main() {
 
 func openDatabase(cfg *config.Config) (*sql.DB, error) {
 	return sqliteutil.Open(cfg)
+}
+
+func initScanStores(cfg *config.Config) (repository.ImageRepository, repository.JobRepository, *service.TaskPlatformService, func()) {
+	if strings.EqualFold(cfg.Database.Type, "d1") {
+		client := d1client.NewClientWithAPIKeyAndReadOnly(cfg.Database.D1APIURL, cfg.Database.D1APIKey, cfg.Database.D1ReadOnly)
+		tagRepo := repository.NewD1TagRepository(client)
+		imageRepo := repository.NewD1ImageRepositoryWithTags(client, tagRepo)
+		jobRepo := repository.NewD1JobRepository(client)
+		taskSvc := service.NewTaskPlatformService(
+			repository.NewD1TaskBatchRepository(client),
+			repository.NewD1PlatformTaskRepository(client),
+			jobRepo,
+		)
+		return imageRepo, jobRepo, taskSvc, nil
+	}
+
+	db, err := openDatabase(cfg)
+	if err != nil {
+		logger.Fatalf("failed to open database: %v", err)
+	}
+	if err := repository.EnsureScanSchema(db); err != nil {
+		_ = db.Close()
+		logger.Fatalf("failed to ensure scan schema: %v", err)
+	}
+
+	imageRepo := repository.NewImageRepository(db)
+	jobRepo := repository.NewJobRepository(db)
+	taskSvc := service.NewTaskPlatformService(repository.NewTaskBatchRepository(db), repository.NewPlatformTaskRepository(db), jobRepo)
+	return imageRepo, jobRepo, taskSvc, func() { _ = db.Close() }
 }

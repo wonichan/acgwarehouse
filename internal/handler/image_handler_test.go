@@ -589,6 +589,46 @@ func TestImageHandlerListImagesFiltersByHasTagsFalse(t *testing.T) {
 	}
 }
 
+func TestImageHandlerListImagesReturnsEmptyArrayForNoMatches(t *testing.T) {
+	t.Parallel()
+
+	router, repos := newImageHandlerTestRouter(t)
+
+	tag := &domain.Tag{PreferredLabel: "test", Slug: "test", ReviewState: "confirmed"}
+	if err := repos.tagRepo.Save(context.Background(), tag); err != nil {
+		t.Fatalf("save tag: %v", err)
+	}
+	for _, imageID := range []int64{1, 2, 3} {
+		if err := repos.imageTagRepo.Save(context.Background(), &domain.ImageTag{ImageID: imageID, TagID: tag.ID, ReviewState: "confirmed"}); err != nil {
+			t.Fatalf("tag image %d: %v", imageID, err)
+		}
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/images?has_tags=false", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Images []map[string]any `json:"images"`
+		Total  int64            `json:"total"`
+	}
+	decodeJSONResponse(t, w, &resp)
+
+	if resp.Images == nil {
+		t.Fatal("images = nil, want empty array")
+	}
+	if len(resp.Images) != 0 {
+		t.Fatalf("len(images) = %d, want 0", len(resp.Images))
+	}
+	if resp.Total != 0 {
+		t.Fatalf("total = %d, want 0", resp.Total)
+	}
+}
+
 func TestImageHandlerListImagesFiltersByHasPendingTagsTrue(t *testing.T) {
 	t.Parallel()
 

@@ -19,6 +19,8 @@ import 'package:provider/provider.dart';
 class _WorkspaceTagProvider extends TagProvider {
   _WorkspaceTagProvider() : super(TagService(baseUrl: 'http://localhost:8080'));
 
+  String _query = '';
+
   @override
   List<Tag> get allTags => [
     Tag(
@@ -30,16 +32,22 @@ class _WorkspaceTagProvider extends TagProvider {
       usageCount: 3,
       createdAt: DateTime.parse('2026-05-10T00:00:00.000Z'),
     ),
-    Tag(
-      id: 8,
-      preferredLabel: '砂狼白子',
-      slug: 'shiroko',
-      reviewState: 'confirmed',
-      trustScore: 1,
-      usageCount: 5,
-      createdAt: DateTime.parse('2026-05-10T00:00:00.000Z'),
-    ),
   ];
+
+  @override
+  List<Tag> get filteredTags => _query == '白子'
+      ? [
+          Tag(
+            id: 8,
+            preferredLabel: '砂狼白子',
+            slug: 'shiroko',
+            reviewState: 'confirmed',
+            trustScore: 1,
+            usageCount: 5,
+            createdAt: DateTime.parse('2026-05-10T00:00:00.000Z'),
+          ),
+        ]
+      : allTags;
 
   @override
   bool get isLoading => false;
@@ -49,6 +57,12 @@ class _WorkspaceTagProvider extends TagProvider {
 
   @override
   Future<void> loadTags() async {}
+
+  @override
+  Future<void> searchTags(String query) async {
+    _query = query;
+    notifyListeners();
+  }
 }
 
 class _TrackingImageListProvider extends ImageListProvider {
@@ -297,6 +311,7 @@ void main() {
     expect(moveProvider.selectedTag, isNull);
 
     await tester.enterText(find.byType(fluent.TextBox), '白子');
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
     expect(find.text('调月莉音 (3)'), findsNothing);
     expect(find.text('砂狼白子 (5)'), findsOneWidget);

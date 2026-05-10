@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +33,7 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
   late final bool _ownsService;
   late final DirectoryPicker _directoryPicker;
   final TextEditingController _tagSearchController = TextEditingController();
+  Timer? _tagSearchDebounce;
 
   @override
   void initState() {
@@ -57,6 +60,7 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
 
   @override
   void dispose() {
+    _tagSearchDebounce?.cancel();
     _tagSearchController.dispose();
     if (_ownsService) {
       _service.dispose();
@@ -141,6 +145,18 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
       if (!mounted) return;
       context.read<ImageMoveProvider>().failHistoryLoad(_friendlyError(error));
     }
+  }
+
+  void _scheduleTagSearch(String value) {
+    final query = value.trim();
+    context.read<ImageMoveProvider>().setTagQuery(query);
+    _tagSearchDebounce?.cancel();
+    _tagSearchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      final currentQuery = context.read<ImageMoveProvider>().tagQuery;
+      if (currentQuery != query) return;
+      context.read<TagProvider>().searchTags(query);
+    });
   }
 
   Future<bool> _confirmOverwrite() async {
@@ -449,15 +465,9 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
       return Text('标签加载失败：${tagProvider.error}');
     }
 
-    final filtered = tagProvider.allTags
-        .where(
-          (tag) =>
-              moveProvider.tagQuery.isEmpty ||
-              tag.preferredLabel.toLowerCase().contains(
-                moveProvider.tagQuery.toLowerCase(),
-              ),
-        )
-        .toList();
+    final filtered = moveProvider.tagQuery.isEmpty
+        ? tagProvider.allTags
+        : tagProvider.filteredTags;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -470,9 +480,28 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Icon(FluentIcons.search, size: 14),
           ),
-          onChanged: moveProvider.setTagQuery,
+          onChanged: _scheduleTagSearch,
         ),
         const SizedBox(height: 8),
+        if (tagProvider.isLoading)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                ProgressRing(strokeWidth: 2),
+                SizedBox(width: 8),
+                Text('正在搜索标签'),
+              ],
+            ),
+          ),
+        if (tagProvider.error != null && tagProvider.allTags.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: InfoBar(
+              severity: InfoBarSeverity.warning,
+              title: Text('标签搜索失败：${tagProvider.error}'),
+            ),
+          ),
         if (moveProvider.selectedTag != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),

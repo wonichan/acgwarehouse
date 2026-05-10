@@ -36,6 +36,11 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
   void initState() {
     super.initState();
     _loadDefaultPrompt();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadImageTags();
+      }
+    });
   }
 
   @override
@@ -43,6 +48,11 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageId != widget.imageId) {
       _resetAIPanel();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _loadImageTags();
+        }
+      });
     }
   }
 
@@ -516,6 +526,7 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
         final pending = provider.imageTags['pending'] ?? [];
         final rejected = provider.imageTags['rejected'] ?? [];
         final totalCount = confirmed.length + pending.length + rejected.length;
+        final isLoadingTags = provider.isLoadingImageTags;
 
         return Container(
           key: const Key('metadata-section-tags'),
@@ -547,6 +558,31 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                   ],
                 ),
                 const SizedBox(height: 14),
+                if (isLoadingTags && totalCount == 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      key: const Key('metadata-tags-loading'),
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: theme.iconColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '加载标签中...',
+                          style: TextStyle(
+                            color: theme.textMuted,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (pending.isNotEmpty) ...[
                   _buildTagGroup(
                     context,
@@ -608,7 +644,10 @@ class _ImageMetadataPanelState extends State<ImageMetadataPanel> {
                         .toList(),
                   ),
                 ],
-                if (confirmed.isEmpty && pending.isEmpty && rejected.isEmpty)
+                if (!isLoadingTags &&
+                    confirmed.isEmpty &&
+                    pending.isEmpty &&
+                    rejected.isEmpty)
                   Text(
                     '暂无标签',
                     style: TextStyle(color: theme.textMuted, fontSize: 13),

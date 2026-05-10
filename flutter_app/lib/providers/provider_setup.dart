@@ -35,35 +35,87 @@ List<dynamic> createAppProviders({
         initialAdminAuth: manifestAdminAuth,
       ),
     ),
-    Provider(
-      create: (context) =>
-          ApiService(baseUrl: context.read<ConfigProvider>().baseUrl),
+    ProxyProvider<ConfigProvider, ApiService>(
+      update: (_, config, previous) {
+        if (previous != null && previous.baseUrl == config.baseUrl) {
+          return previous;
+        }
+        final service = ApiService(baseUrl: config.baseUrl);
+        previous?.dispose();
+        return service;
+      },
+      dispose: (_, service) => service.dispose(),
     ),
-    Provider(
-      create: (context) =>
-          TagService(baseUrl: context.read<ConfigProvider>().baseUrl),
+    ProxyProvider<ConfigProvider, TagService>(
+      update: (_, config, previous) {
+        if (previous != null && previous.baseUrl == config.baseUrl) {
+          return previous;
+        }
+        final service = TagService(baseUrl: config.baseUrl);
+        previous?.dispose();
+        return service;
+      },
+      dispose: (_, service) => service.dispose(),
     ),
-    Provider(
-      create: (context) =>
-          SearchService(baseUrl: context.read<ConfigProvider>().baseUrl),
+    ProxyProvider<ConfigProvider, SearchService>(
+      update: (_, config, previous) {
+        if (previous != null && previous.baseUrl == config.baseUrl) {
+          return previous;
+        }
+        final service = SearchService(baseUrl: config.baseUrl);
+        previous?.dispose();
+        return service;
+      },
+      dispose: (_, service) => service.dispose(),
     ),
-    Provider(
-      create: (context) => MonitoringService(
-        baseUrl: context.read<ConfigProvider>().baseUrl,
-        basicAuthHeader: context.read<ConfigProvider>().adminBasicAuthHeader,
-      ),
+    ProxyProvider<ConfigProvider, MonitoringService>(
+      update: (_, config, previous) {
+        if (previous != null &&
+            previous.baseUrl == config.baseUrl &&
+            previous.basicAuthHeader == config.adminBasicAuthHeader) {
+          return previous;
+        }
+        final service = MonitoringService(
+          baseUrl: config.baseUrl,
+          basicAuthHeader: config.adminBasicAuthHeader,
+        );
+        previous?.dispose();
+        return service;
+      },
+      dispose: (_, service) => service.dispose(),
     ),
-    ChangeNotifierProvider(
+    ChangeNotifierProxyProvider<ApiService, ImageListProvider>(
       create: (context) =>
           ImageListProvider(context.read<ApiService>())..loadImages(),
+      update: (_, service, provider) {
+        if (provider == null) {
+          return ImageListProvider(service)..loadImages();
+        }
+        provider.updateApiService(service);
+        return provider;
+      },
     ),
-    ChangeNotifierProvider(
+    ChangeNotifierProxyProvider<TagService, TagProvider>(
       create: (context) => TagProvider(context.read<TagService>()),
+      update: (_, service, provider) {
+        if (provider == null) {
+          return TagProvider(service);
+        }
+        provider.updateTagService(service);
+        return provider;
+      },
     ),
     ChangeNotifierProvider(create: (_) => ImageMoveProvider()),
-    ChangeNotifierProvider(
+    ChangeNotifierProxyProvider<SearchService, SearchProvider>(
       create: (context) =>
           SearchProvider(service: context.read<SearchService>()),
+      update: (_, service, provider) {
+        if (provider == null) {
+          return SearchProvider(service: service);
+        }
+        provider.updateService(service);
+        return provider;
+      },
     ),
     ChangeNotifierProvider(
       create: (context) => MonitoringProvider(

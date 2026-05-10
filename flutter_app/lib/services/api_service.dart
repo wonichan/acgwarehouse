@@ -28,6 +28,8 @@ class ApiService {
     : _client = client ?? http.Client(),
       _baseUrl = baseUrl;
 
+  String get baseUrl => _baseUrl;
+
   /// Fetches a paginated list of images with optional filtering
   ///
   /// [offset] - Pagination offset for fetching next page (matches backend's next_cursor)

@@ -1138,7 +1138,7 @@ func TestFindUntaggedReturnsEmptyWhenAllImagesHaveTags(t *testing.T) {
 	}
 }
 
-func TestFindImagesWithoutAITagsReturnsThumbnailReadyImagesWithoutAISource(t *testing.T) {
+func TestFindImagesWithoutAITagsReturnsThumbnailReadyUntaggedImagesWithoutAISource(t *testing.T) {
 	t.Parallel()
 
 	db, repo := newImageRepositoryTestDB(t)
@@ -1152,14 +1152,11 @@ func TestFindImagesWithoutAITagsReturnsThumbnailReadyImagesWithoutAISource(t *te
 		t.Fatalf("FindImagesWithoutAITags() error = %v", err)
 	}
 
-	if len(images) != 2 {
-		t.Fatalf("len(images) = %d, want 2", len(images))
+	if len(images) != 1 {
+		t.Fatalf("len(images) = %d, want 1", len(images))
 	}
 	if images[0].ID != imageIDs[0] {
 		t.Fatalf("images[0].ID = %d, want %d", images[0].ID, imageIDs[0])
-	}
-	if images[1].ID != imageIDs[1] {
-		t.Fatalf("images[1].ID = %d, want %d", images[1].ID, imageIDs[1])
 	}
 }
 

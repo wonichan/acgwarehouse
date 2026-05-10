@@ -405,14 +405,11 @@ func (r *d1ImageRepository) FindByGalleryFilter(ctx context.Context, exactTagIDs
 	if r.tagRepo == nil {
 		return nil, fmt.Errorf("d1ImageRepository: tagRepo not configured for gallery queries")
 	}
-	allTagIDs := make([]int64, 0, len(exactTagIDs)+len(subtreeRootTagIDs))
-	allTagIDs = append(allTagIDs, exactTagIDs...)
-	allTagIDs = append(allTagIDs, subtreeRootTagIDs...)
-	clauses, err := expandHierarchicalTagClausesD1(ctx, r.tagRepo, allTagIDs)
+
+	whereClause, args, err := buildGalleryFilterClausesD1(ctx, r.tagRepo, exactTagIDs, subtreeRootTagIDs, "i.id")
 	if err != nil {
 		return nil, err
 	}
-	whereClause, args := buildImageTagClauseFilters(clauses, "i.id")
 	sortColumn := validImageSortColumn(sortBy)
 	if sortDir != "asc" && sortDir != "desc" {
 		sortDir = "desc"
@@ -444,14 +441,11 @@ func (r *d1ImageRepository) CountByGalleryFilter(ctx context.Context, exactTagID
 	if r.tagRepo == nil {
 		return 0, fmt.Errorf("d1ImageRepository: tagRepo not configured for gallery queries")
 	}
-	allTagIDs := make([]int64, 0, len(exactTagIDs)+len(subtreeRootTagIDs))
-	allTagIDs = append(allTagIDs, exactTagIDs...)
-	allTagIDs = append(allTagIDs, subtreeRootTagIDs...)
-	clauses, err := expandHierarchicalTagClausesD1(ctx, r.tagRepo, allTagIDs)
+
+	whereClause, args, err := buildGalleryFilterClausesD1(ctx, r.tagRepo, exactTagIDs, subtreeRootTagIDs, "i.id")
 	if err != nil {
 		return 0, err
 	}
-	whereClause, args := buildImageTagClauseFilters(clauses, "i.id")
 	sql := fmt.Sprintf(`SELECT COUNT(DISTINCT i.id) as cnt FROM images i WHERE %s`, whereClause)
 	return r.client.QueryCount(ctx, sql, args...)
 }
@@ -468,7 +462,12 @@ func (r *d1ImageRepository) FindImagesWithoutAITags(ctx context.Context, limit i
 		       i.thumbnail_small_url, i.thumbnail_large_url, i.created_at, i.updated_at
 		FROM images i
 		LEFT JOIN collection_images ci ON ci.image_id = i.id
-		WHERE NOT EXISTS (
+		WHERE i.thumbnail_small_url IS NOT NULL
+		  AND i.thumbnail_small_url != ''
+		  AND NOT EXISTS (
+			  SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.review_state != ?
+		  )
+		  AND NOT EXISTS (
 			  SELECT 1 FROM image_tags it WHERE it.image_id = i.id AND it.source = ? AND it.review_state != ?
 		  )
 		  AND NOT EXISTS (
@@ -480,7 +479,7 @@ func (r *d1ImageRepository) FindImagesWithoutAITags(ctx context.Context, limit i
 		  )
 		ORDER BY i.id ASC
 		LIMIT ?
-	`, domain.ImageTagSourceAI, domain.ReviewStateRejected, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusPending, domain.PlatformTaskStatusQueued, domain.PlatformTaskStatusRunning, int64(limit))
+	`, domain.ReviewStateRejected, domain.ImageTagSourceAI, domain.ReviewStateRejected, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusPending, domain.PlatformTaskStatusQueued, domain.PlatformTaskStatusRunning, int64(limit))
 	if err != nil {
 		return nil, err
 	}

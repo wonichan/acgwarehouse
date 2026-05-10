@@ -156,7 +156,7 @@ func (h *ImageHandler) ListImages(c *gin.Context) {
 		return
 	}
 
-	var images []any
+	images := make([]any, 0)
 	var total int64
 
 	if hasTags != nil && !*hasTags {

@@ -854,6 +854,12 @@ func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, lim
 			  SELECT 1
 			  FROM image_tags it
 			  WHERE it.image_id = i.id
+			    AND it.review_state != ?
+		  )
+		  AND NOT EXISTS (
+			  SELECT 1
+			  FROM image_tags it
+			  WHERE it.image_id = i.id
 			    AND it.source = ?
 			    AND it.review_state != ?
 		  )
@@ -866,7 +872,7 @@ func (r *sqliteImageRepository) FindImagesWithoutAITags(ctx context.Context, lim
 		  )
 		ORDER BY i.id ASC
 		LIMIT ?
-	`, domain.ImageTagSourceAI, domain.ReviewStateRejected, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusPending, domain.PlatformTaskStatusQueued, domain.PlatformTaskStatusRunning, int64(limit))
+	`, domain.ReviewStateRejected, domain.ImageTagSourceAI, domain.ReviewStateRejected, domain.PlatformTaskTypeAITagGeneration, domain.PlatformTaskStatusPending, domain.PlatformTaskStatusQueued, domain.PlatformTaskStatusRunning, int64(limit))
 	if err != nil {
 		return nil, err
 	}

@@ -61,6 +61,32 @@ func TestQueryRejectsWritableCTE(t *testing.T) {
 	}
 }
 
+func TestQueryAllowsReadOnlyCTE(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true,"results":[{"id":1}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClientWithAPIKey(server.URL, "test-key")
+	rows, err := client.Query(context.Background(), `
+		WITH RECURSIVE descendants(id) AS (
+			SELECT id FROM tags WHERE id = ?
+			UNION ALL
+			SELECT t.id FROM tags t INNER JOIN descendants d ON t.parent_id = d.id
+		)
+		SELECT id, created_at, updated_at FROM descendants
+	`, 1)
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+}
+
 func TestReadOnlyClientRejectsMutationsWithoutHTTPCall(t *testing.T) {
 	t.Parallel()
 

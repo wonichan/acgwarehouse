@@ -13,6 +13,8 @@ class TagService {
     : _client = client ?? http.Client(),
       _baseUrl = baseUrl;
 
+  String get baseUrl => _baseUrl;
+
   /// 获取标签列表
   Future<List<Tag>> fetchTags({
     String? search,
@@ -313,8 +315,9 @@ class TagService {
       queryParams['search'] = search;
     }
 
-    final uri = Uri.parse('${ApiConfig.baseUrlOf(_baseUrl)}/tags/governance')
-        .replace(queryParameters: queryParams);
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrlOf(_baseUrl)}/tags/governance',
+    ).replace(queryParameters: queryParams);
 
     final response = await _client.get(uri);
     if (response.statusCode != 200) {
@@ -589,9 +592,9 @@ class TagService {
   }
 
   Future<List<TagBrowseNode>> fetchTreeChildren({required int parentId}) async {
-    final uri = Uri.parse(ApiConfig.tagTreeChildren(_baseUrl)).replace(
-      queryParameters: {'parent_id': parentId.toString()},
-    );
+    final uri = Uri.parse(
+      ApiConfig.tagTreeChildren(_baseUrl),
+    ).replace(queryParameters: {'parent_id': parentId.toString()});
     final response = await _client.get(uri);
     if (response.statusCode != 200) {
       throw Exception('Failed to fetch tree children: ${response.statusCode}');
@@ -621,5 +624,9 @@ class TagService {
     return OrphanTagsPage.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
     );
+  }
+
+  void dispose() {
+    _client.close();
   }
 }

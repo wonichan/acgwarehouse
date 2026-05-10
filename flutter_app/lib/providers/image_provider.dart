@@ -8,7 +8,7 @@ enum ViewMode { grid, masonry }
 enum SortField { createdAt, filename, fileSize }
 
 class ImageListProvider extends ChangeNotifier {
-  final ApiService _apiService;
+  ApiService _apiService;
 
   List<ImageModel> _images = [];
   bool _isLoading = false;
@@ -36,6 +36,17 @@ class ImageListProvider extends ChangeNotifier {
 
   int indexOfImage(int imageId) =>
       _images.indexWhere((image) => image.id == imageId);
+
+  void updateApiService(ApiService apiService) {
+    if (identical(_apiService, apiService)) {
+      return;
+    }
+    _apiService = apiService;
+    _resetPaginationForFilterChange();
+    _total = 0;
+    _isLoading = false;
+    loadImages(refresh: true);
+  }
 
   Future<void> loadImages({bool refresh = false}) async {
     // Prevent duplicate in-flight loads

@@ -15,6 +15,7 @@ class _MetadataTagProvider extends TagProvider {
     : super(TagService(baseUrl: 'http://localhost:8080', client: client));
 
   List<Tag> _filtered = const [];
+  bool loadingImageTags = false;
 
   @override
   Map<String, List<Tag>> get imageTags => {
@@ -37,6 +38,9 @@ class _MetadataTagProvider extends TagProvider {
 
   @override
   List<Tag> get filteredTags => _filtered;
+
+  @override
+  bool get isLoadingImageTags => loadingImageTags;
 
   @override
   Future<String> getDefaultAIPrompt() async => 'default';
@@ -72,7 +76,44 @@ class _MetadataTagProvider extends TagProvider {
   }
 }
 
+class _LoadingMetadataTagProvider extends _MetadataTagProvider {
+  _LoadingMetadataTagProvider() {
+    loadingImageTags = true;
+  }
+
+  @override
+  Map<String, List<Tag>> get imageTags => {
+    'confirmed': const [],
+    'pending': const [],
+    'rejected': const [],
+  };
+}
+
 void main() {
+  testWidgets(
+    'image-detail tags section shows loading state before tags arrive',
+    (tester) async {
+      final provider = _LoadingMetadataTagProvider();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangeNotifierProvider<TagProvider>.value(
+            value: provider,
+            child: const Scaffold(
+              body: ImageMetadataPanel(
+                imageId: 1,
+                metadataSection: SizedBox.shrink(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(const Key('metadata-tags-loading')), findsOneWidget);
+    },
+  );
+
   testWidgets('image-detail merge dialog hides cross-level targets', (
     tester,
   ) async {

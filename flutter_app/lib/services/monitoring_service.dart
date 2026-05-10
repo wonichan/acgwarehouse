@@ -18,6 +18,9 @@ class MonitoringService {
        _basicAuthHeader = basicAuthHeader,
        _baseUrl = baseUrl;
 
+  String get baseUrl => _baseUrl;
+  String? get basicAuthHeader => _basicAuthHeader;
+
   Map<String, dynamic>? get webSocketHeaders {
     if (_basicAuthHeader == null || _basicAuthHeader!.isEmpty) {
       return null;

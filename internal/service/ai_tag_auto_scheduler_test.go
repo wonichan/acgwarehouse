@@ -88,6 +88,25 @@ func TestAutoEnqueueCondition(t *testing.T) {
 		}
 	})
 
+	t.Run("image with manual tags is skipped", func(t *testing.T) {
+		t.Parallel()
+
+		env := newAITagAutoSchedulerIntegrationEnv(t)
+		image := env.saveImage("manual-tagged.png", "/thumb/manual-tagged.jpg")
+		env.addImageTag(image.ID, "manual")
+
+		queued, err := env.scheduler.ScanAndEnqueue(context.Background())
+		if err != nil {
+			t.Fatalf("ScanAndEnqueue() error = %v", err)
+		}
+		if queued != 0 {
+			t.Fatalf("queued = %d, want 0", queued)
+		}
+		if got := env.countPlatformTasks(); got != 0 {
+			t.Fatalf("platform task count = %d, want 0", got)
+		}
+	})
+
 	t.Run("disabled config skips scan", func(t *testing.T) {
 		t.Parallel()
 

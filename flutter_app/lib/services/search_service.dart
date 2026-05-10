@@ -50,6 +50,8 @@ class SearchService {
     : _client = client ?? http.Client(),
       _baseUrl = baseUrl;
 
+  String get baseUrl => _baseUrl;
+
   /// Search images by query
   Future<SearchResult> search({
     String? query,

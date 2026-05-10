@@ -5,7 +5,7 @@ import '../models/tag_governance_filter.dart';
 import '../services/tag_service.dart';
 
 class TagProvider extends ChangeNotifier {
-  final TagService _tagService;
+  TagService _tagService;
 
   List<Tag> _allTags = [];
   List<Tag> _filteredTags = [];
@@ -43,8 +43,10 @@ class TagProvider extends ChangeNotifier {
   String? _governanceSearch;
 
   // Governance filter state (draft/applied dual-state)
-  TagGovernanceFilterState _governanceDraftFilter = const TagGovernanceFilterState();
-  TagGovernanceFilterState _governanceAppliedFilter = const TagGovernanceFilterState();
+  TagGovernanceFilterState _governanceDraftFilter =
+      const TagGovernanceFilterState();
+  TagGovernanceFilterState _governanceAppliedFilter =
+      const TagGovernanceFilterState();
 
   // Lazy tree browse state (gallery filter)
   List<TagBrowseNode> _treeRoots = [];
@@ -57,6 +59,36 @@ class TagProvider extends ChangeNotifier {
   String? _treeBrowseError;
 
   TagProvider(this._tagService);
+
+  void updateTagService(TagService tagService) {
+    if (identical(_tagService, tagService)) {
+      return;
+    }
+    _tagService = tagService;
+    _allTags = [];
+    _filteredTags = [];
+    _selectedTagIds.clear();
+    _imageTags = _emptyImageTags();
+    _statistics = [];
+    _governanceRows = [];
+    _selectedGovernanceIds.clear();
+    _activeMergeSource = null;
+    _deletePreview = null;
+    _lastBatchResult = null;
+    _governanceOffset = 0;
+    _governanceTotal = 0;
+    _hasMoreGovernance = true;
+    _governanceSearch = null;
+    _treeRoots = [];
+    _treeChildrenByParent = {};
+    _orphanTags = [];
+    _orphanTotal = 0;
+    _hasMoreOrphans = false;
+    _tagTree = null;
+    _error = null;
+    _treeBrowseError = null;
+    loadTags();
+  }
 
   // Getters
   TagService get tagService => _tagService;
@@ -77,7 +109,8 @@ class TagProvider extends ChangeNotifier {
 
   // Governance filter getters
   TagGovernanceFilterState get governanceDraftFilter => _governanceDraftFilter;
-  TagGovernanceFilterState get governanceAppliedFilter => _governanceAppliedFilter;
+  TagGovernanceFilterState get governanceAppliedFilter =>
+      _governanceAppliedFilter;
 
   // 加载标签树
   Future<void> loadTagTree() async {
@@ -437,8 +470,7 @@ class TagProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final children =
-          await _tagService.fetchTreeChildren(parentId: parentId);
+      final children = await _tagService.fetchTreeChildren(parentId: parentId);
       _treeChildrenByParent[parentId] = children;
     } catch (e) {
       _treeBrowseError = e.toString();
@@ -454,8 +486,10 @@ class TagProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final page =
-          await _tagService.fetchOrphanTags(limit: limit, offset: offset);
+      final page = await _tagService.fetchOrphanTags(
+        limit: limit,
+        offset: offset,
+      );
       if (offset == 0) {
         _orphanTags = page.items;
       } else {
@@ -509,7 +543,9 @@ class TagProvider extends ChangeNotifier {
       const pageSize = 50;
       final page = await _tagService.fetchGovernanceTags(
         search: search,
-        filter: _governanceAppliedFilter.isNotEmpty ? _governanceAppliedFilter : null,
+        filter: _governanceAppliedFilter.isNotEmpty
+            ? _governanceAppliedFilter
+            : null,
         limit: pageSize,
         offset: 0,
       );
@@ -536,7 +572,9 @@ class TagProvider extends ChangeNotifier {
       const pageSize = 50;
       final page = await _tagService.fetchGovernanceTags(
         search: _governanceSearch,
-        filter: _governanceAppliedFilter.isNotEmpty ? _governanceAppliedFilter : null,
+        filter: _governanceAppliedFilter.isNotEmpty
+            ? _governanceAppliedFilter
+            : null,
         limit: pageSize,
         offset: _governanceOffset,
       );
@@ -602,7 +640,9 @@ class TagProvider extends ChangeNotifier {
     try {
       const pageSize = 50;
       final page = await _tagService.fetchGovernanceTags(
-        filter: _governanceAppliedFilter.isNotEmpty ? _governanceAppliedFilter : null,
+        filter: _governanceAppliedFilter.isNotEmpty
+            ? _governanceAppliedFilter
+            : null,
         limit: pageSize,
         offset: 0,
       );
@@ -809,7 +849,9 @@ class TagProvider extends ChangeNotifier {
       const pageSize = 50;
       final page = await _tagService.fetchGovernanceTags(
         search: _governanceSearch,
-        filter: _governanceAppliedFilter.isNotEmpty ? _governanceAppliedFilter : null,
+        filter: _governanceAppliedFilter.isNotEmpty
+            ? _governanceAppliedFilter
+            : null,
         limit: pageSize,
         offset: 0,
       );

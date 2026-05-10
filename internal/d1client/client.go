@@ -283,7 +283,7 @@ func (c *Client) doMutateRequest(ctx context.Context, reqBody MutateRequest) (*M
 
 func validateReadOnly(sql string) error {
 	normalized := strings.TrimSpace(strings.ToUpper(sql))
-	if strings.HasPrefix(normalized, "SELECT") {
+	if strings.HasPrefix(normalized, "SELECT") || isReadOnlyWithQuery(normalized) {
 		return nil
 	}
 	forbidden := []string{"WITH", "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "REPLACE", "ATTACH", "DETACH"}
@@ -293,4 +293,29 @@ func validateReadOnly(sql string) error {
 		}
 	}
 	return fmt.Errorf("d1: only SELECT queries are allowed")
+}
+
+func isReadOnlyWithQuery(normalized string) bool {
+	if !strings.HasPrefix(normalized, "WITH") {
+		return false
+	}
+	forbidden := []string{"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "REPLACE", "ATTACH", "DETACH"}
+	for _, keyword := range forbidden {
+		if containsSQLKeyword(normalized, keyword) {
+			return false
+		}
+	}
+	return strings.Contains(normalized, "SELECT")
+}
+
+func containsSQLKeyword(sql, keyword string) bool {
+	fields := strings.FieldsFunc(sql, func(r rune) bool {
+		return r < 'A' || r > 'Z'
+	})
+	for _, field := range fields {
+		if field == keyword {
+			return true
+		}
+	}
+	return false
 }
