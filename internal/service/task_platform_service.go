@@ -99,6 +99,16 @@ func (s *TaskPlatformService) PlanBatch(ctx context.Context, req TaskPlatformPla
 			}
 			continue
 		}
+		exists, err := s.taskRepo.ImageExists(ctx, item.ImageID)
+		if err != nil {
+			logger.Errorf("[service] PlanBatch image existence check failed: image_id=%d error=%v", item.ImageID, err)
+			return nil, err
+		}
+		if !exists {
+			batch.SkippedImages++
+			logger.Warnf("[service] PlanBatch skipped missing image: image_id=%d source_type=%s task_types=%d", item.ImageID, req.SourceType, len(taskTypes))
+			continue
+		}
 		createdForImage := false
 		for _, taskType := range taskTypes {
 			dedupeKey := buildPlatformTaskDedupeKey(item.ImageVersionKey, taskType)

@@ -1,13 +1,11 @@
-import 'dart:ui' show FontFeature;
-
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/image_move.dart';
-import '../../models/tag.dart';
 import '../../providers/config_provider.dart';
+import '../../providers/image_move_provider.dart';
 import '../../providers/image_provider.dart';
 import '../../providers/tag_provider.dart';
 import '../../services/image_move_service.dart';
@@ -34,34 +32,6 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
   late final DirectoryPicker _directoryPicker;
   final TextEditingController _tagSearchController = TextEditingController();
 
-  final List<String> _sourceDirs = <String>[];
-  Tag? _selectedTag;
-  String? _targetDir;
-  ImageMovePreview? _preview;
-  ImageMoveResult? _result;
-  List<ImageMoveBatch> _history = const <ImageMoveBatch>[];
-  ImageMoveBatch? _activeJob;
-  bool _isPreviewLoading = false;
-  bool _isExecuting = false;
-  bool _isHistoryLoading = false;
-  bool _allowTargetInsideSource = false;
-  String? _errorMessage;
-  String? _successMessage;
-  String _tagQuery = '';
-  String _conflict = 'skip';
-  int _selectedTabIndex = 0;
-
-  bool get _isBusy => _isPreviewLoading || _isExecuting;
-
-  bool get _canPreview =>
-      !_isBusy &&
-      _sourceDirs.isNotEmpty &&
-      _selectedTag != null &&
-      (_targetDir?.trim().isNotEmpty ?? false);
-
-  bool get _canExecute =>
-      !_isBusy && _preview != null && (_preview?.movable ?? 0) > 0;
-
   @override
   void initState() {
     super.initState();
@@ -76,6 +46,8 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final moveProvider = context.read<ImageMoveProvider>();
+      _tagSearchController.text = moveProvider.tagQuery;
       final tagProvider = context.read<TagProvider>();
       if (tagProvider.allTags.isEmpty && !tagProvider.isLoading) {
         tagProvider.loadTags();
@@ -95,139 +67,79 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
   Future<void> _addSourceDir() async {
     final dir = await _directoryPicker();
     if (!mounted || dir == null || dir.trim().isEmpty) return;
-    final normalized = dir.trim();
-    if (_sourceDirs.contains(normalized)) return;
-    setState(() {
-      _sourceDirs.add(normalized);
-      _clearResponses();
-    });
+    context.read<ImageMoveProvider>().addSourceDir(dir);
   }
 
   Future<void> _chooseTargetDir() async {
     final dir = await _directoryPicker();
     if (!mounted || dir == null || dir.trim().isEmpty) return;
-    setState(() {
-      _targetDir = dir.trim();
-      _clearResponses();
-    });
+    context.read<ImageMoveProvider>().setTargetDir(dir);
   }
 
   Future<void> _previewMove() async {
-    if (!_canPreview) return;
-    setState(() {
-      _isPreviewLoading = true;
-      _errorMessage = null;
-      _successMessage = null;
-      _result = null;
-    });
+    final moveProvider = context.read<ImageMoveProvider>();
+    if (!moveProvider.canPreview) return;
+    moveProvider.startPreview();
 
     try {
-      final preview = await _service.preview(_buildRequest());
+      final preview = await _service.preview(moveProvider.buildRequest());
       if (!mounted) return;
-      setState(() {
-        _preview = preview;
-        if (preview.totalMatched > 1000) {
-          _successMessage = '命中数量较大，可创建后台任务执行';
-        }
-      });
+      context.read<ImageMoveProvider>().finishPreview(preview);
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = _friendlyError(error);
-      });
-    } finally {
-      if (!mounted) return;
-      setState(() {
-        _isPreviewLoading = false;
-      });
+      context.read<ImageMoveProvider>().failPreview(_friendlyError(error));
     }
   }
 
   Future<void> _executeMove() async {
-    if (!_canExecute) return;
-    if (_conflict == 'overwrite') {
+    final moveProvider = context.read<ImageMoveProvider>();
+    if (!moveProvider.canExecute) return;
+    if (moveProvider.conflict == 'overwrite') {
       final confirmed = await _confirmOverwrite();
-      if (!confirmed) return;
+      if (!mounted || !confirmed) return;
     }
-    setState(() {
-      _isExecuting = true;
-      _errorMessage = null;
-      _successMessage = null;
-    });
+    moveProvider.startExecute();
+    final imageProvider = context.read<ImageListProvider>();
 
     try {
-      final result = await _service.execute(_buildRequest());
+      final result = await _service.execute(moveProvider.buildRequest());
       if (!mounted) return;
-      setState(() {
-        _result = result;
-        _successMessage = '移动完成';
-      });
+      context.read<ImageMoveProvider>().finishExecute(result);
+      await imageProvider.loadImages(refresh: true);
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = _friendlyError(error);
-      });
-    } finally {
-      if (!mounted) return;
-      setState(() {
-        _isExecuting = false;
-      });
+      context.read<ImageMoveProvider>().failExecute(_friendlyError(error));
     }
   }
 
   Future<void> _createJob() async {
-    if (!_canPreview) return;
-    if (_conflict == 'overwrite') {
+    final moveProvider = context.read<ImageMoveProvider>();
+    if (!moveProvider.canPreview) return;
+    if (moveProvider.conflict == 'overwrite') {
       final confirmed = await _confirmOverwrite();
       if (!confirmed) return;
     }
-    setState(() {
-      _isExecuting = true;
-      _errorMessage = null;
-      _successMessage = null;
-    });
+    moveProvider.startExecute();
     try {
-      final job = await _service.createJob(_buildRequest());
+      final job = await _service.createJob(moveProvider.buildRequest());
       if (!mounted) return;
-      setState(() {
-        _activeJob = job;
-        _selectedTabIndex = 1;
-        _successMessage = '后台任务已创建';
-      });
+      context.read<ImageMoveProvider>().setJobCreated(job);
       await _loadHistory();
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = _friendlyError(error);
-      });
-    } finally {
-      if (!mounted) return;
-      setState(() {
-        _isExecuting = false;
-      });
+      context.read<ImageMoveProvider>().failExecute(_friendlyError(error));
     }
   }
 
   Future<void> _loadHistory() async {
-    setState(() {
-      _isHistoryLoading = true;
-    });
+    context.read<ImageMoveProvider>().startHistoryLoad();
     try {
       final history = await _service.history();
       if (!mounted) return;
-      setState(() {
-        _history = history;
-      });
+      context.read<ImageMoveProvider>().finishHistoryLoad(history);
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = _friendlyError(error);
-      });
-    } finally {
-      if (!mounted) return;
-      setState(() {
-        _isHistoryLoading = false;
-      });
+      context.read<ImageMoveProvider>().failHistoryLoad(_friendlyError(error));
     }
   }
 
@@ -252,28 +164,11 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
     return confirmed ?? false;
   }
 
-  ImageMoveRequest _buildRequest() {
-    return ImageMoveRequest(
-      sourceDirs: List<String>.from(_sourceDirs),
-      tagId: _selectedTag!.id,
-      targetDir: _targetDir!,
-      conflict: _conflict,
-      allowTargetInsideSource: _allowTargetInsideSource,
-    );
-  }
-
-  void _clearResponses() {
-    _preview = null;
-    _result = null;
-    _errorMessage = null;
-    _successMessage = null;
-  }
-
   String _friendlyError(Object error) {
     final message = error.toString();
-    final serverMessage = RegExp(r'ApiError\([^)]*\): ([^(]+)').firstMatch(
-      message,
-    );
+    final serverMessage = RegExp(
+      r'ApiError\([^)]*\): ([^(]+)',
+    ).firstMatch(message);
     if (serverMessage != null) {
       return serverMessage.group(1)?.trim() ?? message;
     }
@@ -282,8 +177,8 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<TagProvider, ImageListProvider>(
-      builder: (context, tagProvider, imageProvider, child) {
+    return Consumer3<TagProvider, ImageListProvider, ImageMoveProvider>(
+      builder: (context, tagProvider, imageProvider, moveProvider, child) {
         return ScaffoldPage(
           header: PageHeader(
             title: const Text('移动'),
@@ -293,7 +188,7 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
                 CommandBarButton(
                   icon: const Icon(FluentIcons.refresh),
                   label: const Text('刷新图库'),
-                  onPressed: _isBusy
+                  onPressed: moveProvider.isBusy
                       ? null
                       : () => imageProvider.loadImages(refresh: true),
                 ),
@@ -301,17 +196,17 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
                 CommandBarButton(
                   icon: const Icon(FluentIcons.view),
                   label: const Text('预览'),
-                  onPressed: _canPreview ? _previewMove : null,
+                  onPressed: moveProvider.canPreview ? _previewMove : null,
                 ),
                 CommandBarButton(
                   icon: const Icon(FluentIcons.move_to_folder),
                   label: const Text('开始移动'),
-                  onPressed: _canExecute ? _executeMove : null,
+                  onPressed: moveProvider.canExecute ? _executeMove : null,
                 ),
                 CommandBarButton(
                   icon: const Icon(FluentIcons.cloud_import_export),
                   label: const Text('后台任务'),
-                  onPressed: _canPreview ? _createJob : null,
+                  onPressed: moveProvider.canPreview ? _createJob : null,
                 ),
               ],
             ),
@@ -321,48 +216,50 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_errorMessage != null) ...[
+                if (moveProvider.errorMessage != null) ...[
                   InfoBar(
                     severity: InfoBarSeverity.error,
-                    title: Text(_errorMessage!),
+                    title: Text(moveProvider.errorMessage!),
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (_successMessage != null) ...[
+                if (moveProvider.successMessage != null) ...[
                   InfoBar(
                     severity: InfoBarSeverity.success,
-                    title: Text(_successMessage!),
+                    title: Text(moveProvider.successMessage!),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (moveProvider.isExecuting) ...[
+                  _BusyPanel(
+                    text: moveProvider.activeJob != null
+                        ? '后台移动任务正在创建或刷新'
+                        : '正在移动图片，请保持程序打开',
                   ),
                   const SizedBox(height: 12),
                 ],
                 Row(
                   children: [
                     ToggleButton(
-                      checked: _selectedTabIndex == 0,
-                      onChanged: (_) {
-                        setState(() {
-                          _selectedTabIndex = 0;
-                        });
-                      },
+                      checked: moveProvider.selectedTabIndex == 0,
+                      onChanged: (_) => moveProvider.setSelectedTabIndex(0),
                       child: const Text('移动任务'),
                     ),
                     const SizedBox(width: 8),
                     ToggleButton(
-                      checked: _selectedTabIndex == 1,
+                      checked: moveProvider.selectedTabIndex == 1,
                       onChanged: (_) {
-                        setState(() {
-                          _selectedTabIndex = 1;
-                        });
+                        moveProvider.setSelectedTabIndex(1);
                         _loadHistory();
                       },
                       child: const Text('历史记录'),
                     ),
                   ],
                 ),
-                if (_selectedTabIndex == 0)
-                  _buildMoveTab(tagProvider)
+                if (moveProvider.selectedTabIndex == 0)
+                  _buildMoveTab(tagProvider, moveProvider)
                 else
-                  _buildHistoryTab(),
+                  _buildHistoryTab(moveProvider),
               ],
             ),
           ),
@@ -371,7 +268,10 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
     );
   }
 
-  Widget _buildMoveTab(TagProvider tagProvider) {
+  Widget _buildMoveTab(
+    TagProvider tagProvider,
+    ImageMoveProvider moveProvider,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Column(
@@ -380,7 +280,7 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
           _SelectionPanel(
             title: '来源目录',
             action: Button(
-              onPressed: _isBusy ? null : _addSourceDir,
+              onPressed: moveProvider.isBusy ? null : _addSourceDir,
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -390,7 +290,7 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
                 ],
               ),
             ),
-            child: _buildSourceDirs(),
+            child: _buildSourceDirs(moveProvider),
           ),
           const SizedBox(height: 12),
           _SelectionPanel(
@@ -398,16 +298,18 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
             action: tagProvider.isLoading
                 ? const ProgressRing(strokeWidth: 2)
                 : Button(
-                    onPressed: _isBusy ? null : tagProvider.loadTags,
+                    onPressed: moveProvider.isBusy
+                        ? null
+                        : tagProvider.loadTags,
                     child: const Text('刷新标签'),
                   ),
-            child: _buildTagSelector(tagProvider),
+            child: _buildTagSelector(tagProvider, moveProvider),
           ),
           const SizedBox(height: 12),
           _SelectionPanel(
             title: '目标与策略',
             action: Button(
-              onPressed: _isBusy ? null : _chooseTargetDir,
+              onPressed: moveProvider.isBusy ? null : _chooseTargetDir,
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -420,101 +322,101 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _PathLine(path: _targetDir ?? '尚未选择'),
+                _PathLine(path: moveProvider.targetDir ?? '尚未选择'),
                 const SizedBox(height: 10),
                 ComboBox<String>(
-                  value: _conflict,
+                  value: moveProvider.conflict,
                   items: const [
                     ComboBoxItem(value: 'skip', child: Text('跳过同名文件')),
                     ComboBoxItem(value: 'rename', child: Text('自动重命名')),
                     ComboBoxItem(value: 'overwrite', child: Text('覆盖同名文件')),
                   ],
-                  onChanged: _isBusy
+                  onChanged: moveProvider.isBusy
                       ? null
                       : (value) {
                           if (value == null) return;
-                          setState(() {
-                            _conflict = value;
-                            _clearResponses();
-                          });
+                          moveProvider.setConflict(value);
                         },
                 ),
                 const SizedBox(height: 8),
                 Checkbox(
-                  checked: _allowTargetInsideSource,
+                  checked: moveProvider.allowTargetInsideSource,
                   content: const Text('允许目标目录位于来源目录内部'),
-                  onChanged: _isBusy
+                  onChanged: moveProvider.isBusy
                       ? null
                       : (value) {
-                          setState(() {
-                            _allowTargetInsideSource = value ?? false;
-                            _clearResponses();
-                          });
+                          moveProvider.setAllowTargetInsideSource(
+                            value ?? false,
+                          );
                         },
                 ),
               ],
             ),
           ),
-          if (_activeJob != null) ...[
+          if (moveProvider.activeJob != null) ...[
             const SizedBox(height: 12),
-            _JobPanel(batch: _activeJob!),
+            _JobPanel(batch: moveProvider.activeJob!),
           ],
           const SizedBox(height: 16),
           _ResultPanel(
             title: '预览结果',
-            summary: _preview == null
+            summary: moveProvider.preview == null
                 ? null
                 : [
-                    _Metric('命中', _preview!.totalMatched),
-                    _Metric('可移动', _preview!.movable),
-                    _Metric('跳过', _preview!.skipped),
+                    _Metric('命中', moveProvider.preview!.totalMatched),
+                    _Metric('可移动', moveProvider.preview!.movable),
+                    _Metric('跳过', moveProvider.preview!.skipped),
                   ],
-            loading: _isPreviewLoading,
-            emptyText: _preview == null
+            loading: moveProvider.isPreviewLoading,
+            emptyText: moveProvider.preview == null
                 ? '完成三项选择后点击预览'
-                : _preview!.items.isEmpty
+                : moveProvider.preview!.items.isEmpty
                 ? '没有命中图片'
                 : null,
-            items: _preview?.items ?? const <ImageMoveItem>[],
+            items: moveProvider.preview?.items ?? const <ImageMoveItem>[],
           ),
           const SizedBox(height: 12),
           _ResultPanel(
             title: '执行结果',
-            summary: _result == null
+            summary: moveProvider.result == null
                 ? null
                 : [
-                    _Metric('已移动', _result!.moved),
-                    _Metric('跳过', _result!.skipped),
-                    _Metric('失败', _result!.failed),
+                    _Metric('已移动', moveProvider.result!.moved),
+                    _Metric('跳过', moveProvider.result!.skipped),
+                    _Metric('失败', moveProvider.result!.failed),
                   ],
-            loading: _isExecuting,
-            emptyText: _result == null ? '预览后可开始移动' : null,
-            items: _result?.items ?? const <ImageMoveItem>[],
+            loading: moveProvider.isExecuting,
+            emptyText: moveProvider.result == null
+                ? moveProvider.isExecuting
+                      ? '正在移动，完成后会显示结果'
+                      : '预览后可开始移动'
+                : null,
+            items: moveProvider.result?.items ?? const <ImageMoveItem>[],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildHistoryTab() {
+  Widget _buildHistoryTab(ImageMoveProvider moveProvider) {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: _HistoryPanel(
-        loading: _isHistoryLoading,
-        batches: _history,
+        loading: moveProvider.isHistoryLoading,
+        batches: moveProvider.history,
         onRefresh: _loadHistory,
       ),
     );
   }
 
-  Widget _buildSourceDirs() {
-    if (_sourceDirs.isEmpty) {
+  Widget _buildSourceDirs(ImageMoveProvider moveProvider) {
+    if (moveProvider.sourceDirs.isEmpty) {
       return const _MutedText('尚未选择来源目录');
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final dir in _sourceDirs)
+        for (final dir in moveProvider.sourceDirs)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
@@ -522,34 +424,27 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
                 Expanded(child: _PathLine(path: dir)),
                 IconButton(
                   icon: const Icon(FluentIcons.delete),
-                  onPressed: _isBusy
+                  onPressed: moveProvider.isBusy
                       ? null
-                      : () {
-                          setState(() {
-                            _sourceDirs.remove(dir);
-                            _clearResponses();
-                          });
-                        },
+                      : () => moveProvider.removeSourceDir(dir),
                 ),
               ],
             ),
           ),
         Button(
-          onPressed: _isBusy || _sourceDirs.isEmpty
+          onPressed: moveProvider.isBusy || moveProvider.sourceDirs.isEmpty
               ? null
-              : () {
-                  setState(() {
-                    _sourceDirs.clear();
-                    _clearResponses();
-                  });
-                },
+              : moveProvider.clearSourceDirs,
           child: const Text('清空全部'),
         ),
       ],
     );
   }
 
-  Widget _buildTagSelector(TagProvider tagProvider) {
+  Widget _buildTagSelector(
+    TagProvider tagProvider,
+    ImageMoveProvider moveProvider,
+  ) {
     if (tagProvider.error != null && tagProvider.allTags.isEmpty) {
       return Text('标签加载失败：${tagProvider.error}');
     }
@@ -557,9 +452,9 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
     final filtered = tagProvider.allTags
         .where(
           (tag) =>
-              _tagQuery.isEmpty ||
+              moveProvider.tagQuery.isEmpty ||
               tag.preferredLabel.toLowerCase().contains(
-                _tagQuery.toLowerCase(),
+                moveProvider.tagQuery.toLowerCase(),
               ),
         )
         .toList();
@@ -570,23 +465,19 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
         TextBox(
           controller: _tagSearchController,
           placeholder: '搜索标签',
-          enabled: !_isBusy,
+          enabled: !moveProvider.isBusy,
           prefix: const Padding(
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Icon(FluentIcons.search, size: 14),
           ),
-          onChanged: (value) {
-            setState(() {
-              _tagQuery = value.trim();
-            });
-          },
+          onChanged: moveProvider.setTagQuery,
         ),
         const SizedBox(height: 8),
-        if (_selectedTag != null)
+        if (moveProvider.selectedTag != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
-              '已选择：${_selectedTag!.preferredLabel}（${_selectedTag!.usageCount}）',
+              '已选择：${moveProvider.selectedTag!.preferredLabel}（${moveProvider.selectedTag!.usageCount}）',
             ),
           ),
         ConstrainedBox(
@@ -595,15 +486,12 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
               ? const _MutedText('没有可选标签')
               : SingleChildScrollView(
                   child: RadioGroup<int>(
-                    groupValue: _selectedTag?.id,
+                    groupValue: moveProvider.selectedTag?.id,
                     onChanged: (tagId) {
-                      if (_isBusy || tagId == null) return;
-                      setState(() {
-                        _selectedTag = filtered.firstWhere(
-                          (tag) => tag.id == tagId,
-                        );
-                        _clearResponses();
-                      });
+                      if (moveProvider.isBusy || tagId == null) return;
+                      moveProvider.setSelectedTag(
+                        filtered.firstWhere((tag) => tag.id == tagId),
+                      );
                     },
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -613,7 +501,7 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
                             padding: const EdgeInsets.only(bottom: 4),
                             child: RadioButton<int>(
                               value: tag.id,
-                              enabled: !_isBusy,
+                              enabled: !moveProvider.isBusy,
                               content: Text(
                                 '${tag.preferredLabel} (${tag.usageCount})',
                               ),
@@ -728,6 +616,45 @@ class _ResultPanel extends StatelessWidget {
             _MutedText(emptyText!)
           else
             _MoveItemList(items: items.take(80).toList()),
+        ],
+      ),
+    );
+  }
+}
+
+class _BusyPanel extends StatelessWidget {
+  final String text;
+
+  const _BusyPanel({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: FluentTheme.of(context).accentColor.withValues(alpha: 0.08),
+        border: Border.all(
+          color: FluentTheme.of(context).accentColor.withValues(alpha: 0.28),
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const ProgressRing(strokeWidth: 2),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: FluentTheme.of(context).typography.bodyStrong,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const ProgressBar(),
         ],
       ),
     );
@@ -895,7 +822,9 @@ class _HistoryPanel extends StatelessWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            _MetricPill(metric: _Metric('命中', batch.totalMatched)),
+                            _MetricPill(
+                              metric: _Metric('命中', batch.totalMatched),
+                            ),
                             _MetricPill(metric: _Metric('已移动', batch.moved)),
                             _MetricPill(metric: _Metric('跳过', batch.skipped)),
                             _MetricPill(metric: _Metric('失败', batch.failed)),

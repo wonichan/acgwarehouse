@@ -28,6 +28,7 @@ type PlatformTaskDedupeLookup struct {
 
 type PlatformTaskRepository interface {
 	Create(ctx context.Context, task *domain.PlatformTask) error
+	ImageExists(ctx context.Context, imageID int64) (bool, error)
 	FindByID(ctx context.Context, taskID int64) (*domain.PlatformTask, error)
 	List(ctx context.Context, filter PlatformTaskListFilter) ([]domain.PlatformTask, error)
 	FindByDedupeKey(ctx context.Context, dedupeKey string) (*domain.PlatformTask, error)
@@ -68,6 +69,18 @@ func (r *sqlitePlatformTaskRepository) Create(ctx context.Context, task *domain.
 	}
 	task.ID = id
 	return nil
+}
+
+func (r *sqlitePlatformTaskRepository) ImageExists(ctx context.Context, imageID int64) (bool, error) {
+	var exists int
+	err := r.db.QueryRowContext(ctx, `SELECT 1 FROM images WHERE id = ? LIMIT 1`, imageID).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *sqlitePlatformTaskRepository) FindByID(ctx context.Context, taskID int64) (*domain.PlatformTask, error) {

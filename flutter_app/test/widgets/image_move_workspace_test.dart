@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gallery/models/tag.dart';
 import 'package:gallery/providers/config_provider.dart';
+import 'package:gallery/providers/image_move_provider.dart';
 import 'package:gallery/providers/image_provider.dart';
 import 'package:gallery/providers/tag_provider.dart';
 import 'package:gallery/services/api_service.dart';
@@ -15,8 +17,7 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 class _WorkspaceTagProvider extends TagProvider {
-  _WorkspaceTagProvider()
-    : super(TagService(baseUrl: 'http://localhost:8080'));
+  _WorkspaceTagProvider() : super(TagService(baseUrl: 'http://localhost:8080'));
 
   @override
   List<Tag> get allTags => [
@@ -60,10 +61,14 @@ void main() {
     required ImageMoveService service,
     required List<String?> pickedDirs,
     _TrackingImageListProvider? imageProvider,
+    ImageMoveProvider? moveProvider,
   }) {
     var pickIndex = 0;
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider<ImageMoveProvider>.value(
+          value: moveProvider ?? ImageMoveProvider(),
+        ),
         ChangeNotifierProvider<TagProvider>(
           create: (_) => _WorkspaceTagProvider(),
         ),
@@ -87,6 +92,7 @@ void main() {
   testWidgets('disables preview until source, tag, and target are selected', (
     tester,
   ) async {
+    final moveProvider = ImageMoveProvider();
     final service = ImageMoveService(
       baseUrl: 'http://localhost:8080',
       client: MockClient((_) async => http.Response('{}', 500)),
@@ -96,36 +102,25 @@ void main() {
       buildApp(
         service: service,
         pickedDirs: ['E:/picture/output', 'E:/picture/archive'],
+        moveProvider: moveProvider,
       ),
     );
     await tester.pump();
 
-    final previewButton = find.widgetWithText(fluent.CommandBarButton, '预览');
-    expect(
-      tester.widget<fluent.CommandBarButton>(previewButton).onPressed,
-      isNull,
-    );
+    expect(find.text('预览'), findsOneWidget);
+    expect(moveProvider.canPreview, isFalse);
 
     await tester.tap(find.text('添加来源目录'));
     await tester.pumpAndSettle();
-    expect(
-      tester.widget<fluent.CommandBarButton>(previewButton).onPressed,
-      isNull,
-    );
+    expect(moveProvider.canPreview, isFalse);
 
     await tester.tap(find.text('调月莉音 (3)'));
     await tester.pumpAndSettle();
-    expect(
-      tester.widget<fluent.CommandBarButton>(previewButton).onPressed,
-      isNull,
-    );
+    expect(moveProvider.canPreview, isFalse);
 
     await tester.tap(find.text('选择目标目录'));
     await tester.pumpAndSettle();
-    expect(
-      tester.widget<fluent.CommandBarButton>(previewButton).onPressed,
-      isNotNull,
-    );
+    expect(moveProvider.canPreview, isTrue);
   });
 
   testWidgets('shows preview conflicts and execution failures', (tester) async {
@@ -208,20 +203,62 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('选择目标目录'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(fluent.CommandBarButton, '预览'));
+    await tester.tap(find.text('预览'));
     await tester.pumpAndSettle();
 
     expect(find.text('命中 2'), findsOneWidget);
     expect(find.text('可移动 1'), findsOneWidget);
     expect(find.text('原因：目标已存在'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(fluent.CommandBarButton, '开始移动'));
+    await tester.tap(find.text('开始移动'));
     await tester.pumpAndSettle();
 
     expect(find.text('移动完成'), findsOneWidget);
     expect(find.text('已移动 1'), findsOneWidget);
     expect(find.text('失败 1'), findsOneWidget);
     expect(find.text('原因：移动失败'), findsOneWidget);
+  });
+
+  testWidgets('keeps move selections after workspace is rebuilt', (
+    tester,
+  ) async {
+    final moveProvider = ImageMoveProvider();
+    final service = ImageMoveService(
+      baseUrl: 'http://localhost:8080',
+      client: MockClient((_) async => http.Response('{}', 200)),
+    );
+
+    await tester.pumpWidget(
+      buildApp(
+        service: service,
+        pickedDirs: ['E:/picture/output', 'E:/picture/archive'],
+        moveProvider: moveProvider,
+      ),
+    );
+
+    await tester.tap(find.text('添加来源目录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('调月莉音 (3)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('选择目标目录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('E:/picture/output'), findsOneWidget);
+    expect(find.text('已选择：调月莉音（3）'), findsOneWidget);
+    expect(find.text('E:/picture/archive'), findsOneWidget);
+
+    await tester.pumpWidget(
+      buildApp(
+        service: service,
+        pickedDirs: ['unused'],
+        moveProvider: moveProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('E:/picture/output'), findsOneWidget);
+    expect(find.text('已选择：调月莉音（3）'), findsOneWidget);
+    expect(find.text('E:/picture/archive'), findsOneWidget);
   });
 
   testWidgets('refresh gallery button delegates to image provider', (
@@ -240,7 +277,7 @@ void main() {
         imageProvider: imageProvider,
       ),
     );
-    await tester.tap(find.widgetWithText(fluent.CommandBarButton, '刷新图库'));
+    await tester.tap(find.text('刷新图库'));
     await tester.pumpAndSettle();
 
     expect(imageProvider.refreshCalls, 1);

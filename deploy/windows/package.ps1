@@ -155,9 +155,12 @@ server:
   env: "production"
 
 database:
-  type: "sqlite"
-  path: "./storage/acgwarehouse.db"
+  type: "d1"
+  path: "./storage/acgwarehouse-runtime.db"
   connection_string: ""
+  d1_api_url: "https://api.*.cloud"
+  d1_api_key: "*"
+  d1_readonly: false
 
 storage:
   scan_roots:

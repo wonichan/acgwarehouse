@@ -2,6 +2,7 @@ import 'package:provider/provider.dart';
 import '../config/api_config.dart';
 import '../models/log_models.dart';
 import '../providers/config_provider.dart';
+import '../providers/image_move_provider.dart';
 import '../providers/image_provider.dart';
 import '../providers/log_viewer_provider.dart';
 import '../providers/monitoring_provider.dart';
@@ -59,6 +60,7 @@ List<dynamic> createAppProviders({
     ChangeNotifierProvider(
       create: (context) => TagProvider(context.read<TagService>()),
     ),
+    ChangeNotifierProvider(create: (_) => ImageMoveProvider()),
     ChangeNotifierProvider(
       create: (context) =>
           SearchProvider(service: context.read<SearchService>()),

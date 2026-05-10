@@ -14,6 +14,7 @@ import (
 
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
+	"github.com/wonichan/acgwarehouse-backend/internal/logger"
 	"github.com/wonichan/acgwarehouse-backend/internal/repository"
 )
 
@@ -46,8 +47,10 @@ func NewImageMoveService(imageRepo repository.ImageMoveQuery, tagRepo repository
 }
 
 func (s *ImageMoveService) PreviewMove(ctx context.Context, req domain.ImageMoveRequest) (*domain.ImageMovePreview, error) {
+	logger.Infof("[service] ImageMove Preview started: tag_id=%d source_dirs=%d target_dir=%s conflict=%s limit=%d allow_target_inside_source=%t", req.TagID, len(req.SourceDirs), req.TargetDir, req.Conflict, req.Limit, req.AllowTargetInsideSource)
 	plan, err := s.buildPlan(ctx, req)
 	if err != nil {
+		logger.Errorf("[service] ImageMove Preview failed: tag_id=%d source_dirs=%d target_dir=%s error=%v", req.TagID, len(req.SourceDirs), req.TargetDir, err)
 		return nil, err
 	}
 
@@ -64,20 +67,31 @@ func (s *ImageMoveService) PreviewMove(ctx context.Context, req domain.ImageMove
 		}
 	}
 
+	logger.Infof("[service] ImageMove Preview completed: tag_id=%d source_dirs=%d target_dir=%s total_matched=%d movable=%d skipped=%d", plan.request.TagID, len(plan.request.SourceDirs), plan.request.TargetDir, preview.TotalMatched, preview.Movable, preview.Skipped)
 	return preview, nil
 }
 
 func (s *ImageMoveService) ExecuteMove(ctx context.Context, req domain.ImageMoveRequest) (*domain.ImageMoveResult, error) {
+	logger.Infof("[service] ImageMove Execute started: tag_id=%d source_dirs=%d target_dir=%s conflict=%s limit=%d allow_target_inside_source=%t", req.TagID, len(req.SourceDirs), req.TargetDir, req.Conflict, req.Limit, req.AllowTargetInsideSource)
 	plan, err := s.buildPlan(ctx, req)
 	if err != nil {
+		logger.Errorf("[service] ImageMove Execute plan failed: tag_id=%d source_dirs=%d target_dir=%s error=%v", req.TagID, len(req.SourceDirs), req.TargetDir, err)
 		return nil, err
 	}
-	return s.executePlan(ctx, plan, nil)
+	result, err := s.executePlan(ctx, plan, nil)
+	if err != nil {
+		logger.Errorf("[service] ImageMove Execute failed: tag_id=%d target_dir=%s total_matched=%d moved=%d skipped=%d failed=%d error=%v", plan.request.TagID, plan.request.TargetDir, result.TotalMatched, result.Moved, result.Skipped, result.Failed, err)
+		return result, err
+	}
+	logger.Infof("[service] ImageMove Execute completed: tag_id=%d source_dirs=%d target_dir=%s total_matched=%d moved=%d skipped=%d failed=%d", plan.request.TagID, len(plan.request.SourceDirs), plan.request.TargetDir, result.TotalMatched, result.Moved, result.Skipped, result.Failed)
+	return result, nil
 }
 
 func (s *ImageMoveService) CreateMoveJob(ctx context.Context, req domain.ImageMoveRequest) (*domain.ImageMoveBatch, error) {
+	logger.Infof("[service] ImageMove Job create started: tag_id=%d source_dirs=%d target_dir=%s conflict=%s limit=%d allow_target_inside_source=%t", req.TagID, len(req.SourceDirs), req.TargetDir, req.Conflict, req.Limit, req.AllowTargetInsideSource)
 	plan, err := s.buildPlan(ctx, req)
 	if err != nil {
+		logger.Errorf("[service] ImageMove Job create plan failed: tag_id=%d source_dirs=%d target_dir=%s error=%v", req.TagID, len(req.SourceDirs), req.TargetDir, err)
 		return nil, err
 	}
 	batch := &domain.ImageMoveBatch{
@@ -92,9 +106,11 @@ func (s *ImageMoveService) CreateMoveJob(ctx context.Context, req domain.ImageMo
 		},
 	}
 	if s.historyRepo == nil {
+		logger.Errorf("[service] ImageMove Job create failed: history repository unavailable tag_id=%d target_dir=%s", plan.request.TagID, plan.request.TargetDir)
 		return nil, fmt.Errorf("%w: image move history repository unavailable", ErrImageMoveInvalidRequest)
 	}
 	if err := s.historyRepo.CreateImageMoveBatch(ctx, batch); err != nil {
+		logger.Errorf("[service] ImageMove Job create failed: tag_id=%d target_dir=%s error=%v", plan.request.TagID, plan.request.TargetDir, err)
 		return nil, err
 	}
 
@@ -104,6 +120,7 @@ func (s *ImageMoveService) CreateMoveJob(ctx context.Context, req domain.ImageMo
 	s.jobsMu.Unlock()
 
 	go s.runMoveJob(jobCtx, batch.ID, plan.request, plan.targetSourceRoot, plan.totalMatched)
+	logger.Infof("[service] ImageMove Job created: batch_id=%d tag_id=%d source_dirs=%d target_dir=%s total_matched=%d conflict=%s", batch.ID, batch.TagID, len(batch.SourceDirs), batch.TargetDir, batch.TotalMatched, batch.ConflictStrategy)
 	return s.historyRepo.FindImageMoveBatch(ctx, batch.ID)
 }
 
@@ -122,6 +139,7 @@ func (s *ImageMoveService) ListMoveHistory(ctx context.Context, limit int) ([]do
 }
 
 func (s *ImageMoveService) CancelMoveJob(ctx context.Context, id int64) (*domain.ImageMoveBatch, error) {
+	logger.Infof("[service] ImageMove Job cancel requested: batch_id=%d", id)
 	s.jobsMu.Lock()
 	cancel := s.jobs[id]
 	if cancel != nil {
@@ -137,9 +155,11 @@ func (s *ImageMoveService) CancelMoveJob(ctx context.Context, id int64) (*domain
 	if cancel == nil && batch.Status == domain.ImageMoveBatchStatusQueued {
 		batch.Status = domain.ImageMoveBatchStatusCancelled
 		if err := s.historyRepo.UpdateImageMoveBatch(ctx, batch); err != nil {
+			logger.Errorf("[service] ImageMove Job cancel failed: batch_id=%d error=%v", id, err)
 			return nil, err
 		}
 	}
+	logger.Infof("[service] ImageMove Job cancel completed: batch_id=%d had_active_job=%t previous_status=%s", id, cancel != nil, batch.Status)
 	return s.GetMoveJob(ctx, id)
 }
 
@@ -149,6 +169,7 @@ func (s *ImageMoveService) runMoveJob(ctx context.Context, batchID int64, req do
 		delete(s.jobs, batchID)
 		s.jobsMu.Unlock()
 	}()
+	logger.Infof("[service] ImageMove Job run started: batch_id=%d tag_id=%d source_dirs=%d target_dir=%s total_matched=%d conflict=%s", batchID, req.TagID, len(req.SourceDirs), req.TargetDir, totalMatched, req.Conflict)
 	batch := &domain.ImageMoveBatch{
 		ID:               batchID,
 		TagID:            req.TagID,
@@ -173,6 +194,11 @@ func (s *ImageMoveService) runMoveJob(ctx context.Context, batchID int64, req do
 		batch.Failed = result.Failed
 	}
 	_ = s.historyRepo.UpdateImageMoveBatch(context.Background(), batch)
+	if err != nil {
+		logger.Errorf("[service] ImageMove Job run finished with error: batch_id=%d status=%s moved=%d skipped=%d failed=%d error=%v", batchID, batch.Status, batch.Moved, batch.Skipped, batch.Failed, err)
+		return
+	}
+	logger.Infof("[service] ImageMove Job run completed: batch_id=%d status=%s moved=%d skipped=%d failed=%d", batchID, batch.Status, batch.Moved, batch.Skipped, batch.Failed)
 }
 
 func (s *ImageMoveService) executeJobPlan(ctx context.Context, batch *domain.ImageMoveBatch, req domain.ImageMoveRequest, targetSourceRoot string) (*domain.ImageMoveResult, error) {
@@ -223,6 +249,10 @@ func (s *ImageMoveService) executePlan(ctx context.Context, plan *imageMovePlan,
 }
 
 func (s *ImageMoveService) executePlanInto(ctx context.Context, plan *imageMovePlan, batch *domain.ImageMoveBatch, result *domain.ImageMoveResult) error {
+	batchID := int64(0)
+	if batch != nil {
+		batchID = batch.ID
+	}
 	for _, planned := range plan.items {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -232,10 +262,12 @@ func (s *ImageMoveService) executePlanInto(ctx context.Context, plan *imageMoveP
 			result.Skipped++
 			result.Items = append(result.Items, planned)
 			s.recordMoveItem(ctx, batch, planned, result)
+			logger.Infof("[service] ImageMove item skipped: batch_id=%d image_id=%d source_path=%s target_path=%s reason=%s moved=%d skipped=%d failed=%d", batchID, planned.ImageID, planned.SourcePath, planned.TargetPath, planned.Reason, result.Moved, result.Skipped, result.Failed)
 			continue
 		}
 
 		item := planned
+		logger.Infof("[service] ImageMove item started: batch_id=%d image_id=%d source_path=%s target_path=%s conflict=%s overwritten=%t", batchID, item.ImageID, item.SourcePath, item.TargetPath, plan.request.Conflict, item.Overwritten)
 		moved, reason := s.executeMoveItem(ctx, item, plan.targetSourceRoot)
 		if moved {
 			item.Status = domain.ImageMoveStatusMoved
@@ -249,6 +281,7 @@ func (s *ImageMoveService) executePlanInto(ctx context.Context, plan *imageMoveP
 		}
 		result.Items = append(result.Items, item)
 		s.recordMoveItem(ctx, batch, item, result)
+		logger.Infof("[service] ImageMove item completed: batch_id=%d image_id=%d status=%s reason=%s moved=%d skipped=%d failed=%d", batchID, item.ImageID, item.Status, item.Reason, result.Moved, result.Skipped, result.Failed)
 	}
 	return nil
 }
@@ -312,7 +345,11 @@ func (s *ImageMoveService) recordMoveItem(ctx context.Context, batch *domain.Ima
 		Failed:      result.Failed,
 		CurrentPath: item.SourcePath,
 	}
-	_ = s.historyRepo.UpdateImageMoveBatch(ctx, batch)
+	if err := s.historyRepo.UpdateImageMoveBatch(ctx, batch); err != nil {
+		logger.Errorf("[service] ImageMove progress update failed: batch_id=%d processed=%d total=%d error=%v", batch.ID, batch.Progress.Processed, batch.Progress.Total, err)
+		return
+	}
+	logger.Infof("[service] ImageMove progress updated: batch_id=%d processed=%d total=%d moved=%d skipped=%d failed=%d current_path=%s", batch.ID, batch.Progress.Processed, batch.Progress.Total, batch.Progress.Moved, batch.Progress.Skipped, batch.Progress.Failed, batch.Progress.CurrentPath)
 }
 
 type imageMovePlan struct {

@@ -81,6 +81,41 @@ func TestTaskPlatformServiceBackfillsOnlyMissingTaskTypes(t *testing.T) {
 	}
 }
 
+func TestTaskPlatformServiceSkipsMissingImagesBeforeCreatingTasks(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	env := newTaskPlatformServiceTestEnv(t)
+
+	result, err := env.service.PlanBatch(ctx, TaskPlatformPlanRequest{
+		SourceType:   domain.TaskBatchSourceImportScan,
+		SummaryLabel: "missing image protection",
+		SourceRoots:  []string{"/task-platform"},
+		TaskTypes:    []string{domain.PlatformTaskTypeAITagGeneration},
+		Items: []TaskPlatformPlanItem{{
+			ImageID:          999999,
+			ImageVersionKey:  "image:999999:size:1:phash:1",
+			SourceDescriptor: "/task-platform/missing.png",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PlanBatch() error = %v", err)
+	}
+	if len(result.CreatedTasks) != 0 {
+		t.Fatalf("len(CreatedTasks) = %d, want 0", len(result.CreatedTasks))
+	}
+	if result.Batch.SkippedImages != 1 {
+		t.Fatalf("SkippedImages = %d, want 1", result.Batch.SkippedImages)
+	}
+	tasks, err := env.taskRepo.List(ctx, repository.PlatformTaskListFilter{BatchID: &result.Batch.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("List(batch tasks) error = %v", err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("len(tasks) = %d, want 0", len(tasks))
+	}
+}
+
 func TestTaskPlatformServiceRefreshBatchStatusAggregatesRunningAndPartialFailed(t *testing.T) {
 	t.Parallel()
 
