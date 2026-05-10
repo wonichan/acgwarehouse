@@ -76,6 +76,13 @@ class ImageMoveProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearSelectedTag() {
+    if (_selectedTag == null) return;
+    _selectedTag = null;
+    _clearResponses();
+    notifyListeners();
+  }
+
   void setTargetDir(String dir) {
     final normalized = dir.trim();
     if (normalized.isEmpty) return;

@@ -62,6 +62,35 @@ func TestNewInitializesAutoScheduler(t *testing.T) {
 	}
 }
 
+func TestNewD1DoesNotOpenLocalSQLite(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	localDBPath := filepath.Join(t.TempDir(), "missing-parent", "should-not-open.db")
+	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: d1\n  path: " + localDBPath + "\n  d1_api_url: http://127.0.0.1:1\n  d1_api_key: test-key\n  d1_readonly: true\nstorage:\n  scan_roots: []\nai: {}\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 0\n")
+	if err := os.WriteFile(cfgPath, configYAML, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	app, err := New(cfgPath)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := app.Shutdown(ctx); err != nil {
+			t.Errorf("Shutdown() error = %v", err)
+		}
+	})
+
+	if app.db != nil {
+		t.Fatal("expected D1 app to avoid opening local SQLite")
+	}
+	assertTypeName(t, app.imageRepo, "*repository.d1ImageRepository")
+	assertTypeName(t, app.jobRepo, "*repository.d1JobRepository")
+	assertTypeName(t, app.taskRepo, "*repository.d1PlatformTaskRepository")
+	assertTypeName(t, app.taskBatchRepo, "*repository.d1TaskBatchRepository")
+}
+
 func TestInitRepositoriesD1ReadWriteUsesD1DataRepositories(t *testing.T) {
 	t.Parallel()
 
@@ -81,7 +110,10 @@ func TestInitRepositoriesD1ReadWriteUsesD1DataRepositories(t *testing.T) {
 	assertTypeName(t, app.obsRepo, "*repository.d1TagObservationRepository")
 	assertTypeName(t, app.tagAdminStore, "*repository.d1TagAdminStore")
 	assertTypeName(t, app.tagGovernanceQuery, "*repository.d1TagGovernanceQuery")
-	assertTypeName(t, app.jobRepo, "*repository.sqliteJobRepository")
+	assertTypeName(t, app.jobRepo, "*repository.d1JobRepository")
+	assertTypeName(t, app.taskRepo, "*repository.d1PlatformTaskRepository")
+	assertTypeName(t, app.taskBatchRepo, "*repository.d1TaskBatchRepository")
+	assertTypeName(t, app.imageMoveHistoryRepo, "*repository.d1ImageMoveHistoryRepository")
 
 	app.initServices()
 	if app.searchMaintenanceSvc == nil {
@@ -89,7 +121,7 @@ func TestInitRepositoriesD1ReadWriteUsesD1DataRepositories(t *testing.T) {
 	}
 }
 
-func TestInitRepositoriesD1ReadOnlyUsesHybridDataRepositories(t *testing.T) {
+func TestInitRepositoriesD1ReadOnlyUsesD1DataRepositories(t *testing.T) {
 	t.Parallel()
 
 	app := &App{config: &config.Config{Database: config.DatabaseConfig{
@@ -100,15 +132,19 @@ func TestInitRepositoriesD1ReadOnlyUsesHybridDataRepositories(t *testing.T) {
 
 	app.initRepositories()
 
-	assertTypeName(t, app.imageRepo, "*repository.HybridImageRepository")
-	assertTypeName(t, app.tagRepo, "*repository.HybridTagRepository")
-	assertTypeName(t, app.aliasRepo, "*repository.HybridTagAliasRepository")
-	assertTypeName(t, app.imageTagRepo, "*repository.HybridImageTagRepository")
-	assertTypeName(t, app.collectionRepo, "*repository.HybridCollectionRepository")
+	assertTypeName(t, app.imageRepo, "*repository.d1ImageRepository")
+	assertTypeName(t, app.tagRepo, "*repository.d1TagRepository")
+	assertTypeName(t, app.aliasRepo, "*repository.d1TagAliasRepository")
+	assertTypeName(t, app.imageTagRepo, "*repository.d1ImageTagRepository")
+	assertTypeName(t, app.collectionRepo, "*repository.d1CollectionRepository")
+	assertTypeName(t, app.jobRepo, "*repository.d1JobRepository")
+	assertTypeName(t, app.taskRepo, "*repository.d1PlatformTaskRepository")
+	assertTypeName(t, app.taskBatchRepo, "*repository.d1TaskBatchRepository")
+	assertTypeName(t, app.imageMoveHistoryRepo, "*repository.d1ImageMoveHistoryRepository")
 	assertTypeName(t, app.searchRepo, "*repository.d1SearchRepository")
-	assertTypeName(t, app.obsRepo, "*repository.sqliteTagObservationRepository")
-	assertTypeName(t, app.tagAdminStore, "*repository.sqliteTagAdminStore")
-	assertTypeName(t, app.tagGovernanceQuery, "*repository.sqliteTagGovernanceQuery")
+	assertTypeName(t, app.obsRepo, "*repository.d1TagObservationRepository")
+	assertTypeName(t, app.tagAdminStore, "*repository.d1TagAdminStore")
+	assertTypeName(t, app.tagGovernanceQuery, "*repository.d1TagGovernanceQuery")
 
 	app.initServices()
 	if app.tagAdminSvc == nil {
@@ -227,7 +263,7 @@ func TestRefillReadyJobsRespectsBatchSize(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: sqlite\n  path: \":memory:\"\nstorage:\n  scan_roots: []\nai: {}\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 2\n")
+	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: local\n  path: \":memory:\"\nstorage:\n  scan_roots: []\nai: {}\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 2\n")
 	if err := os.WriteFile(cfgPath, configYAML, 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
@@ -267,7 +303,7 @@ func TestRefillReadyJobsSkipsAITasksBeyondQueueLimitAndLoadsThumbnailJobs(t *tes
 	t.Parallel()
 
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: sqlite\n  path: \":memory:\"\nstorage:\n  scan_roots: []\nai:\n  auto_scan_batch_size: 1\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 3\n")
+	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: local\n  path: \":memory:\"\nstorage:\n  scan_roots: []\nai:\n  auto_scan_batch_size: 1\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 3\n")
 	if err := os.WriteFile(cfgPath, configYAML, 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
@@ -358,7 +394,7 @@ func writeTestConfig(t *testing.T, dbPath string) string {
 	t.Helper()
 
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: sqlite\n  path: " + dbPath + "\nstorage:\n  scan_roots: []\nai: {}\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 0\n")
+	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 0\n  env: test\ndatabase:\n  type: local\n  path: " + dbPath + "\nstorage:\n  scan_roots: []\nai: {}\ncos: {}\nadmin:\n  username: \"\"\n  password: \"\"\nworker_pool:\n  worker_count: 1\n  queue_size: 8\n  refill_interval_seconds: 1\n  refill_threshold: 0.5\n  refill_batch_size: 0\n")
 	if err := os.WriteFile(cfgPath, configYAML, 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}

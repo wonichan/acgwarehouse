@@ -476,8 +476,20 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
         if (moveProvider.selectedTag != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              '已选择：${moveProvider.selectedTag!.preferredLabel}（${moveProvider.selectedTag!.usageCount}）',
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '已选择：${moveProvider.selectedTag!.preferredLabel}（${moveProvider.selectedTag!.usageCount}）',
+                  ),
+                ),
+                Button(
+                  onPressed: moveProvider.isBusy
+                      ? null
+                      : moveProvider.clearSelectedTag,
+                  child: const Text('清除选择'),
+                ),
+              ],
             ),
           ),
         ConstrainedBox(
@@ -486,7 +498,12 @@ class _ImageMoveWorkspaceState extends State<ImageMoveWorkspace> {
               ? const _MutedText('没有可选标签')
               : SingleChildScrollView(
                   child: RadioGroup<int>(
-                    groupValue: moveProvider.selectedTag?.id,
+                    groupValue:
+                        filtered.any(
+                          (tag) => tag.id == moveProvider.selectedTag?.id,
+                        )
+                        ? moveProvider.selectedTag?.id
+                        : null,
                     onChanged: (tagId) {
                       if (moveProvider.isBusy || tagId == null) return;
                       moveProvider.setSelectedTag(

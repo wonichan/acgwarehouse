@@ -26,11 +26,10 @@ type autoSchedulerLifecycle interface {
 }
 
 // initRepositories initializes all repositories.
-// database.type=sqlite keeps all data repositories on local SQLite.
-// database.type=d1 routes data repositories through the D1 HTTP API; when
-// d1_readonly is true, reads use D1 while writes stay on local SQLite.
+// database.type=d1 routes data repositories through the D1 HTTP API.
+// database.type=local uses the local SQLite database.
 func (a *App) initRepositories() {
-	if strings.EqualFold(a.config.Database.Type, "d1") && a.config.Database.D1APIURL != "" {
+	if strings.EqualFold(a.config.Database.Type, "d1") {
 		a.initD1Repositories()
 	} else {
 		a.initSQLiteRepositories()
@@ -54,21 +53,13 @@ func (a *App) initSQLiteRepositories() {
 }
 
 func (a *App) initD1Repositories() {
-	d1Client := d1client.NewClientWithAPIKey(a.config.Database.D1APIURL, a.config.Database.D1APIKey)
+	d1Client := d1client.NewClientWithAPIKeyAndReadOnly(a.config.Database.D1APIURL, a.config.Database.D1APIKey, a.config.Database.D1ReadOnly)
 	a.d1Client = d1Client
 	if a.config.Database.D1ReadOnly {
-		logger.Infof("D1 read-only mode: routing reads to %s and writes to local SQLite", a.config.Database.D1APIURL)
+		logger.Infof("D1 mode: database.type=d1 routes repositories to %s; d1_readonly rejects remote mutations", a.config.Database.D1APIURL)
 	} else {
-		logger.Infof("D1 read-write mode: routing supported data repositories to %s", a.config.Database.D1APIURL)
+		logger.Infof("D1 mode: database.type=d1 routes repositories to %s", a.config.Database.D1APIURL)
 	}
-
-	// SQLite repositories for writes
-	sqliteImageRepo := repository.NewImageRepository(a.db)
-	sqliteTagRepo := repository.NewTagRepository(a.db)
-	sqliteAliasRepo := repository.NewTagAliasRepository(a.db)
-	sqliteObsRepo := repository.NewTagObservationRepository(a.db)
-	sqliteImageTagRepo := repository.NewImageTagRepository(a.db)
-	sqliteCollectionRepo := repository.NewCollectionRepository(a.db)
 
 	// D1-backed repositories
 	d1SearchRepo := repository.NewD1SearchRepository(d1Client)
@@ -79,42 +70,19 @@ func (a *App) initD1Repositories() {
 	d1ObsRepo := repository.NewD1TagObservationRepository(d1Client)
 	d1ImageRepo := repository.NewD1ImageRepositoryWithTags(d1Client, d1TagRepo)
 
-	if a.config.Database.D1ReadOnly {
-		// Hybrid repositories: D1 reads + SQLite writes
-		a.imageRepo = repository.NewHybridImageRepository(
-			d1ImageRepo,
-			d1ImageRepo,
-			sqliteImageRepo,
-			sqliteImageRepo,
-			sqliteImageRepo,
-		)
-		a.tagRepo = repository.NewHybridTagRepository(d1TagRepo, sqliteTagRepo)
-		a.aliasRepo = repository.NewHybridTagAliasRepository(d1AliasRepo, sqliteAliasRepo)
-		a.imageTagRepo = repository.NewHybridImageTagRepository(d1ImageTagRepo, sqliteImageTagRepo)
-		a.collectionRepo = repository.NewHybridCollectionRepository(d1CollectionRepo, sqliteCollectionRepo)
-	} else {
-		a.imageRepo = d1ImageRepo
-		a.tagRepo = d1TagRepo
-		a.aliasRepo = d1AliasRepo
-		a.imageTagRepo = d1ImageTagRepo
-		a.collectionRepo = d1CollectionRepo
-	}
-
-	// Runtime task/state repositories stay local until D1 equivalents exist.
-	a.jobRepo = repository.NewJobRepository(a.db)
+	a.imageRepo = d1ImageRepo
+	a.tagRepo = d1TagRepo
+	a.aliasRepo = d1AliasRepo
+	a.imageTagRepo = d1ImageTagRepo
+	a.collectionRepo = d1CollectionRepo
+	a.jobRepo = repository.NewD1JobRepository(d1Client)
 	a.searchRepo = d1SearchRepo
-	a.imageMoveHistoryRepo = repository.NewImageMoveHistoryRepository(a.db)
-	a.taskRepo = repository.NewPlatformTaskRepository(a.db)
-	a.taskBatchRepo = repository.NewTaskBatchRepository(a.db)
-	if a.config.Database.D1ReadOnly {
-		a.obsRepo = sqliteObsRepo
-		a.tagAdminStore = repository.NewTagAdminStore(a.db)
-		a.tagGovernanceQuery = repository.NewTagGovernanceQuery(a.db)
-	} else {
-		a.obsRepo = d1ObsRepo
-		a.tagAdminStore = repository.NewD1TagAdminStore(d1Client)
-		a.tagGovernanceQuery = repository.NewD1TagGovernanceQuery(d1Client)
-	}
+	a.imageMoveHistoryRepo = repository.NewD1ImageMoveHistoryRepository(d1Client)
+	a.taskRepo = repository.NewD1PlatformTaskRepository(d1Client)
+	a.taskBatchRepo = repository.NewD1TaskBatchRepository(d1Client)
+	a.obsRepo = d1ObsRepo
+	a.tagAdminStore = repository.NewD1TagAdminStore(d1Client)
+	a.tagGovernanceQuery = repository.NewD1TagGovernanceQuery(d1Client)
 }
 
 // initServices initializes all services.
@@ -125,7 +93,7 @@ func (a *App) initServices() {
 	a.batchSvc = service.NewBatchService(a.imageRepo, a.tagRepo, a.imageTagRepo, a.collectionRepo)
 	a.taskPlatformSvc = service.NewTaskPlatformService(a.taskBatchRepo, a.taskRepo, a.jobRepo)
 	if strings.EqualFold(a.config.Database.Type, "d1") && a.config.Database.D1ReadOnly {
-		a.tagAdminSvc = service.NewTagAdminService(a.db, repository.NewTagRepository(a.db), repository.NewTagAliasRepository(a.db), repository.NewImageTagRepository(a.db))
+		a.tagAdminSvc = service.NewTagAdminServiceWithStore(a.db, a.tagRepo, a.aliasRepo, a.imageTagRepo, a.tagAdminStore, a.tagGovernanceQuery)
 		a.searchMaintenanceSvc = service.NewDisabledSearchMaintenanceService("D1 read-only mode cannot rebuild the remote FTS index")
 	} else if strings.EqualFold(a.config.Database.Type, "d1") && a.d1Client != nil {
 		a.tagAdminSvc = service.NewTagAdminServiceWithStore(a.db, a.tagRepo, a.aliasRepo, a.imageTagRepo, a.tagAdminStore, a.tagGovernanceQuery)
@@ -162,7 +130,7 @@ func (a *App) initAutoScheduler(cfg *config.Config) {
 func (a *App) startAutoScheduler() {
 	a.autoSchedulerMu.Lock()
 	defer a.autoSchedulerMu.Unlock()
-	if a.config == nil || !a.config.AI.AutoAITagOnImport || a.autoSchedulerControl == nil || a.autoSchedulerStarted {
+	if a.config == nil || a.isD1ReadOnly() || !a.config.AI.AutoAITagOnImport || a.autoSchedulerControl == nil || a.autoSchedulerStarted {
 		return
 	}
 	a.autoSchedulerControl.Start(context.Background())
@@ -200,6 +168,13 @@ func (a *App) handleAutoSchedulerConfigChange(old, new *config.Config) {
 	a.autoSchedulerMu.Unlock()
 
 	if !newAI.AutoAITagOnImport {
+		if started && current != nil {
+			a.stopAutoScheduler()
+		}
+		return
+	}
+
+	if a.isD1ReadOnly() {
 		if started && current != nil {
 			a.stopAutoScheduler()
 		}
@@ -414,6 +389,13 @@ func (a *App) registerAIHandlers() {
 func (a *App) newTaskPlatformService() *service.TaskPlatformService {
 	if a.taskPlatformSvc != nil {
 		return a.taskPlatformSvc
+	}
+	if strings.EqualFold(a.config.Database.Type, "d1") && a.d1Client != nil {
+		return service.NewTaskPlatformService(
+			repository.NewD1TaskBatchRepository(a.d1Client),
+			repository.NewD1PlatformTaskRepository(a.d1Client),
+			a.jobRepo,
+		)
 	}
 	return service.NewTaskPlatformService(
 		repository.NewTaskBatchRepository(a.db),

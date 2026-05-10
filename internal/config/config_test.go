@@ -130,9 +130,9 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	t.Setenv("SERVER_HOST", "0.0.0.0")
 	t.Setenv("SERVER_PORT", "9090")
 	t.Setenv("SERVER_ENV", "production")
-	t.Setenv("DATABASE_TYPE", "postgres")
+	t.Setenv("DATABASE_TYPE", "local")
 	t.Setenv("DATABASE_PATH", "./data/override.db")
-	t.Setenv("DATABASE_CONNECTION_STRING", "postgres://user:pass@localhost/acg")
+	t.Setenv("DATABASE_CONNECTION_STRING", "file:override.db?cache=shared")
 	t.Setenv("ACG_D1_API_URL", "https://api.acgwarehouse.cloud")
 	t.Setenv("ACG_D1_API_KEY", "d1-secret")
 	t.Setenv("ACG_D1_READONLY", "true")
@@ -161,13 +161,13 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	if cfg.Server.Env != "production" {
 		t.Fatalf("expected overridden env production, got %q", cfg.Server.Env)
 	}
-	if cfg.Database.Type != "postgres" {
-		t.Fatalf("expected overridden database type postgres, got %q", cfg.Database.Type)
+	if cfg.Database.Type != "local" {
+		t.Fatalf("expected overridden database type local, got %q", cfg.Database.Type)
 	}
 	if cfg.Database.Path != "./data/override.db" {
 		t.Fatalf("expected overridden database path ./data/override.db, got %q", cfg.Database.Path)
 	}
-	if cfg.Database.ConnectionString != "postgres://user:pass@localhost/acg" {
+	if cfg.Database.ConnectionString != "file:override.db?cache=shared" {
 		t.Fatalf("expected overridden connection string, got %q", cfg.Database.ConnectionString)
 	}
 	if cfg.Database.D1APIURL != "https://api.acgwarehouse.cloud" {
@@ -208,6 +208,28 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	}
 	if cfg.WorkerPool.RefillBatchSize != 21 {
 		t.Fatalf("expected overridden refill batch size 21, got %d", cfg.WorkerPool.RefillBatchSize)
+	}
+}
+
+func TestLoadConfigAppliesLocalDefaultsAfterEnvTypeOverride(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+	configYAML := []byte("server:\n  host: 127.0.0.1\n  port: 8080\n  env: test\ndatabase:\n  type: d1\n  d1_api_url: http://127.0.0.1:1\nstorage:\n  scan_roots: []\nai: {}\ncos: {}\nadmin: {}\nworker_pool: {}\n")
+	if err := os.WriteFile(configPath, configYAML, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	t.Setenv("DATABASE_TYPE", "local")
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig returned error: %v", err)
+	}
+	if cfg.Database.Type != "local" {
+		t.Fatalf("expected database type local, got %q", cfg.Database.Type)
+	}
+	if cfg.Database.Path == "" {
+		t.Fatal("expected local database path default after env type override")
 	}
 }
 
@@ -260,7 +282,7 @@ func TestLoadConfigAppliesAutoAITagDefaults(t *testing.T) {
 	}
 }
 
-func TestLoadConfigDefaultsD1RuntimeDatabasePath(t *testing.T) {
+func TestLoadConfigDoesNotDefaultLocalPathForD1(t *testing.T) {
 	tempDir := t.TempDir()
 	runtimeDir := filepath.Join(tempDir, "runtime")
 	t.Setenv("ACG_RUNTIME_ROOT", runtimeDir)
@@ -286,9 +308,8 @@ ai: {}
 		t.Fatalf("LoadConfig returned error: %v", err)
 	}
 
-	want := filepath.Join(tempDir, "storage", "acgwarehouse-runtime.db")
-	if cfg.Database.Path != want {
-		t.Fatalf("database path = %q, want %q", cfg.Database.Path, want)
+	if cfg.Database.Path != "" {
+		t.Fatalf("database path = %q, want empty for d1", cfg.Database.Path)
 	}
 }
 

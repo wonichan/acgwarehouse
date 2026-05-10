@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -106,23 +107,25 @@ func New(cfgPath string) (*App, error) {
 		return nil, fmt.Errorf("failed to start image runtime: %w", err)
 	}
 
-	// Initialize database
-	db, err := openDatabase(app.config)
-	if err != nil {
-		if app.logCleanup != nil {
-			app.logCleanup()
+	if !isD1Database(app.config) {
+		// Initialize local SQLite only when database.type=local.
+		db, err := openDatabase(app.config)
+		if err != nil {
+			if app.logCleanup != nil {
+				app.logCleanup()
+			}
+			return nil, fmt.Errorf("failed to open database: %w", err)
 		}
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-	app.db = db
+		app.db = db
 
-	// Ensure database schema
-	if err := repository.EnsureScanSchema(db); err != nil {
-		db.Close()
-		if app.logCleanup != nil {
-			app.logCleanup()
+		// Ensure local database schema.
+		if err := repository.EnsureScanSchema(db); err != nil {
+			db.Close()
+			if app.logCleanup != nil {
+				app.logCleanup()
+			}
+			return nil, fmt.Errorf("failed to ensure scan schema: %w", err)
 		}
-		return nil, fmt.Errorf("failed to ensure scan schema: %w", err)
 	}
 
 	// Initialize repositories
@@ -134,7 +137,9 @@ func New(cfgPath string) (*App, error) {
 
 	// Initialize worker manager
 	if err := app.initWorkerManager(); err != nil {
-		db.Close()
+		if app.db != nil {
+			_ = app.db.Close()
+		}
 		if app.logCleanup != nil {
 			app.logCleanup()
 		}
@@ -148,7 +153,7 @@ func New(cfgPath string) (*App, error) {
 		app.tagRepo,
 		app.collectionRepo,
 		app.jobManager,
-		service.NewTaskReadService(repository.NewTaskBatchReadRepository(app.db)),
+		service.NewTaskReadService(app.newTaskBatchReadRepository()),
 		app.taskBatchRepo,
 		app.taskRepo,
 	)
@@ -158,6 +163,13 @@ func New(cfgPath string) (*App, error) {
 	})
 
 	return app, nil
+}
+
+func (a *App) newTaskBatchReadRepository() repository.TaskBatchReadRepository {
+	if strings.EqualFold(a.config.Database.Type, "d1") && a.d1Client != nil {
+		return repository.NewD1TaskBatchReadRepository(a.d1Client)
+	}
+	return repository.NewTaskBatchReadRepository(a.db)
 }
 
 func (a *App) LogSourcePaths() LogSourcePaths {
@@ -177,12 +189,16 @@ func (a *App) Run() error {
 		a.handleAutoSchedulerConfigChange(old, new)
 		a.handleAIConfigChange(old, new)
 	})
-	// Start job recovery in background
-	go a.recoverJobs()
+	if a.isD1ReadOnly() {
+		logger.Infof("D1 read-only mode: job recovery, refill loop, and AI auto scheduler are disabled")
+	} else {
+		// Start job recovery in background
+		go a.recoverJobs()
 
-	// Start refill loop in background
-	go a.runRefillLoop()
-	a.startAutoScheduler()
+		// Start refill loop in background
+		go a.runRefillLoop()
+		a.startAutoScheduler()
+	}
 	if a.monitoringBus != nil {
 		busCtx, cancel := context.WithCancel(context.Background())
 		a.monitoringBusCancel = cancel
@@ -421,4 +437,12 @@ func (a *App) recoverJobs() {
 
 func openDatabase(cfg *config.Config) (*sql.DB, error) {
 	return sqliteutil.Open(cfg)
+}
+
+func isD1Database(cfg *config.Config) bool {
+	return cfg != nil && strings.EqualFold(cfg.Database.Type, "d1")
+}
+
+func (a *App) isD1ReadOnly() bool {
+	return a != nil && isD1Database(a.config) && a.config.Database.D1ReadOnly
 }

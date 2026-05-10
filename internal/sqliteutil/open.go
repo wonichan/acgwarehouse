@@ -22,13 +22,16 @@ func Open(cfg *config.Config) (*sql.DB, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config is required")
 	}
-	if strings.EqualFold(cfg.Database.Type, "postgres") {
-		return nil, fmt.Errorf("postgres scanning bootstrap is not implemented yet")
+	if !isLocalDatabaseType(cfg.Database.Type) {
+		return nil, fmt.Errorf("sqlite database can only be opened when database.type is local")
 	}
 
-	dbPath := strings.TrimSpace(cfg.Database.Path)
+	dbPath := strings.TrimSpace(cfg.Database.ConnectionString)
 	if dbPath == "" {
-		return nil, fmt.Errorf("sqlite database path is required")
+		dbPath = strings.TrimSpace(cfg.Database.Path)
+	}
+	if dbPath == "" {
+		return nil, fmt.Errorf("local sqlite database path or connection_string is required")
 	}
 
 	dsn, err := buildSQLiteDSN(dbPath)
@@ -67,6 +70,10 @@ func Open(cfg *config.Config) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+func isLocalDatabaseType(databaseType string) bool {
+	return strings.EqualFold(databaseType, "local") || strings.EqualFold(databaseType, "sqlite") || strings.TrimSpace(databaseType) == ""
 }
 
 func buildSQLiteDSN(dbPath string) (string, error) {

@@ -44,6 +44,7 @@ type MutateStatement struct {
 type Client struct {
 	baseURL    string
 	apiKey     string
+	readOnly   bool
 	httpClient *http.Client
 }
 
@@ -57,9 +58,14 @@ func NewClient(baseURL string) *Client {
 }
 
 func NewClientWithAPIKey(baseURL, apiKey string) *Client {
+	return NewClientWithAPIKeyAndReadOnly(baseURL, apiKey, false)
+}
+
+func NewClientWithAPIKeyAndReadOnly(baseURL, apiKey string, readOnly bool) *Client {
 	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		apiKey:  apiKey,
+		baseURL:  strings.TrimRight(baseURL, "/"),
+		apiKey:   apiKey,
+		readOnly: readOnly,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -118,6 +124,9 @@ func (c *Client) QueryCount(ctx context.Context, sql string, params ...any) (int
 }
 
 func (c *Client) Exec(ctx context.Context, sql string, params ...any) error {
+	if c.readOnly {
+		return fmt.Errorf("d1 readonly mode rejects mutate query")
+	}
 	resp, err := c.doMutateRequest(ctx, MutateRequest{SQL: sql, Params: params})
 	if err != nil {
 		return fmt.Errorf("d1 exec: %w", err)
@@ -129,6 +138,9 @@ func (c *Client) Exec(ctx context.Context, sql string, params ...any) error {
 }
 
 func (c *Client) ExecReturningID(ctx context.Context, sql string, params ...any) (int64, error) {
+	if c.readOnly {
+		return 0, fmt.Errorf("d1 readonly mode rejects mutate query")
+	}
 	resp, err := c.doMutateRequest(ctx, MutateRequest{SQL: sql, Params: params})
 	if err != nil {
 		return 0, fmt.Errorf("d1 exec returning id: %w", err)
@@ -177,6 +189,9 @@ func (c *Client) ExecReturningID(ctx context.Context, sql string, params ...any)
 }
 
 func (c *Client) ExecBatch(ctx context.Context, statements []MutateStatement) error {
+	if c.readOnly {
+		return fmt.Errorf("d1 readonly mode rejects mutate query")
+	}
 	resp, err := c.doMutateRequest(ctx, MutateRequest{Statements: statements})
 	if err != nil {
 		return fmt.Errorf("d1 exec batch: %w", err)
@@ -268,10 +283,10 @@ func (c *Client) doMutateRequest(ctx context.Context, reqBody MutateRequest) (*M
 
 func validateReadOnly(sql string) error {
 	normalized := strings.TrimSpace(strings.ToUpper(sql))
-	if strings.HasPrefix(normalized, "SELECT") || strings.HasPrefix(normalized, "WITH") {
+	if strings.HasPrefix(normalized, "SELECT") {
 		return nil
 	}
-	forbidden := []string{"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "REPLACE", "ATTACH", "DETACH"}
+	forbidden := []string{"WITH", "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "REPLACE", "ATTACH", "DETACH"}
 	for _, prefix := range forbidden {
 		if strings.HasPrefix(normalized, prefix) {
 			return fmt.Errorf("d1: write operation not allowed: %s", prefix)

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/wonichan/acgwarehouse-backend/internal/d1client"
@@ -98,7 +99,54 @@ func (r *d1JobRepository) Update(job *domain.AsyncJob) error {
 }
 
 func (r *d1JobRepository) FindAndClaimReadyJobs(ctx context.Context, jobType string, limit int) ([]domain.AsyncJob, error) {
-	return nil, nil
+	if limit <= 0 {
+		return []domain.AsyncJob{}, nil
+	}
+	rows, err := r.client.Query(ctx, `
+		SELECT id FROM async_jobs WHERE type = ? AND status = 'ready' ORDER BY id ASC LIMIT ?
+	`, jobType, int64(limit))
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return []domain.AsyncJob{}, nil
+	}
+
+	ids := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		id, err := toInt64(row["id"])
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, 2+len(ids))
+	args = append(args, time.Now(), jobType)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	if err := r.client.Exec(ctx, `
+		UPDATE async_jobs SET status = 'running', started_at = ?
+		WHERE type = ? AND status = 'ready' AND id IN (`+placeholders+`)
+	`, args...); err != nil {
+		return nil, err
+	}
+
+	queryArgs := make([]any, 0, 1+len(ids))
+	queryArgs = append(queryArgs, jobType)
+	for _, id := range ids {
+		queryArgs = append(queryArgs, id)
+	}
+	claimed, err := r.client.Query(ctx, `
+		SELECT id, platform_task_id, type, status, payload, progress, error, created_at, started_at, finished_at
+		FROM async_jobs WHERE type = ? AND status = 'running' AND id IN (`+placeholders+`) ORDER BY id ASC
+	`, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	return mapAsyncJobsFromD1(claimed)
 }
 
 func (r *d1JobRepository) FindRecent(limit int) ([]domain.AsyncJob, error) {
@@ -132,7 +180,14 @@ func (r *d1JobRepository) CountByStatus(status string) (int64, error) {
 }
 
 func (r *d1JobRepository) ResetRunningToReady() (int64, error) {
-	return 0, nil
+	count, err := r.client.QueryCount(context.Background(), `SELECT COUNT(*) AS cnt FROM async_jobs WHERE status = 'running'`)
+	if err != nil {
+		return 0, err
+	}
+	if err := r.client.Exec(context.Background(), `UPDATE async_jobs SET status = 'ready', started_at = NULL WHERE status = 'running'`); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func mapAsyncJobFromD1(row map[string]any) (*domain.AsyncJob, error) {
@@ -159,17 +214,22 @@ func mapAsyncJobFromD1(row map[string]any) (*domain.AsyncJob, error) {
 		}
 	}
 	return &domain.AsyncJob{
-		ID:               id,
-		PlatformTaskID:   platformTaskID,
-		Type:             toStringDefault(row["type"], ""),
-		Status:           toStringDefault(row["status"], ""),
-		Payload:          toStringDefault(row["payload"], ""),
-		Progress:         0,
-		Error:            errorStr,
-		CreatedAt:         createdAt,
-		StartedAt:        startedAt,
-		FinishedAt:       finishedAt,
+		ID:             id,
+		PlatformTaskID: platformTaskID,
+		Type:           toStringDefault(row["type"], ""),
+		Status:         toStringDefault(row["status"], ""),
+		Payload:        toStringDefault(row["payload"], ""),
+		Progress:       mustFloat64(row["progress"]),
+		Error:          errorStr,
+		CreatedAt:      createdAt,
+		StartedAt:      startedAt,
+		FinishedAt:     finishedAt,
 	}, nil
+}
+
+func mustFloat64(v any) float64 {
+	f, _ := toFloat64(v)
+	return f
 }
 
 func mapAsyncJobsFromD1(rows []map[string]any) ([]domain.AsyncJob, error) {

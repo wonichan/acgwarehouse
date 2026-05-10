@@ -3,6 +3,7 @@ package sqliteutil
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -61,6 +62,39 @@ func TestOpenConfiguresSQLiteForConcurrentWorkers(t *testing.T) {
 		if journalMode != "wal" {
 			t.Fatalf("conn[%d] journal_mode = %q, want %q", index, journalMode, "wal")
 		}
+	}
+}
+
+func TestOpenPrefersConnectionStringOverPath(t *testing.T) {
+	t.Parallel()
+
+	pathDB := filepath.Join(t.TempDir(), "path.db")
+	connectionDB := filepath.Join(t.TempDir(), "connection.db")
+	db, err := Open(&config.Config{
+		Database: config.DatabaseConfig{
+			Type:             "local",
+			Path:             pathDB,
+			ConnectionString: connectionDB,
+		},
+		WorkerPool: config.WorkerPoolConfig{WorkerCount: 1},
+	})
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	})
+
+	if _, err := db.Exec("CREATE TABLE marker(id INTEGER PRIMARY KEY)"); err != nil {
+		t.Fatalf("create marker table: %v", err)
+	}
+	if _, err := os.Stat(connectionDB); err != nil {
+		t.Fatalf("expected connection string database at %s: %v", connectionDB, err)
+	}
+	if _, err := os.Stat(pathDB); !os.IsNotExist(err) {
+		t.Fatalf("path database stat error = %v, want not exist", err)
 	}
 }
 

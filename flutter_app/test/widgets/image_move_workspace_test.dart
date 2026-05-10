@@ -30,6 +30,15 @@ class _WorkspaceTagProvider extends TagProvider {
       usageCount: 3,
       createdAt: DateTime.parse('2026-05-10T00:00:00.000Z'),
     ),
+    Tag(
+      id: 8,
+      preferredLabel: '砂狼白子',
+      slug: 'shiroko',
+      reviewState: 'confirmed',
+      trustScore: 1,
+      usageCount: 5,
+      createdAt: DateTime.parse('2026-05-10T00:00:00.000Z'),
+    ),
   ];
 
   @override
@@ -259,6 +268,42 @@ void main() {
     expect(find.text('E:/picture/output'), findsOneWidget);
     expect(find.text('已选择：调月莉音（3）'), findsOneWidget);
     expect(find.text('E:/picture/archive'), findsOneWidget);
+  });
+
+  testWidgets('can clear selected tag and choose another tag after search', (
+    tester,
+  ) async {
+    final moveProvider = ImageMoveProvider();
+    final service = ImageMoveService(
+      baseUrl: 'http://localhost:8080',
+      client: MockClient((_) async => http.Response('{}', 200)),
+    );
+
+    await tester.pumpWidget(
+      buildApp(
+        service: service,
+        pickedDirs: const [],
+        moveProvider: moveProvider,
+      ),
+    );
+
+    await tester.tap(find.text('调月莉音 (3)'));
+    await tester.pumpAndSettle();
+    expect(moveProvider.selectedTag?.id, 7);
+    expect(find.text('清除选择'), findsOneWidget);
+
+    await tester.tap(find.text('清除选择'));
+    await tester.pumpAndSettle();
+    expect(moveProvider.selectedTag, isNull);
+
+    await tester.enterText(find.byType(fluent.TextBox), '白子');
+    await tester.pumpAndSettle();
+    expect(find.text('调月莉音 (3)'), findsNothing);
+    expect(find.text('砂狼白子 (5)'), findsOneWidget);
+
+    await tester.tap(find.text('砂狼白子 (5)'));
+    await tester.pumpAndSettle();
+    expect(moveProvider.selectedTag?.id, 8);
   });
 
   testWidgets('refresh gallery button delegates to image provider', (

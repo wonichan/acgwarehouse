@@ -225,6 +225,7 @@ func loadConfig(path string) (*Config, error) {
 
 	applyDefaults(&cfg)
 	applyEnvOverrides(&cfg)
+	applyDefaults(&cfg)
 	return &cfg, nil
 }
 
@@ -239,11 +240,14 @@ func LoadConfig(paths ...string) (*Config, error) {
 
 // applyDefaults sets default values for optional configuration fields.
 func applyDefaults(cfg *Config) {
-	if strings.EqualFold(cfg.Database.Type, "d1") && strings.TrimSpace(cfg.Database.Path) == "" {
+	if strings.TrimSpace(cfg.Database.Type) == "" {
+		cfg.Database.Type = "local"
+	}
+	if isLocalDatabaseType(cfg.Database.Type) && strings.TrimSpace(cfg.Database.Path) == "" && strings.TrimSpace(cfg.Database.ConnectionString) == "" {
 		if runtimeRoot := strings.TrimSpace(os.Getenv(portableRuntimeRootEnv)); runtimeRoot != "" {
-			cfg.Database.Path = filepath.Join(filepath.Dir(filepath.Clean(runtimeRoot)), "storage", "acgwarehouse-runtime.db")
+			cfg.Database.Path = filepath.Join(filepath.Dir(filepath.Clean(runtimeRoot)), "storage", "acgwarehouse.db")
 		} else {
-			cfg.Database.Path = filepath.Join("data", "acgwarehouse-runtime.db")
+			cfg.Database.Path = filepath.Join("data", "acgwarehouse.db")
 		}
 	}
 
@@ -276,6 +280,10 @@ func applyDefaults(cfg *Config) {
 	}
 	cfg.AI.FallbackModels = normalizeFallbackModels(cfg.AI.FallbackModels)
 	applyDoubaoBatchMode(cfg, cfg.AI.DoubaoBatchMode)
+}
+
+func isLocalDatabaseType(databaseType string) bool {
+	return strings.EqualFold(databaseType, "local") || strings.EqualFold(databaseType, "sqlite")
 }
 
 func applyEnvOverrides(cfg *Config) {
