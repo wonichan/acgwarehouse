@@ -126,6 +126,10 @@ func NewTagAdminService(db *sql.DB, tagRepo repository.TagRepository, aliasRepo 
 	return newTagAdminServiceWithStore(db, tagRepo, aliasRepo, imageTagRepo, nil, nil)
 }
 
+func NewTagAdminServiceWithStore(db *sql.DB, tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository, adminStore repository.TagAdminStore, govQuery repository.TagGovernanceQuery) *TagAdminService {
+	return newTagAdminServiceWithStore(db, tagRepo, aliasRepo, imageTagRepo, adminStore, govQuery)
+}
+
 func newTagAdminServiceWithStore(db *sql.DB, tagRepo repository.TagRepository, aliasRepo repository.TagAliasRepository, imageTagRepo repository.ImageTagRepository, adminStore repository.TagAdminStore, govQuery repository.TagGovernanceQuery) *TagAdminService {
 	if adminStore == nil {
 		adminStore = repository.NewTagAdminStore(db)

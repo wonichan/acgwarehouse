@@ -103,7 +103,7 @@ func (s *ImageMoveService) CreateMoveJob(ctx context.Context, req domain.ImageMo
 	s.jobs[batch.ID] = cancel
 	s.jobsMu.Unlock()
 
-	go s.runMoveJob(jobCtx, batch.ID, plan)
+	go s.runMoveJob(jobCtx, batch.ID, plan.request, plan.targetSourceRoot, plan.totalMatched)
 	return s.historyRepo.FindImageMoveBatch(ctx, batch.ID)
 }
 
@@ -134,7 +134,7 @@ func (s *ImageMoveService) CancelMoveJob(ctx context.Context, id int64) (*domain
 	if err != nil {
 		return nil, err
 	}
-	if batch.Status == domain.ImageMoveBatchStatusQueued || batch.Status == domain.ImageMoveBatchStatusRunning {
+	if cancel == nil && batch.Status == domain.ImageMoveBatchStatusQueued {
 		batch.Status = domain.ImageMoveBatchStatusCancelled
 		if err := s.historyRepo.UpdateImageMoveBatch(ctx, batch); err != nil {
 			return nil, err
@@ -143,7 +143,7 @@ func (s *ImageMoveService) CancelMoveJob(ctx context.Context, id int64) (*domain
 	return s.GetMoveJob(ctx, id)
 }
 
-func (s *ImageMoveService) runMoveJob(ctx context.Context, batchID int64, plan *imageMovePlan) {
+func (s *ImageMoveService) runMoveJob(ctx context.Context, batchID int64, req domain.ImageMoveRequest, targetSourceRoot string, totalMatched int64) {
 	defer func() {
 		s.jobsMu.Lock()
 		delete(s.jobs, batchID)
@@ -151,16 +151,16 @@ func (s *ImageMoveService) runMoveJob(ctx context.Context, batchID int64, plan *
 	}()
 	batch := &domain.ImageMoveBatch{
 		ID:               batchID,
-		TagID:            plan.request.TagID,
-		SourceDirs:       plan.request.SourceDirs,
-		TargetDir:        plan.request.TargetDir,
-		ConflictStrategy: plan.request.Conflict,
-		TotalMatched:     plan.totalMatched,
+		TagID:            req.TagID,
+		SourceDirs:       req.SourceDirs,
+		TargetDir:        req.TargetDir,
+		ConflictStrategy: req.Conflict,
+		TotalMatched:     totalMatched,
 		Status:           domain.ImageMoveBatchStatusRunning,
 	}
 	_ = s.historyRepo.UpdateImageMoveBatch(context.Background(), batch)
-	result, err := s.executePlan(ctx, plan, batch)
-	if err != nil && errors.Is(err, context.Canceled) {
+	result, err := s.executeJobPlan(ctx, batch, req, targetSourceRoot)
+	if err != nil && errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 		batch.Status = domain.ImageMoveBatchStatusCancelled
 	} else if err != nil || result.Failed > 0 {
 		batch.Status = domain.ImageMoveBatchStatusFailed
@@ -175,15 +175,57 @@ func (s *ImageMoveService) runMoveJob(ctx context.Context, batchID int64, plan *
 	_ = s.historyRepo.UpdateImageMoveBatch(context.Background(), batch)
 }
 
+func (s *ImageMoveService) executeJobPlan(ctx context.Context, batch *domain.ImageMoveBatch, req domain.ImageMoveRequest, targetSourceRoot string) (*domain.ImageMoveResult, error) {
+	plan, err := s.buildFullJobPlan(ctx, req, targetSourceRoot, batch.TotalMatched)
+	if err != nil {
+		return &domain.ImageMoveResult{TotalMatched: batch.TotalMatched}, err
+	}
+	return s.executePlan(ctx, plan, batch)
+}
+
+func (s *ImageMoveService) buildFullJobPlan(ctx context.Context, req domain.ImageMoveRequest, targetSourceRoot string, totalMatched int64) (*imageMovePlan, error) {
+	plan := &imageMovePlan{
+		totalMatched:     totalMatched,
+		targetSourceRoot: targetSourceRoot,
+		request:          req,
+	}
+	plannedTargets := make(map[string]struct{})
+
+	for offset := 0; ; offset += req.Limit {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		images, err := s.imageRepo.FindBySourceDirsAndTag(ctx, req.SourceDirs, req.TagID, req.Limit, offset)
+		if err != nil {
+			return nil, err
+		}
+		if len(images) == 0 {
+			return plan, nil
+		}
+		if err := s.appendPlanItems(plan, images, plannedTargets); err != nil {
+			return nil, err
+		}
+		if len(images) < req.Limit {
+			return plan, nil
+		}
+	}
+}
+
 func (s *ImageMoveService) executePlan(ctx context.Context, plan *imageMovePlan, batch *domain.ImageMoveBatch) (*domain.ImageMoveResult, error) {
 	result := &domain.ImageMoveResult{
 		TotalMatched: plan.totalMatched,
 		Items:        make([]domain.ImageMoveItem, 0, len(plan.items)),
 	}
+	if err := s.executePlanInto(ctx, plan, batch, result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
 
+func (s *ImageMoveService) executePlanInto(ctx context.Context, plan *imageMovePlan, batch *domain.ImageMoveBatch, result *domain.ImageMoveResult) error {
 	for _, planned := range plan.items {
 		if err := ctx.Err(); err != nil {
-			return result, err
+			return err
 		}
 		if planned.Status != domain.ImageMoveStatusMovable {
 			planned.Status = domain.ImageMoveStatusSkipped
@@ -194,48 +236,61 @@ func (s *ImageMoveService) executePlan(ctx context.Context, plan *imageMovePlan,
 		}
 
 		item := planned
-		if item.Overwritten {
-			if err := os.Remove(item.TargetPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-				item.Status = domain.ImageMoveStatusFailed
-				item.Reason = classifyMoveError(err)
-				item.Retryable = domain.ImageMoveReasonIsRetryable(item.Reason)
-				result.Failed++
-				result.Items = append(result.Items, item)
-				s.recordMoveItem(ctx, batch, item, result)
-				continue
-			}
-		}
-		if err := s.moveFile(item.SourcePath, item.TargetPath); err != nil {
+		moved, reason := s.executeMoveItem(ctx, item, plan.targetSourceRoot)
+		if moved {
+			item.Status = domain.ImageMoveStatusMoved
+			item.Reason = ""
+			result.Moved++
+		} else {
 			item.Status = domain.ImageMoveStatusFailed
-			item.Reason = classifyMoveError(err)
+			item.Reason = reason
 			item.Retryable = domain.ImageMoveReasonIsRetryable(item.Reason)
 			result.Failed++
-			result.Items = append(result.Items, item)
-			s.recordMoveItem(ctx, batch, item, result)
-			continue
 		}
-
-		if err := s.imageRepo.UpdateImageLocation(ctx, item.ImageID, item.TargetPath, filepath.Base(item.TargetPath), plan.targetSourceRoot); err != nil {
-			item.Status = domain.ImageMoveStatusFailed
-			item.Reason = domain.ImageMoveReasonDBUpdateFailed
-			if rollbackErr := s.moveFile(item.TargetPath, item.SourcePath); rollbackErr != nil {
-				item.Reason = domain.ImageMoveReasonRollbackFailed
-			}
-			item.Retryable = domain.ImageMoveReasonIsRetryable(item.Reason)
-			result.Failed++
-			result.Items = append(result.Items, item)
-			s.recordMoveItem(ctx, batch, item, result)
-			continue
-		}
-
-		item.Status = domain.ImageMoveStatusMoved
-		item.Reason = ""
-		result.Moved++
 		result.Items = append(result.Items, item)
 		s.recordMoveItem(ctx, batch, item, result)
 	}
+	return nil
+}
 
-	return result, nil
+func (s *ImageMoveService) executeMoveItem(ctx context.Context, item domain.ImageMoveItem, targetSourceRoot string) (bool, string) {
+	backupPath := ""
+	if item.Overwritten {
+		var err error
+		backupPath, err = reserveOverwriteBackup(item.TargetPath)
+		if err != nil {
+			return false, classifyMoveError(err)
+		}
+		if err := s.moveFile(item.TargetPath, backupPath); err != nil {
+			_ = os.Remove(backupPath)
+			return false, classifyMoveError(err)
+		}
+	}
+
+	if err := s.moveFile(item.SourcePath, item.TargetPath); err != nil {
+		if backupPath != "" {
+			_ = s.moveFile(backupPath, item.TargetPath)
+		}
+		return false, classifyMoveError(err)
+	}
+
+	if err := s.imageRepo.UpdateImageLocation(ctx, item.ImageID, item.TargetPath, filepath.Base(item.TargetPath), targetSourceRoot); err != nil {
+		reason := domain.ImageMoveReasonDBUpdateFailed
+		if rollbackErr := s.moveFile(item.TargetPath, item.SourcePath); rollbackErr != nil {
+			reason = domain.ImageMoveReasonRollbackFailed
+		}
+		if backupPath != "" {
+			if restoreErr := s.moveFile(backupPath, item.TargetPath); restoreErr != nil && reason == domain.ImageMoveReasonDBUpdateFailed {
+				reason = domain.ImageMoveReasonRollbackFailed
+			}
+		}
+		return false, reason
+	}
+
+	if backupPath != "" {
+		_ = os.Remove(backupPath)
+	}
+	return true, ""
 }
 
 func (s *ImageMoveService) recordMoveItem(ctx context.Context, batch *domain.ImageMoveBatch, item domain.ImageMoveItem, result *domain.ImageMoveResult) {
@@ -292,10 +347,17 @@ func (s *ImageMoveService) buildPlan(ctx context.Context, req domain.ImageMoveRe
 		items:            make([]domain.ImageMoveItem, 0, len(images)),
 	}
 	plannedTargets := make(map[string]struct{}, len(images))
+	if err := s.appendPlanItems(plan, images, plannedTargets); err != nil {
+		return nil, err
+	}
 
+	return plan, nil
+}
+
+func (s *ImageMoveService) appendPlanItems(plan *imageMovePlan, images []domain.Image, plannedTargets map[string]struct{}) error {
 	for _, image := range images {
-		targetPath := filepath.Join(normalized.TargetDir, image.Filename)
-		if normalized.Conflict == domain.ImageMoveConflictRename {
+		targetPath := filepath.Join(plan.request.TargetDir, image.Filename)
+		if plan.request.Conflict == domain.ImageMoveConflictRename {
 			targetPath = nextAvailableMoveTarget(targetPath, plannedTargets)
 		}
 		item := domain.ImageMoveItem{
@@ -305,7 +367,7 @@ func (s *ImageMoveService) buildPlan(ctx context.Context, req domain.ImageMoveRe
 			TargetPath: targetPath,
 			Status:     domain.ImageMoveStatusMovable,
 		}
-		if !pathInAnyDir(image.Path, normalized.SourceDirs) {
+		if !pathInAnyDir(image.Path, plan.request.SourceDirs) {
 			continue
 		}
 		if _, err := os.Stat(image.Path); err != nil {
@@ -315,7 +377,7 @@ func (s *ImageMoveService) buildPlan(ctx context.Context, req domain.ImageMoveRe
 				item.Reason = classifyMoveError(err)
 			}
 		} else if _, err := os.Stat(item.TargetPath); err == nil {
-			switch normalized.Conflict {
+			switch plan.request.Conflict {
 			case domain.ImageMoveConflictOverwrite:
 				item.Overwritten = true
 			default:
@@ -332,8 +394,7 @@ func (s *ImageMoveService) buildPlan(ctx context.Context, req domain.ImageMoveRe
 		plannedTargets[pathCompareKey(item.TargetPath)] = struct{}{}
 		plan.items = append(plan.items, item)
 	}
-
-	return plan, nil
+	return nil
 }
 
 func (s *ImageMoveService) normalizeRequest(req domain.ImageMoveRequest) (domain.ImageMoveRequest, error) {
@@ -500,6 +561,29 @@ func nextAvailableMoveTarget(targetPath string, reserved map[string]struct{}) st
 		}
 	}
 	return targetPath
+}
+
+func reserveOverwriteBackup(targetPath string) (string, error) {
+	dir := filepath.Dir(targetPath)
+	base := filepath.Base(targetPath)
+	for i := 0; i < 100000; i++ {
+		candidate := filepath.Join(dir, fmt.Sprintf(".%s.acgwarehouse-overwrite-%d.tmp", base, i))
+		file, err := os.OpenFile(candidate, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err == nil {
+			if closeErr := file.Close(); closeErr != nil {
+				_ = os.Remove(candidate)
+				return "", closeErr
+			}
+			if err := os.Remove(candidate); err != nil {
+				return "", err
+			}
+			return candidate, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("reserve overwrite backup for %q: no available name", targetPath)
 }
 
 func pathInAnyDir(path string, dirs []string) bool {

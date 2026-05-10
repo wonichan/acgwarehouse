@@ -1,9 +1,10 @@
-﻿package app
+package app
 
 import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -58,6 +59,63 @@ func TestNewInitializesAutoScheduler(t *testing.T) {
 
 	if app.autoScheduler == nil {
 		t.Fatal("expected autoScheduler to be initialized")
+	}
+}
+
+func TestInitRepositoriesD1ReadWriteUsesD1DataRepositories(t *testing.T) {
+	t.Parallel()
+
+	app := &App{config: &config.Config{Database: config.DatabaseConfig{
+		Type:     "d1",
+		D1APIURL: "https://api.acgwarehouse.cloud",
+	}}}
+
+	app.initRepositories()
+
+	assertTypeName(t, app.imageRepo, "*repository.d1ImageRepository")
+	assertTypeName(t, app.tagRepo, "*repository.d1TagRepository")
+	assertTypeName(t, app.aliasRepo, "*repository.d1TagAliasRepository")
+	assertTypeName(t, app.imageTagRepo, "*repository.d1ImageTagRepository")
+	assertTypeName(t, app.collectionRepo, "*repository.d1CollectionRepository")
+	assertTypeName(t, app.searchRepo, "*repository.d1SearchRepository")
+	assertTypeName(t, app.obsRepo, "*repository.d1TagObservationRepository")
+	assertTypeName(t, app.tagAdminStore, "*repository.d1TagAdminStore")
+	assertTypeName(t, app.tagGovernanceQuery, "*repository.d1TagGovernanceQuery")
+	assertTypeName(t, app.jobRepo, "*repository.sqliteJobRepository")
+
+	app.initServices()
+	if app.searchMaintenanceSvc == nil {
+		t.Fatal("expected D1 search maintenance service")
+	}
+}
+
+func TestInitRepositoriesD1ReadOnlyUsesHybridDataRepositories(t *testing.T) {
+	t.Parallel()
+
+	app := &App{config: &config.Config{Database: config.DatabaseConfig{
+		Type:       "d1",
+		D1APIURL:   "https://api.acgwarehouse.cloud",
+		D1ReadOnly: true,
+	}}}
+
+	app.initRepositories()
+
+	assertTypeName(t, app.imageRepo, "*repository.HybridImageRepository")
+	assertTypeName(t, app.tagRepo, "*repository.HybridTagRepository")
+	assertTypeName(t, app.aliasRepo, "*repository.HybridTagAliasRepository")
+	assertTypeName(t, app.imageTagRepo, "*repository.HybridImageTagRepository")
+	assertTypeName(t, app.collectionRepo, "*repository.HybridCollectionRepository")
+	assertTypeName(t, app.searchRepo, "*repository.d1SearchRepository")
+	assertTypeName(t, app.obsRepo, "*repository.sqliteTagObservationRepository")
+	assertTypeName(t, app.tagAdminStore, "*repository.sqliteTagAdminStore")
+	assertTypeName(t, app.tagGovernanceQuery, "*repository.sqliteTagGovernanceQuery")
+
+	app.initServices()
+	if app.tagAdminSvc == nil {
+		t.Fatal("expected D1 read-only tag admin service")
+	}
+	if err := app.searchMaintenanceSvc.RebuildFTSIndex(context.Background()); err == nil {
+		t.Fatal("expected read-only D1 search maintenance to reject rebuild")
 	}
 }
 
@@ -283,6 +341,16 @@ func newTestLifecycleApp(tracker autoSchedulerLifecycle, cfg *config.Config) *Ap
 		config:               cfg,
 		refillStopCh:         make(chan struct{}),
 		autoSchedulerControl: tracker,
+	}
+}
+
+func assertTypeName(t *testing.T, value any, want string) {
+	t.Helper()
+	if value == nil {
+		t.Fatalf("type = <nil>, want %s", want)
+	}
+	if got := reflect.TypeOf(value).String(); got != want {
+		t.Fatalf("type = %s, want %s", got, want)
 	}
 }
 

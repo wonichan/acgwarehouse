@@ -16,8 +16,8 @@ func (s *TagAdminService) MergeTags(ctx context.Context, sourceTagID, targetTagI
 	if sourceTagID == targetTagID {
 		return nil, ErrMergeSameSourceTarget
 	}
-	if s.db == nil {
-		return nil, errors.New("database is required")
+	if s.adminStore == nil {
+		return nil, errors.New("tag admin store is required")
 	}
 
 	sourceTag, err := s.tagRepo.FindByID(ctx, sourceTagID)

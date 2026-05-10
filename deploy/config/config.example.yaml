@@ -7,6 +7,9 @@ database:
   type: "sqlite"
   path: ""
   connection_string: ""
+  # d1_api_url: "https://api.acgwarehouse.cloud"
+  # d1_api_key: ""
+  # d1_readonly: true
 
 storage:
   scan_roots:

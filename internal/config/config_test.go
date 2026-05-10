@@ -133,6 +133,9 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	t.Setenv("DATABASE_TYPE", "postgres")
 	t.Setenv("DATABASE_PATH", "./data/override.db")
 	t.Setenv("DATABASE_CONNECTION_STRING", "postgres://user:pass@localhost/acg")
+	t.Setenv("ACG_D1_API_URL", "https://api.acgwarehouse.cloud")
+	t.Setenv("ACG_D1_API_KEY", "d1-secret")
+	t.Setenv("ACG_D1_READONLY", "true")
 	t.Setenv("AI_PROVIDER", "doubao")
 	t.Setenv("AI_API_KEY", "secret")
 	t.Setenv("AI_MODEL", "doubao-vision")
@@ -166,6 +169,15 @@ func TestLoadConfigAppliesEnvOverrides(t *testing.T) {
 	}
 	if cfg.Database.ConnectionString != "postgres://user:pass@localhost/acg" {
 		t.Fatalf("expected overridden connection string, got %q", cfg.Database.ConnectionString)
+	}
+	if cfg.Database.D1APIURL != "https://api.acgwarehouse.cloud" {
+		t.Fatalf("expected overridden D1 API URL, got %q", cfg.Database.D1APIURL)
+	}
+	if cfg.Database.D1APIKey != "d1-secret" {
+		t.Fatalf("expected overridden D1 API key, got %q", cfg.Database.D1APIKey)
+	}
+	if !cfg.Database.D1ReadOnly {
+		t.Fatal("expected overridden D1 readonly true")
 	}
 	if cfg.AI.Provider != "doubao" {
 		t.Fatalf("expected overridden AI provider doubao, got %q", cfg.AI.Provider)
@@ -245,6 +257,38 @@ func TestLoadConfigAppliesAutoAITagDefaults(t *testing.T) {
 	}
 	if cfg.AI.AutoScanBatchSize != 100 {
 		t.Fatalf("expected default auto scan batch size 100, got %d", cfg.AI.AutoScanBatchSize)
+	}
+}
+
+func TestLoadConfigDefaultsD1RuntimeDatabasePath(t *testing.T) {
+	tempDir := t.TempDir()
+	runtimeDir := filepath.Join(tempDir, "runtime")
+	t.Setenv("ACG_RUNTIME_ROOT", runtimeDir)
+
+	configPath := filepath.Join(tempDir, "config.yaml")
+	configYAML := `server:
+  host: "127.0.0.1"
+  port: 8080
+database:
+  type: "d1"
+  d1_api_url: "https://api.acgwarehouse.cloud"
+  d1_api_key: "test-key"
+storage:
+  scan_roots: []
+ai: {}
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig returned error: %v", err)
+	}
+
+	want := filepath.Join(tempDir, "storage", "acgwarehouse-runtime.db")
+	if cfg.Database.Path != want {
+		t.Fatalf("database path = %q, want %q", cfg.Database.Path, want)
 	}
 }
 

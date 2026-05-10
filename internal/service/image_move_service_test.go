@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -299,6 +301,128 @@ func TestImageMoveServiceExecuteRollsBackFileWhenDBUpdateFails(t *testing.T) {
 	}
 }
 
+func TestImageMoveServiceOverwriteRestoresOriginalTargetWhenDBUpdateFails(t *testing.T) {
+	t.Parallel()
+	env := setupImageMoveServiceTest(t)
+	ctx := context.Background()
+
+	image := env.saveImageWithFile(t, "overwrite.png", env.sourceDir, "new")
+	env.saveImageTag(t, image.ID)
+	targetPath := filepath.Join(env.targetDir, "overwrite.png")
+	if err := os.WriteFile(targetPath, []byte("old"), 0644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+
+	failingRepo := &failingImageMoveRepo{ImageMoveQuery: env.imageRepo, updateErr: errors.New("db down")}
+	svc := NewImageMoveService(failingRepo, env.tagRepo, nil, func() *config.Config {
+		return &config.Config{Storage: config.StorageConfig{ScanRoots: []string{env.targetDir}}}
+	})
+
+	result, err := svc.ExecuteMove(ctx, domain.ImageMoveRequest{
+		SourceDirs: []string{env.sourceDir},
+		TagID:      env.tag.ID,
+		TargetDir:  env.targetDir,
+		Conflict:   domain.ImageMoveConflictOverwrite,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteMove() error = %v", err)
+	}
+	if result.Failed != 1 || result.Moved != 0 {
+		t.Fatalf("Failed/Moved = %d/%d, want 1/0", result.Failed, result.Moved)
+	}
+	assertImageMoveItem(t, result.Items, image.ID, domain.ImageMoveStatusFailed, domain.ImageMoveReasonDBUpdateFailed)
+	sourceData, err := os.ReadFile(filepath.Join(env.sourceDir, "overwrite.png"))
+	if err != nil {
+		t.Fatalf("read restored source: %v", err)
+	}
+	if string(sourceData) != "new" {
+		t.Fatalf("source payload = %q, want new", sourceData)
+	}
+	targetData, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatalf("read restored target: %v", err)
+	}
+	if string(targetData) != "old" {
+		t.Fatalf("target payload = %q, want old", targetData)
+	}
+}
+
+func TestImageMoveServiceJobProcessesAllPages(t *testing.T) {
+	t.Parallel()
+	env := setupImageMoveServiceTest(t)
+	ctx := context.Background()
+
+	const imageCount = 13
+	for i := 0; i < imageCount; i++ {
+		image := env.saveImageWithFile(t, "page-"+intToString(i)+".png", env.sourceDir, "payload")
+		env.saveImageTag(t, image.ID)
+	}
+
+	job, err := env.svc.CreateMoveJob(ctx, domain.ImageMoveRequest{
+		SourceDirs: []string{env.sourceDir},
+		TagID:      env.tag.ID,
+		TargetDir:  env.targetDir,
+		Limit:      5,
+	})
+	if err != nil {
+		t.Fatalf("CreateMoveJob() error = %v", err)
+	}
+
+	refreshed := waitImageMoveJob(t, env.svc, job.ID, domain.ImageMoveBatchStatusCompleted, domain.ImageMoveBatchStatusFailed, domain.ImageMoveBatchStatusCancelled)
+	if refreshed.Status != domain.ImageMoveBatchStatusCompleted {
+		t.Fatalf("job status = %q, want completed; job=%+v", refreshed.Status, refreshed)
+	}
+	if refreshed.TotalMatched != imageCount || refreshed.Moved != imageCount || refreshed.Progress.Processed != imageCount {
+		t.Fatalf("job counts = total:%d moved:%d processed:%d, want %d", refreshed.TotalMatched, refreshed.Moved, refreshed.Progress.Processed, imageCount)
+	}
+	if len(refreshed.Items) != imageCount {
+		t.Fatalf("history item count = %d, want %d", len(refreshed.Items), imageCount)
+	}
+}
+
+func TestImageMoveServiceCancelJobFinalStateWinsOverWorker(t *testing.T) {
+	t.Parallel()
+	env := setupImageMoveServiceTest(t)
+	ctx := context.Background()
+
+	image := env.saveImageWithFile(t, "cancel.png", env.sourceDir, "payload")
+	env.saveImageTag(t, image.ID)
+	releaseMove := make(chan struct{})
+	moveStarted := make(chan struct{})
+	var signalStarted sync.Once
+	env.svc.moveFile = func(src, dst string) error {
+		signalStarted.Do(func() {
+			close(moveStarted)
+		})
+		<-releaseMove
+		return moveFileWithCopyFallback(src, dst)
+	}
+
+	job, err := env.svc.CreateMoveJob(ctx, domain.ImageMoveRequest{
+		SourceDirs: []string{env.sourceDir},
+		TagID:      env.tag.ID,
+		TargetDir:  env.targetDir,
+	})
+	if err != nil {
+		t.Fatalf("CreateMoveJob() error = %v", err)
+	}
+
+	select {
+	case <-moveStarted:
+	case <-time.After(time.Second):
+		t.Fatal("move did not start")
+	}
+	if _, err := env.svc.CancelMoveJob(ctx, job.ID); err != nil {
+		t.Fatalf("CancelMoveJob() error = %v", err)
+	}
+	close(releaseMove)
+
+	refreshed := waitImageMoveJob(t, env.svc, job.ID, domain.ImageMoveBatchStatusCancelled, domain.ImageMoveBatchStatusCompleted, domain.ImageMoveBatchStatusFailed)
+	if refreshed.Status != domain.ImageMoveBatchStatusCancelled {
+		t.Fatalf("job status = %q, want cancelled; job=%+v", refreshed.Status, refreshed)
+	}
+}
+
 func (env *imageMoveServiceTestEnv) saveImageWithFile(t *testing.T, filename, dir, payload string) *domain.Image {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -362,4 +486,30 @@ func findImageMoveItem(t *testing.T, items []domain.ImageMoveItem, imageID int64
 	}
 	t.Fatalf("item %d not found in %+v", imageID, items)
 	return domain.ImageMoveItem{}
+}
+
+func waitImageMoveJob(t *testing.T, svc *ImageMoveService, jobID int64, terminalStatuses ...string) *domain.ImageMoveBatch {
+	t.Helper()
+	wanted := make(map[string]struct{}, len(terminalStatuses))
+	for _, status := range terminalStatuses {
+		wanted[status] = struct{}{}
+	}
+	var refreshed *domain.ImageMoveBatch
+	var err error
+	for i := 0; i < 200; i++ {
+		refreshed, err = svc.GetMoveJob(context.Background(), jobID)
+		if err != nil {
+			t.Fatalf("GetMoveJob() error = %v", err)
+		}
+		if _, ok := wanted[refreshed.Status]; ok {
+			return refreshed
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("job did not reach terminal status; last=%+v", refreshed)
+	return refreshed
+}
+
+func intToString(value int) string {
+	return fmt.Sprintf("%d", value)
 }

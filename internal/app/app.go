@@ -14,6 +14,7 @@ import (
 	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/wonichan/acgwarehouse-backend/internal/ai"
 	"github.com/wonichan/acgwarehouse-backend/internal/config"
+	"github.com/wonichan/acgwarehouse-backend/internal/d1client"
 	"github.com/wonichan/acgwarehouse-backend/internal/domain"
 	"github.com/wonichan/acgwarehouse-backend/internal/handler"
 	"github.com/wonichan/acgwarehouse-backend/internal/imageruntime"
@@ -29,6 +30,7 @@ type App struct {
 	config      *config.Config
 	cfgReloader *config.Reloader
 	db          *sql.DB
+	d1Client    *d1client.Client
 	httpServer  *http.Server
 	jobManager  *worker.Manager
 
@@ -44,6 +46,8 @@ type App struct {
 	imageMoveHistoryRepo repository.ImageMoveHistoryRepository
 	taskRepo             repository.PlatformTaskRepository
 	taskBatchRepo        repository.TaskBatchRepository
+	tagAdminStore        repository.TagAdminStore
+	tagGovernanceQuery   repository.TagGovernanceQuery
 
 	// Services
 	governanceSvc        *service.TagGovernanceService

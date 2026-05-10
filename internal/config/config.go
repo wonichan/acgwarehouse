@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,7 +35,12 @@ type DatabaseConfig struct {
 	Type             string `yaml:"type"`
 	Path             string `yaml:"path"`
 	ConnectionString string `yaml:"connection_string"`
+	D1APIURL         string `yaml:"d1_api_url"`
+	D1APIKey         string `yaml:"d1_api_key"`
+	D1ReadOnly       bool   `yaml:"d1_readonly"`
 }
+
+const portableRuntimeRootEnv = "ACG_RUNTIME_ROOT"
 
 type StorageConfig struct {
 	ScanRoots []string `yaml:"scan_roots"`
@@ -233,6 +239,14 @@ func LoadConfig(paths ...string) (*Config, error) {
 
 // applyDefaults sets default values for optional configuration fields.
 func applyDefaults(cfg *Config) {
+	if strings.EqualFold(cfg.Database.Type, "d1") && strings.TrimSpace(cfg.Database.Path) == "" {
+		if runtimeRoot := strings.TrimSpace(os.Getenv(portableRuntimeRootEnv)); runtimeRoot != "" {
+			cfg.Database.Path = filepath.Join(filepath.Dir(filepath.Clean(runtimeRoot)), "storage", "acgwarehouse-runtime.db")
+		} else {
+			cfg.Database.Path = filepath.Join("data", "acgwarehouse-runtime.db")
+		}
+	}
+
 	// WorkerPool defaults
 	if cfg.WorkerPool.WorkerCount <= 0 {
 		cfg.WorkerPool.WorkerCount = 4
@@ -289,6 +303,20 @@ func applyEnvOverrides(cfg *Config) {
 
 	if v := os.Getenv("DATABASE_CONNECTION_STRING"); v != "" {
 		cfg.Database.ConnectionString = v
+	}
+
+	if v := os.Getenv("ACG_D1_API_URL"); v != "" {
+		cfg.Database.D1APIURL = v
+	}
+
+	if v := os.Getenv("ACG_D1_API_KEY"); v != "" {
+		cfg.Database.D1APIKey = v
+	}
+
+	if v := os.Getenv("ACG_D1_READONLY"); v != "" {
+		if readonly, err := strconv.ParseBool(v); err == nil {
+			cfg.Database.D1ReadOnly = readonly
+		}
 	}
 
 	if v := os.Getenv("AI_PROVIDER"); v != "" {

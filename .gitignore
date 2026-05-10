@@ -15,6 +15,12 @@ thirdparty/
 .codex*/
 .codX*/
 migrate_working_dir/
+cloudflare-worker/
+scripts/
+migrations/
+.wrangler/*
+.tmp/*
+.sisyphus/*
 
 # IntelliJ related
 *.iml
@@ -51,6 +57,9 @@ app.*.map.json
 
 # Go / backend
 /bin/
+/.gobuildcache/
+/.gocachetmp/
+/.testtmp/
 /data/*.db
 config.yaml
 config.local.yaml
