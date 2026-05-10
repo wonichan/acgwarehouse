@@ -30,6 +30,7 @@ type Dependencies struct {
 	TagAdminSvc          tagAdminService
 	SearchMaintenanceSvc searchMaintenanceService
 	AdminSvc             AdminServiceInterface
+	ImageMoveSvc         *service.ImageMoveService
 	MonitoringBus        *service.MonitoringEventBus
 	LogStreamSvc         *service.LogStreamService
 	JobManager           *worker.Manager
@@ -261,6 +262,16 @@ func SetupRoutes(r *gin.Engine, depsOpt ...*Dependencies) {
 	api.POST("/images/batch-ai-tags", aiBatch)
 	api.POST("/images/batch-ai-tags/regenerate", aiBatchRegenerate)
 	api.GET("/ai-tags/default-prompt", aiDefaultPrompt)
+
+	imageMovePreview := gin.HandlerFunc(placeholderHandler)
+	imageMoveExecute := gin.HandlerFunc(placeholderHandler)
+	if deps != nil && deps.ImageMoveSvc != nil {
+		imageMoveHandler := NewImageMoveHandler(deps.ImageMoveSvc)
+		imageMovePreview = imageMoveHandler.PreviewMove
+		imageMoveExecute = imageMoveHandler.ExecuteMove
+	}
+	api.POST("/image-moves/preview", imageMovePreview)
+	api.POST("/image-moves/execute", imageMoveExecute)
 
 	// Search routes
 	searchHandler := gin.HandlerFunc(placeholderHandler)

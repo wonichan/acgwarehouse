@@ -58,6 +58,7 @@ type App struct {
 	backfillSvc          *service.AIBackfillService
 	tagAdminSvc          *service.TagAdminService
 	searchMaintenanceSvc *service.SearchMaintenanceService
+	imageMoveSvc         *service.ImageMoveService
 
 	// Background task control
 	refillStopMu         sync.Mutex
@@ -217,6 +218,7 @@ func (a *App) Run() error {
 		BackfillSvc:          a.backfillSvc,
 		TagAdminSvc:          a.tagAdminSvc,
 		SearchMaintenanceSvc: a.searchMaintenanceSvc,
+		ImageMoveSvc:         a.imageMoveSvc,
 		MonitoringBus:        a.monitoringBus,
 		LogStreamSvc:         a.logStreamSvc,
 		JobManager:           a.jobManager,

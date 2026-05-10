@@ -28,6 +28,8 @@ func TestRoutesRegistersTagAndImageTagEndpoints(t *testing.T) {
 		{method: http.MethodPost, path: "/api/v1/viewer/window"},
 		{method: http.MethodPost, path: "/api/v1/images/1/ai-tags"},
 		{method: http.MethodPost, path: "/api/v1/images/batch-ai-tags/regenerate"},
+		{method: http.MethodPost, path: "/api/v1/image-moves/preview"},
+		{method: http.MethodPost, path: "/api/v1/image-moves/execute"},
 	} {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(tc.method, tc.path, nil)

@@ -49,6 +49,12 @@ type BackfillImageQuery interface {
 	CountBackfillHitCount(ctx context.Context, filter BackfillCandidateFilter) (int64, error)
 }
 
+type ImageMoveQuery interface {
+	FindBySourceDirsAndTag(ctx context.Context, sourceDirs []string, tagID int64, limit, offset int) ([]domain.Image, error)
+	CountBySourceDirsAndTag(ctx context.Context, sourceDirs []string, tagID int64) (int64, error)
+	UpdateImageLocation(ctx context.Context, imageID int64, path, filename, sourceRoot string) error
+}
+
 type ImageMutationStore interface {
 	// SaveImage saves an image to the database.
 	// Returns (isNew, error) where isNew is true if a new record was inserted,
@@ -64,6 +70,7 @@ type ImageRepository interface {
 	ImageReader
 	GalleryImageQuery
 	BackfillImageQuery
+	ImageMoveQuery
 	ImageMutationStore
 }
 
@@ -499,6 +506,125 @@ func (r *sqliteImageRepository) CountByTagIDs(ctx context.Context, tagIDs []int6
 	var count int64
 	err = r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
+}
+
+func (r *sqliteImageRepository) FindBySourceDirsAndTag(ctx context.Context, sourceDirs []string, tagID int64, limit, offset int) ([]domain.Image, error) {
+	if tagID <= 0 {
+		return []domain.Image{}, nil
+	}
+	clauses, args := buildImageMoveSourceClauses(sourceDirs)
+	if len(clauses) == 0 {
+		return []domain.Image{}, nil
+	}
+	if limit <= 0 {
+		limit = 1000
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM images i
+		LEFT JOIN collection_images ci ON ci.image_id = i.id
+		JOIN image_tags it ON it.image_id = i.id
+		WHERE it.tag_id = ?
+		  AND it.review_state != ?
+		  AND (%s)
+		ORDER BY i.id ASC
+		LIMIT ? OFFSET ?
+	`, imageSelectColumns, strings.Join(clauses, " OR "))
+
+	queryArgs := make([]any, 0, len(args)+4)
+	queryArgs = append(queryArgs, tagID, domain.ReviewStateRejected)
+	queryArgs = append(queryArgs, args...)
+	queryArgs = append(queryArgs, int64(limit), int64(offset))
+
+	rows, err := r.db.QueryContext(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	images := make([]domain.Image, 0)
+	for rows.Next() {
+		var image domain.Image
+		if err := scanImage(rows, &image); err != nil {
+			return nil, err
+		}
+		images = append(images, image)
+	}
+
+	return images, rows.Err()
+}
+
+func (r *sqliteImageRepository) CountBySourceDirsAndTag(ctx context.Context, sourceDirs []string, tagID int64) (int64, error) {
+	if tagID <= 0 {
+		return 0, nil
+	}
+	clauses, args := buildImageMoveSourceClauses(sourceDirs)
+	if len(clauses) == 0 {
+		return 0, nil
+	}
+
+	query := fmt.Sprintf(`
+		SELECT COUNT(DISTINCT i.id)
+		FROM images i
+		JOIN image_tags it ON it.image_id = i.id
+		WHERE it.tag_id = ?
+		  AND it.review_state != ?
+		  AND (%s)
+	`, strings.Join(clauses, " OR "))
+
+	queryArgs := make([]any, 0, len(args)+2)
+	queryArgs = append(queryArgs, tagID, domain.ReviewStateRejected)
+	queryArgs = append(queryArgs, args...)
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, queryArgs...).Scan(&count)
+	return count, err
+}
+
+func (r *sqliteImageRepository) UpdateImageLocation(ctx context.Context, imageID int64, path, filename, sourceRoot string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE images
+		SET path = ?, filename = ?, source_root = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, path, filename, sourceRoot, imageID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func buildImageMoveSourceClauses(sourceDirs []string) ([]string, []any) {
+	clauses := make([]string, 0, len(sourceDirs))
+	args := make([]any, 0, len(sourceDirs)*3)
+	for _, dir := range sourceDirs {
+		trimmed := strings.TrimSpace(dir)
+		if trimmed == "" {
+			continue
+		}
+		trimmed = strings.TrimRight(trimmed, `/\`)
+		if trimmed == "" {
+			continue
+		}
+		clauses = append(clauses, `(i.path = ? OR i.path LIKE ? ESCAPE '\' OR i.path LIKE ? ESCAPE '\')`)
+		args = append(args, trimmed, escapeSQLiteLike(trimmed+`\`)+"%", escapeSQLiteLike(trimmed+`/`)+"%")
+	}
+	return clauses, args
+}
+
+func escapeSQLiteLike(value string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return replacer.Replace(value)
 }
 
 // FindUntagged returns images that have no tags associated with them.
