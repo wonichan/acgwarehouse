@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/guides/go-project-layout.md", "reason": "校验分层与 dto/do/po 不穿透"}
+{"file": ".trellis/spec/backend/go-http-api.md", "reason": "校验路由规范、响应体与状态码映射"}
+{"file": ".trellis/spec/backend/go-naming-and-style.md", "reason": "校验命名与格式(gofmt -s 无 diff)"}
+{"file": ".trellis/spec/backend/go-error-handling.md", "reason": "校验错误处理与堆栈/日志边界"}
+{"file": ".trellis/spec/backend/go-best-practices.md", "reason": "校验函数复杂度、中文注释覆盖"}
+{"file": ".trellis/spec/backend/go-logging.md", "reason": "校验日志规范，禁裸 print"}

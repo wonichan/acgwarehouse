@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/guides/go-project-layout.md", "reason": "强制分层目录结构与对象流转(dto/do/po)约束，所有新建文件必须遵守"}
+{"file": ".trellis/spec/backend/go-http-api.md", "reason": "RESTful 路由规范与统一 Response{Code,Data,Msg} 响应体、状态码/业务码矩阵"}
+{"file": ".trellis/spec/backend/go-naming-and-style.md", "reason": "命名矩阵、Tab 缩进、行宽≤120、gofmt -s 风格要求"}
+{"file": ".trellis/spec/backend/go-error-handling.md", "reason": "pkg/errors 带堆栈、错误只返回或只打日志、handler 层统一打印"}
+{"file": ".trellis/spec/backend/go-best-practices.md", "reason": "函数≤50行/参数≤5/圈复杂度≤10、接收者选择、中文注释要求"}
+{"file": ".trellis/spec/backend/go-logging.md", "reason": "结构化日志签名、禁 fmt.Println、error 级告警注意"}
