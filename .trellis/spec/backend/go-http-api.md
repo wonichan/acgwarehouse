@@ -151,3 +151,69 @@ result, err := h.ratingService.Upsert(c, do.Rating{
     Score:   input.Score,
 })
 ```
+
+## 6. 场景：收藏夹 API
+
+### 1. Scope / Trigger
+- 触发：新增多收藏夹能力，涉及 HTTP API、owner/visibility 权限、SQLite `collection` / `collection_item` 表、`image.favorite_count` 去重聚合和 `image_event` 行为流水。
+- 目标：用户可管理多个命名收藏夹；公开收藏夹可被任何人浏览；私有收藏夹仅 owner 可见；图片收藏数按去重用户数维护。
+
+### 2. Signatures
+- `GET /api/v1/collections`，需 `Auth`，返回当前用户收藏夹列表。
+- `POST /api/v1/collections`，需 `Auth`，Request：`{"name": <string>, "visibility": "private"|"public"}`。
+- `GET /api/v1/collections/:id`，公开收藏夹任意访问；私有仅 owner。
+- `PUT /api/v1/collections/:id` / `DELETE /api/v1/collections/:id`，需 `Auth` 且 owner。
+- `POST /api/v1/collections/:id/items`，需 owner，Request：`{"image_id": <int64>}`。
+- `DELETE /api/v1/collections/:id/items/:imageId`，需 owner。
+- DB：`collection(id,user_id,name,visibility,created_at,updated_at)`；`collection_item(collection_id,image_id,created_at)`，同夹同图唯一；`image.favorite_count` 为去重用户数；`image_event(type='favorite', value=1|-1)` 记录收藏/取消收藏事件。
+
+### 3. Contracts
+- `visibility` 缺省为 `private`；只允许 `private` / `public`。
+- 同一收藏夹内同一图片只能存在一条 `collection_item`；重复加入应幂等，不重复增加 `favorite_count`。
+- `favorite_count` 统计某图片被多少个不同用户收藏，而不是被多少个收藏夹收藏。
+- 用户删除收藏夹时，必须按被删除 item 的图片逐一重算该 owner 是否仍收藏该图；只有 owner 对该图无剩余收藏时才递减 `favorite_count` 并发 `favorite value=-1` 事件。
+- 删除收藏夹、删除 items、更新 `favorite_count`、写 favorite event 必须在同一写事务内完成。
+- handler 只接收/返回 `dto`，service 使用 `do.Collection` / `do.CollectionItem`，repository 内部使用 `po`；禁止 `po` 穿透 HTTP 响应。
+
+### 4. Validation & Error Matrix
+- 未登录管理收藏夹或 item -> HTTP 401 / Code 40101。
+- 非法 `:id` / `:imageId` / body 绑定失败 / 非法 visibility -> HTTP 400 / Code 40001。
+- 收藏夹不存在，或私有收藏夹被非 owner 读取 -> HTTP 404 / Code 40401（避免泄露私有资源存在性）。
+- 非 owner 更新/删除/添加/移除 item -> HTTP 403 / Code 40301。
+- DB 事务、聚合重算或事件写入失败 -> HTTP 500 / Code 50001，由 handler 统一记录日志。
+
+### 5. Good/Base/Bad Cases
+- Good：用户 A 将图片 1 加入第一个收藏夹，`favorite_count +1` 且发 `favorite value=1`。
+- Good：用户 A 又将图片 1 加入第二个收藏夹，`favorite_count` 不变，不重复发 +1 事件。
+- Good：用户 A 删除第一个收藏夹但第二个收藏夹仍含图片 1，`favorite_count` 不变。
+- Good：用户 A 删除最后一个包含图片 1 的收藏夹，`favorite_count -1` 且发 `favorite value=-1`。
+- Base：公开收藏夹未登录可读；私有收藏夹非 owner 读取按不存在处理。
+- Bad：按 `collection_item` 行数维护 `favorite_count`，导致同一用户多收藏夹收藏同图时重复计数。
+
+### 6. Tests Required
+- Repository：同夹同图唯一；同用户多夹收藏同图只计数一次；删除 item / 删除 collection 时只在最后一份收藏消失后递减；favorite event value=1/-1。
+- Service：visibility 默认值与非法值；非 owner 管理返回 forbidden；public/private 读取边界。
+- Route smoke：未登录管理 401；非 owner 管理 403；公开收藏夹可读；私有收藏夹非 owner/游客不可读。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```go
+// 收藏数按 item 行数递增，重复收藏同图会重复计数。
+if err := tx.Create(&po.CollectionItem{CollectionID: cid, ImageID: imageID}).Error; err == nil {
+    tx.Model(&po.Image{}).Where("id = ?", imageID).
+        UpdateColumn("favorite_count", gorm.Expr("favorite_count + 1"))
+}
+```
+
+#### Correct
+```go
+// 先判断该用户此前是否已收藏该图；只有首次用户收藏才递增。
+hadFavorite, err := userHasFavoriteImage(ctx, tx, ownerID, imageID)
+if err != nil { return err }
+created, err := createCollectionItem(ctx, tx, collectionID, imageID)
+if err != nil { return err }
+if created && !hadFavorite {
+    return incrementFavoriteCountAndEvent(ctx, tx, imageID, ownerID, 1)
+}
+```
