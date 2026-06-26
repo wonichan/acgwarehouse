@@ -63,17 +63,40 @@ type ViewRecorder interface {
 	RecordView(ctx context.Context, event do.ImageEvent) error
 }
 
+// ImageTagReader 定义图片标签读取能力。
+type ImageTagReader interface {
+	ListByImageID(ctx context.Context, imageID int64) ([]do.Tag, error)
+}
+
 // ImageService 提供图片查询、搜索和生命周期管理能力。
 type ImageService struct {
 	repo     ImageRepository
 	searcher ImageSearcher
 	views    ViewRecorder
+	tags     ImageTagReader
 	cosBase  string
 }
 
 // NewImageService 创建图片服务。
 func NewImageService(repo ImageRepository, searcher ImageSearcher, views ViewRecorder, cosBase string) *ImageService {
-	return &ImageService{repo: repo, searcher: searcher, views: views, cosBase: strings.TrimRight(cosBase, "/")}
+	return NewImageServiceWithTags(repo, searcher, views, nil, cosBase)
+}
+
+// NewImageServiceWithTags 创建带标签读取能力的图片服务。
+func NewImageServiceWithTags(
+	repo ImageRepository,
+	searcher ImageSearcher,
+	views ViewRecorder,
+	tags ImageTagReader,
+	cosBase string,
+) *ImageService {
+	return &ImageService{
+		repo:     repo,
+		searcher: searcher,
+		views:    views,
+		tags:     tags,
+		cosBase:  strings.TrimRight(cosBase, "/"),
+	}
 }
 
 // List 查询可公开展示图片列表。
@@ -107,7 +130,11 @@ func (s *ImageService) Detail(ctx context.Context, id int64, userID int64) (dto.
 			return dto.ImageDetailResponse{}, pkgerrors.WithMessage(err, "record image view")
 		}
 	}
-	return s.newDetailResponse(image), nil
+	detail, err := s.newDetailResponse(ctx, image)
+	if err != nil {
+		return dto.ImageDetailResponse{}, err
+	}
+	return detail, nil
 }
 
 // Search 搜索可公开展示图片列表。
@@ -150,6 +177,7 @@ func (s *ImageService) Restore(ctx context.Context, id int64) (do.Image, error) 
 func toRepositoryImageQuery(query ImageQuery) RepositoryImageQuery {
 	return RepositoryImageQuery{
 		Filename: query.Filename,
+		Tag:      query.Tag,
 		Page:     query.Page,
 		Size:     query.Size,
 		Sort:     query.Sort,
@@ -167,18 +195,38 @@ func (s *ImageService) newListResult(total int64, page int, size int, images []d
 }
 
 // newDetailResponse 创建阶段三稳定的图片详情响应。
-func (s *ImageService) newDetailResponse(image do.Image) dto.ImageDetailResponse {
+func (s *ImageService) newDetailResponse(ctx context.Context, image do.Image) (dto.ImageDetailResponse, error) {
 	response := s.toImageResponse(image)
+	tags, err := s.imageTagNames(ctx, image.ID)
+	if err != nil {
+		return dto.ImageDetailResponse{}, err
+	}
 	return dto.ImageDetailResponse{
 		Image:         response,
-		Tags:          []string{},
+		Tags:          tags,
 		AvgScore:      image.AvgScore,
 		RatingCount:   image.RatingCount,
 		FavoriteCount: image.FavoriteCount,
 		MyRating:      nil,
 		IsCollected:   false,
 		SimilarImages: []dto.ImageResponse{},
+	}, nil
+}
+
+// imageTagNames 查询图片标签名称。
+func (s *ImageService) imageTagNames(ctx context.Context, imageID int64) ([]string, error) {
+	if s.tags == nil {
+		return []string{}, nil
 	}
+	tags, err := s.tags.ListByImageID(ctx, imageID)
+	if err != nil {
+		return nil, pkgerrors.WithMessage(err, "list image tags")
+	}
+	names := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		names = append(names, tag.Name)
+	}
+	return names, nil
 }
 
 // toImageResponse 将图片领域对象转换为公开响应 DTO。
