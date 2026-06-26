@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/06-26-acg-landing-2017/prd.md", "reason": "Acceptance criteria AC1-AC6 and decisions D1-D5 that the check must verify (landing served, MinIO removed, 301 intact, nginx -t passes)."}
+{"file": ".trellis/tasks/06-26-acg-landing-2017/implement.md", "reason": "Validation command set used to verify each acceptance criterion."}

@@ -1,0 +1,16 @@
+# Dependencies
+.opencode/node_modules/
+
+# External symlinks / generated index
+.codegraph
+
+# Runtime state
+.omo/run-continuation/
+
+# Python cache
+**/__pycache__/
+**/*.pyc
+
+# OS / editor cruft
+.DS_Store
+*.swp

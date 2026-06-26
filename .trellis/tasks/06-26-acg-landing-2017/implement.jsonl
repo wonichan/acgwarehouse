@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend layer conventions (currently placeholder) — confirms no framework/build system is mandated, static HTML/CSS/JS is acceptable."}
+{"file": ".trellis/tasks/06-26-acg-landing-2017/design.md", "reason": "Authoritative nginx topology: docroot, 2017 static server block, 443 reverse-proxy contract, files to create."}
