@@ -12,6 +12,7 @@ import (
 	"github.com/yachiyo/acgwarehouse/internal/conf"
 	"github.com/yachiyo/acgwarehouse/internal/handler/router"
 	"github.com/yachiyo/acgwarehouse/internal/infra/db"
+	"github.com/yachiyo/acgwarehouse/internal/infra/search"
 	"github.com/yachiyo/acgwarehouse/internal/repository"
 	"github.com/yachiyo/acgwarehouse/internal/service"
 	jwtpkg "github.com/yachiyo/acgwarehouse/pkg/jwt"
@@ -54,6 +55,12 @@ func run(ctx context.Context) error {
 	}
 	addSQLiteClose(hooks, sqliteDB)
 
+	searchIndex, err := search.Open(cfg.Search.BlevePath)
+	if err != nil {
+		return pkgerrors.WithMessage(err, "open search index")
+	}
+	addSearchClose(hooks, searchIndex)
+
 	userRepo := repository.NewUserRepository(sqliteDB.Read, sqliteDB.Write)
 	userService := service.NewUserService(
 		userRepo,
@@ -63,7 +70,18 @@ func run(ctx context.Context) error {
 		return pkgerrors.WithMessage(err, "bootstrap admin")
 	}
 
-	engine := router.New(cfg, userService)
+	imageRepo := repository.NewImageRepository(sqliteDB.Read, sqliteDB.Write)
+	viewBuffer := service.NewViewBuffer(imageRepo, cfg.View.FlushInterval)
+	viewBuffer.Start(ctx)
+	addViewBufferFlush(hooks, viewBuffer)
+	imageService := service.NewImageService(
+		imageRepo,
+		search.NewSearcher(searchIndex),
+		viewBuffer,
+		cfg.COS.Domain,
+	)
+
+	engine := router.New(cfg, userService, imageService)
 	engine.SetCustomSignalWaiter(newSignalWaiter(ctx))
 	engine.OnShutdown = append(engine.OnShutdown, runShutdownHooks(hooks))
 
@@ -155,6 +173,28 @@ func addSQLiteClose(hooks *shutdownHooks, sqliteDB *db.SQLite) {
 			return pkgerrors.WithMessage(err, "close sqlite")
 		}
 		logger.Info(ctx, "sqlite closed")
+		return nil
+	})
+}
+
+// addSearchClose 注册搜索索引关闭钩子。
+func addSearchClose(hooks *shutdownHooks, index *search.Index) {
+	hooks.addCloser(func(ctx context.Context) error {
+		if err := index.Close(); err != nil {
+			return pkgerrors.WithMessage(err, "close search index")
+		}
+		logger.Info(ctx, "search index closed")
+		return nil
+	})
+}
+
+// addViewBufferFlush 注册浏览事件缓冲刷新钩子。
+func addViewBufferFlush(hooks *shutdownHooks, buffer *service.ViewBuffer) {
+	hooks.flushers = append(hooks.flushers, func(ctx context.Context) error {
+		if err := buffer.Stop(ctx); err != nil {
+			return pkgerrors.WithMessage(err, "stop view buffer")
+		}
+		logger.Info(ctx, "view buffer flushed")
 		return nil
 	})
 }

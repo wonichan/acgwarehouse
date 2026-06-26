@@ -16,18 +16,24 @@ import (
 )
 
 // New 创建 Hertz 路由引擎并注册基础路由。
-func New(cfg conf.Config, userService *service.UserService) *server.Hertz {
+func New(cfg conf.Config, userService *service.UserService, imageService *service.ImageService) *server.Hertz {
 	engine := server.Default(server.WithHostPorts(cfg.Server.Address()))
 	engine.Use(middleware.CORS(cfg.CORS.AllowOrigin))
-	Register(engine, userService, jwtpkg.NewManager(cfg.Security.JWTSecret, cfg.Security.JWTDuration))
+	Register(engine, userService, imageService, jwtpkg.NewManager(cfg.Security.JWTSecret, cfg.Security.JWTDuration))
 	return engine
 }
 
 // Register 注册 API v1 路由骨架。
-func Register(engine *server.Hertz, userService *service.UserService, jwtManager *jwtpkg.Manager) {
+func Register(
+	engine *server.Hertz,
+	userService *service.UserService,
+	imageService *service.ImageService,
+	jwtManager *jwtpkg.Manager,
+) {
 	v1 := engine.Group("/api/v1")
 	v1.GET("/ping", ping)
 	registerUserRoutes(v1, userService, jwtManager)
+	registerImageRoutes(v1, imageService, jwtManager)
 }
 
 // registerUserRoutes 注册用户认证路由。
@@ -37,6 +43,16 @@ func registerUserRoutes(group *route.RouterGroup, userService *service.UserServi
 	users.POST("/register", userHandler.Register)
 	users.POST("/login", userHandler.Login)
 	users.GET("/me", middleware.Auth(jwtManager), userHandler.Me)
+}
+
+// registerImageRoutes 注册图片查询与生命周期路由。
+func registerImageRoutes(group *route.RouterGroup, imageService *service.ImageService, jwtManager *jwtpkg.Manager) {
+	imageHandler := handler.NewImageHandler(imageService)
+	group.GET("/images", imageHandler.List)
+	group.GET("/images/:id", imageHandler.Detail)
+	group.GET("/search", imageHandler.Search)
+	group.DELETE("/images/:id", middleware.Auth(jwtManager), middleware.RequireAdmin(), imageHandler.SoftDelete)
+	group.POST("/images/:id/restore", middleware.Auth(jwtManager), middleware.RequireAdmin(), imageHandler.Restore)
 }
 
 // ping 返回服务健康检查响应。
