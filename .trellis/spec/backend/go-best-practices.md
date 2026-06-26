@@ -31,5 +31,47 @@
    ```go
    // 按 key 排序，保证输出确定性。Go map 迭代顺序随机，
    // 不排序会导致相同输入产生不同输出顺序，影响测试稳定性和日志可读性。
-   sort.Strings(resourceTypes)
-   ```
+    sort.Strings(resourceTypes)
+    ```
+
+## 4. 场景：外部同步 Upsert 不得覆盖业务生命周期字段
+
+### 1. Scope / Trigger
+- 触发：COS、消息队列、第三方 API 等外部源同步到本地表，并使用唯一键 upsert。
+- 原因：外部源只是真相的一部分；软删除、隐藏、审核状态属于本地业务生命周期，不能被重复同步恢复。
+
+### 2. Signatures
+- Repository：`UpsertBy<ExternalKey>(ctx context.Context, value do.X) (do.X, error)`。
+- DB：唯一键列（如 `cos_key`）用于幂等；生命周期列（如 `status`、`deleted_at`）只由业务命令更新。
+
+### 3. Contracts
+- 同步可更新：外部元数据字段，如 `filename`、`size`、`last_modified`、`width`、`height`、`category`。
+- 同步不可更新：`status`、`deleted_at`、审核状态、owner 管理字段、用户行为计数字段。
+- 业务恢复必须走显式命令或接口，不能借同步任务隐式恢复。
+
+### 4. Validation & Error Matrix
+- 外部凭证缺失或占位符 -> 同步命令返回带堆栈错误，不落库。
+- 同步 upsert 命中已软删除记录 -> 只刷新允许的外部元数据，仍不出现在公开查询。
+- 派生索引更新失败 -> SQLite 已提交时仅 warn，后续用全量 reindex 修复。
+
+### 5. Good/Base/Bad Cases
+- Good：同一 `cos_key` 重复同步后只有一行记录，宽高/大小更新，软删除状态保持。
+- Base：新外部对象首次同步时写入默认 active 状态。
+- Bad：`OnConflict` 更新 `status` 或 `deleted_at`，导致用户已删除内容在同步后重新公开。
+
+### 6. Tests Required
+- Repository 单测：重复 upsert 不新增记录，元数据更新。
+- Repository 回归：先写入 deleted 记录，再同步同 key，断言 `ListActive` 不返回它。
+- Command smoke：占位凭证失败路径；`--reindex` 可在空库上成功。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```go
+clause.AssignmentColumns([]string{"filename", "size", "status", "deleted_at"})
+```
+
+#### Correct
+```go
+clause.AssignmentColumns([]string{"filename", "size", "last_modified", "width", "height", "category"})
+```
