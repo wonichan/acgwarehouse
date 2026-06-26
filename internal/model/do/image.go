@@ -9,6 +9,8 @@ const (
 	ImageStatusDeleted ImageStatus = "deleted"
 	// ImageEventTypeView 表示图片详情浏览事件。
 	ImageEventTypeView ImageEventType = "view"
+	// ImageEventTypeRating 表示图片评分事件。
+	ImageEventTypeRating ImageEventType = "rating"
 )
 
 // ImageStatus 定义图片生命周期状态。
