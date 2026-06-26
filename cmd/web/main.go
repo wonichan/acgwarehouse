@@ -13,6 +13,7 @@ import (
 	"github.com/yachiyo/acgwarehouse/internal/handler/router"
 	"github.com/yachiyo/acgwarehouse/internal/infra/db"
 	"github.com/yachiyo/acgwarehouse/internal/infra/search"
+	"github.com/yachiyo/acgwarehouse/internal/job"
 	"github.com/yachiyo/acgwarehouse/internal/repository"
 	"github.com/yachiyo/acgwarehouse/internal/service"
 	jwtpkg "github.com/yachiyo/acgwarehouse/pkg/jwt"
@@ -74,10 +75,15 @@ func run(ctx context.Context) error {
 	tagRepo := repository.NewTagRepository(sqliteDB.Read, sqliteDB.Write)
 	ratingRepo := repository.NewRatingRepository(sqliteDB.Read, sqliteDB.Write)
 	collectionRepo := repository.NewCollectionRepository(sqliteDB.Read, sqliteDB.Write)
+	rankingRepo := repository.NewRankingRepository(sqliteDB.Read, sqliteDB.Write)
 	searcher := search.NewSearcher(searchIndex)
 	tagService := service.NewTagService(tagRepo, searcher)
 	ratingService := service.NewRatingService(ratingRepo)
 	collectionService := service.NewCollectionService(collectionRepo)
+	rankingService := service.NewRankingService(rankingRepo, cfg.COS.Domain)
+	rankingJob := job.NewRankingJob(rankingRepo, cfg.Ranking)
+	rankingJob.Start(ctx)
+	addRankingJobStop(hooks, rankingJob)
 	viewBuffer := service.NewViewBuffer(imageRepo, cfg.View.FlushInterval)
 	viewBuffer.Start(ctx)
 	addViewBufferFlush(hooks, viewBuffer)
@@ -95,6 +101,7 @@ func run(ctx context.Context) error {
 		Tag:        tagService,
 		Rating:     ratingService,
 		Collection: collectionService,
+		Ranking:    rankingService,
 	})
 	engine.SetCustomSignalWaiter(newSignalWaiter(ctx))
 	engine.OnShutdown = append(engine.OnShutdown, runShutdownHooks(hooks))
@@ -209,6 +216,17 @@ func addViewBufferFlush(hooks *shutdownHooks, buffer *service.ViewBuffer) {
 			return pkgerrors.WithMessage(err, "stop view buffer")
 		}
 		logger.Info(ctx, "view buffer flushed")
+		return nil
+	})
+}
+
+// addRankingJobStop 注册热榜任务停止钩子。
+func addRankingJobStop(hooks *shutdownHooks, rankingJob *job.RankingJob) {
+	hooks.stoppers = append(hooks.stoppers, func(ctx context.Context) error {
+		if err := rankingJob.Stop(ctx); err != nil {
+			return pkgerrors.WithMessage(err, "stop ranking job")
+		}
+		logger.Info(ctx, "ranking job stopped")
 		return nil
 	})
 }

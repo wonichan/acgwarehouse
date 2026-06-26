@@ -22,6 +22,7 @@ type Services struct {
 	Tag        *service.TagService
 	Rating     *service.RatingService
 	Collection *service.CollectionService
+	Ranking    *service.RankingService
 }
 
 // New 创建 Hertz 路由引擎并注册基础路由。
@@ -45,6 +46,7 @@ func Register(engine *server.Hertz, services Services, jwtManager *jwtpkg.Manage
 	registerTagRoutes(v1, services.Tag, jwtManager)
 	registerRatingRoutes(v1, services.Rating, jwtManager)
 	registerCollectionRoutes(v1, services.Collection, jwtManager)
+	registerRankingRoutes(v1, services.Ranking)
 }
 
 // registerUserRoutes 注册用户认证路由。
@@ -94,6 +96,12 @@ func registerCollectionRoutes(group *route.RouterGroup, collectionService *servi
 	group.DELETE("/collections/:id", middleware.Auth(jwtManager), collectionHandler.Delete)
 	group.POST("/collections/:id/items", middleware.Auth(jwtManager), collectionHandler.AddItem)
 	group.DELETE("/collections/:id/items/:imageId", middleware.Auth(jwtManager), collectionHandler.RemoveItem)
+}
+
+// registerRankingRoutes 注册热榜查询路由。
+func registerRankingRoutes(group *route.RouterGroup, rankingService *service.RankingService) {
+	rankingHandler := handler.NewRankingHandler(rankingService)
+	group.GET("/rankings", rankingHandler.List)
 }
 
 // ping 返回服务健康检查响应。
