@@ -73,9 +73,11 @@ func run(ctx context.Context) error {
 	imageRepo := repository.NewImageRepository(sqliteDB.Read, sqliteDB.Write)
 	tagRepo := repository.NewTagRepository(sqliteDB.Read, sqliteDB.Write)
 	ratingRepo := repository.NewRatingRepository(sqliteDB.Read, sqliteDB.Write)
+	collectionRepo := repository.NewCollectionRepository(sqliteDB.Read, sqliteDB.Write)
 	searcher := search.NewSearcher(searchIndex)
 	tagService := service.NewTagService(tagRepo, searcher)
 	ratingService := service.NewRatingService(ratingRepo)
+	collectionService := service.NewCollectionService(collectionRepo)
 	viewBuffer := service.NewViewBuffer(imageRepo, cfg.View.FlushInterval)
 	viewBuffer.Start(ctx)
 	addViewBufferFlush(hooks, viewBuffer)
@@ -88,10 +90,11 @@ func run(ctx context.Context) error {
 	)
 
 	engine := router.New(cfg, router.Services{
-		User:   userService,
-		Image:  imageService,
-		Tag:    tagService,
-		Rating: ratingService,
+		User:       userService,
+		Image:      imageService,
+		Tag:        tagService,
+		Rating:     ratingService,
+		Collection: collectionService,
 	})
 	engine.SetCustomSignalWaiter(newSignalWaiter(ctx))
 	engine.OnShutdown = append(engine.OnShutdown, runShutdownHooks(hooks))

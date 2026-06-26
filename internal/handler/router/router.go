@@ -17,10 +17,11 @@ import (
 
 // Services 聚合路由层依赖的业务服务。
 type Services struct {
-	User   *service.UserService
-	Image  *service.ImageService
-	Tag    *service.TagService
-	Rating *service.RatingService
+	User       *service.UserService
+	Image      *service.ImageService
+	Tag        *service.TagService
+	Rating     *service.RatingService
+	Collection *service.CollectionService
 }
 
 // New 创建 Hertz 路由引擎并注册基础路由。
@@ -43,6 +44,7 @@ func Register(engine *server.Hertz, services Services, jwtManager *jwtpkg.Manage
 	registerImageRoutes(v1, services.Image, jwtManager)
 	registerTagRoutes(v1, services.Tag, jwtManager)
 	registerRatingRoutes(v1, services.Rating, jwtManager)
+	registerCollectionRoutes(v1, services.Collection, jwtManager)
 }
 
 // registerUserRoutes 注册用户认证路由。
@@ -80,6 +82,18 @@ func registerTagRoutes(group *route.RouterGroup, tagService *service.TagService,
 func registerRatingRoutes(group *route.RouterGroup, ratingService *service.RatingService, jwtManager *jwtpkg.Manager) {
 	ratingHandler := handler.NewRatingHandler(ratingService)
 	group.PUT("/images/:id/rating", middleware.Auth(jwtManager), ratingHandler.Rate)
+}
+
+// registerCollectionRoutes 注册收藏夹路由。
+func registerCollectionRoutes(group *route.RouterGroup, collectionService *service.CollectionService, jwtManager *jwtpkg.Manager) {
+	collectionHandler := handler.NewCollectionHandler(collectionService)
+	group.GET("/collections", middleware.Auth(jwtManager), collectionHandler.ListMine)
+	group.POST("/collections", middleware.Auth(jwtManager), collectionHandler.Create)
+	group.GET("/collections/:id", collectionHandler.Detail)
+	group.PUT("/collections/:id", middleware.Auth(jwtManager), collectionHandler.Update)
+	group.DELETE("/collections/:id", middleware.Auth(jwtManager), collectionHandler.Delete)
+	group.POST("/collections/:id/items", middleware.Auth(jwtManager), collectionHandler.AddItem)
+	group.DELETE("/collections/:id/items/:imageId", middleware.Auth(jwtManager), collectionHandler.RemoveItem)
 }
 
 // ping 返回服务健康检查响应。
