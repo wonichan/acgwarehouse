@@ -79,3 +79,59 @@ Started the backend Trellis task and implemented stages 00/01 only. Stage 00 add
 - Continue with stage 02 image sync when requested.
 - Before commit/finish, run full Trellis check and decide whether to update backend spec for the local JWT implementation / deferred dependency strategy.
 
+
+
+## Session 2: ACG gallery backend stages 04-07 complete
+
+**Date**: 2026-06-27
+**Task**: ACG gallery backend stages 04-07 complete
+**Branch**: `master`
+
+### Summary
+
+Implemented tag, rating, collection, and ranking modules with TDD. Each stage added model/DTO/PO, repository/service/handler/tests, HTTP routes, DB migration, updated code-spec, and recorded task artifact. All Go tests/build/vet/gofmt pass.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f49f074` | (see git log) |
+| `b6fffe3` | (see git log) |
+| `f930458` | (see git log) |
+| `cdc237f` | (see git log) |
+| `3a6d5a8` | (see git log) |
+| `ceaec96` | (see git log) |
+| `ffc5c6e` | (see git log) |
+| `f4c3eb8` | (see git log) |
+| `0756506` | (see git log) |
+| `a596f9d` | (see git log) |
+| `446b1e3` | (see git log) |
+| `d83e6cc` | (see git log) |
+| `58ea428` | (see git log) |
+| `2cc948e` | (see git log) |
+| `ec18b38` | (see git log) |
+| `52d36af` | (see git log) |
+| `88ac855` | (see git log) |
+| `b3cc4ac` | (see git log) |
+| `a4fa436` | (see git log) |
+| `bbecbd6` | (see git log) |
+| `822f363` | (see git log) |
+| `bd800ff` | (see git log) |
+| `252805a` | (see git log) |
+| `73008e2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
