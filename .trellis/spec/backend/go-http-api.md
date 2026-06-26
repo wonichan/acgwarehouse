@@ -217,3 +217,61 @@ if created && !hadFavorite {
     return incrementFavoriteCountAndEvent(ctx, tx, imageID, ownerID, 1)
 }
 ```
+
+## 7. 场景：热榜 API
+
+### 1. Scope / Trigger
+- 触发：新增日/周/月热榜能力，涉及定时 job、`ranking` 缓存表、`image_event` 聚合、贝叶斯评分与热度公式、HTTP 查询接口。
+- 目标：前端可通过缓存的 ranking 表快速获得按综合热度排序的图片列表；定时 job 负责重算并持久化 ranking。
+
+### 2. Signatures
+- `GET /api/v1/rankings?period=day|week|month&page=&size=`，公开无 Auth。
+- Response：`{total,page,size,list:[{rank,image_id,cos_key,filename,url,size,width,height,category,avg_score,rating_count,favorite_count,view_count,created_at}]}`。
+- DB：`ranking(image_id,period,score,bayes_score,favorite_count,view_count,computed_at)`，按 `(period, score desc)` 排序缓存；`image_event(type=view|rating|favorite, value, user_id, image_id, created_at)` 作为源数据。
+- Job：`internal/job/ranking_job.go`，默认 10min 调度，聚合 day/week/month 窗口，写 ranking，排除软删除。
+
+### 3. Contracts
+- `period` 必须为 `day` / `week` / `month`；其他值返回 HTTP 400 / Code 40001。
+- 查询接口只读 `ranking` 缓存表并与 `image` join 返回活跃图片元数据；不在请求时实时重算。
+- job 聚合规则：
+  - `view` 计数不去重；`favorite` 按用户去重；`rating` 取窗口内评分事件 value。
+  - 贝叶斯评分：`bayes = (C*m + sum_score)/(C+n)`，C 为可配置先验票数，m 为全局均分（默认 50）。
+  - 热度：`score = w1*bayes + w2*log(1+fav) + w3*log(1+view)`，权重可配置。
+  - 排除 `image.status=deleted`。
+- handler 只接收 query param 并返回 `dto`；job/repository 使用 `do`/`po`；禁止 `po` 穿透 HTTP 响应。
+
+### 4. Validation & Error Matrix
+- 非法 `period` / 缺失 -> HTTP 400 / Code 40001。
+- DB 读失败 -> HTTP 500 / Code 50001，由 handler 统一记录日志。
+
+### 5. Good/Base/Bad Cases
+- Good：job 运行后 `ranking` 表包含 day/week/month 各 top-N，且软删除图片不在其中。
+- Good：`GET /rankings?period=day` 返回按 score 降序的图片列表，前端可渲染。
+- Base：无事件数据时 ranking 表为空，接口返回空列表。
+- Bad：查询接口实时聚合 image_event，导致高并发下响应变慢。
+
+### 6. Tests Required
+- Repository：day/week/month 窗口聚合、view 不去重、favorite 去重、贝叶斯与热度公式排序、软删除排除、缓存读写。
+- Job：定时触发后 ranking 表被刷新。
+- Route smoke：合法 period 返回 200；非法 period 返回 400。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```go
+// 查询接口实时聚合 image_event，导致 O(n) 扫描。
+func (h *RankingHandler) List(c context.Context, ctx *app.RequestContext) {
+    events := db.Where("created_at >= ?", window).Find(&po.ImageEvent{})
+    // 在内存里聚合评分……
+}
+```
+
+#### Correct
+```go
+// 查询接口只读缓存表；job 在后台定时重算。
+func (h *RankingHandler) List(c context.Context, ctx *app.RequestContext) {
+    rankings, total, err := h.rankingService.ListCached(c, period, page, size)
+    if err != nil { /* 500 */ }
+    Success(ctx, rankings)
+}
+```
