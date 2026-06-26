@@ -14,7 +14,7 @@ import (
 	"github.com/yachiyo/acgwarehouse/internal/model/po"
 )
 
-const defaultImageSort = "created_at desc"
+const defaultImageSort = "image.created_at desc"
 
 var (
 	// ErrImageNotFound 表示图片不存在或不可公开展示。
@@ -24,6 +24,7 @@ var (
 // ImageListQuery 定义图片仓储列表查询条件。
 type ImageListQuery struct {
 	Filename string
+	Tag      string
 	Page     int
 	Size     int
 	Sort     string
@@ -187,6 +188,13 @@ func queryActiveImages(database *gorm.DB, query ImageListQuery) *gorm.DB {
 	if filename != "" {
 		database = database.Where("filename LIKE ?", "%"+filename+"%")
 	}
+	tagName := strings.TrimSpace(query.Tag)
+	if tagName != "" {
+		database = database.
+			Joins("JOIN image_tag ON image_tag.image_id = image.id").
+			Joins("JOIN tag ON tag.id = image_tag.tag_id").
+			Where("tag.name = ?", tagName)
+	}
 	return database
 }
 
@@ -206,8 +214,10 @@ func imageOrder(query ImageListQuery) string {
 		order = "desc"
 	}
 	switch field {
-	case "created_at", "size":
-		return field + " " + order
+	case "created_at":
+		return "image.created_at " + order
+	case "size":
+		return "image.size " + order
 	case "tag":
 		return defaultImageSort
 	default:

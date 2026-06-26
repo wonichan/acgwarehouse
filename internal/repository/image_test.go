@@ -173,6 +173,39 @@ func Test_ImageRepository_ListActive_filters_filename_and_counts_matching_images
 	}
 }
 
+func Test_ImageRepository_ListActive_filters_by_tag_name(t *testing.T) {
+	// Given
+	database := openTestDatabase(t)
+	imageRepo := repository.NewImageRepository(database.Read, database.Write)
+	tagRepo := repository.NewTagRepository(database.Read, database.Write)
+	mikuImage := mustCreateImage(t, imageRepo, "thumbnails/miku.png")
+	lukaImage := mustCreateImage(t, imageRepo, "thumbnails/luka.png")
+	mikuTag := mustCreateTag(t, tagRepo, "miku")
+	lukaTag := mustCreateTag(t, tagRepo, "luka")
+	if _, err := tagRepo.AssignToImages(context.Background(), []int64{mikuImage.ID}, []int64{mikuTag.ID}); err != nil {
+		t.Fatalf("assign miku tag: %v", err)
+	}
+	if _, err := tagRepo.AssignToImages(context.Background(), []int64{lukaImage.ID}, []int64{lukaTag.ID}); err != nil {
+		t.Fatalf("assign luka tag: %v", err)
+	}
+	query := repository.ImageListQuery{Tag: "miku", Page: 1, Size: 10}
+
+	// When
+	images, err := imageRepo.ListActive(context.Background(), query)
+	total, countErr := imageRepo.CountActiveByQuery(context.Background(), query)
+
+	// Then
+	if err != nil {
+		t.Fatalf("list by tag: %v", err)
+	}
+	if countErr != nil {
+		t.Fatalf("count by tag: %v", countErr)
+	}
+	if total != 1 || len(images) != 1 || images[0].ID != mikuImage.ID {
+		t.Fatalf("total=%d images=%#v, want only miku image", total, images)
+	}
+}
+
 func Test_ImageRepository_SoftDelete_hides_image_then_restore_returns_it(t *testing.T) {
 	// Given
 	database := openTestDatabase(t)
