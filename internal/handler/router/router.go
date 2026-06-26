@@ -15,32 +15,34 @@ import (
 	jwtpkg "github.com/yachiyo/acgwarehouse/pkg/jwt"
 )
 
+// Services 聚合路由层依赖的业务服务。
+type Services struct {
+	User   *service.UserService
+	Image  *service.ImageService
+	Tag    *service.TagService
+	Rating *service.RatingService
+}
+
 // New 创建 Hertz 路由引擎并注册基础路由。
-func New(
-	cfg conf.Config,
-	userService *service.UserService,
-	imageService *service.ImageService,
-	tagService *service.TagService,
-) *server.Hertz {
+func New(cfg conf.Config, services Services) *server.Hertz {
 	engine := server.Default(server.WithHostPorts(cfg.Server.Address()))
 	engine.Use(middleware.CORS(cfg.CORS.AllowOrigin))
-	Register(engine, userService, imageService, tagService, jwtpkg.NewManager(cfg.Security.JWTSecret, cfg.Security.JWTDuration))
+	Register(
+		engine,
+		services,
+		jwtpkg.NewManager(cfg.Security.JWTSecret, cfg.Security.JWTDuration),
+	)
 	return engine
 }
 
 // Register 注册 API v1 路由骨架。
-func Register(
-	engine *server.Hertz,
-	userService *service.UserService,
-	imageService *service.ImageService,
-	tagService *service.TagService,
-	jwtManager *jwtpkg.Manager,
-) {
+func Register(engine *server.Hertz, services Services, jwtManager *jwtpkg.Manager) {
 	v1 := engine.Group("/api/v1")
 	v1.GET("/ping", ping)
-	registerUserRoutes(v1, userService, jwtManager)
-	registerImageRoutes(v1, imageService, jwtManager)
-	registerTagRoutes(v1, tagService, jwtManager)
+	registerUserRoutes(v1, services.User, jwtManager)
+	registerImageRoutes(v1, services.Image, jwtManager)
+	registerTagRoutes(v1, services.Tag, jwtManager)
+	registerRatingRoutes(v1, services.Rating, jwtManager)
 }
 
 // registerUserRoutes 注册用户认证路由。
@@ -72,6 +74,12 @@ func registerTagRoutes(group *route.RouterGroup, tagService *service.TagService,
 	group.DELETE("/tags/:id", middleware.Auth(jwtManager), middleware.RequireAdmin(), tagHandler.Delete)
 	group.POST("/images/tags", middleware.Auth(jwtManager), tagHandler.Assign)
 	group.DELETE("/images/tags", middleware.Auth(jwtManager), tagHandler.Unassign)
+}
+
+// registerRatingRoutes 注册评分路由。
+func registerRatingRoutes(group *route.RouterGroup, ratingService *service.RatingService, jwtManager *jwtpkg.Manager) {
+	ratingHandler := handler.NewRatingHandler(ratingService)
+	group.PUT("/images/:id/rating", middleware.Auth(jwtManager), ratingHandler.Rate)
 }
 
 // ping 返回服务健康检查响应。
