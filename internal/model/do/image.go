@@ -11,6 +11,8 @@ const (
 	ImageEventTypeView ImageEventType = "view"
 	// ImageEventTypeRating 表示图片评分事件。
 	ImageEventTypeRating ImageEventType = "rating"
+	// ImageEventTypeFavorite 表示图片收藏事件。
+	ImageEventTypeFavorite ImageEventType = "favorite"
 )
 
 // ImageStatus 定义图片生命周期状态。
