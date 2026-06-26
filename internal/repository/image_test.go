@@ -2,6 +2,7 @@ package repository_test
 
 import (
 	"context"
+	stderrors "errors"
 	"testing"
 	"time"
 
@@ -131,6 +132,76 @@ func Test_ImageRepository_UpsertByCOSKey_keeps_deleted_image_excluded_when_sync_
 	}
 	if len(images) != 0 {
 		t.Fatalf("images = %#v, want deleted image excluded", images)
+	}
+}
+
+func Test_ImageRepository_ListActive_filters_filename_and_counts_matching_images(t *testing.T) {
+	// Given
+	database := openTestDatabase(t)
+	repo := repository.NewImageRepository(database.Read, database.Write)
+	for _, image := range []do.Image{
+		{COSKey: "thumbnails/miku.png", Filename: "miku.png", LastModified: fixedImageTime()},
+		{COSKey: "thumbnails/luka.png", Filename: "luka.png", LastModified: fixedImageTime()},
+		{COSKey: "thumbnails/miku-deleted.png", Filename: "miku-deleted.png", LastModified: fixedImageTime()},
+	} {
+		if _, err := repo.UpsertByCOSKey(context.Background(), image); err != nil {
+			t.Fatalf("insert image: %v", err)
+		}
+	}
+	deleted, err := repo.FindByCOSKey(context.Background(), "thumbnails/miku-deleted.png")
+	if err != nil {
+		t.Fatalf("find deleted image: %v", err)
+	}
+	if err := repo.SoftDelete(context.Background(), deleted.ID, fixedImageTime()); err != nil {
+		t.Fatalf("soft delete image: %v", err)
+	}
+	query := repository.ImageListQuery{Filename: "miku", Page: 1, Size: 10, Sort: "created_at", Order: "desc"}
+
+	// When
+	images, err := repo.ListActive(context.Background(), query)
+	total, countErr := repo.CountActiveByQuery(context.Background(), query)
+
+	// Then
+	if err != nil {
+		t.Fatalf("list filtered images: %v", err)
+	}
+	if countErr != nil {
+		t.Fatalf("count filtered images: %v", countErr)
+	}
+	if total != 1 || len(images) != 1 || images[0].Filename != "miku.png" {
+		t.Fatalf("total=%d images=%#v, want only active miku.png", total, images)
+	}
+}
+
+func Test_ImageRepository_SoftDelete_hides_image_then_restore_returns_it(t *testing.T) {
+	// Given
+	database := openTestDatabase(t)
+	repo := repository.NewImageRepository(database.Read, database.Write)
+	stored, err := repo.UpsertByCOSKey(context.Background(), do.Image{
+		COSKey:       "thumbnails/restore.png",
+		Filename:     "restore.png",
+		LastModified: fixedImageTime(),
+	})
+	if err != nil {
+		t.Fatalf("insert image: %v", err)
+	}
+
+	// When
+	if err := repo.SoftDelete(context.Background(), stored.ID, fixedImageTime()); err != nil {
+		t.Fatalf("soft delete image: %v", err)
+	}
+	_, hiddenErr := repo.FindActiveByID(context.Background(), stored.ID)
+	restored, restoreErr := repo.Restore(context.Background(), stored.ID)
+
+	// Then
+	if !stderrors.Is(hiddenErr, repository.ErrImageNotFound) {
+		t.Fatalf("hidden error = %v, want image not found", hiddenErr)
+	}
+	if restoreErr != nil {
+		t.Fatalf("restore image: %v", restoreErr)
+	}
+	if restored.Status != do.ImageStatusActive || !restored.DeletedAt.IsZero() {
+		t.Fatalf("restored image = %#v, want active without deleted_at", restored)
 	}
 }
 

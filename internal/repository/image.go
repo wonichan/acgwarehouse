@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	stderrors "errors"
 	"strings"
 	"time"
 
@@ -15,12 +16,18 @@ import (
 
 const defaultImageSort = "created_at desc"
 
+var (
+	// ErrImageNotFound 表示图片不存在或不可公开展示。
+	ErrImageNotFound = pkgerrors.New("repository: image not found")
+)
+
 // ImageListQuery 定义图片仓储列表查询条件。
 type ImageListQuery struct {
-	Page  int
-	Size  int
-	Sort  string
-	Order string
+	Filename string
+	Page     int
+	Size     int
+	Sort     string
+	Order    string
 }
 
 // ImageRepository 提供图片持久化访问。
@@ -67,7 +74,7 @@ func (r *ImageRepository) FindByCOSKey(ctx context.Context, cosKey string) (do.I
 // ListActive 查询未软删除图片列表。
 func (r *ImageRepository) ListActive(ctx context.Context, query ImageListQuery) ([]do.Image, error) {
 	var images []po.Image
-	database := activeImages(r.readDB.WithContext(ctx)).Order(imageOrder(query))
+	database := queryActiveImages(r.readDB.WithContext(ctx), query).Order(imageOrder(query))
 	if query.Size > 0 {
 		database = database.Limit(query.Size).Offset(imageOffset(query))
 	}
@@ -79,16 +86,108 @@ func (r *ImageRepository) ListActive(ctx context.Context, query ImageListQuery) 
 
 // CountActive 统计未软删除图片数量。
 func (r *ImageRepository) CountActive(ctx context.Context) (int64, error) {
+	return r.CountActiveByQuery(ctx, ImageListQuery{})
+}
+
+// CountActiveByQuery 统计符合查询条件的未软删除图片数量。
+func (r *ImageRepository) CountActiveByQuery(ctx context.Context, query ImageListQuery) (int64, error) {
 	var total int64
-	if err := activeImages(r.readDB.WithContext(ctx)).Count(&total).Error; err != nil {
+	if err := queryActiveImages(r.readDB.WithContext(ctx), query).Count(&total).Error; err != nil {
 		return 0, pkgerrors.WithMessage(err, "count active images")
 	}
 	return total, nil
 }
 
+// FindActiveByID 按 ID 查询可公开展示图片。
+func (r *ImageRepository) FindActiveByID(ctx context.Context, id int64) (do.Image, error) {
+	var image po.Image
+	err := activeImages(r.readDB.WithContext(ctx)).Where("id = ?", id).First(&image).Error
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return do.Image{}, pkgerrors.WithMessage(ErrImageNotFound, "find active image by id")
+	}
+	if err != nil {
+		return do.Image{}, pkgerrors.WithMessage(err, "find active image by id")
+	}
+	return imageToDO(image), nil
+}
+
+// FindActiveByIDs 按 ID 列表查询可公开展示图片并保持入参顺序。
+func (r *ImageRepository) FindActiveByIDs(ctx context.Context, ids []int64) ([]do.Image, error) {
+	if len(ids) == 0 {
+		return []do.Image{}, nil
+	}
+	var images []po.Image
+	if err := activeImages(r.readDB.WithContext(ctx)).Where("id IN ?", ids).Find(&images).Error; err != nil {
+		return nil, pkgerrors.WithMessage(err, "find active images by ids")
+	}
+	return orderImagesByIDs(ids, imagesToDO(images)), nil
+}
+
+// SoftDelete 将图片标记为已删除。
+func (r *ImageRepository) SoftDelete(ctx context.Context, id int64, deletedAt time.Time) error {
+	updates := map[string]interface{}{
+		"status":     string(do.ImageStatusDeleted),
+		"deleted_at": deletedAt.UTC(),
+	}
+	result := activeImages(r.writeDB.WithContext(ctx)).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return pkgerrors.WithMessage(result.Error, "soft delete image")
+	}
+	if result.RowsAffected == 0 {
+		return pkgerrors.WithMessage(ErrImageNotFound, "soft delete image")
+	}
+	return nil
+}
+
+// Restore 恢复已软删除图片。
+func (r *ImageRepository) Restore(ctx context.Context, id int64) (do.Image, error) {
+	updates := map[string]interface{}{
+		"status":     string(do.ImageStatusActive),
+		"deleted_at": nil,
+	}
+	result := r.writeDB.WithContext(ctx).Model(&po.Image{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return do.Image{}, pkgerrors.WithMessage(result.Error, "restore image")
+	}
+	if result.RowsAffected == 0 {
+		return do.Image{}, pkgerrors.WithMessage(ErrImageNotFound, "restore image")
+	}
+	return r.FindActiveByID(ctx, id)
+}
+
+// CreateImageEvents 批量写入图片行为事件并累加浏览计数。
+func (r *ImageRepository) CreateImageEvents(ctx context.Context, events []do.ImageEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+	return r.writeDB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(imageEventsToPO(events)).Error; err != nil {
+			return pkgerrors.WithMessage(err, "create image events")
+		}
+		for imageID, count := range viewCountsByImage(events) {
+			update := tx.Model(&po.Image{}).Where("id = ?", imageID).
+				UpdateColumn("view_count", gorm.Expr("view_count + ?", count))
+			if update.Error != nil {
+				return pkgerrors.WithMessage(update.Error, "increment image view count")
+			}
+		}
+		return nil
+	})
+}
+
 // activeImages 限定图片处于可展示状态。
 func activeImages(database *gorm.DB) *gorm.DB {
 	return database.Model(&po.Image{}).Where("status = ? AND deleted_at IS NULL", string(do.ImageStatusActive))
+}
+
+// queryActiveImages 按查询条件限定可展示图片。
+func queryActiveImages(database *gorm.DB, query ImageListQuery) *gorm.DB {
+	database = activeImages(database)
+	filename := strings.TrimSpace(query.Filename)
+	if filename != "" {
+		database = database.Where("filename LIKE ?", "%"+filename+"%")
+	}
+	return database
 }
 
 // imageOffset 计算分页偏移量。
@@ -107,69 +206,11 @@ func imageOrder(query ImageListQuery) string {
 		order = "desc"
 	}
 	switch field {
-	case "created_at", "size", "filename", "category", "last_modified":
+	case "created_at", "size":
 		return field + " " + order
+	case "tag":
+		return defaultImageSort
 	default:
 		return defaultImageSort
-	}
-}
-
-// imagesToDO 将图片持久化对象列表转换为领域对象列表。
-func imagesToDO(images []po.Image) []do.Image {
-	result := make([]do.Image, 0, len(images))
-	for _, image := range images {
-		result = append(result, imageToDO(image))
-	}
-	return result
-}
-
-// imageToDO 将图片持久化对象转换为领域对象。
-func imageToDO(image po.Image) do.Image {
-	var deletedAt time.Time
-	if image.DeletedAt != nil {
-		deletedAt = image.DeletedAt.UTC()
-	}
-	return do.Image{
-		ID:            image.ID,
-		COSKey:        image.COSKey,
-		Filename:      image.Filename,
-		Size:          image.Size,
-		LastModified:  image.LastModified.UTC(),
-		Width:         image.Width,
-		Height:        image.Height,
-		Category:      image.Category,
-		AvgScore:      image.AvgScore,
-		RatingCount:   image.RatingCount,
-		FavoriteCount: image.FavoriteCount,
-		ViewCount:     image.ViewCount,
-		Status:        do.ImageStatus(image.Status),
-		DeletedAt:     deletedAt,
-		CreatedAt:     image.CreatedAt.UTC(),
-	}
-}
-
-// imageToPO 将图片领域对象转换为持久化对象。
-func imageToPO(image do.Image) po.Image {
-	var deletedAt *time.Time
-	if !image.DeletedAt.IsZero() {
-		value := image.DeletedAt.UTC()
-		deletedAt = &value
-	}
-	return po.Image{
-		ID:            image.ID,
-		COSKey:        image.COSKey,
-		Filename:      image.Filename,
-		Size:          image.Size,
-		LastModified:  image.LastModified,
-		Width:         image.Width,
-		Height:        image.Height,
-		Category:      image.Category,
-		AvgScore:      image.AvgScore,
-		RatingCount:   image.RatingCount,
-		FavoriteCount: image.FavoriteCount,
-		ViewCount:     image.ViewCount,
-		Status:        string(image.Status),
-		DeletedAt:     deletedAt,
-		CreatedAt:     image.CreatedAt,
 	}
 }
