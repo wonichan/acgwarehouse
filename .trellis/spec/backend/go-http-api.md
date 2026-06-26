@@ -93,3 +93,61 @@ type ImageSearchQuery struct {
     Size int
 }
 ```
+
+## 5. 场景：图片评分 API
+
+### 1. Scope / Trigger
+- 触发：新增用户对图片评分能力，涉及 HTTP API、service 校验、SQLite `rating` 表、`image` 冗余聚合字段和 `image_event` 行为流水。
+- 目标：登录用户可对单张图片提交 0-100 整数评分；重复评分覆盖；前端可立即获得最新均分与评分人数。
+
+### 2. Signatures
+- API：`PUT /api/v1/images/:id/rating`，需 `Auth`。
+- Request：`{"score": <int>}`。
+- Response：`{"image_id": <int64>, "user_id": <int64>, "score": <int>, "avg_score": <float64>, "rating_count": <int64>, "updated_at": <RFC3339>}`。
+- DB：`rating(user_id,image_id,score,created_at,updated_at)`，主键/唯一键为 `(user_id,image_id)`；`image.avg_score` / `image.rating_count` 为冗余聚合；`image_event(type='rating', value=score)` 记录评分事件。
+
+### 3. Contracts
+- `score` 必须为整数且范围 `0 <= score <= 100`；0 和 100 均为合法边界值。
+- 同一 `(user_id,image_id)` 重复提交评分时覆盖原 `score`，不得新增第二条 rating。
+- rating upsert、`image.avg_score` / `image.rating_count` 重算、rating 事件写入必须在同一写事务中完成。
+- handler 只接收/返回 `dto`，service 使用 `do.Rating`，repository 内部使用 `po.Rating`；禁止 `po` 穿透 HTTP 响应。
+
+### 4. Validation & Error Matrix
+- 未登录或 JWT 非法 -> HTTP 401 / Code 40101。
+- 非法 `:id` -> HTTP 400 / Code 40001。
+- `score < 0` 或 `score > 100` / body 绑定失败 -> HTTP 400 / Code 40001。
+- 图片不存在或已软删除 -> HTTP 404 / Code 40401。
+- DB 事务、聚合重算或事件写入失败 -> HTTP 500 / Code 50001，由 handler 统一记录日志。
+
+### 5. Good/Base/Bad Cases
+- Good：用户 A 对图片 1 评分 80 后，`rating_count=1`、`avg_score=80`，并产生一条 `rating` 事件。
+- Good：用户 A 再次对图片 1 评分 60 后，rating 表仍只有一条 `(A,1)`，`rating_count` 不增加，`avg_score=60`。
+- Base：用户 A 评分 0、用户 B 评分 100 后，`rating_count=2`、`avg_score=50`。
+- Bad：先 insert rating 再在事务外更新 image 聚合，导致聚合与评分表短暂不一致。
+
+### 6. Tests Required
+- Repository：首次 upsert 创建 rating、重复 upsert 覆盖、多人评分均分/人数正确、写入 rating 事件。
+- Service：0/100 边界合法；-1/101 返回 `ErrInvalidRatingInput`；重复评分不重复计数。
+- Route smoke：未登录返回 401；非法 score 返回 400；合法请求返回最新 `avg_score` / `rating_count`。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```go
+// handler 直接构造 po.Rating 并写库，且聚合在事务外更新。
+func (h *RatingHandler) Rate(c context.Context, ctx *app.RequestContext) {
+    rating := po.Rating{ImageID: id, UserID: userID, Score: input.Score}
+    db.Create(&rating)
+    db.Model(&po.Image{}).Update("avg_score", input.Score)
+}
+```
+
+#### Correct
+```go
+// handler 只做边界解析，事务与聚合由 repository 经 service 触发。
+result, err := h.ratingService.Upsert(c, do.Rating{
+    ImageID: imageID,
+    UserID:  userID,
+    Score:   input.Score,
+})
+```
