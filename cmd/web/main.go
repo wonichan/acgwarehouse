@@ -71,17 +71,21 @@ func run(ctx context.Context) error {
 	}
 
 	imageRepo := repository.NewImageRepository(sqliteDB.Read, sqliteDB.Write)
+	tagRepo := repository.NewTagRepository(sqliteDB.Read, sqliteDB.Write)
+	searcher := search.NewSearcher(searchIndex)
+	tagService := service.NewTagService(tagRepo, searcher)
 	viewBuffer := service.NewViewBuffer(imageRepo, cfg.View.FlushInterval)
 	viewBuffer.Start(ctx)
 	addViewBufferFlush(hooks, viewBuffer)
-	imageService := service.NewImageService(
+	imageService := service.NewImageServiceWithTags(
 		imageRepo,
-		search.NewSearcher(searchIndex),
+		searcher,
 		viewBuffer,
+		tagService,
 		cfg.COS.Domain,
 	)
 
-	engine := router.New(cfg, userService, imageService)
+	engine := router.New(cfg, userService, imageService, tagService)
 	engine.SetCustomSignalWaiter(newSignalWaiter(ctx))
 	engine.OnShutdown = append(engine.OnShutdown, runShutdownHooks(hooks))
 
