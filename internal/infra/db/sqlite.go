@@ -15,6 +15,7 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/yachiyo/acgwarehouse/internal/conf"
+	"github.com/yachiyo/acgwarehouse/internal/model/po"
 )
 
 const (
@@ -64,6 +65,9 @@ func NewSQLite(cfg conf.DatabaseConfig) (*SQLite, error) {
 func AutoMigrate(database *gorm.DB) error {
 	if database == nil {
 		return pkgerrors.New("sqlite database is nil")
+	}
+	if err := database.AutoMigrate(&po.User{}); err != nil {
+		return pkgerrors.WithMessage(err, "migrate user")
 	}
 	return nil
 }

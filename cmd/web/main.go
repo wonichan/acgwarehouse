@@ -12,6 +12,9 @@ import (
 	"github.com/yachiyo/acgwarehouse/internal/conf"
 	"github.com/yachiyo/acgwarehouse/internal/handler/router"
 	"github.com/yachiyo/acgwarehouse/internal/infra/db"
+	"github.com/yachiyo/acgwarehouse/internal/repository"
+	"github.com/yachiyo/acgwarehouse/internal/service"
+	jwtpkg "github.com/yachiyo/acgwarehouse/pkg/jwt"
 	"github.com/yachiyo/acgwarehouse/pkg/logger"
 )
 
@@ -51,12 +54,36 @@ func run(ctx context.Context) error {
 	}
 	addSQLiteClose(hooks, sqliteDB)
 
-	engine := router.New(cfg)
+	userRepo := repository.NewUserRepository(sqliteDB.Read, sqliteDB.Write)
+	userService := service.NewUserService(
+		userRepo,
+		jwtpkg.NewManager(cfg.Security.JWTSecret, cfg.Security.JWTDuration),
+	)
+	if err := bootstrapAdmin(ctx, cfg.Admin, userService); err != nil {
+		return pkgerrors.WithMessage(err, "bootstrap admin")
+	}
+
+	engine := router.New(cfg, userService)
 	engine.SetCustomSignalWaiter(newSignalWaiter(ctx))
 	engine.OnShutdown = append(engine.OnShutdown, runShutdownHooks(hooks))
 
 	logger.Info(ctx, "web server starting", zap.String("addr", cfg.Server.Address()))
 	engine.Spin()
+	return nil
+}
+
+// bootstrapAdmin 按环境配置幂等引导首个管理员。
+func bootstrapAdmin(ctx context.Context, cfg conf.AdminConfig, userService *service.UserService) error {
+	if cfg.Username == "" && cfg.Password == "" {
+		return nil
+	}
+	if cfg.Username == "" || cfg.Password == "" {
+		return pkgerrors.New("admin username and password must be configured together")
+	}
+	if err := userService.EnsureAdmin(ctx, cfg.Username, cfg.Password); err != nil {
+		return pkgerrors.WithMessage(err, "ensure admin")
+	}
+	logger.Info(ctx, "admin bootstrap checked", zap.String("username", cfg.Username))
 	return nil
 }
 

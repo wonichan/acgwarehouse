@@ -6,24 +6,37 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"github.com/cloudwego/hertz/pkg/route"
 
 	"github.com/yachiyo/acgwarehouse/internal/conf"
 	"github.com/yachiyo/acgwarehouse/internal/handler"
 	"github.com/yachiyo/acgwarehouse/internal/handler/middleware"
+	"github.com/yachiyo/acgwarehouse/internal/service"
+	jwtpkg "github.com/yachiyo/acgwarehouse/pkg/jwt"
 )
 
 // New 创建 Hertz 路由引擎并注册基础路由。
-func New(cfg conf.Config) *server.Hertz {
+func New(cfg conf.Config, userService *service.UserService) *server.Hertz {
 	engine := server.Default(server.WithHostPorts(cfg.Server.Address()))
 	engine.Use(middleware.CORS(cfg.CORS.AllowOrigin))
-	Register(engine)
+	Register(engine, userService, jwtpkg.NewManager(cfg.Security.JWTSecret, cfg.Security.JWTDuration))
 	return engine
 }
 
 // Register 注册 API v1 路由骨架。
-func Register(engine *server.Hertz) {
+func Register(engine *server.Hertz, userService *service.UserService, jwtManager *jwtpkg.Manager) {
 	v1 := engine.Group("/api/v1")
 	v1.GET("/ping", ping)
+	registerUserRoutes(v1, userService, jwtManager)
+}
+
+// registerUserRoutes 注册用户认证路由。
+func registerUserRoutes(group *route.RouterGroup, userService *service.UserService, jwtManager *jwtpkg.Manager) {
+	userHandler := handler.NewUserHandler(userService)
+	users := group.Group("/users")
+	users.POST("/register", userHandler.Register)
+	users.POST("/login", userHandler.Login)
+	users.GET("/me", middleware.Auth(jwtManager), userHandler.Me)
 }
 
 // ping 返回服务健康检查响应。
