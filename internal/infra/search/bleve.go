@@ -19,6 +19,31 @@ type Query struct {
 	Size int
 }
 
+// Searcher 定义服务层使用的搜索接口适配器。
+type Searcher struct {
+	index *Index
+}
+
+// NewSearcher 创建服务层搜索接口适配器。
+func NewSearcher(index *Index) Searcher {
+	return Searcher{index: index}
+}
+
+// Search 执行全文检索并返回图片 ID 列表。
+func (s Searcher) Search(ctx context.Context, query do.ImageSearchQuery) (do.ImageSearchResult, error) {
+	return s.index.Search(ctx, Query{Text: query.Text, Page: query.Page, Size: query.Size})
+}
+
+// Index 写入或更新图片索引文档。
+func (s Searcher) Index(ctx context.Context, image do.Image) error {
+	return s.index.Index(ctx, image)
+}
+
+// Delete 移除指定图片的搜索文档。
+func (s Searcher) Delete(ctx context.Context, imageID int64) error {
+	return s.index.Delete(ctx, imageID)
+}
+
 // Index 封装 bleve 图片索引。
 type Index struct {
 	index bleve.Index
@@ -76,19 +101,19 @@ func (i *Index) Delete(ctx context.Context, imageID int64) error {
 }
 
 // Search 执行全文检索并返回图片 ID 列表。
-func (i *Index) Search(ctx context.Context, query Query) ([]int64, error) {
+func (i *Index) Search(ctx context.Context, query Query) (do.ImageSearchResult, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, pkgerrors.WithMessage(err, "search image context")
+		return do.ImageSearchResult{}, pkgerrors.WithMessage(err, "search image context")
 	}
 	if i == nil || i.index == nil {
-		return nil, pkgerrors.New("bleve index is nil")
+		return do.ImageSearchResult{}, pkgerrors.New("bleve index is nil")
 	}
 	request := bleve.NewSearchRequestOptions(newQuery(query.Text), searchSize(query), searchOffset(query), false)
 	result, err := i.index.Search(request)
 	if err != nil {
-		return nil, pkgerrors.WithMessage(err, "search image index")
+		return do.ImageSearchResult{}, pkgerrors.WithMessage(err, "search image index")
 	}
-	return hitsToIDs(result.Hits), nil
+	return do.ImageSearchResult{IDs: hitsToIDs(result.Hits), Total: int64(result.Total)}, nil
 }
 
 // Count 返回当前索引文档总数。
