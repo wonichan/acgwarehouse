@@ -6,6 +6,7 @@
 
 # Runtime state
 .omo/run-continuation/
+data/
 
 # Python cache
 **/__pycache__/
