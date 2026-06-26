@@ -75,6 +75,7 @@ func AutoMigrate(database *gorm.DB) error {
 		&po.Rating{},
 		&po.Collection{},
 		&po.CollectionItem{},
+		&po.Ranking{},
 	); err != nil {
 		return pkgerrors.WithMessage(err, "migrate models")
 	}
