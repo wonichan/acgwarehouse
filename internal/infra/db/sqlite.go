@@ -66,8 +66,8 @@ func AutoMigrate(database *gorm.DB) error {
 	if database == nil {
 		return pkgerrors.New("sqlite database is nil")
 	}
-	if err := database.AutoMigrate(&po.User{}); err != nil {
-		return pkgerrors.WithMessage(err, "migrate user")
+	if err := database.AutoMigrate(&po.User{}, &po.Image{}); err != nil {
+		return pkgerrors.WithMessage(err, "migrate models")
 	}
 	return nil
 }
