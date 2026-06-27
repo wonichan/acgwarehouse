@@ -72,7 +72,7 @@ func run(ctx context.Context) error {
 	}
 
 	imageRepo := repository.NewImageRepository(sqliteDB.Read, sqliteDB.Write)
-	tagRepo := repository.NewTagRepository(sqliteDB.Read, sqliteDB.Write)
+	tagRepo := repository.NewTagRepository(sqliteDB.Read, sqliteDB.Write, imageRepo)
 	ratingRepo := repository.NewRatingRepository(sqliteDB.Read, sqliteDB.Write)
 	collectionRepo := repository.NewCollectionRepository(sqliteDB.Read, sqliteDB.Write)
 	rankingRepo := repository.NewRankingRepository(sqliteDB.Read, sqliteDB.Write)

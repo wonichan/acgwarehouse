@@ -10,13 +10,14 @@ import (
 
 	"github.com/yachiyo/acgwarehouse/internal/model/do"
 	"github.com/yachiyo/acgwarehouse/internal/model/po"
+	"github.com/yachiyo/acgwarehouse/internal/ports"
 )
 
 var (
 	// ErrUserNotFound 表示用户不存在。
-	ErrUserNotFound = pkgerrors.New("repository: user not found")
+	ErrUserNotFound = ports.ErrUserNotFound
 	// ErrUsernameExists 表示用户名已经存在。
-	ErrUsernameExists = pkgerrors.New("repository: username exists")
+	ErrUsernameExists = ports.ErrUsernameExists
 )
 
 // UserRepository 提供用户持久化访问。

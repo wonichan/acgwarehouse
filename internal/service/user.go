@@ -10,15 +10,15 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/yachiyo/acgwarehouse/internal/model/do"
-	"github.com/yachiyo/acgwarehouse/internal/repository"
+	"github.com/yachiyo/acgwarehouse/internal/ports"
 	jwtpkg "github.com/yachiyo/acgwarehouse/pkg/jwt"
 )
 
 var (
 	// ErrUserNotFound 表示用户不存在。
-	ErrUserNotFound = repository.ErrUserNotFound
+	ErrUserNotFound = ports.ErrUserNotFound
 	// ErrUsernameExists 表示用户名已经存在。
-	ErrUsernameExists = repository.ErrUsernameExists
+	ErrUsernameExists = ports.ErrUsernameExists
 	// ErrInvalidCredential 表示登录凭据非法。
 	ErrInvalidCredential = pkgerrors.New("service: invalid credential")
 	// ErrInvalidUserInput 表示用户输入非法。
@@ -72,7 +72,7 @@ func (s *UserService) Register(ctx context.Context, user do.User) (do.User, erro
 // Login 校验用户密码并签发访问令牌。
 func (s *UserService) Login(ctx context.Context, input do.User) (do.LoginResult, error) {
 	user, err := s.repo.FindByUsername(ctx, strings.TrimSpace(input.Username))
-	if stderrors.Is(err, repository.ErrUserNotFound) {
+	if stderrors.Is(err, ports.ErrUserNotFound) {
 		return do.LoginResult{}, pkgerrors.WithMessage(ErrInvalidCredential, "find login user")
 	}
 	if err != nil {
@@ -105,7 +105,7 @@ func (s *UserService) CurrentUser(ctx context.Context, userID int64) (do.User, e
 // EnsureAdmin 创建首个管理员，若用户名已存在则保持幂等跳过。
 func (s *UserService) EnsureAdmin(ctx context.Context, username string, password string) error {
 	_, err := s.Register(ctx, do.User{Username: username, Password: password, Role: do.UserRoleAdmin})
-	if stderrors.Is(err, repository.ErrUsernameExists) {
+	if stderrors.Is(err, ports.ErrUsernameExists) {
 		return nil
 	}
 	if err != nil {

@@ -8,12 +8,10 @@ import (
 	pkgerrors "github.com/pkg/errors"
 
 	"github.com/yachiyo/acgwarehouse/internal/model/do"
-	"github.com/yachiyo/acgwarehouse/internal/repository"
+	"github.com/yachiyo/acgwarehouse/internal/ports"
 )
 
 var (
-	// ErrCollectionNotFound 表示收藏夹不存在。
-	ErrCollectionNotFound = repository.ErrCollectionNotFound
 	// ErrInvalidCollectionInput 表示收藏夹输入非法。
 	ErrInvalidCollectionInput = pkgerrors.New("service: invalid collection input")
 )
@@ -149,10 +147,10 @@ func prepareCollectionInput(collection do.Collection) (do.Collection, error) {
 // mapCollectionError 将仓储收藏错误映射为服务错误。
 func mapCollectionError(err error, message string) error {
 	switch {
-	case stderrors.Is(err, repository.ErrCollectionForbidden):
+	case stderrors.Is(err, ports.ErrCollectionForbidden):
 		return pkgerrors.WithMessage(ErrForbidden, message)
-	case stderrors.Is(err, repository.ErrCollectionNotFound):
-		return pkgerrors.WithMessage(ErrCollectionNotFound, message)
+	case stderrors.Is(err, ports.ErrCollectionNotFound):
+		return pkgerrors.WithMessage(ports.ErrCollectionNotFound, message)
 	default:
 		return pkgerrors.WithMessage(err, message)
 	}

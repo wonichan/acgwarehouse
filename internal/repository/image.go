@@ -12,13 +12,15 @@ import (
 
 	"github.com/yachiyo/acgwarehouse/internal/model/do"
 	"github.com/yachiyo/acgwarehouse/internal/model/po"
+	"github.com/yachiyo/acgwarehouse/internal/ports"
+	"github.com/yachiyo/acgwarehouse/internal/validators"
 )
 
 const defaultImageSort = "image.created_at desc"
 
 var (
 	// ErrImageNotFound 表示图片不存在或不可公开展示。
-	ErrImageNotFound = pkgerrors.New("repository: image not found")
+	ErrImageNotFound = ports.ErrImageNotFound
 )
 
 // ImageListQuery 定义图片仓储列表查询条件。
@@ -44,7 +46,7 @@ func NewImageRepository(readDB *gorm.DB, writeDB *gorm.DB) *ImageRepository {
 
 // UpsertByCOSKey 按 COS key 幂等写入图片元数据。
 func (r *ImageRepository) UpsertByCOSKey(ctx context.Context, image do.Image) (do.Image, error) {
-	stored := imageToPO(image.NormalizeForCreate(time.Now().UTC()))
+	stored := imageToPO(validators.NormalizeImageForCreate(image, time.Now().UTC()))
 	assignments := clause.AssignmentColumns([]string{
 		"filename",
 		"size",

@@ -10,13 +10,15 @@ import (
 
 	"github.com/yachiyo/acgwarehouse/internal/model/do"
 	"github.com/yachiyo/acgwarehouse/internal/model/po"
+	"github.com/yachiyo/acgwarehouse/internal/ports"
+	"github.com/yachiyo/acgwarehouse/internal/validators"
 )
 
 var (
 	// ErrCollectionNotFound 表示收藏夹不存在。
-	ErrCollectionNotFound = pkgerrors.New("repository: collection not found")
+	ErrCollectionNotFound = ports.ErrCollectionNotFound
 	// ErrCollectionForbidden 表示当前用户无权访问或管理收藏夹。
-	ErrCollectionForbidden = pkgerrors.New("repository: collection forbidden")
+	ErrCollectionForbidden = ports.ErrCollectionForbidden
 )
 
 // CollectionRepository 提供收藏夹持久化访问。
@@ -32,7 +34,7 @@ func NewCollectionRepository(readDB *gorm.DB, writeDB *gorm.DB) *CollectionRepos
 
 // Create 创建用户命名收藏夹。
 func (r *CollectionRepository) Create(ctx context.Context, collection do.Collection) (do.Collection, error) {
-	stored := collectionToPO(collection.NormalizeForCreate(time.Now().UTC()))
+	stored := collectionToPO(validators.NormalizeCollectionForCreate(collection, time.Now().UTC()))
 	if err := r.writeDB.WithContext(ctx).Create(&stored).Error; err != nil {
 		return do.Collection{}, pkgerrors.WithMessage(err, "create collection")
 	}

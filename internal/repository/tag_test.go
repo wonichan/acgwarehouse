@@ -12,7 +12,8 @@ import (
 func Test_TagRepository_Create_reuses_existing_tag_when_name_repeated(t *testing.T) {
 	// Given
 	database := openTestDatabase(t)
-	repo := repository.NewTagRepository(database.Read, database.Write)
+	imageRepo := repository.NewImageRepository(database.Read, database.Write)
+	repo := repository.NewTagRepository(database.Read, database.Write, imageRepo)
 
 	// When
 	created, err := repo.Create(context.Background(), do.Tag{Name: "  miku  "})
@@ -34,7 +35,7 @@ func Test_TagRepository_AssignToImages_creates_links_and_increments_usage_once(t
 	// Given
 	database := openTestDatabase(t)
 	imageRepo := repository.NewImageRepository(database.Read, database.Write)
-	tagRepo := repository.NewTagRepository(database.Read, database.Write)
+	tagRepo := repository.NewTagRepository(database.Read, database.Write, imageRepo)
 	first := mustCreateImage(t, imageRepo, "thumbnails/one.png")
 	second := mustCreateImage(t, imageRepo, "thumbnails/two.png")
 	tag := mustCreateTag(t, tagRepo, "初音")
@@ -66,7 +67,7 @@ func Test_TagRepository_UnassignFromImages_removes_links_and_decrements_usage(t 
 	// Given
 	database := openTestDatabase(t)
 	imageRepo := repository.NewImageRepository(database.Read, database.Write)
-	tagRepo := repository.NewTagRepository(database.Read, database.Write)
+	tagRepo := repository.NewTagRepository(database.Read, database.Write, imageRepo)
 	first := mustCreateImage(t, imageRepo, "thumbnails/one.png")
 	second := mustCreateImage(t, imageRepo, "thumbnails/two.png")
 	tag := mustCreateTag(t, tagRepo, "壁纸")
@@ -98,7 +99,7 @@ func Test_TagRepository_Suggest_orders_by_prefix_and_usage_count(t *testing.T) {
 	// Given
 	database := openTestDatabase(t)
 	imageRepo := repository.NewImageRepository(database.Read, database.Write)
-	tagRepo := repository.NewTagRepository(database.Read, database.Write)
+	tagRepo := repository.NewTagRepository(database.Read, database.Write, imageRepo)
 	first := mustCreateImage(t, imageRepo, "thumbnails/one.png")
 	second := mustCreateImage(t, imageRepo, "thumbnails/two.png")
 	miku := mustCreateTag(t, tagRepo, "miku")
@@ -129,7 +130,8 @@ func Test_TagRepository_Suggest_orders_by_prefix_and_usage_count(t *testing.T) {
 func Test_TagRepository_Update_and_delete_return_not_found_when_missing(t *testing.T) {
 	// Given
 	database := openTestDatabase(t)
-	repo := repository.NewTagRepository(database.Read, database.Write)
+	imageRepo := repository.NewImageRepository(database.Read, database.Write)
+	repo := repository.NewTagRepository(database.Read, database.Write, imageRepo)
 
 	// When
 	_, updateErr := repo.Update(context.Background(), do.Tag{ID: 404, Name: "missing"})

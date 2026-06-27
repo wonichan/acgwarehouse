@@ -177,7 +177,7 @@ func Test_ImageRepository_ListActive_filters_by_tag_name(t *testing.T) {
 	// Given
 	database := openTestDatabase(t)
 	imageRepo := repository.NewImageRepository(database.Read, database.Write)
-	tagRepo := repository.NewTagRepository(database.Read, database.Write)
+	tagRepo := repository.NewTagRepository(database.Read, database.Write, imageRepo)
 	mikuImage := mustCreateImage(t, imageRepo, "thumbnails/miku.png")
 	lukaImage := mustCreateImage(t, imageRepo, "thumbnails/luka.png")
 	mikuTag := mustCreateTag(t, tagRepo, "miku")

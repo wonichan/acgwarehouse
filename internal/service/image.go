@@ -12,11 +12,6 @@ import (
 	"github.com/yachiyo/acgwarehouse/internal/repository"
 )
 
-var (
-	// ErrImageNotFound 表示图片不存在或不可公开展示。
-	ErrImageNotFound = repository.ErrImageNotFound
-)
-
 // RepositoryImageQuery 定义图片仓储列表查询条件。
 type RepositoryImageQuery = repository.ImageListQuery
 

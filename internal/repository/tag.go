@@ -13,13 +13,14 @@ import (
 
 	"github.com/yachiyo/acgwarehouse/internal/model/do"
 	"github.com/yachiyo/acgwarehouse/internal/model/po"
+	"github.com/yachiyo/acgwarehouse/internal/ports"
 )
 
 const defaultTagSuggestLimit = 20
 
 var (
 	// ErrTagNotFound 表示标签不存在。
-	ErrTagNotFound = pkgerrors.New("repository: tag not found")
+	ErrTagNotFound = ports.ErrTagNotFound
 	// ErrInvalidTagInput 表示标签输入非法。
 	ErrInvalidTagInput = pkgerrors.New("repository: invalid tag input")
 )
@@ -28,11 +29,12 @@ var (
 type TagRepository struct {
 	readDB  *gorm.DB
 	writeDB *gorm.DB
+	imgRepo *ImageRepository
 }
 
 // NewTagRepository 创建标签仓储。
-func NewTagRepository(readDB *gorm.DB, writeDB *gorm.DB) *TagRepository {
-	return &TagRepository{readDB: readDB, writeDB: writeDB}
+func NewTagRepository(readDB, writeDB *gorm.DB, imgRepo *ImageRepository) *TagRepository {
+	return &TagRepository{readDB: readDB, writeDB: writeDB, imgRepo: imgRepo}
 }
 
 // Create 创建标签；名称已存在时返回既有标签。
@@ -210,8 +212,7 @@ func (r *TagRepository) UnassignFromImages(ctx context.Context, imageIDs []int64
 
 // FindActiveImagesWithTags 查询图片并填充标签名称。
 func (r *TagRepository) FindActiveImagesWithTags(ctx context.Context, imageIDs []int64) ([]do.Image, error) {
-	imageRepo := NewImageRepository(r.readDB, r.writeDB)
-	images, err := imageRepo.FindActiveByIDs(ctx, imageIDs)
+	images, err := r.imgRepo.FindActiveByIDs(ctx, imageIDs)
 	if err != nil {
 		return nil, pkgerrors.WithMessage(err, "find affected images")
 	}

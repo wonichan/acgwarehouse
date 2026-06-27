@@ -7,18 +7,13 @@ import (
 	pkgerrors "github.com/pkg/errors"
 
 	"github.com/yachiyo/acgwarehouse/internal/model/do"
-	"github.com/yachiyo/acgwarehouse/internal/repository"
 )
 
 const defaultSuggestLimit = 20
 
 var (
-	// ErrTagNotFound 表示标签不存在。
-	ErrTagNotFound = repository.ErrTagNotFound
 	// ErrInvalidTagInput 表示标签输入非法。
 	ErrInvalidTagInput = pkgerrors.New("service: invalid tag input")
-	// ErrForbidden 表示当前用户无权执行该操作。
-	ErrForbidden = pkgerrors.New("service: forbidden")
 )
 
 // TagRepository 定义标签服务依赖的仓储能力。
