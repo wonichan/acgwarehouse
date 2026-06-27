@@ -235,3 +235,37 @@ Converted static HTML prototype to Vue 3 + TypeScript SPA. Created 6 pages, 7 co
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Use backend API data in frontend
+
+**Date**: 2026-06-28
+**Task**: Use backend API data in frontend
+**Branch**: `master`
+
+### Summary
+
+Replaced Vue gallery mock and hard-coded dynamic data with real backend API responses, documented frontend API contracts, and verified build plus API/proxy smoke checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `414b19f` | (see git log) |
+| `80ac5c5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
