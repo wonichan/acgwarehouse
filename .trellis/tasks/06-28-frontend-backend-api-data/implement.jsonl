@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer overview: Vue 3 + Vite API endpoint conventions and type-import rule."}
+{"file":".trellis/spec/frontend/api-client.md","reason":"Canonical frontend API client pattern, `/api/v1` proxy rule, ApiError handling, and TypeScript import constraints."}
+{"file":".trellis/spec/backend/go-http-api.md","reason":"Backend HTTP response envelope, pagination/list contracts, image/search/ranking/collection route contracts."}
+{"file":".trellis/tasks/06-28-frontend-backend-api-data/prd.md","reason":"Task requirements, acceptance criteria, known API mismatches, and open scoring decision."}
+{"file":".trellis/tasks/06-28-frontend-backend-api-data/design.md","reason":"Technical design for replacing mock data with typed API client calls and real page data flows."}
+{"file":".trellis/tasks/06-28-frontend-backend-api-data/implement.md","reason":"Ordered implementation checklist, validation commands, and rollback points."}
+{"file":"DESIGN.md","reason":"Extracted project design system tokens and component/state patterns to preserve while modifying frontend pages."}

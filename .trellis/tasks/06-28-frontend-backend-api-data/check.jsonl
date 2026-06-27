@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Check frontend endpoint usage and type import rules against project conventions."}
+{"file":".trellis/spec/frontend/api-client.md","reason":"Check API client implementation, error handling, proxy assumptions, and page integration pattern."}
+{"file":".trellis/spec/backend/go-http-api.md","reason":"Check frontend requests and response mapping against backend HTTP contracts."}
+{"file":".trellis/tasks/06-28-frontend-backend-api-data/prd.md","reason":"Check implemented behavior against requirements and acceptance criteria."}
+{"file":".trellis/tasks/06-28-frontend-backend-api-data/design.md","reason":"Check code follows planned API/data-flow boundaries without mock fallback or backend changes."}
+{"file":".trellis/tasks/06-28-frontend-backend-api-data/implement.md","reason":"Check all implementation tasks and validation gates were completed."}
+{"file":"DESIGN.md","reason":"Check new loading/error/empty states and template changes preserve the existing design system."}

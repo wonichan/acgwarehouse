@@ -15,7 +15,9 @@
 ```
 frontend/vue-gallery/src/
 ├── api/
-│   └── client.ts        # API调用封装、类型定义
+│   ├── client.ts        # API方法封装与前端友好归一化
+│   ├── transport.ts     # fetch、token、Response envelope、ApiError 边界
+│   └── types.ts         # 后端 DTO / query 类型定义
 ├── composables/
 │   └── useAuth.ts       # 认证状态管理
 └── pages/
@@ -69,9 +71,9 @@ async function apiCall<T>(path: string, options?: RequestInit & { skipAuth?: boo
 ```typescript
 export class ApiError extends Error {
   status: number
-  code?: string
+  code?: number
   
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: number) {
     super(message)
     this.name = 'ApiError'
     this.status = status
@@ -83,6 +85,113 @@ export class ApiError extends Error {
 ---
 
 ## 后端API契约
+
+### 场景：Vue Gallery API Client 对接真实后端 DTO
+
+#### 1. Scope / Trigger
+
+- Trigger：前端页面或 composable 调用 `/api/v1/*` 后端接口，尤其是图片列表、搜索、热榜、详情、标签、收藏夹、评分。
+- Scope：`frontend/vue-gallery/src/api/client.ts` 只暴露前端友好的方法；`transport.ts` 只处理 fetch/envelope/token/error；`types.ts` 只声明后端 DTO 与 query 类型。
+- Goal：页面层不直接知道后端端口、响应 envelope、后端字段名差异，也不能伪造后端未支持的筛选或业务成功。
+
+#### 2. Signatures
+
+```typescript
+const API_BASE = '/api/v1'
+
+export interface ApiResponse<T> {
+  readonly code: number
+  readonly msg: string
+  readonly data: T
+}
+
+export class ApiError extends Error {
+  readonly status: number
+  readonly code?: number
+}
+
+export async function getImages(params?: ImageQuery): Promise<ImageListResponse>
+export async function searchImages(params: SearchQuery): Promise<ImageListResponse>
+export async function getImage(id: number): Promise<ImageDetailResponse>
+export async function getTags(): Promise<readonly TagResponse[]>
+export async function suggestTags(q: string, limit?: number): Promise<readonly TagResponse[]>
+export async function getRankings(params?: RankingQuery): Promise<readonly RankingResponse[]>
+export async function getCollections(): Promise<readonly CollectionResponse[]>
+export async function createCollection(name: string, visibility?: 'private' | 'public'): Promise<CollectionResponse>
+export async function rateImage(imageId: number, score: number): Promise<RatingResponse>
+```
+
+#### 3. Contracts
+
+- 所有前端源码请求必须使用相对路径 `/api/v1/*`；开发环境只允许在 `vite.config.ts` proxy 中出现 `http://localhost:2018`。
+- 后端成功/错误 envelope 是 `{code,data,msg}`。前端错误消息优先读取 `msg`，不是 `message`。
+- 后端列表响应是 `{total,page,size,list}`。前端可归一化为 `{items,total,page,limit}`，但请求必须发送 `size`。
+- `getImages({limit})` -> `GET /api/v1/images?size=<limit>`；可发送 `filename/tag/sort/order/page/size`，不要发送旧 `category`。
+- `searchImages({keyword,limit})` -> `GET /api/v1/search?q=<keyword>&size=<limit>`；不要发送旧 `keyword/tags/min_score/limit`。
+- `suggestTags(text, limit)` -> `GET /api/v1/tags/suggest?q=<text>&limit=<limit>`；不要发送旧 `prefix`。
+- `getRankings({period,page,limit})` -> `GET /api/v1/rankings?period=day|week|month&page=&size=`。
+- `getImage(id)` 返回嵌套 detail：`{image,tags,avg_score,rating_count,favorite_count,my_rating,is_collected,similar_images}`。
+- `TagResponse` 字段是 `{id,name,usage_count,created_at,updated_at}`。
+- `CollectionResponse` 字段是 `{id,user_id,name,visibility,created_at,updated_at?,items}`；`items` 是 `{collection_id,image_id,created_at}`，不是完整图片卡片。
+- `createCollection()` body 是 `{name,visibility}`，`visibility` 默认 `private`；不要发送旧 `description`。
+- 评分使用后端百分制整数 `0-100`；展示为 `/100`，不要在真实数据页面显示五分制如 `4.8 分`。
+
+#### 4. Validation & Error Matrix
+
+| Condition | Frontend behavior |
+|-----------|-------------------|
+| HTTP 非 2xx，body 有 `msg/code` | throw `ApiError(msg, status, code)` |
+| HTTP 非 2xx，body 非 JSON | throw `ApiError('API Error: <status>', status)` |
+| HTTP 200 但 `code !== 0` | throw `ApiError(msg || '请求失败', 200, code)` |
+| `/collections` 未登录返回 401 / 40101 | 页面显示登录提示，不渲染 mock 收藏夹 |
+| 后端返回空 `list` | 页面显示 empty state，不使用 fallback mock |
+| 缺少有效 detail `id` | 详情页显示“请选择一张作品”，不渲染固定示例 |
+| 评分值来自均分小数 | 提交前 round 并 clamp 到 `0-100` |
+
+#### 5. Good / Base / Bad Cases
+
+- Good：`getImages({limit: 2})` 的 network query 是 `size=2`，返回数据归一化为 `items.length === data.list.length`。
+- Good：热榜 period UI `每日/每周/每月` 映射为 `day/week/month`，切换后重新请求 `/rankings`。
+- Good：未登录收藏页展示登录 required 状态，并说明 `/collections` 需要 Bearer token。
+- Base：后端 `similar_images: []` 时详情页显示 empty state。
+- Bad：搜索页展示“标签/评分筛选”并发送后端不消费的 `tags/min_score`，会误导用户以为筛选生效。
+- Bad：收藏夹详情只返回 image_id 时，用静态图片卡片填充 masonry，这是 mock fallback。
+
+#### 6. Tests Required
+
+- Build/type：`npm run build` 必须通过，覆盖 `vue-tsc -b`。
+- API smoke：`curl http://localhost:2018/api/v1/images?size=2` 断言 `data.size=2`；`/rankings?period=day&size=3` 断言 `data.list.length=3`；`/search?q=<term>&size=2` 断言 envelope/list shape；`/collections` 未登录断言 401/`msg`。
+- Proxy smoke：Vite dev server 下访问 `/api/v1/images?size=1` 必须代理到后端，前端源码不得硬编码端口。
+- Page/E2E：浏览图库、热榜、`/detail?id=<known id>`、未登录收藏页，断言真实 API 请求和 loading/error/empty/login-required 状态。
+
+#### 7. Wrong vs Correct
+
+##### Wrong
+
+```typescript
+// 后端不消费这些参数；错误消息字段也不是 message。
+await apiCall<ApiResponse<ImageListResponse>>('/search?keyword=miku&tags=雨景&limit=20')
+throw new ApiError(response.message, response.status)
+```
+
+##### Correct
+
+```typescript
+const query = new URLSearchParams()
+query.set('q', keyword)
+query.set('size', String(limit))
+
+const response = await unwrapResponse(
+  apiCall<ApiResponse<BackendListResponse<ImageItem>>>(`/search?${query.toString()}`)
+)
+
+return {
+  items: response.list,
+  total: response.total,
+  page: response.page,
+  limit: response.size,
+}
+```
 
 ### 认证接口
 
@@ -114,15 +223,16 @@ export class ApiError extends Error {
 
 **图片列表**: `GET /api/v1/images`
 ```typescript
-// Query: page, limit, tag, category
+// Query sent to backend: page, size, filename, tag, sort, order
+// Frontend method may accept `limit`, but must map it to backend `size`.
 // Response
 {
   code: 0,
   data: {
-    items: ImageItem[],
+    list: ImageItem[],
     total: number,
     page: number,
-    limit: number
+    size: number
   },
   msg: ""
 }
@@ -132,7 +242,7 @@ export class ApiError extends Error {
 
 **搜索**: `GET /api/v1/search`
 ```typescript
-// Query: keyword, tags, min_score, page, limit
+// Query sent to backend: q, page, size
 ```
 
 ### 其他接口
