@@ -168,3 +168,36 @@ Converted static HTML prototype to Vue 3 + TypeScript SPA. Created 6 pages, 7 co
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: 生产环境部署：前端2017+nginx反代、后端2018+HTTPS
+
+**Date**: 2026-06-27
+**Task**: 生产环境部署：前端2017+nginx反代、后端2018+HTTPS
+**Branch**: `master`
+
+### Summary
+
+完成前端API层开发（从Mock切换到真实API）、后端构建、systemd服务配置、nginx HTTPS反代配置、环境变量配置。部署已验证成功：HTTPS正常、API代理工作、管理员登录成功。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d8ac0ac` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
