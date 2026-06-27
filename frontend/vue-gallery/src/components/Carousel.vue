@@ -53,13 +53,15 @@ const handleKeydown = (event: KeyboardEvent) => {
           :aria-hidden="index !== currentIndex"
         >
           <div class="focus-card focus-card-compact">
-            <div class="focus-art" :class="`focus-art-${slide.artVariant}`" aria-hidden="true"></div>
+            <div class="focus-art" :class="`focus-art-${slide.artVariant}`" aria-hidden="true">
+              <img v-if="slide.imageUrl" :src="slide.imageUrl" :alt="slide.title" loading="lazy" />
+            </div>
             <div class="focus-copy">
               <span class="tag" :class="{ 'is-hot': slide.tagType === 'hot' }">{{ slide.tag }}</span>
               <h4>{{ slide.title }}</h4>
               <p>{{ slide.description }}</p>
               <div class="focus-stats" :aria-label="`${slide.title}数据`">
-                <span><strong>{{ slide.score }}</strong> 评分</span>
+                <span><strong>{{ slide.score }}</strong> 热度</span>
                 <span><strong>{{ slide.favorites }}</strong> 收藏</span>
               </div>
             </div>

@@ -1,122 +1,49 @@
-const API_BASE = '/api/v1'
-const TOKEN_KEY = 'acgwarehouse_token'
-
-function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY)
-}
-
-export function isAuthenticated(): boolean {
-  return getToken() !== null
-}
-
-async function apiCall<T>(
-  path: string,
-  options?: RequestInit & { skipAuth?: boolean }
-): Promise<T> {
-  const token = getToken()
-  
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  
-  if (token && !options?.skipAuth) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options?.headers as Record<string, string>,
-    },
-  })
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-    throw new ApiError(
-      errorData.message || `API Error: ${response.status}`,
-      response.status,
-      errorData.code
-    )
-  }
-  
-  return response.json()
-}
-
-export class ApiError extends Error {
-  status: number
-  code?: string
-  
-  constructor(message: string, status: number, code?: string) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-    this.code = code
-  }
-}
-
-interface ApiResponse<T> {
-  code: number
-  message: string
-  data: T
-}
-
-async function unwrapResponse<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
-  const response = await promise
-  return response.data
-}
-
-export interface UserResponse {
-  id: number
-  username: string
-  role: string
-  created_at: string
-}
-
-export interface ImageItem {
-  id: number
-  filename: string
-  cos_key: string
-  url: string
-  width: number
-  height: number
-  size: number
-  category: string
-  avg_score: number
-  rating_count: number
-  view_count: number
-  favorite_count: number
-  last_modified: string
-  created_at: string
-}
-
-export interface ImageDetailResponse extends ImageItem {
-  tags: TagResponse[]
-}
+import { apiCall, unwrapResponse } from './transport'
+import type {
+  CollectionDetailResponse,
+  CollectionResponse,
+  CollectionVisibility,
+  ImageDetailResponse,
+  ImageItem,
+  ImageListResponse,
+  ImageQuery,
+  RankingQuery,
+  RankingResponse,
+  RatingResponse,
+  SearchQuery,
+  TagResponse,
+  UserResponse,
+} from './types'
+import type { ApiResponse } from './transport'
+export { ApiError, clearToken, isAuthenticated, setToken } from './transport'
+export type {
+  CollectionDetailResponse,
+  CollectionItemResponse,
+  CollectionResponse,
+  CollectionVisibility,
+  ImageDetailResponse,
+  ImageItem,
+  ImageListResponse,
+  ImageQuery,
+  ImageSort,
+  RankingPeriod,
+  RankingQuery,
+  RankingResponse,
+  RatingResponse,
+  SearchQuery,
+  SortOrder,
+  TagResponse,
+  UserResponse,
+} from './types'
 
 interface BackendListResponse<T> {
-  list: T[]
-  total: number
-  page: number
-  size: number
+  readonly list: readonly T[]
+  readonly total: number
+  readonly page: number
+  readonly size: number
 }
 
-export interface ImageListResponse {
-  items: ImageItem[]
-  total: number
-  page: number
-  limit: number
-}
-
-function normalizeListResponse<T>(response: BackendListResponse<T>): { items: T[]; total: number; page: number; limit: number } {
+function normalizeListResponse<T>(response: BackendListResponse<T>): { readonly items: readonly T[]; readonly total: number; readonly page: number; readonly limit: number } {
   return {
     items: response.list,
     total: response.total,
@@ -125,62 +52,30 @@ function normalizeListResponse<T>(response: BackendListResponse<T>): { items: T[
   }
 }
 
-export interface TagResponse {
-  id: number
-  name: string
-  category: string
-  count: number
+function appendNumberParam(query: URLSearchParams, key: string, value: number | undefined): void {
+  if (value !== undefined) query.set(key, String(value))
 }
 
-export interface RankingResponse {
-  period: string
-  rank: number
-  score: number
-  bayesian_score: number
-  rating_count: number
-  favorite_count: number
-  view_count: number
-  computed_at: string
-  image: ImageItem
+function appendStringParam(query: URLSearchParams, key: string, value: string | undefined): void {
+  if (value !== undefined && value.length > 0) query.set(key, value)
 }
 
-export interface CollectionResponse {
-  id: number
-  name: string
-  description: string
-  item_count: number
-  created_at: string
+function queryPath(path: string, query: URLSearchParams): string {
+  const queryString = query.toString()
+  return queryString.length > 0 ? `${path}?${queryString}` : path
 }
 
-export interface CollectionDetailResponse extends CollectionResponse {
-  items: ImageItem[]
-}
-
-export interface ImageQuery {
-  page?: number
-  limit?: number
-  tag?: string
-  category?: string
-}
-
-export interface SearchQuery {
-  keyword?: string
-  tags?: string
-  minScore?: number
-  page?: number
-  limit?: number
-}
-
-export async function login(username: string, password: string): Promise<{ token: string }> {
-  const response = await apiCall<ApiResponse<{ token: string }>>(
-    '/users/login',
-    {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-      skipAuth: true,
-    }
+export async function login(username: string, password: string): Promise<{ readonly token: string }> {
+  return unwrapResponse(
+    apiCall<ApiResponse<{ readonly token: string }>>(
+      '/users/login',
+      {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+        skipAuth: true,
+      }
+    )
   )
-  return response.data
 }
 
 export async function register(username: string, password: string): Promise<UserResponse> {
@@ -204,15 +99,16 @@ export async function getCurrentUser(): Promise<UserResponse> {
 
 export async function getImages(params?: ImageQuery): Promise<ImageListResponse> {
   const query = new URLSearchParams()
-  if (params?.page) query.set('page', String(params.page))
-  if (params?.limit) query.set('limit', String(params.limit))
-  if (params?.tag) query.set('tag', params.tag)
-  if (params?.category) query.set('category', params.category)
-  
-  const queryString = query.toString()
-  const path = queryString ? `/images?${queryString}` : '/images'
-  
-  const response = await unwrapResponse(apiCall<ApiResponse<BackendListResponse<ImageItem>>>(path))
+  appendNumberParam(query, 'page', params?.page)
+  appendNumberParam(query, 'size', params?.limit)
+  appendStringParam(query, 'tag', params?.tag)
+  appendStringParam(query, 'filename', params?.filename)
+  appendStringParam(query, 'sort', params?.sort)
+  appendStringParam(query, 'order', params?.order)
+
+  const response = await unwrapResponse(
+    apiCall<ApiResponse<BackendListResponse<ImageItem>>>(queryPath('/images', query))
+  )
   return normalizeListResponse(response)
 }
 
@@ -224,79 +120,77 @@ export async function getImage(id: number): Promise<ImageDetailResponse> {
 
 export async function searchImages(params: SearchQuery): Promise<ImageListResponse> {
   const query = new URLSearchParams()
-  if (params.keyword) query.set('keyword', params.keyword)
-  if (params.tags) query.set('tags', params.tags)
-  if (params.minScore) query.set('min_score', String(params.minScore))
-  if (params.page) query.set('page', String(params.page))
-  if (params.limit) query.set('limit', String(params.limit))
-  
+  appendStringParam(query, 'q', params.keyword)
+  appendNumberParam(query, 'page', params.page)
+  appendNumberParam(query, 'size', params.limit)
+
   const response = await unwrapResponse(
-    apiCall<ApiResponse<BackendListResponse<ImageItem>>>(`/search?${query.toString()}`)
+    apiCall<ApiResponse<BackendListResponse<ImageItem>>>(queryPath('/search', query))
   )
   return normalizeListResponse(response)
 }
 
-export async function getTags(): Promise<TagResponse[]> {
+export async function getTags(): Promise<readonly TagResponse[]> {
+  return unwrapResponse(apiCall<ApiResponse<readonly TagResponse[]>>('/tags'))
+}
+
+export async function suggestTags(queryText: string, limit?: number): Promise<readonly TagResponse[]> {
+  const query = new URLSearchParams()
+  appendStringParam(query, 'q', queryText)
+  appendNumberParam(query, 'limit', limit)
+
   return unwrapResponse(
-    apiCall<ApiResponse<TagResponse[]>>('/tags')
+    apiCall<ApiResponse<readonly TagResponse[]>>(queryPath('/tags/suggest', query))
   )
 }
 
-export async function suggestTags(prefix: string): Promise<TagResponse[]> {
-  return unwrapResponse(
-    apiCall<ApiResponse<TagResponse[]>>(`/tags/suggest?prefix=${encodeURIComponent(prefix)}`)
-  )
-}
+export async function getRankings(params?: RankingQuery): Promise<readonly RankingResponse[]> {
+  const query = new URLSearchParams()
+  appendStringParam(query, 'period', params?.period ?? 'day')
+  appendNumberParam(query, 'page', params?.page)
+  appendNumberParam(query, 'size', params?.limit)
 
-export async function getRankings(limit?: number): Promise<RankingResponse[]> {
-  const query = limit ? `?limit=${limit}` : ''
   const response = await unwrapResponse(
-    apiCall<ApiResponse<BackendListResponse<RankingResponse>>>(`/rankings${query}`)
+    apiCall<ApiResponse<BackendListResponse<RankingResponse>>>(queryPath('/rankings', query))
   )
   return response.list
 }
 
-export async function getCollections(): Promise<CollectionResponse[]> {
-  return unwrapResponse(
-    apiCall<ApiResponse<CollectionResponse[]>>('/collections')
-  )
+export async function getCollections(): Promise<readonly CollectionResponse[]> {
+  return unwrapResponse(apiCall<ApiResponse<readonly CollectionResponse[]>>('/collections'))
 }
 
 export async function getCollection(id: number): Promise<CollectionDetailResponse> {
-  return unwrapResponse(
-    apiCall<ApiResponse<CollectionDetailResponse>>(`/collections/${id}`)
-  )
+  return unwrapResponse(apiCall<ApiResponse<CollectionDetailResponse>>(`/collections/${id}`))
 }
 
-export async function createCollection(name: string, description?: string): Promise<CollectionResponse> {
+export async function createCollection(
+  name: string,
+  visibility: CollectionVisibility = 'private'
+): Promise<CollectionResponse> {
   return unwrapResponse(
     apiCall<ApiResponse<CollectionResponse>>(
       '/collections',
-      {
-        method: 'POST',
-        body: JSON.stringify({ name, description }),
-      }
+      { method: 'POST', body: JSON.stringify({ name, visibility }) }
     )
   )
 }
 
 export async function addImageToCollection(collectionId: number, imageId: number): Promise<void> {
-  await apiCall<ApiResponse<null>>(
-    `/collections/${collectionId}/items`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ image_id: imageId }),
-    }
+  await unwrapResponse(
+    apiCall<ApiResponse<null>>(
+      `/collections/${collectionId}/items`,
+      { method: 'POST', body: JSON.stringify({ image_id: imageId }) }
+    )
   )
 }
 
-export async function rateImage(imageId: number, score: number): Promise<void> {
-  await apiCall<ApiResponse<null>>(
-    `/images/${imageId}/rating`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ score }),
-    }
+export async function rateImage(imageId: number, score: number): Promise<RatingResponse> {
+  return unwrapResponse(
+    apiCall<ApiResponse<RatingResponse>>(
+      `/images/${imageId}/rating`,
+      { method: 'PUT', body: JSON.stringify({ score }) }
+    )
   )
 }
 

@@ -16,7 +16,7 @@ const carouselSlides = ref<CarouselSlide[]>([])
 
 // Filter state
 const activeFilter = ref('推荐')
-const filters = ['推荐', '最新', '高分', '可商用标记']
+const filters = ['推荐', '最新', '高分参考', '收藏热度']
 
 // Convert API image to ArtItem for display
 function imageToArtItem(img: ImageItem): ArtItem {
@@ -34,7 +34,7 @@ function imageToArtItem(img: ImageItem): ArtItem {
   return {
     id: String(img.id),
     title: img.filename,
-    tags: [category, `${score.toFixed(1)}分`],
+    tags: [category, `${score.toFixed(1)}/100`],
     score,
     favorites: img.favorite_count,
     previewVariant,
@@ -45,7 +45,7 @@ function imageToArtItem(img: ImageItem): ArtItem {
 // Convert ranking to carousel slide
 function rankingToSlide(ranking: RankingResponse, index: number): CarouselSlide {
   const variants: Array<'rain' | 'character' | 'album'> = ['rain', 'character', 'album']
-  const tags = ['热度上升', '场景焦点', '头像精选']
+  const tags = ['热榜缓存', '真实数据', '社区精选']
   
   const image = ranking.image
   const score = Number.isFinite(ranking.score) ? ranking.score : 0
@@ -53,12 +53,13 @@ function rankingToSlide(ranking: RankingResponse, index: number): CarouselSlide 
   return {
     id: String(image.id),
     title: image.filename,
-    description: `排名第${ranking.rank}的热门作品，热度分${score.toFixed(1)}`,
+    description: `排名第${ranking.rank}的热门作品，热度分${score.toFixed(1)}，均分${image.avg_score.toFixed(1)}/100`,
     tag: tags[index % tags.length],
     tagType: index === 0 ? 'hot' : 'normal',
     score,
     favorites: ranking.favorite_count,
     artVariant: variants[index % variants.length],
+    imageUrl: image.url,
   }
 }
 
@@ -71,7 +72,7 @@ async function loadGallery() {
     // Load images and rankings in parallel
     const [imagesData, rankingsData] = await Promise.all([
       getImages({ limit: 20 }),
-      getRankings(3),
+      getRankings({ period: 'day', limit: 3 }),
     ])
     
     // Convert to display format
@@ -83,7 +84,6 @@ async function loadGallery() {
     } else {
       error.value = '加载失败，请刷新重试'
     }
-    console.error('Failed to load gallery:', e)
   } finally {
     loading.value = false
   }
@@ -109,16 +109,16 @@ onMounted(() => {
         <div>
           <p class="eyebrow">社区图库 · 瀑布流浏览</p>
           <h1>发现值得收藏的二次元灵感图。</h1>
-          <p class="lead">按标签、评分和热度浏览社区投稿，把喜欢的作品快速加入收藏夹，后续再统一打标整理。</p>
+          <p class="lead">按真实后端图片、评分和热榜缓存浏览社区投稿，把喜欢的作品快速加入后续收藏夹流程。</p>
           <div class="hero-actions">
             <RouterLink class="btn btn-primary" to="/search">开始智能搜索</RouterLink>
             <RouterLink class="btn btn-secondary" to="/trending">查看今日热榜</RouterLink>
           </div>
           <div class="kicker-row" aria-label="热门标签">
             <span class="pill is-active">全部</span>
-            <span class="pill">角色设计</span>
-            <span class="pill">场景</span>
-            <span class="pill">头像</span>
+            <span class="pill">真实图片</span>
+            <span class="pill">热榜缓存</span>
+            <span class="pill">百分制评分</span>
             <span class="pill">高评分</span>
           </div>
         </div>
@@ -148,7 +148,7 @@ onMounted(() => {
           </div>
           <div class="row">
             <span class="meta">{{ loading ? '加载中...' : `共 ${artItems.length} 张作品` }}</span>
-            <RouterLink class="btn btn-secondary btn-small" to="/detail">查看示例详情</RouterLink>
+            <RouterLink v-if="artItems.length > 0" class="btn btn-secondary btn-small" :to="`/detail?id=${artItems[0]?.id}`">查看最新详情</RouterLink>
           </div>
         </div>
 

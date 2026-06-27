@@ -44,7 +44,7 @@ const handleClick = (event: MouseEvent) => {
       <p class="art-title">{{ item.title }}</p>
       <div class="art-meta">
         <span v-for="tag in item.tags.slice(0, 3)" :key="tag">#{{ tag }}</span>
-        <span>#{{ item.score }} 分</span>
+        <span>#{{ item.score }}/100</span>
         <span>{{ item.favorites }} 收藏</span>
       </div>
     </div>

@@ -19,6 +19,7 @@ export interface CarouselSlide {
   score: number
   favorites: number
   artVariant: 'rain' | 'character' | 'album'
+  imageUrl?: string
 }
 
 // 相册数据类型
