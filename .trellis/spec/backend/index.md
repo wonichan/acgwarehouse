@@ -20,6 +20,7 @@ This directory contains guidelines for backend development.
 | 最佳实践 Spec   | [go-best-practices.md](./go-best-practices.md)     | **Filled** |
 | 日志规范 Spec   | [go-logging.md](./go-logging.md)                   | **Filled** |
 | 血缘构建清理契约 | [lineage-build.md](./lineage-build.md)             | **Filled** |
+| 架构分层规范   | [architecture-layers.md](./architecture-layers.md) | **Filled** |
 
 
 **Language**: All documentation should be written in **简洁精炼的中文**.
