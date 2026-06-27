@@ -6,6 +6,7 @@ export interface ArtItem {
   score: number
   favorites: number
   previewVariant: 'default' | 'tall' | 'wide'
+  imageUrl?: string
 }
 
 // 轮播数据类型

@@ -29,7 +29,10 @@ const handleClick = (event: MouseEvent) => {
     @click="handleClick"
   >
     <RouterLink :to="`/detail?id=${item.id}`" :aria-label="`查看${item.title}详情`">
-      <div class="art-preview" :class="item.previewVariant"></div>
+      <div v-if="item.imageUrl" class="art-preview" :class="item.previewVariant">
+        <img :src="item.imageUrl" :alt="item.title" loading="lazy" />
+      </div>
+      <div v-else class="art-preview" :class="item.previewVariant"></div>
     </RouterLink>
     <button
       v-if="selectable"

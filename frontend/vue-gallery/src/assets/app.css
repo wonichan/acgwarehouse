@@ -139,10 +139,11 @@ h3 { font-size: var(--text-xl); }
 .art-card:hover { transform: translateY(-4px); box-shadow: var(--elev-raised); }
 .art-card.is-selected { box-shadow: var(--focus-ring), var(--elev-raised); }
 .art-preview { min-height: 210px; position: relative; overflow: hidden; background: linear-gradient(135deg, color-mix(in oklab, var(--surface-warm), var(--surface) 28%), color-mix(in oklab, var(--accent), var(--surface) 82%)); }
+.art-preview img { width: 100%; height: 100%; min-height: inherit; object-fit: cover; display: block; }
 .art-preview.tall { min-height: 320px; }
 .art-preview.wide { min-height: 180px; }
-.art-preview::before { content: ""; position: absolute; width: 44%; aspect-ratio: 1; border-radius: 50%; background: color-mix(in oklab, var(--accent), var(--surface) 54%); left: 12%; top: 15%; box-shadow: 86px 46px 0 color-mix(in oklab, var(--surface), transparent 20%), 34px 132px 0 color-mix(in oklab, var(--fg), transparent 86%); }
-.art-preview::after { content: ""; position: absolute; inset: auto 10% 12% 18%; height: 28%; border-radius: 999px 999px 24px 24px; background: color-mix(in oklab, var(--fg), transparent 24%); opacity: 0.9; transform: rotate(-4deg); }
+.art-preview:not(:has(img))::before { content: ""; position: absolute; width: 44%; aspect-ratio: 1; border-radius: 50%; background: color-mix(in oklab, var(--accent), var(--surface) 54%); left: 12%; top: 15%; box-shadow: 86px 46px 0 color-mix(in oklab, var(--surface), transparent 20%), 34px 132px 0 color-mix(in oklab, var(--fg), transparent 86%); }
+.art-preview:not(:has(img))::after { content: ""; position: absolute; inset: auto 10% 12% 18%; height: 28%; border-radius: 999px 999px 24px 24px; background: color-mix(in oklab, var(--fg), transparent 24%); opacity: 0.9; transform: rotate(-4deg); }
 .art-body { padding: var(--space-4); }
 .art-title { margin: 0; font-size: var(--text-base); font-weight: 900; line-height: 1.28; }
 .art-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); color: var(--muted); font-size: var(--text-sm); }
