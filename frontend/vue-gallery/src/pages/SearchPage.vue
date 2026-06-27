@@ -1,19 +1,65 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useToast } from '@/composables/useToast'
+import { searchImages, ApiError } from '@/api/client'
+import type { ImageItem } from '@/api/client'
 
 const { show } = useToast()
 
-const keyword = ref('雨夜 角色')
-const tags = ref('雨景, 制服, 暖光')
-const scoreRange = ref('4.5 分以上')
+// Form state
+const keyword = ref('')
+const tags = ref('')
+const scoreRange = ref('不限评分')
 
-const searchSummary = ref('正在展示「雨夜 角色」相关结果，评分范围：4.5 分以上')
+// Results state
+const loading = ref(false)
+const error = ref<string | null>(null)
+const results = ref<ImageItem[]>([])
+const total = ref(0)
+const searchSummary = ref('请输入搜索条件')
 
-const handleSearch = () => {
-  searchSummary.value = `正在展示「${keyword.value}」相关结果，评分范围：${scoreRange.value}`
-  show('筛选条件已应用')
+// Search handler
+async function handleSearch() {
+  loading.value = true
+  error.value = null
+  
+  try {
+    // Parse score range
+    let minScore = 0
+    if (scoreRange.value === '4.5 分以上') minScore = 4.5
+    else if (scoreRange.value === '4.0 - 4.5 分') minScore = 4.0
+    
+    const searchData = await searchImages({
+      keyword: keyword.value || undefined,
+      tags: tags.value || undefined,
+      minScore: minScore > 0 ? minScore : undefined,
+      limit: 20,
+    })
+    
+    results.value = searchData.items
+    total.value = searchData.total
+    
+    searchSummary.value = keyword.value 
+      ? `正在展示「${keyword.value}」相关结果，共 ${total.value} 张作品`
+      : `正在展示 ${total.value} 张作品`
+    
+    show('筛选条件已应用')
+  } catch (e) {
+    if (e instanceof ApiError) {
+      error.value = e.message
+    } else {
+      error.value = '搜索失败，请重试'
+    }
+  } finally {
+    loading.value = false
+  }
 }
+
+// Initial load (optional: show all images)
+onMounted(() => {
+  // Optionally load initial results
+  // handleSearch()
+})
 </script>
 
 <template>
@@ -29,21 +75,23 @@ const handleSearch = () => {
         <div class="panel panel-raised form-grid">
           <label class="field">
             关键词
-            <input class="input" v-model="keyword" />
+            <input class="input" v-model="keyword" placeholder="输入文件名关键词..." />
           </label>
           <label class="field">
             标签
-            <input class="input" v-model="tags" />
+            <input class="input" v-model="tags" placeholder="多个标签用逗号分隔" />
           </label>
           <label class="field">
             评分范围
             <select class="select" v-model="scoreRange">
+              <option>不限评分</option>
               <option>4.5 分以上</option>
               <option>4.0 - 4.5 分</option>
-              <option>不限评分</option>
             </select>
           </label>
-          <button class="btn btn-primary" @click="handleSearch">应用筛选</button>
+          <button class="btn btn-primary" @click="handleSearch" :disabled="loading">
+            {{ loading ? '搜索中...' : '应用筛选' }}
+          </button>
         </div>
       </div>
     </section>
@@ -61,42 +109,32 @@ const handleSearch = () => {
               <span class="meta" data-search-summary>{{ searchSummary }}</span>
             </div>
           </div>
-          <div class="results-list">
-            <article class="result-row">
+          
+          <!-- Error state -->
+          <div v-if="error" class="panel">
+            <p class="meta">{{ error }}</p>
+            <button class="btn btn-secondary" @click="handleSearch">重试</button>
+          </div>
+          
+          <!-- Empty state -->
+          <div v-else-if="results.length === 0 && !loading" class="panel">
+            <p class="meta">暂无结果，请调整搜索条件</p>
+          </div>
+          
+          <!-- Results list -->
+          <div v-else class="results-list">
+            <article v-for="item in results" :key="item.id" class="result-row">
               <div class="thumb"></div>
               <div>
-                <h3>樱雨街角的夜间补光</h3>
-                <p class="meta">文件名：sakura-rain-street-042.png · 标签：雨景、制服、夜色</p>
+                <h3>{{ item.filename }}</h3>
+                <p class="meta">分类：{{ item.category }} · 尺寸：{{ item.width }}x{{ item.height }}</p>
                 <div class="kicker-row">
-                  <span class="tag is-hot">4.8 分</span>
-                  <span class="tag">已收藏</span>
+                  <span v-if="item.avg_rating >= 4.5" class="tag is-hot">{{ item.avg_rating.toFixed(1) }} 分</span>
+                  <span v-else class="tag">{{ item.avg_rating.toFixed(1) }} 分</span>
+                  <span class="tag">{{ item.view_count }} 次浏览</span>
                 </div>
               </div>
-              <RouterLink class="btn btn-secondary btn-small" to="/detail">查看</RouterLink>
-            </article>
-            <article class="result-row">
-              <div class="thumb"></div>
-              <div>
-                <h3>咖啡店窗边回头瞬间</h3>
-                <p class="meta">文件名：window-cafe-turn-018.png · 标签：角色、暖光、室内</p>
-                <div class="kicker-row">
-                  <span class="tag">4.7 分</span>
-                  <span class="tag">可加入相册</span>
-                </div>
-              </div>
-              <RouterLink class="btn btn-secondary btn-small" to="/detail">查看</RouterLink>
-            </article>
-            <article class="result-row">
-              <div class="thumb"></div>
-              <div>
-                <h3>蓝色车站候车室</h3>
-                <p class="meta">文件名：blue-station-platform-009.png · 标签：场景、夜色、构图参考</p>
-                <div class="kicker-row">
-                  <span class="tag">4.6 分</span>
-                  <span class="tag">未打标</span>
-                </div>
-              </div>
-              <RouterLink class="btn btn-secondary btn-small" to="/detail">查看</RouterLink>
+              <RouterLink class="btn btn-secondary btn-small" :to="`/detail?id=${item.id}`">查看</RouterLink>
             </article>
           </div>
         </div>

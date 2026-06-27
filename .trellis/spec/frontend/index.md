@@ -1,39 +1,48 @@
-# Frontend Development Guidelines
+# Frontend Spec Index
 
-> Best practices for frontend development in this project.
+Layer: frontend/vue-gallery
+Language: TypeScript + Vue 3 + Vite
 
----
+## Available Specs
 
-## Overview
+- `api-client.md` - API调用层封装、类型定义、composables使用
+- `design.md` - UI设计规范（如果存在）
 
-This directory contains guidelines for frontend development. Fill in each file with your project's specific conventions.
+## Quick Reference
 
----
+### API Integration Pattern
 
-## Guidelines Index
+```typescript
+// 1. Import API methods and types
+import { getImages, ApiError } from '@/api/client'
+import type { ImageItem } from '@/api/client'
 
-| Guide | Description | Status |
-|-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Module organization and file layout | To fill |
-| [Component Guidelines](./component-guidelines.md) | Component patterns, props, composition | To fill |
-| [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | To fill |
-| [State Management](./state-management.md) | Local state, global state, server state | To fill |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
-| [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
+// 2. Use in composables or pages
+const { user, login, isLoggedIn } = useAuth()
 
----
+// 3. Call API with error handling
+try {
+  const data = await getImages({ limit: 20 })
+} catch (e) {
+  if (e instanceof ApiError) {
+    showError(e.message)
+  }
+}
+```
 
-## How to Fill These Guidelines
+### Type Import Rule (CRITICAL)
 
-For each guideline file:
+All type imports must use `import type` syntax:
 
-1. Document your project's **actual conventions** (not ideals)
-2. Include **code examples** from your codebase
-3. List **forbidden patterns** and why
-4. Add **common mistakes** your team has made
+```typescript
+import type { ImageItem, UserResponse } from '@/api/client'
+```
 
-The goal is to help AI assistants and new team members understand how YOUR project works.
+### API Endpoints
 
----
-
-**Language**: All documentation should be written in **English**.
+All backend APIs are under `/api/v1/*`:
+- Auth: `/api/v1/users/login`, `/api/v1/users/register`, `/api/v1/users/me`
+- Images: `/api/v1/images`, `/api/v1/images/:id`, `/api/v1/search`
+- Tags: `/api/v1/tags`
+- Rankings: `/api/v1/rankings`
+- Collections: `/api/v1/collections` (auth required)
