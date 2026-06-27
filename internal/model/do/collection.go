@@ -33,14 +33,3 @@ type CollectionItem struct {
 func (v CollectionVisibility) IsValid() bool {
 	return v == CollectionVisibilityPrivate || v == CollectionVisibilityPublic
 }
-
-// NormalizeForCreate 补齐收藏夹创建默认值。
-func (c Collection) NormalizeForCreate(now time.Time) Collection {
-	if c.Visibility == "" {
-		c.Visibility = CollectionVisibilityPrivate
-	}
-	if c.CreatedAt.IsZero() {
-		c.CreatedAt = now.UTC()
-	}
-	return c
-}

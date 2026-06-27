@@ -68,17 +68,3 @@ type ImageEvent struct {
 func (i Image) IsActive() bool {
 	return i.Status == "" || i.Status == ImageStatusActive
 }
-
-// NormalizeForCreate 补齐图片创建时的默认字段。
-func (i Image) NormalizeForCreate(now time.Time) Image {
-	if i.Status == "" {
-		i.Status = ImageStatusActive
-	}
-	if i.CreatedAt.IsZero() {
-		i.CreatedAt = now.UTC()
-	}
-	if !i.LastModified.IsZero() {
-		i.LastModified = i.LastModified.UTC()
-	}
-	return i
-}
