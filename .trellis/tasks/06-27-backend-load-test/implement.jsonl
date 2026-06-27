@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/go-http-api.md", "line": 1, "reason": "HTTP API 设计规范，压测脚本需遵循 API 响应格式", "type": "spec"}
+{"file": ".trellis/spec/backend/go-best-practices.md", "line": 1, "reason": "Go 最佳实践，用于并发问题诊断和优化建议", "type": "spec"}
+{"file": "internal/service/view_buffer.go", "line": 61, "reason": "ViewBuffer 并发实现，需要验证 sync.Mutex 在高 QPS 下的表现", "type": "spec"}
+{"file": "internal/repository/rating.go", "line": 35, "reason": "评分事务实现，需要验证并发评分的数据一致性", "type": "spec"}
+{"file": "internal/infra/db/sqlite.go", "line": 33, "reason": "SQLite 连接池配置，需要验证 busy_timeout 和 WAL 模式在并发下的表现", "type": "spec"}

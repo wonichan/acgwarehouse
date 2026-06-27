@@ -1,0 +1,13 @@
+Running 15s test @ http://localhost:7070/api/v1/ping
+  4 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.47ms    1.19ms  26.39ms   81.84%
+    Req/Sec    17.19k     3.13k   26.78k    69.50%
+  Latency Distribution
+     50%    1.23ms
+     75%    1.88ms
+     90%    2.79ms
+     99%    5.68ms
+  1028585 requests in 15.06s, 355.10MB read
+Requests/sec:  68304.29
+Transfer/sec:     23.58MB

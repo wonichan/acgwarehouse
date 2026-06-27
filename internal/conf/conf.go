@@ -158,7 +158,7 @@ func loadDatabaseConfig() DatabaseConfig {
 	return DatabaseConfig{
 		Path:              envString("SQLITE_PATH", defaultDBPath),
 		BusyTimeoutMS:     envInt("SQLITE_BUSY_TIMEOUT_MS", defaultSQLiteTimeout),
-		ReadMaxOpenConns:  envIntWithFallback("SQLITE_READ_MAX_OPEN_CONNS", runtime.NumCPU()),
+		ReadMaxOpenConns:  envIntWithFallback("SQLITE_READ_MAX_OPEN_CONNS", runtime.NumCPU()*4), // 增加读连接池，提升并发能力
 		WriteMaxOpenConns: 1,
 	}
 }
