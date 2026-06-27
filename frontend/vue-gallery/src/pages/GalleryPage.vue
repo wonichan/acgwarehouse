@@ -28,13 +28,17 @@ function imageToArtItem(img: ImageItem): ArtItem {
     else if (ratio > 1.3) previewVariant = 'wide'
   }
   
+  const score = Number.isFinite(img.avg_score) ? img.avg_score : 0
+  const category = img.category || '未分类'
+  
   return {
     id: String(img.id),
     title: img.filename,
-    tags: [img.category, `${img.avg_rating.toFixed(1)}分`],
-    score: img.avg_rating,
+    tags: [category, `${score.toFixed(1)}分`],
+    score,
     favorites: img.favorite_count,
     previewVariant,
+    imageUrl: img.url,
   }
 }
 
@@ -43,14 +47,17 @@ function rankingToSlide(ranking: RankingResponse, index: number): CarouselSlide 
   const variants: Array<'rain' | 'character' | 'album'> = ['rain', 'character', 'album']
   const tags = ['热度上升', '场景焦点', '头像精选']
   
+  const image = ranking.image
+  const score = Number.isFinite(ranking.score) ? ranking.score : 0
+  
   return {
-    id: String(ranking.image_id),
-    title: ranking.filename,
-    description: `排名第${ranking.rank}的热门作品，评分${ranking.score.toFixed(1)}分`,
+    id: String(image.id),
+    title: image.filename,
+    description: `排名第${ranking.rank}的热门作品，热度分${score.toFixed(1)}`,
     tag: tags[index % tags.length],
     tagType: index === 0 ? 'hot' : 'normal',
-    score: ranking.score,
-    favorites: 0,
+    score,
+    favorites: ranking.favorite_count,
     artVariant: variants[index % variants.length],
   }
 }
@@ -115,7 +122,12 @@ onMounted(() => {
             <span class="pill">高评分</span>
           </div>
         </div>
-        <Carousel :slides="carouselSlides" />
+        <Carousel v-if="carouselSlides.length > 0" :slides="carouselSlides" />
+        <aside v-else class="panel panel-raised community-carousel-panel">
+          <p class="eyebrow">本周社区焦点</p>
+          <h3>正在加载社区精选</h3>
+          <p class="meta">热榜数据加载完成后会自动显示。</p>
+        </aside>
       </div>
     </section>
 

@@ -129,8 +129,8 @@ onMounted(() => {
                 <h3>{{ item.filename }}</h3>
                 <p class="meta">分类：{{ item.category }} · 尺寸：{{ item.width }}x{{ item.height }}</p>
                 <div class="kicker-row">
-                  <span v-if="item.avg_rating >= 4.5" class="tag is-hot">{{ item.avg_rating.toFixed(1) }} 分</span>
-                  <span v-else class="tag">{{ item.avg_rating.toFixed(1) }} 分</span>
+                  <span v-if="item.avg_score >= 4.5" class="tag is-hot">{{ item.avg_score.toFixed(1) }} 分</span>
+                  <span v-else class="tag">{{ item.avg_score.toFixed(1) }} 分</span>
                   <span class="tag">{{ item.view_count }} 次浏览</span>
                 </div>
               </div>

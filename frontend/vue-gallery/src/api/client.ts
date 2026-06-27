@@ -85,13 +85,16 @@ export interface ImageItem {
   id: number
   filename: string
   cos_key: string
+  url: string
   width: number
   height: number
   size: number
   category: string
-  avg_rating: number
+  avg_score: number
+  rating_count: number
   view_count: number
   favorite_count: number
+  last_modified: string
   created_at: string
 }
 
@@ -99,11 +102,27 @@ export interface ImageDetailResponse extends ImageItem {
   tags: TagResponse[]
 }
 
+interface BackendListResponse<T> {
+  list: T[]
+  total: number
+  page: number
+  size: number
+}
+
 export interface ImageListResponse {
   items: ImageItem[]
   total: number
   page: number
   limit: number
+}
+
+function normalizeListResponse<T>(response: BackendListResponse<T>): { items: T[]; total: number; page: number; limit: number } {
+  return {
+    items: response.list,
+    total: response.total,
+    page: response.page,
+    limit: response.size,
+  }
 }
 
 export interface TagResponse {
@@ -114,11 +133,15 @@ export interface TagResponse {
 }
 
 export interface RankingResponse {
-  image_id: number
-  filename: string
-  thumbnail_url: string
-  score: number
+  period: string
   rank: number
+  score: number
+  bayesian_score: number
+  rating_count: number
+  favorite_count: number
+  view_count: number
+  computed_at: string
+  image: ImageItem
 }
 
 export interface CollectionResponse {
@@ -189,7 +212,8 @@ export async function getImages(params?: ImageQuery): Promise<ImageListResponse>
   const queryString = query.toString()
   const path = queryString ? `/images?${queryString}` : '/images'
   
-  return unwrapResponse(apiCall<ApiResponse<ImageListResponse>>(path))
+  const response = await unwrapResponse(apiCall<ApiResponse<BackendListResponse<ImageItem>>>(path))
+  return normalizeListResponse(response)
 }
 
 export async function getImage(id: number): Promise<ImageDetailResponse> {
@@ -206,9 +230,10 @@ export async function searchImages(params: SearchQuery): Promise<ImageListRespon
   if (params.page) query.set('page', String(params.page))
   if (params.limit) query.set('limit', String(params.limit))
   
-  return unwrapResponse(
-    apiCall<ApiResponse<ImageListResponse>>(`/search?${query.toString()}`)
+  const response = await unwrapResponse(
+    apiCall<ApiResponse<BackendListResponse<ImageItem>>>(`/search?${query.toString()}`)
   )
+  return normalizeListResponse(response)
 }
 
 export async function getTags(): Promise<TagResponse[]> {
@@ -225,9 +250,10 @@ export async function suggestTags(prefix: string): Promise<TagResponse[]> {
 
 export async function getRankings(limit?: number): Promise<RankingResponse[]> {
   const query = limit ? `?limit=${limit}` : ''
-  return unwrapResponse(
-    apiCall<ApiResponse<RankingResponse[]>>(`/rankings${query}`)
+  const response = await unwrapResponse(
+    apiCall<ApiResponse<BackendListResponse<RankingResponse>>>(`/rankings${query}`)
   )
+  return response.list
 }
 
 export async function getCollections(): Promise<CollectionResponse[]> {
