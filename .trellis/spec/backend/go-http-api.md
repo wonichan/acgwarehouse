@@ -55,6 +55,7 @@ type Response struct {
 - 详情响应必须包含：`image, tags, avg_score, rating_count, favorite_count, my_rating, is_collected, similar_images`。
 - Phase 03 占位约定：标签/评分/收藏/相似图尚未落真实模块时，返回 `tags:[]`、`my_rating:null`、`is_collected:false`、`similar_images:[]`。
 - `GET /api/v1/images/:id` 必须记录 `view` 事件；写入走缓冲器，关闭服务前必须 flush。
+- `GET /api/v1/images/:id` 的本次响应必须立即体现本次浏览：`data.image.view_count` 应为读取到的持久化快照值 `+1`，但不得因此绕过 `ViewBuffer` 改成每次同步写库。
 - 软删除图片不得出现在 list/detail/search；恢复后必须重新可见并重新写入搜索索引。
 
 ### 4. Validation & Error Matrix
@@ -67,12 +68,15 @@ type Response struct {
 ### 5. Good/Base/Bad Cases
 - Good：`GET /images?filename=miku&page=1&size=20` 只返回 active 且 filename 匹配的图片，总数正确。
 - Good：`DELETE /images/:id` 后该图片 detail 返回 404，search 不再返回；`POST /restore` 后重新出现。
+- Good：`GET /api/v1/images/:id` 返回的 `data.image.view_count` 立即包含本次详情浏览，同时只通过 `ViewBuffer` 记录事件，最终异步累加 DB。
 - Base：`tag` 参数和 `sort=tag` 在标签模块前保持兼容，不提前创建标签表。
 - Bad：详情缺少占位字段，导致前端在 Phase 04-06 前后响应结构变化。
+- Bad：详情接口只返回记录前快照的 `view_count`，导致用户点击进入详情后当前页面看不到本次浏览。
+- Bad：为让 `view_count` 立即变化而在 detail 请求路径同步更新 DB，绕过浏览事件缓冲器。
 
 ### 6. Tests Required
 - Repository：filename 过滤/计数、soft delete hide、restore show、事件批量写入并累加 `view_count`。
-- Service：detail 占位字段、view event 记录、search 按索引顺序返回、search total 保持索引总数。
+- Service：detail 占位字段、view event 记录、detail 响应 `view_count` 立即包含本次浏览、search 按索引顺序返回、search total 保持索引总数。
 - Infra search：分页只返回当前页 ID，但 `total` 保持全部命中数。
 - Route smoke（有测试框架时）：公开路由 200，管理员路由 401/403/200 分支。
 
@@ -84,14 +88,23 @@ type Response struct {
 import "github.com/yachiyo/acgwarehouse/internal/service"
 ```
 
+#### Wrong
+```go
+// 记录 view 后仍用旧快照构造响应，当前详情页不会立即显示本次浏览。
+if err := views.RecordView(ctx, event); err != nil {
+    return dto.ImageDetailResponse{}, err
+}
+return newDetailResponse(image)
+```
+
 #### Correct
 ```go
-// 共享搜索契约放在 do 层，service 与 infra/search 都依赖更低层。
-type ImageSearchQuery struct {
-    Text string
-    Page int
-    Size int
+// 持久化仍交给 ViewBuffer；本次响应只补展示增量。
+if err := views.RecordView(ctx, event); err != nil {
+    return dto.ImageDetailResponse{}, err
 }
+image.ViewCount++
+return newDetailResponse(image)
 ```
 
 ## 5. 场景：图片评分 API
