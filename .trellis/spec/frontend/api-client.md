@@ -130,6 +130,7 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 - `searchImages({keyword,limit})` -> `GET /api/v1/search?q=<keyword>&size=<limit>`；不要发送旧 `keyword/tags/min_score/limit`。
 - `suggestTags(text, limit)` -> `GET /api/v1/tags/suggest?q=<text>&limit=<limit>`；不要发送旧 `prefix`。
 - `getRankings({period,page,limit})` -> `GET /api/v1/rankings?period=day|week|month&page=&size=`。
+- 面向图片展示的排名列表必须在页面边界过滤不可展示图片项后再渲染：`image.size > 0`、`image.width > 0`、`image.height > 0`、`image.url.trim().length > 0`、且 `!image.url.trim().endsWith('/')`。目录占位项（例如 `filename=thumbnails`、URL 以 `/` 结尾）不能进入轮播、瀑布流或详情推荐卡片。
 - `getImage(id)` 返回嵌套 detail：`{image,tags,avg_score,rating_count,favorite_count,my_rating,is_collected,similar_images}`。
 - `TagResponse` 字段是 `{id,name,usage_count,created_at,updated_at}`。
 - `CollectionResponse` 字段是 `{id,user_id,name,visibility,created_at,updated_at?,items}`；`items` 是 `{collection_id,image_id,created_at}`，不是完整图片卡片。
@@ -145,6 +146,7 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 | HTTP 200 但 `code !== 0` | throw `ApiError(msg || '请求失败', 200, code)` |
 | `/collections` 未登录返回 401 / 40101 | 页面显示登录提示，不渲染 mock 收藏夹 |
 | 后端返回空 `list` | 页面显示 empty state，不使用 fallback mock |
+| 排名/推荐列表包含目录占位或零尺寸图片 | 页面过滤该条目；如果过滤后为空，显示 empty state，不渲染 broken image 或目录名 |
 | 缺少有效 detail `id` | 详情页显示“请选择一张作品”，不渲染固定示例 |
 | 评分值来自均分小数 | 提交前 round 并 clamp 到 `0-100` |
 
@@ -152,15 +154,18 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 
 - Good：`getImages({limit: 2})` 的 network query 是 `size=2`，返回数据归一化为 `items.length === data.list.length`。
 - Good：热榜 period UI `每日/每周/每月` 映射为 `day/week/month`，切换后重新请求 `/rankings`。
+- Good：社区焦点需要 10 张可展示作品时，可以请求 `getRankings({period: 'week', limit: 20})` 作为缓冲，先过滤不可展示图片项，再 `slice(0, 10)` 渲染真实作品。
 - Good：未登录收藏页展示登录 required 状态，并说明 `/collections` 需要 Bearer token。
 - Base：后端 `similar_images: []` 时详情页显示 empty state。
+- Base：排名接口返回 `filename=thumbnails`、`size=0`、`width=0`、`height=0` 或 URL 以 `/` 结尾时，该条目被跳过，剩余真实图片继续展示。
 - Bad：搜索页展示“标签/评分筛选”并发送后端不消费的 `tags/min_score`，会误导用户以为筛选生效。
 - Bad：收藏夹详情只返回 image_id 时，用静态图片卡片填充 masonry，这是 mock fallback。
+- Bad：将目录占位排名项直接映射成轮播 slide，导致主图显示 broken image alt 文本（如 `thumbnails`）。
 
 #### 6. Tests Required
 
 - Build/type：`npm run build` 必须通过，覆盖 `vue-tsc -b`。
-- API smoke：`curl http://localhost:2018/api/v1/images?size=2` 断言 `data.size=2`；`/rankings?period=day&size=3` 断言 `data.list.length=3`；`/search?q=<term>&size=2` 断言 envelope/list shape；`/collections` 未登录断言 401/`msg`。
+- API smoke：`curl http://localhost:2018/api/v1/images?size=2` 断言 `data.size=2`；`/rankings?period=day&size=3` 断言 envelope/list shape；需要固定展示数量的页面额外断言过滤后 displayable 数量和首个展示项不是目录占位；`/search?q=<term>&size=2` 断言 envelope/list shape；`/collections` 未登录断言 401/`msg`。
 - Proxy smoke：Vite dev server 下访问 `/api/v1/images?size=1` 必须代理到后端，前端源码不得硬编码端口。
 - Page/E2E：浏览图库、热榜、`/detail?id=<known id>`、未登录收藏页，断言真实 API 请求和 loading/error/empty/login-required 状态。
 
@@ -172,6 +177,9 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 // 后端不消费这些参数；错误消息字段也不是 message。
 await apiCall<ApiResponse<ImageListResponse>>('/search?keyword=miku&tags=雨景&limit=20')
 throw new ApiError(response.message, response.status)
+
+// 直接渲染排名结果会把目录占位项显示成 broken image。
+carouselSlides.value = rankingsData.map(rankingToSlide)
 ```
 
 ##### Correct
@@ -191,6 +199,14 @@ return {
   page: response.page,
   limit: response.size,
 }
+
+function hasDisplayableImage(ranking: RankingResponse): boolean {
+  const image = ranking.image
+  const imageUrl = image.url.trim()
+  return image.size > 0 && image.width > 0 && image.height > 0 && imageUrl.length > 0 && !imageUrl.endsWith('/')
+}
+
+carouselSlides.value = rankingsData.filter(hasDisplayableImage).slice(0, 10).map(rankingToSlide)
 ```
 
 ### 认证接口
