@@ -127,6 +127,9 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 - 后端成功/错误 envelope 是 `{code,data,msg}`。前端错误消息优先读取 `msg`，不是 `message`。
 - 后端列表响应是 `{total,page,size,list}`。前端可归一化为 `{items,total,page,limit}`，但请求必须发送 `size`。
 - `getImages({limit})` -> `GET /api/v1/images?size=<limit>`；可发送 `filename/tag/sort/order/page/size`，不要发送旧 `category`。
+- 图库瀑布流自动分页必须显式发送 `getImages({page, limit})`：首屏传 `page: 1`，下一页传 `currentPage + 1`；下一页结果追加到现有列表，不能替换首屏列表。
+- 无限滚动分页必须有 `loadingMore` 或等价锁，避免同一页并发重复请求；必须用列表响应的 `total/page/size` 计算 `hasMore`，全部加载后停止请求。
+- 底部 `IntersectionObserver` / sentinel 必须在首屏加载完成并且 DOM 更新后注册，避免 sentinel 首次相交时因 `loading=true` 被丢弃且不再触发。
 - `searchImages({keyword,limit})` -> `GET /api/v1/search?q=<keyword>&size=<limit>`；不要发送旧 `keyword/tags/min_score/limit`。
 - `suggestTags(text, limit)` -> `GET /api/v1/tags/suggest?q=<text>&limit=<limit>`；不要发送旧 `prefix`。
 - `getRankings({period,page,limit})` -> `GET /api/v1/rankings?period=day|week|month&page=&size=`。
@@ -146,6 +149,9 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 | HTTP 200 但 `code !== 0` | throw `ApiError(msg || '请求失败', 200, code)` |
 | `/collections` 未登录返回 401 / 40101 | 页面显示登录提示，不渲染 mock 收藏夹 |
 | 后端返回空 `list` | 页面显示 empty state，不使用 fallback mock |
+| 瀑布流下一页请求失败 | 保留已加载图片，显示可重试的 next-page 错误状态，不把首屏 `error` 覆盖为整页失败 |
+| 瀑布流已加载数量达到 `total` | `hasMore=false`，停止自动请求下一页并显示已加载全部状态 |
+| 瀑布流下一页仍在请求中 | 忽略新的 sentinel 触发，避免同一页重复请求 |
 | 排名/推荐列表包含目录占位或零尺寸图片 | 页面过滤该条目；如果过滤后为空，显示 empty state，不渲染 broken image 或目录名 |
 | 缺少有效 detail `id` | 详情页显示“请选择一张作品”，不渲染固定示例 |
 | 评分值来自均分小数 | 提交前 round 并 clamp 到 `0-100` |
@@ -153,6 +159,7 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 #### 5. Good / Base / Bad Cases
 
 - Good：`getImages({limit: 2})` 的 network query 是 `size=2`，返回数据归一化为 `items.length === data.list.length`。
+- Good：图库瀑布流首屏请求 `/images?page=1&size=20`，滚动到底部后请求 `/images?page=2&size=20`，并把第二页追加到已有卡片后面。
 - Good：热榜 period UI `每日/每周/每月` 映射为 `day/week/month`，切换后重新请求 `/rankings`。
 - Good：社区焦点需要 10 张可展示作品时，可以请求 `getRankings({period: 'week', limit: 20})` 作为缓冲，先过滤不可展示图片项，再 `slice(0, 10)` 渲染真实作品。
 - Good：未登录收藏页展示登录 required 状态，并说明 `/collections` 需要 Bearer token。
@@ -168,6 +175,7 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 - API smoke：`curl http://localhost:2018/api/v1/images?size=2` 断言 `data.size=2`；`/rankings?period=day&size=3` 断言 envelope/list shape；需要固定展示数量的页面额外断言过滤后 displayable 数量和首个展示项不是目录占位；`/search?q=<term>&size=2` 断言 envelope/list shape；`/collections` 未登录断言 401/`msg`。
 - Proxy smoke：Vite dev server 下访问 `/api/v1/images?size=1` 必须代理到后端，前端源码不得硬编码端口。
 - Page/E2E：浏览图库、热榜、`/detail?id=<known id>`、未登录收藏页，断言真实 API 请求和 loading/error/empty/login-required 状态。
+- Gallery pagination：图库页必须验证滚动到底部会发出 `page=2&size=<pageSize>` 请求；重复 sentinel 触发不会并发请求同一页；`items.length >= total` 后不会继续请求；下一页失败时已加载卡片仍保留并出现重试入口。
 
 #### 7. Wrong vs Correct
 
@@ -180,6 +188,10 @@ throw new ApiError(response.message, response.status)
 
 // 直接渲染排名结果会把目录占位项显示成 broken image。
 carouselSlides.value = rankingsData.map(rankingToSlide)
+
+// 瀑布流分页不能一直请求默认第一页，也不能用下一页覆盖已有列表。
+const imagesData = await getImages({ limit: 20 })
+artItems.value = imagesData.items.map(imageToArtItem)
 ```
 
 ##### Correct
@@ -207,6 +219,20 @@ function hasDisplayableImage(ranking: RankingResponse): boolean {
 }
 
 carouselSlides.value = rankingsData.filter(hasDisplayableImage).slice(0, 10).map(rankingToSlide)
+
+const imagesData = await getImages({ page: currentPage.value + 1, limit: 20 })
+const nextItems = imagesData.items.map(imageToArtItem)
+artItems.value = [...artItems.value, ...nextItems]
+```
+
+##### Infinite scroll setup
+
+```typescript
+async function loadInitialGallery(): Promise<void> {
+  await loadGallery()
+  await nextTick()
+  observeGallerySentinel()
+}
 ```
 
 ### 认证接口
