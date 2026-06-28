@@ -1,0 +1,9 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Check frontend conventions, Vue 3 + Vite scope, and type import rule."}
+{"file":".trellis/spec/frontend/api-client.md","reason":"Check ranking request uses `/api/v1/rankings?period=week` with a request buffer of at least 10 items through API client semantics and does not use mock fallback data."}
+{"file":"DESIGN.md","reason":"Check carousel CSS and markup preserve design-system tokens, focus states, motion rules, and warm community archive identity."}
+{"file":".trellis/tasks/06-28-gallery-community-focus-carousel/prd.md","reason":"Check implementation satisfies requirements and acceptance criteria, especially weekly period and at least 10 requested items."}
+{"file":".trellis/tasks/06-28-gallery-community-focus-carousel/design.md","reason":"Check implementation follows planned data flow, feature-plus-rail UX, accessibility contracts, and scope boundaries."}
+{"file":".trellis/tasks/06-28-gallery-community-focus-carousel/implement.md","reason":"Check all implementation checklist items, validation commands, review gates, and rollback considerations were completed."}
+{"file":"frontend/vue-gallery/src/pages/GalleryPage.vue","reason":"Check the page requests weekly rankings with a buffer, filters to 10 displayable slides, maps real responses, and handles loading/empty/error states."}
+{"file":"frontend/vue-gallery/src/components/Carousel.vue","reason":"Check accessible carousel behavior, readable 10-item navigation, keyboard controls, and no cramped dot-only UX."}
+{"file":"frontend/vue-gallery/src/assets/app.css","reason":"Check responsive layout, no horizontal overflow, token usage, and transform/opacity-only motion."}

@@ -1,0 +1,10 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer overview: Vue 3 + Vite package, API endpoint conventions, and type-import rule."}
+{"file":".trellis/spec/frontend/api-client.md","reason":"Canonical frontend API contract for getRankings period/page/limit mapping, real-data-only behavior, and validation expectations."}
+{"file":"DESIGN.md","reason":"Project design system tokens, component/state patterns, motion rules, and surface/depth constraints for the carousel redesign."}
+{"file":".trellis/tasks/06-28-gallery-community-focus-carousel/prd.md","reason":"Task requirements, weekly ranking decision, scope boundaries, and acceptance criteria."}
+{"file":".trellis/tasks/06-28-gallery-community-focus-carousel/design.md","reason":"Technical design for weekly ranking data flow, feature-plus-rail carousel UX, accessibility, and rollback boundaries."}
+{"file":".trellis/tasks/06-28-gallery-community-focus-carousel/implement.md","reason":"Ordered implementation checklist, validation commands, review gates, and rollback points."}
+{"file":"frontend/vue-gallery/src/pages/GalleryPage.vue","reason":"Current gallery page data loading and current 3-item daily ranking request to change."}
+{"file":"frontend/vue-gallery/src/components/Carousel.vue","reason":"Current carousel markup, keyboard handling, ARIA semantics, controls, and slide rendering to redesign."}
+{"file":"frontend/vue-gallery/src/composables/useCarousel.ts","reason":"Current carousel index, next/prev/goto, offset, and status helpers to preserve or extend carefully."}
+{"file":"frontend/vue-gallery/src/assets/app.css","reason":"Existing design-token declarations and carousel-related CSS to modify without introducing ad-hoc styling."}
