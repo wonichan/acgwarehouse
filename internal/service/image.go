@@ -124,6 +124,7 @@ func (s *ImageService) Detail(ctx context.Context, id int64, userID int64) (dto.
 		}); err != nil {
 			return dto.ImageDetailResponse{}, pkgerrors.WithMessage(err, "record image view")
 		}
+		image.ViewCount++
 	}
 	detail, err := s.newDetailResponse(ctx, image)
 	if err != nil {

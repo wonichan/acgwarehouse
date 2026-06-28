@@ -110,6 +110,9 @@ func Test_ImageService_Detail_returns_placeholder_fields_and_records_view(t *tes
 	if detail.MyRating != nil || detail.IsCollected || len(detail.Tags) != 0 || len(detail.SimilarImages) != 0 {
 		t.Fatalf("detail = %#v, want stable phase-03 placeholders", detail)
 	}
+	if detail.Image.ViewCount != 10 {
+		t.Fatalf("view_count = %d, want current view included", detail.Image.ViewCount)
+	}
 	if len(recorder.events) != 1 || recorder.events[0].ImageID != 7 || recorder.events[0].Type != do.ImageEventTypeView {
 		t.Fatalf("events = %#v, want one view event", recorder.events)
 	}
