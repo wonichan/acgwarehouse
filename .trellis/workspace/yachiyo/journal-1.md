@@ -337,3 +337,37 @@ Implemented automatic infinite scroll pagination for the Vue gallery waterfall, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Fix image detail view count display
+
+**Date**: 2026-06-28
+**Task**: Fix image detail view count display
+**Branch**: `master`
+
+### Summary
+
+Fixed image detail responses so the displayed view_count includes the current detail view while preserving asynchronous ViewBuffer persistence. Added regression coverage and documented the backend API contract.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6c10b76` | (see git log) |
+| `a36e16a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-06-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~339 | Active |
+| `journal-1.md` | ~373 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-06-28 | Fix image detail view count display | `6c10b76`, `a36e16a` | `master` |
 | 8 | 2026-06-28 | Fix gallery waterfall pagination | `1e8490c`, `29b55cc` | `master` |
 | 7 | 2026-06-28 | Gallery community focus carousel redesign | `042172f`, `9170e74` | `master` |
 | 6 | 2026-06-28 | Use backend API data in frontend | `414b19f`, `80ac5c5` | `master` |
