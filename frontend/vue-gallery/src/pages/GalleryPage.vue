@@ -6,6 +6,10 @@ import ArtCard from '@/components/ArtCard.vue'
 import { getImages, getRankings, ApiError } from '@/api/client'
 import type { ImageItem, RankingResponse } from '@/api/client'
 
+const COMMUNITY_FOCUS_PERIOD = 'week' as const
+const COMMUNITY_FOCUS_REQUEST_LIMIT = 20
+const COMMUNITY_FOCUS_DISPLAY_LIMIT = 10
+
 // Loading and error states
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -63,6 +67,12 @@ function rankingToSlide(ranking: RankingResponse, index: number): CarouselSlide 
   }
 }
 
+function hasDisplayableImage(ranking: RankingResponse): boolean {
+  const image = ranking.image
+  const imageUrl = image.url.trim()
+  return image.size > 0 && image.width > 0 && image.height > 0 && imageUrl.length > 0 && !imageUrl.endsWith('/')
+}
+
 // Load gallery data
 async function loadGallery() {
   loading.value = true
@@ -72,12 +82,12 @@ async function loadGallery() {
     // Load images and rankings in parallel
     const [imagesData, rankingsData] = await Promise.all([
       getImages({ limit: 20 }),
-      getRankings({ period: 'day', limit: 3 }),
+      getRankings({ period: COMMUNITY_FOCUS_PERIOD, limit: COMMUNITY_FOCUS_REQUEST_LIMIT }),
     ])
     
     // Convert to display format
     artItems.value = imagesData.items.map(imageToArtItem)
-    carouselSlides.value = rankingsData.map((r, i) => rankingToSlide(r, i))
+    carouselSlides.value = rankingsData.filter(hasDisplayableImage).slice(0, COMMUNITY_FOCUS_DISPLAY_LIMIT).map((r, i) => rankingToSlide(r, i))
   } catch (e) {
     if (e instanceof ApiError) {
       error.value = e.message
@@ -123,10 +133,22 @@ onMounted(() => {
           </div>
         </div>
         <Carousel v-if="carouselSlides.length > 0" :slides="carouselSlides" />
-        <aside v-else class="panel panel-raised community-carousel-panel">
+        <aside v-else class="panel panel-raised community-carousel-panel community-carousel-empty">
           <p class="eyebrow">本周社区焦点</p>
-          <h3>正在加载社区精选</h3>
-          <p class="meta">热榜数据加载完成后会自动显示。</p>
+          <template v-if="loading">
+            <h3>正在加载本周精选</h3>
+            <p class="meta">正在读取本周热榜作品，完成后会自动展示前 10 张有效图片。</p>
+          </template>
+          <template v-else-if="error">
+            <h3>社区焦点加载失败</h3>
+            <p class="meta">{{ error }}</p>
+            <button class="btn btn-secondary btn-small" type="button" @click="loadGallery">重试</button>
+          </template>
+          <template v-else>
+            <h3>本周暂无焦点作品</h3>
+            <p class="meta">社区活动积累后会自动生成每周精选。</p>
+            <RouterLink class="btn btn-secondary btn-small" to="/trending">查看今日热榜</RouterLink>
+          </template>
         </aside>
       </div>
     </section>

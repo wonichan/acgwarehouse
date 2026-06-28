@@ -52,12 +52,15 @@ const handleKeydown = (event: KeyboardEvent) => {
           :aria-label="`${index + 1} / ${slides.length}：${slide.title}`"
           :aria-hidden="index !== currentIndex"
         >
-          <div class="focus-card focus-card-compact">
-            <div class="focus-art" :class="`focus-art-${slide.artVariant}`" aria-hidden="true">
+          <div class="focus-card">
+            <div class="focus-art" :class="`focus-art-${slide.artVariant}`">
               <img v-if="slide.imageUrl" :src="slide.imageUrl" :alt="slide.title" loading="lazy" />
             </div>
             <div class="focus-copy">
-              <span class="tag" :class="{ 'is-hot': slide.tagType === 'hot' }">{{ slide.tag }}</span>
+              <div class="focus-label-row">
+                <span class="tag" :class="{ 'is-hot': slide.tagType === 'hot' }">{{ slide.tag }}</span>
+                <span class="carousel-position">{{ index + 1 }} / {{ slides.length }}</span>
+              </div>
               <h4>{{ slide.title }}</h4>
               <p>{{ slide.description }}</p>
               <div class="focus-stats" :aria-label="`${slide.title}数据`">
@@ -71,16 +74,19 @@ const handleKeydown = (event: KeyboardEvent) => {
     </div>
 
     <div class="carousel-footer">
-      <div class="carousel-dots" aria-label="本周社区焦点分页">
+      <div class="carousel-rail" role="group" aria-label="本周社区焦点快速导航">
         <button
-          v-for="(_, index) in slides"
-          :key="index"
-          class="carousel-dot"
+          v-for="(slide, index) in slides"
+          :key="slide.id"
+          class="carousel-rail-chip"
           type="button"
-          :aria-label="`查看第 ${index + 1} 张：${slides[index].title}`"
+          :aria-label="`查看第 ${index + 1} 张：${slide.title}`"
           :aria-current="index === currentIndex"
           @click="goto(index)"
-        ></button>
+        >
+          <span class="carousel-rail-num">{{ index + 1 }}</span>
+          <span class="carousel-rail-title">{{ slide.title }}</span>
+        </button>
       </div>
       <p class="carousel-status" aria-live="polite">{{ statusText }}</p>
     </div>
