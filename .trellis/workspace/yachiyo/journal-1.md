@@ -269,3 +269,37 @@ Replaced Vue gallery mock and hard-coded dynamic data with real backend API resp
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Gallery community focus carousel redesign
+
+**Date**: 2026-06-28
+**Task**: Gallery community focus carousel redesign
+**Branch**: `master`
+
+### Summary
+
+Redesigned the Vue gallery home community focus carousel to use weekly ranking data, filter non-displayable ranking image rows, and show a 10-item feature-plus-rail carousel. Documented the frontend ranking display contract and verified build, API smoke, responsive Playwright checks, Trellis check, visual QA, and post-implementation review.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `042172f` | (see git log) |
+| `9170e74` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
