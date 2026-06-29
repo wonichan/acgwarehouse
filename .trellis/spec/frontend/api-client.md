@@ -118,6 +118,10 @@ export async function suggestTags(q: string, limit?: number): Promise<readonly T
 export async function getRankings(params?: RankingQuery): Promise<readonly RankingResponse[]>
 export async function getCollections(): Promise<readonly CollectionResponse[]>
 export async function createCollection(name: string, visibility?: 'private' | 'public'): Promise<CollectionResponse>
+export async function addImageToCollection(collectionId: number, imageId: number): Promise<void>
+export async function createTag(name: string): Promise<TagResponse>
+export async function assignTagsToImages(imageIds: readonly number[], tagIds: readonly number[]): Promise<readonly ImageTagResponse[]>
+export async function unassignTagsFromImages(imageIds: readonly number[], tagIds: readonly number[]): Promise<readonly ImageTagResponse[]>
 export async function rateImage(imageId: number, score: number): Promise<RatingResponse>
 export async function getCurrentUser(): Promise<UserResponse>
 export async function updateCurrentUserProfile(input: UserProfileUpdateRequest): Promise<UserResponse>
@@ -141,6 +145,10 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - `TagResponse` 字段是 `{id,name,usage_count,created_at,updated_at}`。
 - `CollectionResponse` 字段是 `{id,user_id,name,visibility,created_at,updated_at?,items}`；`items` 是 `{collection_id,image_id,created_at}`，不是完整图片卡片。
 - `createCollection()` body 是 `{name,visibility}`，`visibility` 默认 `private`；不要发送旧 `description`。
+- `addImageToCollection(collectionId, imageId)` -> `POST /api/v1/collections/:id/items`，body 是 `{image_id}`。
+- `createTag(name)` -> `POST /api/v1/tags`，body 是 `{name}`。
+- `assignTagsToImages(imageIds, tagIds)` -> `POST /api/v1/images/tags`，body 是 `{image_ids,tag_ids}`。
+- `unassignTagsFromImages(imageIds, tagIds)` -> `DELETE /api/v1/images/tags`，body 是 `{image_ids,tag_ids}`。
 - 评分使用后端百分制整数 `0-100`；展示为 `/100`，不要在真实数据页面显示五分制如 `4.8 分`。
 - 用户资料字段必须与后端字符计数语义一致：nickname 1-20 个字符、favorite_tags 0-120 个字符、bio 0-200 个字符。前端校验 CJK 时用字符计数（如 `Array.from(value).length`），不要用字节长度假设。
 - 账户中心保存资料/偏好必须调用 `PUT /api/v1/users/me`；不得用 localStorage 伪造 profile 持久化。密码修改必须调用 `PUT /api/v1/users/password`。
@@ -153,6 +161,8 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 | HTTP 非 2xx，body 非 JSON | throw `ApiError('API Error: <status>', status)` |
 | HTTP 200 但 `code !== 0` | throw `ApiError(msg || '请求失败', 200, code)` |
 | `/collections` 未登录返回 401 / 40101 | 页面显示登录提示，不渲染 mock 收藏夹 |
+| 收藏夹/标签/评分 mutation 未登录 | 阻止调用 mutation API，显示持久 inline 登录提示与 `/account` 链接；toast 只能作为补充 |
+| 批量标签移除 | 发送选中图片 ID 和选中标签 ID 到 `DELETE /images/tags`；不要伪造本地成功 |
 | 后端返回空 `list` | 页面显示 empty state，不使用 fallback mock |
 | 瀑布流下一页请求失败 | 保留已加载图片，显示可重试的 next-page 错误状态，不把首屏 `error` 覆盖为整页失败 |
 | 瀑布流已加载数量达到 `total` | `hasMore=false`，停止自动请求下一页并显示已加载全部状态 |
@@ -171,12 +181,16 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - Good：热榜 period UI `每日/每周/每月` 映射为 `day/week/month`，切换后重新请求 `/rankings`。
 - Good：社区焦点需要 10 张可展示作品时，可以请求 `getRankings({period: 'week', limit: 20})` 作为缓冲，先过滤不可展示图片项，再 `slice(0, 10)` 渲染真实作品。
 - Good：未登录收藏页展示登录 required 状态，并说明 `/collections` 需要 Bearer token。
+- Good：详情页点击“收藏到相册/管理标签/保存评分”且未登录时，渲染 inline `role="alert"` 登录状态与 `/account` 链接，不发送 mutation 请求。
+- Good：批量打标签的移除操作使用真实 `DELETE /images/tags`，body 同时包含 `image_ids` 与 `tag_ids`。
 - Good：账户中心注册成功后自动登录，`GET /users/me` 同步 expanded `UserResponse`；保存资料/偏好后刷新仍保留。
 - Good：20 个中文字符 nickname 前端校验通过，后端也按字符数接受。
 - Base：后端 `similar_images: []` 时详情页显示 empty state。
 - Base：排名接口返回 `filename=thumbnails`、`size=0`、`width=0`、`height=0` 或 URL 以 `/` 结尾时，该条目被跳过，剩余真实图片继续展示。
 - Bad：搜索页展示“标签/评分筛选”并发送后端不消费的 `tags/min_score`，会误导用户以为筛选生效。
 - Bad：收藏夹详情只返回 image_id 时，用静态图片卡片填充 masonry，这是 mock fallback。
+- Bad：点击“加入收藏夹/批量打标签”后只显示成功 toast，不调用真实收藏夹或标签 API。
+- Bad：批量移除标签只更新本地 chip，不调用 `DELETE /images/tags`。
 - Bad：将目录占位排名项直接映射成轮播 slide，导致主图显示 broken image alt 文本（如 `thumbnails`）。
 
 #### 6. Tests Required
@@ -186,6 +200,7 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - Proxy smoke：Vite dev server 下访问 `/api/v1/images?size=1` 必须代理到后端，前端源码不得硬编码端口。
 - Page/E2E：浏览图库、热榜、`/detail?id=<known id>`、未登录收藏页，断言真实 API 请求和 loading/error/empty/login-required 状态。
 - Account E2E：注册自动登录、保存资料、保存偏好、修改密码、退出后用新密码登录并恢复资料；断言 `/users/me` 与 `/users/password` 真实请求返回 200。
+- Favorites/tags E2E：未登录点击详情/批量 mutation action 时断言 inline 登录状态；登录后断言收藏夹列表、创建收藏夹、加入收藏夹、创建标签、批量添加标签、批量移除标签均发出对应 `/collections`、`/tags`、`/images/tags` 请求。
 - Gallery pagination：图库页必须验证滚动到底部会发出 `page=2&size=<pageSize>` 请求；重复 sentinel 触发不会并发请求同一页；`items.length >= total` 后不会继续请求；下一页失败时已加载卡片仍保留并出现重试入口。
 
 #### 7. Wrong vs Correct
@@ -243,6 +258,75 @@ async function loadInitialGallery(): Promise<void> {
   await loadGallery()
   await nextTick()
   observeGallerySentinel()
+}
+```
+
+### 场景：收藏夹与普通用户标签 Mutation
+
+#### 1. Scope / Trigger
+
+- Trigger：前端实现收藏夹选择、创建收藏夹、图片打标/取消打标、批量图片标签操作。
+- Scope：只覆盖普通用户收藏/标签 mutation；管理员标签 CRUD、收藏夹 rename/delete、收藏夹 item removal 不在此场景内。
+
+#### 2. Signatures
+
+```typescript
+export async function createCollection(name: string, visibility?: CollectionVisibility): Promise<CollectionResponse>
+export async function addImageToCollection(collectionId: number, imageId: number): Promise<void>
+export async function createTag(name: string): Promise<TagResponse>
+export async function assignTagsToImages(imageIds: readonly number[], tagIds: readonly number[]): Promise<readonly ImageTagResponse[]>
+export async function unassignTagsFromImages(imageIds: readonly number[], tagIds: readonly number[]): Promise<readonly ImageTagResponse[]>
+```
+
+#### 3. Contracts
+
+- `POST /collections` request：`{name:string, visibility:'private'|'public'}`。
+- `POST /collections/:id/items` request：`{image_id:number}`。
+- `POST /tags` request：`{name:string}`。
+- `POST /images/tags` request：`{image_ids:number[], tag_ids:number[]}`。
+- `DELETE /images/tags` request：`{image_ids:number[], tag_ids:number[]}`。
+- `ImageTagResponse` response：`{image: ImageItem, tags: string[]}`；前端可用 `tags` 刷新可移除标签状态，但详情页最终状态必须以重新 `getImage(id)` 为准。
+
+#### 4. Validation & Error Matrix
+
+| Condition | Frontend behavior |
+|-----------|-------------------|
+| 未登录点击 mutation action | 不调用 mutation API；显示 inline 登录状态与 `/account` 链接 |
+| 批量 selection 含非正整数 ID | mutation 前过滤；过滤后为空则显示 inline error |
+| 创建收藏夹名称为空 | 禁用创建提交，不发送 API |
+| 标签选择为空 | 禁用添加/移除提交，不发送 API |
+| mutation 返回 `ApiError` | 保持 picker 打开，显示后端错误，不清空 selection |
+| mutation 成功 | 详情页重新加载 detail；批量面板只在成功后清空 selection |
+
+#### 5. Good / Base / Bad Cases
+
+- Good：登录后在详情页创建私有/公开收藏夹并添加当前图片；成功后重新加载 detail。
+- Good：批量选择图片后添加标签或移除标签；请求体同时包含所有选中图片 ID 和所有选中标签 ID。
+- Base：没有收藏夹时显示 empty state，并提供创建并添加路径。
+- Bad：用 toast 文案“已加入收藏夹/已打标签”替代真实 API 调用。
+- Bad：把标签写入 localStorage 或 Pinia 来伪造服务器状态。
+
+#### 6. Tests Required
+
+- Build/type：`npm run build` 必须通过。
+- Browser smoke：未登录详情页和批量面板 mutation action 显示持久登录提示。
+- API smoke：登录态下断言 `POST /collections`、`POST /collections/:id/items`、`POST /tags`、`POST /images/tags`、`DELETE /images/tags` 的 method/body 正确。
+
+#### 7. Wrong vs Correct
+
+##### Wrong
+
+```typescript
+show(`${selectedCount.value} 张图片已批量打标签`)
+clear()
+```
+
+##### Correct
+
+```typescript
+const result = await unassignTagsFromImages(validImageIds.value, selectedTagIds)
+if (result.length > 0) {
+  clear()
 }
 ```
 

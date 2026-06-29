@@ -38,22 +38,33 @@ Questions to answer:
 
 ## Styling Patterns
 
-<!-- How styles are applied (CSS modules, styled-components, Tailwind, etc.) -->
+- Prefer existing design-system classes from `frontend/vue-gallery/DESIGN.md` and `src/assets/app.css` (`panel`, `form-grid`, `field`, `status`, `tag`, `btn`, spacing tokens).
+- Task-specific component affordances belong in the component's `<style scoped>` block. Do not add narrow feature selectors to the oversized global `app.css` unless the class is intentionally reusable across the whole app.
+- Scoped styles must use existing CSS variables such as `--space-*`, `--radius-*`, `--border`, `--accent`, and motion tokens; do not introduce one-off colors or hard-coded pixel systems.
 
-(To be filled by the team)
+```vue
+<style scoped>
+.picker-panel { margin-top: var(--space-4); }
+</style>
+```
 
 ---
 
 ## Accessibility
 
-<!-- A11y requirements and patterns -->
+- Mutation actions that require login must render durable visible state, not toast-only feedback.
+- Use `role="alert"` for login-required or mutation error states that appear after user action, and include a `/account` link when login resolves the state.
 
-(To be filled by the team)
+```vue
+<div class="status status--error is-visible" role="alert">
+  <span>请先登录后再管理标签</span>
+  <RouterLink class="btn btn-secondary btn-small" to="/account">去登录</RouterLink>
+</div>
+```
 
 ---
 
 ## Common Mistakes
 
-<!-- Component-related mistakes your team has made -->
-
-(To be filled by the team)
+- Do not replace real mutation workflows with success toasts. If the backend route exists, call it and only show success after it resolves.
+- Do not keep feature-specific picker/list styles in `app.css` just to share them between two components; extract a small component or duplicate a few scoped token-backed rules.
