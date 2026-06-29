@@ -6,6 +6,10 @@ import type { ImageDetailResponse, ImageItem } from '@/api/client'
 import { useAuth } from '@/composables/useAuth'
 import { useToast } from '@/composables/useToast'
 import { useZoom } from '@/composables/useZoom'
+import AuthRequiredStatus from '@/components/AuthRequiredStatus.vue'
+import CollectionPickerPanel from '@/components/CollectionPickerPanel.vue'
+import SimilarImagesPanel from '@/components/SimilarImagesPanel.vue'
+import TagPickerPanel from '@/components/TagPickerPanel.vue'
 
 const route = useRoute()
 const { zoom, zoomIn, zoomOut, reset } = useZoom()
@@ -17,29 +21,21 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const selectedScore = ref(50)
 const savingRating = ref(false)
+const collectionAuthRequired = ref<string | null>(null)
+const tagAuthRequired = ref<string | null>(null)
 
-function firstQueryValue(value: unknown): string | null {
-  if (typeof value === 'string') return value
-  if (Array.isArray(value)) {
-    const first = value[0]
-    return typeof first === 'string' ? first : null
-  }
-  return null
-}
+const collectionPickerRef = ref<InstanceType<typeof CollectionPickerPanel> | null>(null)
+const tagPickerRef = ref<InstanceType<typeof TagPickerPanel> | null>(null)
 
 const imageId = computed<number | null>(() => {
-  const rawValue = firstQueryValue(route.query['id'])
-  if (rawValue === null) return null
-
-  const parsed = Number(rawValue)
+  const v = route.query['id']
+  const raw = typeof v === 'string' ? v : Array.isArray(v) && typeof v[0] === 'string' ? v[0] : null
+  if (raw === null) return null
+  const parsed = Number(raw)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 })
 
 const image = computed<ImageItem | null>(() => detail.value?.image ?? null)
-
-const title = computed(() => image.value?.filename ?? '请选择一张作品')
-const tags = computed(() => detail.value?.tags ?? [])
-const similarImages = computed(() => detail.value?.similar_images ?? [])
 
 function formatScore(value: number): string {
   return Number.isFinite(value) ? value.toFixed(1) : '0.0'
@@ -64,10 +60,8 @@ async function loadDetail(): Promise<void> {
     loading.value = false
     return
   }
-
   loading.value = true
   error.value = null
-
   try {
     const response = await getImage(imageId.value)
     detail.value = response
@@ -87,10 +81,10 @@ async function loadDetail(): Promise<void> {
 async function handleSaveRating(): Promise<void> {
   if (imageId.value === null) return
   if (!isLoggedIn.value) {
-    show('请先登录后再提交评分')
+    tagAuthRequired.value = '请先登录后再提交评分'
+    show(tagAuthRequired.value)
     return
   }
-
   savingRating.value = true
   try {
     const result = await rateImage(imageId.value, selectedScore.value)
@@ -108,23 +102,30 @@ async function handleSaveRating(): Promise<void> {
 }
 
 function handleFavorite(): void {
+  collectionAuthRequired.value = null
   if (!isLoggedIn.value) {
-    show('请先登录后再选择收藏夹')
+    collectionAuthRequired.value = '请先登录后再选择收藏夹'
+    show(collectionAuthRequired.value)
     return
   }
-  show('收藏夹选择流程尚未接入，未执行收藏操作')
+  collectionPickerRef.value?.toggle()
 }
 
 function handleTagging(): void {
+  tagAuthRequired.value = null
   if (!isLoggedIn.value) {
-    show('请先登录后再管理标签')
+    tagAuthRequired.value = '请先登录后再管理标签'
+    show(tagAuthRequired.value)
     return
   }
-  show('个人标签保存接口尚未接入，未写入标签')
+  tagPickerRef.value?.toggle()
 }
 
-function handleDownload(): void {
-  show('当前后端未提供下载接口，可打开原图后手动保存')
+async function onPickerSuccess(message: string): Promise<void> {
+  collectionAuthRequired.value = null
+  tagAuthRequired.value = null
+  show(message)
+  await loadDetail()
 }
 
 onMounted(() => {
@@ -132,6 +133,8 @@ onMounted(() => {
 })
 
 watch(imageId, () => {
+  collectionAuthRequired.value = null
+  tagAuthRequired.value = null
   reset()
   loadDetail()
 })
@@ -173,7 +176,6 @@ watch(imageId, () => {
       </div>
 
       <div v-else-if="detail && image" class="container detail-stage">
-        <!-- Viewer Panel -->
         <article class="panel viewer panel-raised" aria-label="图片放大查看器">
           <div class="viewer-art" :style="`--zoom: ${zoom}`" data-viewer-art>
             <img :src="image.url" :alt="image.filename" />
@@ -185,11 +187,10 @@ watch(imageId, () => {
           </div>
         </article>
 
-        <!-- Side Panel -->
         <aside class="stack">
           <div class="panel panel-raised">
             <p class="eyebrow">作品详情</p>
-            <h1 class="detail-title">{{ title }}</h1>
+            <h1 class="detail-title">{{ image.filename }}</h1>
             <p class="lead">
               {{ image.width }}×{{ image.height }} · {{ formatBytes(image.size) }} · {{ image.category || '未分类' }} · 浏览 {{ image.view_count }} 次
             </p>
@@ -199,13 +200,20 @@ watch(imageId, () => {
               <span class="tag">{{ detail.favorite_count }} 收藏</span>
               <span v-if="detail.is_collected" class="tag">已收藏</span>
               <span v-if="detail.my_rating !== null" class="tag">我的评分 {{ detail.my_rating }}/100</span>
-              <span v-for="tag in tags" :key="tag" class="tag">{{ tag }}</span>
+              <span v-for="tag in detail.tags" :key="tag" class="tag">{{ tag }}</span>
             </div>
             <div class="divider"></div>
             <div class="grid-2">
               <button class="btn btn-primary" type="button" @click="handleFavorite">收藏到相册</button>
-              <button class="btn btn-secondary" type="button" @click="handleDownload">下载说明</button>
+              <button class="btn btn-secondary" type="button" @click="show('当前后端未提供下载接口，可打开原图后手动保存')">下载说明</button>
             </div>
+            <AuthRequiredStatus v-if="collectionAuthRequired" :message="collectionAuthRequired" />
+            <CollectionPickerPanel
+              v-if="imageId !== null"
+              ref="collectionPickerRef"
+              :image-ids="[imageId]"
+              @success="onPickerSuccess('已添加到收藏夹')"
+            />
           </div>
 
           <div class="panel">
@@ -230,36 +238,21 @@ watch(imageId, () => {
               <button class="btn btn-primary" type="button" :disabled="savingRating" @click="handleSaveRating">
                 {{ savingRating ? '保存中...' : '保存评分' }}
               </button>
-              <button class="btn btn-secondary" type="button" @click="handleTagging">标签功能状态</button>
-              <p class="meta">标签分配 UI 与个人标签保存接口尚未完整接入，此页不会伪造保存成功。</p>
+              <button class="btn btn-secondary" type="button" @click="handleTagging">
+                管理标签
+              </button>
+              <AuthRequiredStatus v-if="tagAuthRequired" :message="tagAuthRequired" />
+              <TagPickerPanel
+                v-if="imageId !== null"
+                ref="tagPickerRef"
+                :image-ids="[imageId]"
+                :current-tag-names="detail.tags"
+                @success="onPickerSuccess($event)"
+              />
             </div>
           </div>
 
-          <div class="panel">
-            <div class="panel-head">
-              <div>
-                <p class="eyebrow">相似推荐</p>
-                <h3>同类作品</h3>
-              </div>
-              <RouterLink class="btn btn-secondary btn-small" to="/search">更多</RouterLink>
-            </div>
-            <div v-if="similarImages.length === 0" class="activity-empty">
-              <p class="activity-empty__title">暂无相似作品</p>
-              <p class="activity-empty__desc">后端返回 similar_images 为空时显示此状态。</p>
-            </div>
-            <div v-else class="grid-2">
-              <RouterLink
-                v-for="item in similarImages"
-                :key="item.id"
-                :to="`/detail?id=${item.id}`"
-                :aria-label="`查看${item.filename}详情`"
-              >
-                <div class="thumb">
-                  <img v-if="item.url" :src="item.url" :alt="item.filename" loading="lazy" />
-                </div>
-              </RouterLink>
-            </div>
-          </div>
+          <SimilarImagesPanel :images="detail.similar_images" />
         </aside>
       </div>
     </section>
