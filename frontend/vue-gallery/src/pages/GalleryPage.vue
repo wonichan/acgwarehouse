@@ -4,7 +4,7 @@ import type { ArtItem, CarouselSlide } from '@/types'
 import Carousel from '@/components/Carousel.vue'
 import ArtCard from '@/components/ArtCard.vue'
 import { getImages, getRankings, ApiError } from '@/api/client'
-import type { ImageItem, RankingResponse } from '@/api/client'
+import type { ImageItem, ImageQuery, ImageSort, RankingResponse, SortOrder } from '@/api/client'
 
 const COMMUNITY_FOCUS_PERIOD = 'week' as const
 const COMMUNITY_FOCUS_REQUEST_LIMIT = 20
@@ -30,8 +30,18 @@ const gallerySentinel = ref<HTMLElement | null>(null)
 let galleryObserver: IntersectionObserver | null = null
 
 // Filter state
-const activeFilter = ref('推荐')
-const filters = ['推荐', '最新', '高分参考', '收藏热度']
+const filters = ['推荐', '最新', '高分参考', '收藏热度'] as const
+
+type GalleryFilter = (typeof filters)[number]
+
+const activeFilter = ref<GalleryFilter>('推荐')
+
+const gallerySortByFilter: Record<GalleryFilter, { readonly sort: ImageSort, readonly order: SortOrder }> = {
+  推荐: { sort: 'view_count', order: 'desc' },
+  最新: { sort: 'created_at', order: 'desc' },
+  高分参考: { sort: 'avg_score', order: 'desc' },
+  收藏热度: { sort: 'favorite_count', order: 'desc' },
+}
 
 // Convert API image to ArtItem for display
 function imageToArtItem(img: ImageItem): ArtItem {
@@ -90,6 +100,16 @@ function updatePagination(page: number, total: number): void {
   hasMore.value = artItems.value.length < total
 }
 
+function galleryImageQuery(page: number): ImageQuery {
+  const sort = gallerySortByFilter[activeFilter.value] ?? gallerySortByFilter['推荐']
+  return {
+    page,
+    limit: GALLERY_PAGE_SIZE,
+    sort: sort.sort,
+    order: sort.order,
+  }
+}
+
 async function loadNextGalleryPage(): Promise<void> {
   if (loading.value || loadingMore.value || !hasMore.value) return
 
@@ -98,7 +118,7 @@ async function loadNextGalleryPage(): Promise<void> {
 
   try {
     const nextPage = currentPage.value + 1
-    const imagesData = await getImages({ page: nextPage, limit: GALLERY_PAGE_SIZE })
+    const imagesData = await getImages(galleryImageQuery(nextPage))
     const nextItems = imagesData.items.map(imageToArtItem)
     artItems.value = [...artItems.value, ...nextItems]
     updatePagination(imagesData.page, imagesData.total)
@@ -137,7 +157,7 @@ async function loadGallery() {
   try {
     // Load images and rankings in parallel
     const [imagesData, rankingsData] = await Promise.all([
-      getImages({ page: 1, limit: GALLERY_PAGE_SIZE }),
+      getImages(galleryImageQuery(1)),
       getRankings({ period: COMMUNITY_FOCUS_PERIOD, limit: COMMUNITY_FOCUS_REQUEST_LIMIT }),
     ])
     
@@ -157,9 +177,8 @@ async function loadGallery() {
 }
 
 // Filter handler
-async function handleFilter(filter: string) {
+async function handleFilter(filter: GalleryFilter) {
   activeFilter.value = filter
-  // In future, call API with different sort params
   await loadGallery()
 }
 

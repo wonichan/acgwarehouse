@@ -220,8 +220,12 @@ func imageOrder(query ImageListQuery) string {
 		return "image.created_at " + order
 	case "size":
 		return "image.size " + order
-	case "tag":
-		return defaultImageSort
+	case "avg_score":
+		return "image.avg_score " + order
+	case "favorite_count":
+		return "image.favorite_count " + order
+	case "view_count":
+		return "image.view_count " + order
 	default:
 		return defaultImageSort
 	}

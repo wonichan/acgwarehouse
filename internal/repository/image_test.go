@@ -206,6 +206,49 @@ func Test_ImageRepository_ListActive_filters_by_tag_name(t *testing.T) {
 	}
 }
 
+func Test_ImageRepository_ListActive_sorts_by_engagement_fields(t *testing.T) {
+	// Given
+	database := openTestDatabase(t)
+	repo := repository.NewImageRepository(database.Read, database.Write)
+	for _, image := range []do.Image{
+		{COSKey: "thumbnails/low.png", Filename: "low.png", AvgScore: 10, FavoriteCount: 1, ViewCount: 50, LastModified: fixedImageTime()},
+		{COSKey: "thumbnails/high.png", Filename: "high.png", AvgScore: 90, FavoriteCount: 9, ViewCount: 5, LastModified: fixedImageTime()},
+	} {
+		if _, err := repo.UpsertByCOSKey(context.Background(), image); err != nil {
+			t.Fatalf("insert image: %v", err)
+		}
+	}
+
+	tests := []struct {
+		name string
+		sort string
+		want string
+	}{
+		{name: "score", sort: "avg_score", want: "high.png"},
+		{name: "favorites", sort: "favorite_count", want: "high.png"},
+		{name: "views", sort: "view_count", want: "low.png"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// When
+			images, err := repo.ListActive(context.Background(), repository.ImageListQuery{
+				Page:  1,
+				Size:  10,
+				Sort:  tt.sort,
+				Order: "desc",
+			})
+
+			// Then
+			if err != nil {
+				t.Fatalf("list sorted images: %v", err)
+			}
+			if len(images) == 0 || images[0].Filename != tt.want {
+				t.Fatalf("first image = %#v, want %s first", images, tt.want)
+			}
+		})
+	}
+}
+
 func Test_ImageRepository_SoftDelete_hides_image_then_restore_returns_it(t *testing.T) {
 	// Given
 	database := openTestDatabase(t)

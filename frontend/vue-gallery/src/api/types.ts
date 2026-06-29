@@ -1,6 +1,6 @@
 export type RankingPeriod = 'day' | 'week' | 'month'
 export type CollectionVisibility = 'private' | 'public'
-export type ImageSort = 'created_at' | 'size' | 'tag'
+export type ImageSort = 'created_at' | 'size' | 'avg_score' | 'favorite_count' | 'view_count'
 export type SortOrder = 'asc' | 'desc'
 
 export interface UserResponse {
