@@ -35,6 +35,9 @@ func Test_UserRepository_Create_persists_user_when_username_unique(t *testing.T)
 	if got.ID != created.ID || got.PasswordHash != "hash" || got.Role != do.UserRoleUser {
 		t.Fatalf("stored user = %#v, want created user", got)
 	}
+	if got.Nickname != "" || !got.PublicProfile || !got.EmailNotifications || !got.SyncCollections {
+		t.Fatalf("stored profile defaults = %#v, want database defaults", got)
+	}
 }
 
 func Test_UserRepository_FindByID_returns_not_found_when_missing(t *testing.T) {
@@ -66,6 +69,72 @@ func Test_UserRepository_Create_rejects_duplicate_username(t *testing.T) {
 	// Then
 	if !stderrors.Is(err, repository.ErrUsernameExists) {
 		t.Fatalf("error = %v, want username exists", err)
+	}
+}
+
+func Test_UserRepository_UpdateProfile_persists_profile_fields_when_user_exists(t *testing.T) {
+	// Given
+	database := openTestDatabase(t)
+	repo := repository.NewUserRepository(database.Read, database.Write)
+	created, err := repo.Create(context.Background(), do.User{
+		Username:     "alice",
+		PasswordHash: "hash",
+		Role:         do.UserRoleUser,
+	})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	input := do.User{
+		ID:                 created.ID,
+		Nickname:           "Alice Atelier",
+		FavoriteTags:       "雨景, 制服",
+		Bio:                "收藏高评分角色参考。",
+		PublicProfile:      true,
+		EmailNotifications: false,
+		SyncCollections:    true,
+	}
+
+	// When
+	updated, err := repo.UpdateProfile(context.Background(), input)
+
+	// Then
+	if err != nil {
+		t.Fatalf("update user profile: %v", err)
+	}
+	if updated.Nickname != "Alice Atelier" || updated.FavoriteTags != "雨景, 制服" {
+		t.Fatalf("updated user = %#v, want persisted profile", updated)
+	}
+	if updated.EmailNotifications {
+		t.Fatalf("email notifications = true, want false")
+	}
+}
+
+func Test_UserRepository_UpdatePasswordHash_persists_hash_when_user_exists(t *testing.T) {
+	// Given
+	database := openTestDatabase(t)
+	repo := repository.NewUserRepository(database.Read, database.Write)
+	created, err := repo.Create(context.Background(), do.User{
+		Username:     "alice",
+		PasswordHash: "old-hash",
+		Role:         do.UserRoleUser,
+	})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	// When
+	err = repo.UpdatePasswordHash(context.Background(), created.ID, "new-hash")
+
+	// Then
+	if err != nil {
+		t.Fatalf("update password hash: %v", err)
+	}
+	got, err := repo.FindByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("find user by id: %v", err)
+	}
+	if got.PasswordHash != "new-hash" {
+		t.Fatalf("password hash = %q, want new-hash", got.PasswordHash)
 	}
 }
 

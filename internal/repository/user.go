@@ -69,25 +69,69 @@ func (r *UserRepository) Create(ctx context.Context, user do.User) (do.User, err
 	return toDO(created), nil
 }
 
+// UpdateProfile 更新当前用户公开资料和偏好设置。
+func (r *UserRepository) UpdateProfile(ctx context.Context, user do.User) (do.User, error) {
+	updates := map[string]interface{}{
+		"nickname":            user.Nickname,
+		"favorite_tags":       user.FavoriteTags,
+		"bio":                 user.Bio,
+		"public_profile":      user.PublicProfile,
+		"email_notifications": user.EmailNotifications,
+		"sync_collections":    user.SyncCollections,
+	}
+	result := r.writeDB.WithContext(ctx).Model(&po.User{}).Where("id = ?", user.ID).Updates(updates)
+	if result.Error != nil {
+		return do.User{}, pkgerrors.WithMessage(result.Error, "update user profile")
+	}
+	if result.RowsAffected == 0 {
+		return do.User{}, pkgerrors.WithMessage(ErrUserNotFound, "update user profile")
+	}
+	return r.FindByID(ctx, user.ID)
+}
+
+// UpdatePasswordHash 更新当前用户密码哈希。
+func (r *UserRepository) UpdatePasswordHash(ctx context.Context, userID int64, passwordHash string) error {
+	result := r.writeDB.WithContext(ctx).Model(&po.User{}).Where("id = ?", userID).Update("password_hash", passwordHash)
+	if result.Error != nil {
+		return pkgerrors.WithMessage(result.Error, "update user password hash")
+	}
+	if result.RowsAffected == 0 {
+		return pkgerrors.WithMessage(ErrUserNotFound, "update user password hash")
+	}
+	return nil
+}
+
 // toDO 将持久化对象转换为领域对象。
 func toDO(user po.User) do.User {
 	return do.User{
-		ID:           user.ID,
-		Username:     user.Username,
-		PasswordHash: user.PasswordHash,
-		Role:         do.UserRole(user.Role),
-		CreatedAt:    user.CreatedAt,
+		ID:                 user.ID,
+		Username:           user.Username,
+		PasswordHash:       user.PasswordHash,
+		Role:               do.UserRole(user.Role),
+		Nickname:           user.Nickname,
+		FavoriteTags:       user.FavoriteTags,
+		Bio:                user.Bio,
+		PublicProfile:      user.PublicProfile,
+		EmailNotifications: user.EmailNotifications,
+		SyncCollections:    user.SyncCollections,
+		CreatedAt:          user.CreatedAt,
 	}
 }
 
 // toPO 将领域对象转换为持久化对象。
 func toPO(user do.User) po.User {
 	return po.User{
-		ID:           user.ID,
-		Username:     user.Username,
-		PasswordHash: user.PasswordHash,
-		Role:         string(user.Role),
-		CreatedAt:    user.CreatedAt,
+		ID:                 user.ID,
+		Username:           user.Username,
+		PasswordHash:       user.PasswordHash,
+		Role:               string(user.Role),
+		Nickname:           user.Nickname,
+		FavoriteTags:       user.FavoriteTags,
+		Bio:                user.Bio,
+		PublicProfile:      user.PublicProfile,
+		EmailNotifications: user.EmailNotifications,
+		SyncCollections:    user.SyncCollections,
+		CreatedAt:          user.CreatedAt,
 	}
 }
 
