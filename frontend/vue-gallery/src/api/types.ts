@@ -110,6 +110,11 @@ export interface RatingResponse {
   readonly updated_at: string
 }
 
+export interface ImageTagResponse {
+  readonly image: ImageItem
+  readonly tags: readonly string[]
+}
+
 export interface ImageQuery {
   readonly page?: number
   readonly limit?: number

@@ -7,6 +7,7 @@ import type {
   ImageItem,
   ImageListResponse,
   ImageQuery,
+  ImageTagResponse,
   RankingQuery,
   RankingResponse,
   RatingResponse,
@@ -28,6 +29,7 @@ export type {
   ImageListResponse,
   ImageQuery,
   ImageSort,
+  ImageTagResponse,
   RankingPeriod,
   RankingQuery,
   RankingResponse,
@@ -216,6 +218,39 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
   )
 }
 
+export async function createTag(name: string): Promise<TagResponse> {
+  return unwrapResponse(
+    apiCall<ApiResponse<TagResponse>>(
+      '/tags',
+      { method: 'POST', body: JSON.stringify({ name }) }
+    )
+  )
+}
+
+export async function assignTagsToImages(
+  imageIds: readonly number[],
+  tagIds: readonly number[]
+): Promise<readonly ImageTagResponse[]> {
+  return unwrapResponse(
+    apiCall<ApiResponse<readonly ImageTagResponse[]>>(
+      '/images/tags',
+      { method: 'POST', body: JSON.stringify({ image_ids: imageIds, tag_ids: tagIds }) }
+    )
+  )
+}
+
+export async function unassignTagsFromImages(
+  imageIds: readonly number[],
+  tagIds: readonly number[]
+): Promise<readonly ImageTagResponse[]> {
+  return unwrapResponse(
+    apiCall<ApiResponse<readonly ImageTagResponse[]>>(
+      '/images/tags',
+      { method: 'DELETE', body: JSON.stringify({ image_ids: imageIds, tag_ids: tagIds }) }
+    )
+  )
+}
+
 export const api = {
   login,
   register,
@@ -233,4 +268,7 @@ export const api = {
   createCollection,
   addImageToCollection,
   rateImage,
+  createTag,
+  assignTagsToImages,
+  unassignTagsFromImages,
 }
