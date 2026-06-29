@@ -17,6 +17,7 @@ This directory contains guidelines for backend development.
 | 命名和风格 Spec | [go-naming-and-style.md](./go-naming-and-style.md) | **Filled** |
 | 错误处理 Spec   | [go-error-handling.md](./go-error-handling.md)     | **Filled** |
 | HTTP API Spec   | [go-http-api.md](./go-http-api.md)                 | **Filled** |
+| ????? HTTP ?? Spec | [go-security.md](./go-security.md)                 | **Filled** |
 | 最佳实践 Spec   | [go-best-practices.md](./go-best-practices.md)     | **Filled** |
 | 日志规范 Spec   | [go-logging.md](./go-logging.md)                   | **Filled** |
 | 血缘构建清理契约 | [lineage-build.md](./lineage-build.md)             | **Filled** |
