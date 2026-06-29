@@ -483,3 +483,37 @@ Added SPA fallback metadata for Vue history routes, documented the fallback and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 修复前端快速搜索
+
+**Date**: 2026-06-29
+**Task**: 修复前端快速搜索
+**Branch**: `master`
+
+### Summary
+
+确认前端搜索能力已存在，修复顶栏快速搜索未接线问题：提交关键词跳转到 /search?q=...，搜索页从路由 query 自动请求 /api/v1/search?q=...&size=20，并将 route-driven search 约定写入前端 API spec。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c51901f` | (see git log) |
+| `57883c0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
