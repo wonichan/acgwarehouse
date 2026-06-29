@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
@@ -30,6 +31,9 @@ const (
 	maxUsernameLength = 32
 	minPasswordLength = 6
 	bcryptCost        = 12
+	maxNicknameLength = 20
+	maxTagsLength     = 120
+	maxBioLength      = 200
 )
 
 // UserRepository 定义用户服务依赖的仓储能力。
@@ -37,6 +41,8 @@ type UserRepository interface {
 	FindByUsername(ctx context.Context, username string) (do.User, error)
 	FindByID(ctx context.Context, id int64) (do.User, error)
 	Create(ctx context.Context, user do.User) (do.User, error)
+	UpdateProfile(ctx context.Context, user do.User) (do.User, error)
+	UpdatePasswordHash(ctx context.Context, userID int64, passwordHash string) error
 }
 
 // UserService 提供用户注册、登录和当前用户查询能力。
@@ -102,6 +108,41 @@ func (s *UserService) CurrentUser(ctx context.Context, userID int64) (do.User, e
 	return user.Public(), nil
 }
 
+// UpdateCurrentUserProfile 更新当前用户公开资料和偏好设置。
+func (s *UserService) UpdateCurrentUserProfile(ctx context.Context, userID int64, input do.User) (do.User, error) {
+	profile, err := prepareProfileUpdate(userID, input)
+	if err != nil {
+		return do.User{}, pkgerrors.WithMessage(err, "prepare user profile")
+	}
+	updated, err := s.repo.UpdateProfile(ctx, profile)
+	if err != nil {
+		return do.User{}, pkgerrors.WithMessage(err, "update user profile")
+	}
+	return updated.Public(), nil
+}
+
+// ChangePassword 校验旧密码并更新当前用户密码哈希。
+func (s *UserService) ChangePassword(ctx context.Context, userID int64, oldPassword string, newPassword string) error {
+	if len(newPassword) < minPasswordLength {
+		return pkgerrors.WithMessage(ErrInvalidUserInput, "validate new password")
+	}
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return pkgerrors.WithMessage(err, "find password user")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword)); err != nil {
+		return pkgerrors.WithMessage(ErrInvalidCredential, "compare old password")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcryptCost)
+	if err != nil {
+		return pkgerrors.WithMessage(err, "hash new password")
+	}
+	if err := s.repo.UpdatePasswordHash(ctx, userID, string(hash)); err != nil {
+		return pkgerrors.WithMessage(err, "update password hash")
+	}
+	return nil
+}
+
 // EnsureAdmin 创建首个管理员，若用户名已存在则保持幂等跳过。
 func (s *UserService) EnsureAdmin(ctx context.Context, username string, password string) error {
 	_, err := s.Register(ctx, do.User{Username: username, Password: password, Role: do.UserRoleAdmin})
@@ -126,10 +167,41 @@ func prepareNewUser(user do.User) (do.User, error) {
 	if !user.Role.IsValid() {
 		return do.User{}, pkgerrors.WithMessage(ErrInvalidUserInput, "validate user role")
 	}
+	if user.Nickname == "" {
+		user.Nickname = user.Username
+	}
+	if !user.PublicProfile && !user.EmailNotifications && !user.SyncCollections {
+		user.PublicProfile = true
+		user.EmailNotifications = true
+		user.SyncCollections = true
+	}
 	if user.CreatedAt.IsZero() {
 		user.CreatedAt = time.Now().UTC()
 	}
 	return user, nil
+}
+
+// prepareProfileUpdate 校验并规范化用户资料更新。
+func prepareProfileUpdate(userID int64, input do.User) (do.User, error) {
+	profile := do.User{
+		ID:                 userID,
+		Nickname:           strings.TrimSpace(input.Nickname),
+		FavoriteTags:       strings.TrimSpace(input.FavoriteTags),
+		Bio:                strings.TrimSpace(input.Bio),
+		PublicProfile:      input.PublicProfile,
+		EmailNotifications: input.EmailNotifications,
+		SyncCollections:    input.SyncCollections,
+	}
+	if profile.Nickname == "" || utf8.RuneCountInString(profile.Nickname) > maxNicknameLength {
+		return do.User{}, pkgerrors.WithMessage(ErrInvalidUserInput, "validate nickname")
+	}
+	if utf8.RuneCountInString(profile.FavoriteTags) > maxTagsLength {
+		return do.User{}, pkgerrors.WithMessage(ErrInvalidUserInput, "validate favorite tags")
+	}
+	if utf8.RuneCountInString(profile.Bio) > maxBioLength {
+		return do.User{}, pkgerrors.WithMessage(ErrInvalidUserInput, "validate bio")
+	}
+	return profile, nil
 }
 
 // isValidUsername 判断用户名长度是否满足规则。

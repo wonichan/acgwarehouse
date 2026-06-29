@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,47 +13,6 @@ import (
 	"github.com/yachiyo/acgwarehouse/internal/service"
 	jwtpkg "github.com/yachiyo/acgwarehouse/pkg/jwt"
 )
-
-type memoryUserRepository struct {
-	nextID int64
-	byID   map[int64]do.User
-	byName map[string]do.User
-}
-
-func newMemoryUserRepository() *memoryUserRepository {
-	return &memoryUserRepository{
-		nextID: 1,
-		byID:   make(map[int64]do.User),
-		byName: make(map[string]do.User),
-	}
-}
-
-func (r *memoryUserRepository) FindByUsername(_ context.Context, username string) (do.User, error) {
-	user, ok := r.byName[username]
-	if !ok {
-		return do.User{}, service.ErrUserNotFound
-	}
-	return user, nil
-}
-
-func (r *memoryUserRepository) FindByID(_ context.Context, id int64) (do.User, error) {
-	user, ok := r.byID[id]
-	if !ok {
-		return do.User{}, service.ErrUserNotFound
-	}
-	return user, nil
-}
-
-func (r *memoryUserRepository) Create(_ context.Context, user do.User) (do.User, error) {
-	if _, ok := r.byName[user.Username]; ok {
-		return do.User{}, service.ErrUsernameExists
-	}
-	user.ID = r.nextID
-	r.nextID++
-	r.byID[user.ID] = user
-	r.byName[user.Username] = user
-	return user, nil
-}
 
 func Test_UserService_Register_hashes_password_when_input_valid(t *testing.T) {
 	// Given
@@ -158,5 +118,151 @@ func Test_UserService_CurrentUser_returns_public_user_when_id_exists(t *testing.
 	}
 	if got.Username != "alice" || got.PasswordHash != "" || got.Password != "" {
 		t.Fatalf("current user = %#v, want public alice", got)
+	}
+}
+
+func Test_UserService_UpdateCurrentUserProfile_persists_trimmed_profile_when_input_valid(t *testing.T) {
+	// Given
+	repo := newMemoryUserRepository()
+	svc := service.NewUserService(repo, jwtpkg.NewManager("test-secret", time.Hour))
+	created, err := svc.Register(context.Background(), do.User{
+		Username: "alice",
+		Password: "secret1",
+		Role:     do.UserRoleUser,
+	})
+	if err != nil {
+		t.Fatalf("register user: %v", err)
+	}
+	input := do.User{
+		Nickname:           " Alice Atelier ",
+		FavoriteTags:       "雨景, 制服",
+		Bio:                "  收藏高评分角色参考。  ",
+		PublicProfile:      true,
+		EmailNotifications: false,
+		SyncCollections:    true,
+	}
+
+	// When
+	updated, err := svc.UpdateCurrentUserProfile(context.Background(), created.ID, input)
+
+	// Then
+	if err != nil {
+		t.Fatalf("update current user profile: %v", err)
+	}
+	if updated.Nickname != "Alice Atelier" || updated.Bio != "收藏高评分角色参考。" {
+		t.Fatalf("updated profile = %#v, want trimmed profile", updated)
+	}
+	stored, err := repo.FindByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("find updated user: %v", err)
+	}
+	if stored.FavoriteTags != "雨景, 制服" || stored.EmailNotifications {
+		t.Fatalf("stored preferences = %#v, want persisted preferences", stored)
+	}
+}
+
+func Test_UserService_UpdateCurrentUserProfile_rejects_invalid_profile_fields(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  do.User
+		wantOK bool
+	}{
+		{name: "empty nickname", input: do.User{Nickname: "   ", FavoriteTags: "雨景", Bio: "简介"}},
+		{name: "tags too long", input: do.User{Nickname: "Alice", FavoriteTags: strings.Repeat("标", 121), Bio: "简介"}},
+		{name: "bio too long", input: do.User{Nickname: "Alice", FavoriteTags: "雨景", Bio: strings.Repeat("介", 201)}},
+		{name: "nickname counts unicode characters", input: do.User{Nickname: strings.Repeat("爱", 20), FavoriteTags: strings.Repeat("标", 120), Bio: strings.Repeat("介", 200)}, wantOK: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Given
+			repo := newMemoryUserRepository()
+			svc := service.NewUserService(repo, jwtpkg.NewManager("test-secret", time.Hour))
+			created, err := svc.Register(context.Background(), do.User{
+				Username: "alice",
+				Password: "secret1",
+				Role:     do.UserRoleUser,
+			})
+			if err != nil {
+				t.Fatalf("register user: %v", err)
+			}
+
+			// When
+			_, err = svc.UpdateCurrentUserProfile(context.Background(), created.ID, tt.input)
+
+			// Then
+			if tt.wantOK {
+				if err != nil {
+					t.Fatalf("error = %v, want nil", err)
+				}
+				return
+			}
+			if !errors.Is(err, service.ErrInvalidUserInput) {
+				t.Fatalf("error = %v, want invalid user input", err)
+			}
+		})
+	}
+}
+
+func Test_UserService_ChangePassword_updates_hash_when_old_password_matches(t *testing.T) {
+	// Given
+	repo := newMemoryUserRepository()
+	svc := service.NewUserService(repo, jwtpkg.NewManager("test-secret", time.Hour))
+	created, err := svc.Register(context.Background(), do.User{
+		Username: "alice",
+		Password: "secret1",
+		Role:     do.UserRoleUser,
+	})
+	if err != nil {
+		t.Fatalf("register user: %v", err)
+	}
+
+	// When
+	err = svc.ChangePassword(context.Background(), created.ID, "secret1", "secret2")
+
+	// Then
+	if err != nil {
+		t.Fatalf("change password: %v", err)
+	}
+	stored, err := repo.FindByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("find updated user: %v", err)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(stored.PasswordHash), []byte("secret2")); err != nil {
+		t.Fatalf("compare new bcrypt hash: %v", err)
+	}
+}
+
+func Test_UserService_ChangePassword_rejects_invalid_password_change(t *testing.T) {
+	tests := []struct {
+		name        string
+		oldPassword string
+		newPassword string
+		wantErr     error
+	}{
+		{name: "old password mismatch", oldPassword: "wrong1", newPassword: "secret2", wantErr: service.ErrInvalidCredential},
+		{name: "new password too short", oldPassword: "secret1", newPassword: "short", wantErr: service.ErrInvalidUserInput},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Given
+			repo := newMemoryUserRepository()
+			svc := service.NewUserService(repo, jwtpkg.NewManager("test-secret", time.Hour))
+			created, err := svc.Register(context.Background(), do.User{
+				Username: "alice",
+				Password: "secret1",
+				Role:     do.UserRoleUser,
+			})
+			if err != nil {
+				t.Fatalf("register user: %v", err)
+			}
+
+			// When
+			err = svc.ChangePassword(context.Background(), created.ID, tt.oldPassword, tt.newPassword)
+
+			// Then
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error = %v, want %v", err, tt.wantErr)
+			}
+		})
 	}
 }
