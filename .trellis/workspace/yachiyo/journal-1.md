@@ -448,3 +448,38 @@ Implemented real Vue Gallery favorites and tag management workflows, including t
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: Fix frontend public route 404
+
+**Date**: 2026-06-29
+**Task**: Fix frontend public route 404
+**Branch**: `master`
+
+### Summary
+
+Added SPA fallback metadata for Vue history routes, documented the fallback and serve -s production requirement, rebuilt and redeployed the frontend service, and verified public subroutes return the SPA while /api/v1/ping remains backend JSON.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `64448b4` | (see git log) |
+| `05ad482` | (see git log) |
+| `1842727` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
