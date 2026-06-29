@@ -56,6 +56,8 @@ func registerUserRoutes(group *route.RouterGroup, userService *service.UserServi
 	users.POST("/register", userHandler.Register)
 	users.POST("/login", userHandler.Login)
 	users.GET("/me", middleware.Auth(jwtManager), userHandler.Me)
+	users.PUT("/me", middleware.Auth(jwtManager), userHandler.UpdateMe)
+	users.PUT("/password", middleware.Auth(jwtManager), userHandler.ChangePassword)
 }
 
 // registerImageRoutes 注册图片查询与生命周期路由。

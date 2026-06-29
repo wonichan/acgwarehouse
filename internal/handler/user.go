@@ -58,14 +58,8 @@ func (h *UserHandler) Login(c context.Context, ctx *app.RequestContext) {
 
 // Me 返回当前登录用户公开信息。
 func (h *UserHandler) Me(c context.Context, ctx *app.RequestContext) {
-	userID, ok := ctx.Get("user_id")
+	id, ok := requiredCurrentUserID(c, ctx)
 	if !ok {
-		Fail(c, ctx, consts.StatusUnauthorized, apperrors.CodeUnauthorized, "请先登录", nil)
-		return
-	}
-	id, ok := userID.(int64)
-	if !ok {
-		Fail(c, ctx, consts.StatusUnauthorized, apperrors.CodeUnauthorized, "请先登录", nil)
 		return
 	}
 	user, err := h.userService.CurrentUser(c, id)
@@ -74,6 +68,65 @@ func (h *UserHandler) Me(c context.Context, ctx *app.RequestContext) {
 		return
 	}
 	Success(ctx, toUserResponse(user))
+}
+
+// UpdateMe 更新当前登录用户公开资料和偏好设置。
+func (h *UserHandler) UpdateMe(c context.Context, ctx *app.RequestContext) {
+	id, ok := requiredCurrentUserID(c, ctx)
+	if !ok {
+		return
+	}
+	var input dto.UserProfileUpdateRequest
+	if err := ctx.BindAndValidate(&input); err != nil {
+		Fail(c, ctx, consts.StatusBadRequest, apperrors.CodeInvalidParam, "参数错误", err)
+		return
+	}
+	updated, err := h.userService.UpdateCurrentUserProfile(c, id, do.User{
+		Nickname:           input.Nickname,
+		FavoriteTags:       input.FavoriteTags,
+		Bio:                input.Bio,
+		PublicProfile:      input.PublicProfile,
+		EmailNotifications: input.EmailNotifications,
+		SyncCollections:    input.SyncCollections,
+	})
+	if err != nil {
+		writeUserError(c, ctx, err)
+		return
+	}
+	Success(ctx, toUserResponse(updated))
+}
+
+// ChangePassword 更新当前登录用户密码。
+func (h *UserHandler) ChangePassword(c context.Context, ctx *app.RequestContext) {
+	id, ok := requiredCurrentUserID(c, ctx)
+	if !ok {
+		return
+	}
+	var input dto.UserPasswordUpdateRequest
+	if err := ctx.BindAndValidate(&input); err != nil {
+		Fail(c, ctx, consts.StatusBadRequest, apperrors.CodeInvalidParam, "参数错误", err)
+		return
+	}
+	if err := h.userService.ChangePassword(c, id, input.OldPassword, input.NewPassword); err != nil {
+		writeUserError(c, ctx, err)
+		return
+	}
+	Success(ctx, nil)
+}
+
+// requiredCurrentUserID 读取认证中间件注入的当前用户 ID。
+func requiredCurrentUserID(c context.Context, ctx *app.RequestContext) (int64, bool) {
+	userID, ok := ctx.Get("user_id")
+	if !ok {
+		Fail(c, ctx, consts.StatusUnauthorized, apperrors.CodeUnauthorized, "请先登录", nil)
+		return 0, false
+	}
+	id, ok := userID.(int64)
+	if !ok {
+		Fail(c, ctx, consts.StatusUnauthorized, apperrors.CodeUnauthorized, "请先登录", nil)
+		return 0, false
+	}
+	return id, true
 }
 
 // bindCredential 绑定并校验用户凭据请求体。
@@ -90,7 +143,7 @@ func bindCredential(c context.Context, ctx *app.RequestContext) (dto.UserCredent
 func writeUserError(c context.Context, ctx *app.RequestContext, err error) {
 	switch {
 	case stderrors.Is(err, service.ErrInvalidUserInput):
-		Fail(c, ctx, consts.StatusBadRequest, apperrors.CodeInvalidParam, "用户名或密码不符合规则", err)
+		Fail(c, ctx, consts.StatusBadRequest, apperrors.CodeInvalidParam, "参数不符合规则", err)
 	case stderrors.Is(err, repository.ErrUsernameExists):
 		Fail(c, ctx, consts.StatusBadRequest, apperrors.CodeInvalidParam, "用户名已存在", err)
 	case stderrors.Is(err, service.ErrInvalidCredential):
@@ -105,9 +158,15 @@ func writeUserError(c context.Context, ctx *app.RequestContext, err error) {
 // toUserResponse 将用户领域对象转换为 HTTP 响应 DTO。
 func toUserResponse(user do.User) dto.UserResponse {
 	return dto.UserResponse{
-		ID:        user.ID,
-		Username:  user.Username,
-		Role:      string(user.Role),
-		CreatedAt: FormatTime(user.CreatedAt),
+		ID:                 user.ID,
+		Username:           user.Username,
+		Role:               string(user.Role),
+		CreatedAt:          FormatTime(user.CreatedAt),
+		Nickname:           user.Nickname,
+		FavoriteTags:       user.FavoriteTags,
+		Bio:                user.Bio,
+		PublicProfile:      user.PublicProfile,
+		EmailNotifications: user.EmailNotifications,
+		SyncCollections:    user.SyncCollections,
 	}
 }
