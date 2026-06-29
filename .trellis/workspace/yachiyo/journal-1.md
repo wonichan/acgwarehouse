@@ -371,3 +371,43 @@ Fixed image detail responses so the displayed view_count includes the current de
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: Complete login and profile center
+
+**Date**: 2026-06-29
+**Task**: Complete login and profile center
+**Branch**: `master`
+
+### Summary
+
+Implemented end-to-end login, registration, profile, preference, and password flows across backend and Vue account center; added tests, browser QA, and account API specs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `26dd02d` | (see git log) |
+| `94cf1e9` | (see git log) |
+| `6fa7ea4` | (see git log) |
+| `3b29fd1` | (see git log) |
+| `c6b1bc1` | (see git log) |
+| `8d89679` | (see git log) |
+| `7e2180b` | (see git log) |
+| `91c3762` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
