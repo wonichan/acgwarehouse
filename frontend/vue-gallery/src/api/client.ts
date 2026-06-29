@@ -1,6 +1,7 @@
 import { apiCall, unwrapResponse } from './transport'
 import type {
   CollectionDetailResponse,
+  CollectionItemResponse,
   CollectionResponse,
   CollectionVisibility,
   ImageDetailResponse,
@@ -49,12 +50,23 @@ interface BackendListResponse<T> {
   readonly size: number
 }
 
+interface BackendCollectionResponse extends Omit<CollectionResponse, 'items'> {
+  readonly items?: readonly CollectionItemResponse[]
+}
+
 function normalizeListResponse<T>(response: BackendListResponse<T>): { readonly items: readonly T[]; readonly total: number; readonly page: number; readonly limit: number } {
   return {
     items: response.list,
     total: response.total,
     page: response.page,
     limit: response.size,
+  }
+}
+
+function normalizeCollectionResponse(response: BackendCollectionResponse): CollectionResponse {
+  return {
+    ...response,
+    items: response.items ?? [],
   }
 }
 
@@ -181,23 +193,26 @@ export async function getRankings(params?: RankingQuery): Promise<readonly Ranki
 }
 
 export async function getCollections(): Promise<readonly CollectionResponse[]> {
-  return unwrapResponse(apiCall<ApiResponse<readonly CollectionResponse[]>>('/collections'))
+  const response = await unwrapResponse(apiCall<ApiResponse<readonly BackendCollectionResponse[]>>('/collections'))
+  return response.map(normalizeCollectionResponse)
 }
 
 export async function getCollection(id: number): Promise<CollectionDetailResponse> {
-  return unwrapResponse(apiCall<ApiResponse<CollectionDetailResponse>>(`/collections/${id}`))
+  const response = await unwrapResponse(apiCall<ApiResponse<BackendCollectionResponse>>(`/collections/${id}`))
+  return normalizeCollectionResponse(response)
 }
 
 export async function createCollection(
   name: string,
   visibility: CollectionVisibility = 'private'
 ): Promise<CollectionResponse> {
-  return unwrapResponse(
-    apiCall<ApiResponse<CollectionResponse>>(
+  const response = await unwrapResponse(
+    apiCall<ApiResponse<BackendCollectionResponse>>(
       '/collections',
       { method: 'POST', body: JSON.stringify({ name, visibility }) }
     )
   )
+  return normalizeCollectionResponse(response)
 }
 
 export async function addImageToCollection(collectionId: number, imageId: number): Promise<void> {
