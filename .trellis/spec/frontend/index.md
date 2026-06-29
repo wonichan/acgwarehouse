@@ -38,6 +38,10 @@ All type imports must use `import type` syntax:
 import type { ImageItem, UserResponse } from '@/api/client'
 ```
 
+### Responsive Layout Rule
+
+When modifying frontend UI code, keep desktop, tablet, and mobile layouts working. Check `component-guidelines.md` for the responsive layout contract before changing page, form, list, modal, or navigation styles.
+
 ### API Endpoints
 
 All backend APIs are under `/api/v1/*`:
