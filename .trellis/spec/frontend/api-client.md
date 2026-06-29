@@ -138,6 +138,9 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - 无限滚动分页必须有 `loadingMore` 或等价锁，避免同一页并发重复请求；必须用列表响应的 `total/page/size` 计算 `hasMore`，全部加载后停止请求。
 - 底部 `IntersectionObserver` / sentinel 必须在首屏加载完成并且 DOM 更新后注册，避免 sentinel 首次相交时因 `loading=true` 被丢弃且不再触发。
 - `searchImages({keyword,limit})` -> `GET /api/v1/search?q=<keyword>&size=<limit>`；不要发送旧 `keyword/tags/min_score/limit`。
+- 搜索页的可分享状态必须由路由 query 驱动：`/search?q=<keyword>` 进入页面时应同步搜索输入并自动发起 `searchImages({keyword, limit})`；页面内搜索提交关键词时应先更新 route query，再由 route watcher 触发请求，避免 URL 与结果不一致。
+- 顶栏或其他全局“快速搜索”输入不能只渲染静态 `<input>`；必须是可提交的 `role="search"` 表单或等价可访问控件，非空提交导航到 `/search?q=<keyword>`，空提交导航到 `/search`。
+- 同步搜索输入时 watcher 不能只监听 `route.query.q`；如果同一个组件跨路由常驻（例如全局 header），应同时关注 `route.path` 和 `route.query.q`，避免从其他页面进入 `/search` 时保留旧关键词。
 - `suggestTags(text, limit)` -> `GET /api/v1/tags/suggest?q=<text>&limit=<limit>`；不要发送旧 `prefix`。
 - `getRankings({period,page,limit})` -> `GET /api/v1/rankings?period=day|week|month&page=&size=`。
 - 面向图片展示的排名列表必须在页面边界过滤不可展示图片项后再渲染：`image.size > 0`、`image.width > 0`、`image.height > 0`、`image.url.trim().length > 0`、且 `!image.url.trim().endsWith('/')`。目录占位项（例如 `filename=thumbnails`、URL 以 `/` 结尾）不能进入轮播、瀑布流或详情推荐卡片。
@@ -178,6 +181,8 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 
 - Good：`getImages({limit: 2})` 的 network query 是 `size=2`，返回数据归一化为 `items.length === data.list.length`。
 - Good：图库瀑布流首屏请求 `/images?page=1&size=20`，滚动到底部后请求 `/images?page=2&size=20`，并把第二页追加到已有卡片后面。
+- Good：顶栏快速搜索输入 `miku` 后提交，URL 变为 `/search?q=miku`，搜索页输入同步为 `miku`，network query 是 `/api/v1/search?q=miku&size=20`。
+- Good：直接访问 `/search?q=miku`，页面无需额外点击即可请求 `/api/v1/search?q=miku&size=20` 并更新搜索摘要。
 - Good：热榜 period UI `每日/每周/每月` 映射为 `day/week/month`，切换后重新请求 `/rankings`。
 - Good：社区焦点需要 10 张可展示作品时，可以请求 `getRankings({period: 'week', limit: 20})` 作为缓冲，先过滤不可展示图片项，再 `slice(0, 10)` 渲染真实作品。
 - Good：未登录收藏页展示登录 required 状态，并说明 `/collections` 需要 Bearer token。
@@ -188,6 +193,8 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - Base：后端 `similar_images: []` 时详情页显示 empty state。
 - Base：排名接口返回 `filename=thumbnails`、`size=0`、`width=0`、`height=0` 或 URL 以 `/` 结尾时，该条目被跳过，剩余真实图片继续展示。
 - Bad：搜索页展示“标签/评分筛选”并发送后端不消费的 `tags/min_score`，会误导用户以为筛选生效。
+- Bad：顶栏显示“快速搜索”输入框但没有 `v-model`、提交处理、路由导航或 API 请求，用户输入后无任何搜索行为。
+- Bad：搜索页只在按钮点击时调用 API，直接打开 `/search?q=miku` 不自动搜索，导致可分享 URL 与页面结果脱节。
 - Bad：收藏夹详情只返回 image_id 时，用静态图片卡片填充 masonry，这是 mock fallback。
 - Bad：点击“加入收藏夹/批量打标签”后只显示成功 toast，不调用真实收藏夹或标签 API。
 - Bad：批量移除标签只更新本地 chip，不调用 `DELETE /images/tags`。
