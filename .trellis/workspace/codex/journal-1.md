@@ -19,7 +19,11 @@ Added code-level backend protections: strong JWT secret validation, safe CORS de
 
 ### Main Changes
 
-(Add details)
+- Added startup validation for weak JWT secrets.
+- Reworked CORS to use safe defaults and explicit origin allowlists.
+- Added security headers, request body limiting, and login/register rate limiting.
+- Added focused config, middleware, and router tests.
+- Recorded backend security contracts in `.trellis/spec/backend/go-security.md`.
 
 ### Git Commits
 
@@ -30,7 +34,8 @@ Added code-level backend protections: strong JWT secret validation, safe CORS de
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `go test ./internal/conf ./internal/handler/middleware ./internal/handler/router`
+- [OK] `go test ./internal/...`
 
 ### Status
 
