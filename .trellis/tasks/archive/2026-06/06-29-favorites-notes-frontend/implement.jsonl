@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/api-client.md","reason":"Frontend API client contracts, error handling, backend DTO shape, and validation expectations for /api/v1 integration."}
+{"file":"frontend/vue-gallery/DESIGN.md","reason":"Active Vue Gallery design system for Colorful visual tokens, components, motion, and accessibility rules."}
+{"file":".trellis/tasks/archive/2026-06/06-28-frontend-backend-api-data/design.md","reason":"Prior frontend/backend data integration design documenting collection, tag, detail, and no-mock constraints."}
+{"file":".trellis/tasks/archive/2026-06/06-27-vue-gallery-conversion/prd.md","reason":"Original Vue gallery route/function plan including detail favorite/tag actions, collections, and batch operations."}

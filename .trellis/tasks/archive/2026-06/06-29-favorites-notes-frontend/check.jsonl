@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/api-client.md","reason":"Check API usage, type-import discipline, no mock fallback, and required build/API/browser validation."}
+{"file":"frontend/vue-gallery/DESIGN.md","reason":"Check UI additions against existing design tokens, accessibility, status states, and motion constraints."}
+{"file":".trellis/tasks/06-29-favorites-notes-frontend/prd.md","reason":"Check implemented behavior against corrected favorites + tag-management requirements and acceptance criteria."}
+{"file":".trellis/tasks/06-29-favorites-notes-frontend/design.md","reason":"Check implementation follows planned frontend boundaries, API contracts, UI flows, and rollback constraints."}
