@@ -411,3 +411,40 @@ Implemented end-to-end login, registration, profile, preference, and password fl
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Favorites and tag frontend workflows
+
+**Date**: 2026-06-29
+**Task**: Favorites and tag frontend workflows
+**Branch**: `master`
+
+### Summary
+
+Implemented real Vue Gallery favorites and tag management workflows, including typed collection/tag API helpers, reusable picker panels, detail and batch mutation flows, collection visibility selection, updated frontend specs, and verified with build, trellis-check, and browser smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c806474` | (see git log) |
+| `2c2df69` | (see git log) |
+| `d3a1ea8` | (see git log) |
+| `850de3d` | (see git log) |
+| `468114e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

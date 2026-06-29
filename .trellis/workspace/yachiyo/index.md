@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
+- **Total Sessions**: 11
 - **Last Active**: 2026-06-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~413 | Active |
+| `journal-1.md` | ~450 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-06-29 | Favorites and tag frontend workflows | `c806474`, `2c2df69`, `d3a1ea8`, `850de3d`, `468114e` | `master` |
 | 10 | 2026-06-29 | Complete login and profile center | `26dd02d`, `94cf1e9`, `6fa7ea4`, `3b29fd1`, `c6b1bc1`, `8d89679`, `7e2180b`, `91c3762` | `master` |
 | 9 | 2026-06-28 | Fix image detail view count display | `6c10b76`, `a36e16a` | `master` |
 | 8 | 2026-06-28 | Fix gallery waterfall pagination | `1e8490c`, `29b55cc` | `master` |
