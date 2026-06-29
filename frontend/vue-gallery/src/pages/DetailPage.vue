@@ -23,6 +23,9 @@ const selectedScore = ref(50)
 const savingRating = ref(false)
 const collectionAuthRequired = ref<string | null>(null)
 const tagAuthRequired = ref<string | null>(null)
+const ratingScoreMin = 0
+const ratingScoreMax = 100
+const ratingScoreDefault = 50
 
 const collectionPickerRef = ref<InstanceType<typeof CollectionPickerPanel> | null>(null)
 const tagPickerRef = ref<InstanceType<typeof TagPickerPanel> | null>(null)
@@ -49,8 +52,8 @@ function formatBytes(value: number): string {
 }
 
 function clampRatingScore(value: number | null): number {
-  if (value === null || !Number.isFinite(value)) return 50
-  return Math.min(100, Math.max(0, Math.round(value)))
+  if (value === null || !Number.isFinite(value)) return ratingScoreDefault
+  return Math.min(ratingScoreMax, Math.max(ratingScoreMin, Math.round(value)))
 }
 
 async function loadDetail(): Promise<void> {
@@ -87,7 +90,7 @@ async function handleSaveRating(): Promise<void> {
   }
   savingRating.value = true
   try {
-    const result = await rateImage(imageId.value, selectedScore.value)
+    const result = await rateImage(imageId.value, clampRatingScore(selectedScore.value))
     show(`评分已更新为 ${result.score}/100`)
     await loadDetail()
   } catch (e) {
@@ -227,13 +230,16 @@ watch(imageId, () => {
             <div class="form-grid">
               <label class="field">
                 个人评分
-                <select class="select" v-model.number="selectedScore">
-                  <option :value="100">100 分</option>
-                  <option :value="75">75 分</option>
-                  <option :value="50">50 分</option>
-                  <option :value="25">25 分</option>
-                  <option :value="0">0 分</option>
-                </select>
+                <input
+                  v-model.number="selectedScore"
+                  class="input"
+                  type="number"
+                  :min="ratingScoreMin"
+                  :max="ratingScoreMax"
+                  step="1"
+                  inputmode="numeric"
+                  @change="selectedScore = clampRatingScore(selectedScore)"
+                />
               </label>
               <button class="btn btn-primary" type="button" :disabled="savingRating" @click="handleSaveRating">
                 {{ savingRating ? '保存中...' : '保存评分' }}
