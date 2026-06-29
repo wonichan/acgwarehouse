@@ -15,3 +15,7 @@ data/
 # OS / editor cruft
 .DS_Store
 *.swp
+dist/
+.playwright-mcp/
+.agents/
+.codex
