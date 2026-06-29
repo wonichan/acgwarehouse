@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import type { LocationQueryValue } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
+const router = useRouter()
 const { user, isLoggedIn } = useAuth()
+const quickSearchKeyword = ref('')
 
 const currentPath = computed(() => route.path)
 const accountLabel = computed(() => {
@@ -19,6 +22,28 @@ const navItems = [
   { path: '/collections', label: '收藏夹' },
   { path: '/account', label: '我的' }
 ] as const
+
+function queryKeyword(value: LocationQueryValue | LocationQueryValue[]): string {
+  if (Array.isArray(value)) {
+    return value.find((item): item is string => typeof item === 'string') ?? ''
+  }
+  return value ?? ''
+}
+
+watch(
+  () => [route.path, route.query.q] as const,
+  ([path, value]) => {
+    if (path === '/search') {
+      quickSearchKeyword.value = queryKeyword(value).trim()
+    }
+  },
+  { immediate: true }
+)
+
+async function handleQuickSearch(): Promise<void> {
+  const q = quickSearchKeyword.value.trim()
+  await router.push(q.length > 0 ? { path: '/search', query: { q } } : { path: '/search' })
+}
 </script>
 
 <template>
@@ -40,10 +65,10 @@ const navItems = [
           {{ item.label }}
         </RouterLink>
       </nav>
-      <div class="nav-actions">
-        <input class="search-mini" aria-label="快速搜索" placeholder="搜索标签、文件名" />
+      <form class="nav-actions" role="search" @submit.prevent="handleQuickSearch">
+        <input v-model="quickSearchKeyword" class="search-mini" aria-label="快速搜索" placeholder="搜索标签、文件名" />
         <RouterLink class="btn btn-secondary btn-small" to="/account">{{ accountLabel }}</RouterLink>
-      </div>
+      </form>
     </div>
   </header>
 </template>

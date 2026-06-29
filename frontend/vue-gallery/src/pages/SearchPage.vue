@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import type { LocationQueryValue } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { ApiError, searchImages } from '@/api/client'
 import type { ImageItem } from '@/api/client'
 
 const { show } = useToast()
+const route = useRoute()
+const router = useRouter()
+
+const SEARCH_RESULT_LIMIT = 20
 
 const keyword = ref('')
 const loading = ref(false)
@@ -17,24 +23,39 @@ function formatScore(value: number): string {
   return Number.isFinite(value) ? value.toFixed(1) : '0.0'
 }
 
-async function handleSearch(): Promise<void> {
+function queryKeyword(value: LocationQueryValue | LocationQueryValue[]): string {
+  if (Array.isArray(value)) {
+    return value.find((item): item is string => typeof item === 'string') ?? ''
+  }
+  return value ?? ''
+}
+
+function resetSearchPrompt(): void {
+  error.value = null
+  results.value = []
+  total.value = 0
+  searchSummary.value = '请输入文件名或关键词搜索'
+}
+
+async function runSearch(rawKeyword: string, notify: boolean): Promise<void> {
+  const searchKeyword = rawKeyword.trim()
   loading.value = true
   error.value = null
 
   try {
     const searchData = await searchImages({
-      keyword: keyword.value.trim() || undefined,
-      limit: 20,
+      keyword: searchKeyword || undefined,
+      limit: SEARCH_RESULT_LIMIT,
     })
 
     results.value = searchData.items
     total.value = searchData.total
 
-    searchSummary.value = keyword.value.trim().length > 0
-      ? `正在展示「${keyword.value.trim()}」相关结果，共 ${total.value} 张作品`
+    searchSummary.value = searchKeyword.length > 0
+      ? `正在展示「${searchKeyword}」相关结果，共 ${total.value} 张作品`
       : `正在展示 ${total.value} 张作品`
 
-    show('已按后端 q 参数完成搜索')
+    if (notify) show('已按后端 q 参数完成搜索')
   } catch (e) {
     if (e instanceof ApiError) {
       error.value = e.message
@@ -45,6 +66,44 @@ async function handleSearch(): Promise<void> {
     loading.value = false
   }
 }
+
+async function handleSearch(): Promise<void> {
+  await runSearch(keyword.value, true)
+}
+
+async function submitSearch(): Promise<void> {
+  const searchKeyword = keyword.value.trim()
+  const currentKeyword = queryKeyword(route.query.q).trim()
+
+  if (searchKeyword.length === 0) {
+    if (currentKeyword.length > 0) {
+      await router.push({ path: '/search' })
+    }
+    await handleSearch()
+    return
+  }
+
+  if (searchKeyword === currentKeyword) {
+    await handleSearch()
+    return
+  }
+
+  await router.push({ path: '/search', query: { q: searchKeyword } })
+}
+
+watch(
+  () => route.query.q,
+  value => {
+    const searchKeyword = queryKeyword(value).trim()
+    keyword.value = searchKeyword
+    if (searchKeyword.length === 0) {
+      resetSearchPrompt()
+      return
+    }
+    void runSearch(searchKeyword, false)
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -60,10 +119,10 @@ async function handleSearch(): Promise<void> {
         <div class="panel panel-raised form-grid">
           <label class="field">
             关键词
-            <input class="input" v-model="keyword" placeholder="输入文件名关键词..." @keyup.enter="handleSearch" />
+            <input class="input" v-model="keyword" placeholder="输入文件名关键词..." @keyup.enter="submitSearch" />
           </label>
           <p class="meta">请求会发送到 /api/v1/search?q=关键词&size=20，不会伪造未支持的标签或评分筛选。</p>
-          <button class="btn btn-primary" type="button" @click="handleSearch" :disabled="loading">
+          <button class="btn btn-primary" type="button" @click="submitSearch" :disabled="loading">
             {{ loading ? '搜索中...' : '应用搜索' }}
           </button>
         </div>
