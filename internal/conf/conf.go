@@ -4,6 +4,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	pkgerrors "github.com/pkg/errors"
@@ -21,13 +22,17 @@ const (
 	defaultCOSSecretKey      = "COS_SECRET_KEY_PLACEHOLDER"
 	defaultJWTSecret         = "JWT_SECRET_PLACEHOLDER"
 	defaultJWTDuration       = "168h"
-	defaultCORSAllowOrigin   = "*"
+	defaultCORSAllowOrigin   = ""
+	defaultMaxRequestBody    = "1048576"
+	defaultRateLimitRPS      = "2"
+	defaultRateLimitBurst    = "5"
 	defaultRankingWeight     = "1"
 	defaultBayesianC         = "10"
 	defaultRankingInterval   = "10m"
 	defaultViewFlushInterval = "1s"
 	defaultSQLiteTimeout     = "5000"
 	defaultLogLevel          = "info"
+	minJWTSecretLength       = 32
 )
 
 // Config 保存服务启动所需的全部环境配置。
@@ -80,8 +85,11 @@ type COSConfig struct {
 
 // SecurityConfig 保存认证与令牌配置。
 type SecurityConfig struct {
-	JWTSecret   string
-	JWTDuration time.Duration
+	JWTSecret           string
+	JWTDuration         time.Duration
+	MaxRequestBodyBytes int
+	RateLimitRPS        float64
+	RateLimitBurst      int
 }
 
 // RankingConfig 保存热榜计算配置。
@@ -106,7 +114,7 @@ type AdminConfig struct {
 
 // CORSConfig 保存跨域访问配置。
 type CORSConfig struct {
-	AllowOrigin string
+	AllowOrigins []string
 }
 
 // LogConfig 保存日志配置。
@@ -131,18 +139,22 @@ func Load() (Config, error) {
 		return Config{}, pkgerrors.WithMessage(err, "load view flush interval")
 	}
 
-	return Config{
+	cfg := Config{
 		Server:   loadServerConfig(),
 		Database: loadDatabaseConfig(),
 		Search:   SearchConfig{BlevePath: envString("BLEVE_PATH", defaultBlevePath)},
 		COS:      loadCOSConfig(),
-		Security: SecurityConfig{JWTSecret: envString("JWT_SECRET", defaultJWTSecret), JWTDuration: jwtDuration},
+		Security: loadSecurityConfig(jwtDuration),
 		Ranking:  loadRankingConfig(rankingInterval),
 		View:     ViewConfig{FlushInterval: viewFlushInterval},
 		Admin:    loadAdminConfig(),
-		CORS:     CORSConfig{AllowOrigin: envString("CORS_ALLOW_ORIGIN", defaultCORSAllowOrigin)},
+		CORS:     CORSConfig{AllowOrigins: envList("CORS_ALLOW_ORIGIN", defaultCORSAllowOrigin)},
 		Log:      LogConfig{Level: envString("LOG_LEVEL", defaultLogLevel)},
-	}, nil
+	}
+	if err := validateSecurityConfig(cfg.Security); err != nil {
+		return Config{}, pkgerrors.WithMessage(err, "validate security config")
+	}
+	return cfg, nil
 }
 
 // loadServerConfig 读取 HTTP 服务配置。
@@ -175,6 +187,35 @@ func loadCOSConfig() COSConfig {
 	}
 }
 
+// loadSecurityConfig 读取认证、防刷与请求体限制配置。
+func loadSecurityConfig(jwtDuration time.Duration) SecurityConfig {
+	return SecurityConfig{
+		JWTSecret:           envString("JWT_SECRET", defaultJWTSecret),
+		JWTDuration:         jwtDuration,
+		MaxRequestBodyBytes: envIntWithFallback("MAX_REQUEST_BODY_BYTES", mustAtoi(defaultMaxRequestBody)),
+		RateLimitRPS:        envFloatWithFallback("RATE_LIMIT_RPS", mustAtof(defaultRateLimitRPS)),
+		RateLimitBurst:      envIntWithFallback("RATE_LIMIT_BURST", mustAtoi(defaultRateLimitBurst)),
+	}
+}
+
+// validateSecurityConfig 拒绝会让公网服务裸奔的弱安全配置。
+func validateSecurityConfig(cfg SecurityConfig) error {
+	secret := strings.TrimSpace(cfg.JWTSecret)
+	if secret == "" || secret == defaultJWTSecret || len(secret) < minJWTSecretLength {
+		return pkgerrors.New("jwt secret must be configured with at least 32 characters")
+	}
+	if cfg.MaxRequestBodyBytes <= 0 {
+		return pkgerrors.New("max request body bytes must be positive")
+	}
+	if cfg.RateLimitRPS <= 0 {
+		return pkgerrors.New("rate limit rps must be positive")
+	}
+	if cfg.RateLimitBurst <= 0 {
+		return pkgerrors.New("rate limit burst must be positive")
+	}
+	return nil
+}
+
 // loadRankingConfig 读取热榜计算配置。
 func loadRankingConfig(recomputeInterval time.Duration) RankingConfig {
 	return RankingConfig{
@@ -201,6 +242,20 @@ func envString(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// envList 读取逗号分隔的字符串列表，并去除空白项。
+func envList(key string, fallback string) []string {
+	raw := envString(key, fallback)
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	return values
 }
 
 // envInt 读取整数环境变量。
@@ -234,6 +289,19 @@ func envFloat(key string, fallback string) float64 {
 	return parsed
 }
 
+// envFloatWithFallback 读取浮点环境变量，解析失败时返回数值默认值。
+func envFloatWithFallback(key string, fallback float64) float64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
 // envDuration 读取时间间隔环境变量。
 func envDuration(key string, fallback string) (time.Duration, error) {
 	duration, err := time.ParseDuration(envString(key, fallback))
@@ -241,4 +309,22 @@ func envDuration(key string, fallback string) (time.Duration, error) {
 		return 0, pkgerrors.WithMessage(err, "parse duration")
 	}
 	return duration, nil
+}
+
+// mustAtoi 将常量默认值转换为整数。
+func mustAtoi(value string) int {
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		panic(err)
+	}
+	return parsed
+}
+
+// mustAtof 将常量默认值转换为浮点数。
+func mustAtof(value string) float64 {
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		panic(err)
+	}
+	return parsed
 }

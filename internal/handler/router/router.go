@@ -25,23 +25,38 @@ type Services struct {
 	Ranking    *service.RankingService
 }
 
+// Options 保存路由安全中间件配置。
+type Options struct {
+	RateLimitRPS   float64
+	RateLimitBurst int
+}
+
 // New 创建 Hertz 路由引擎并注册基础路由。
 func New(cfg conf.Config, services Services) *server.Hertz {
-	engine := server.Default(server.WithHostPorts(cfg.Server.Address()))
-	engine.Use(middleware.CORS(cfg.CORS.AllowOrigin))
-	Register(
-		engine,
-		services,
-		jwtpkg.NewManager(cfg.Security.JWTSecret, cfg.Security.JWTDuration),
+	engine := server.Default(
+		server.WithHostPorts(cfg.Server.Address()),
+		server.WithMaxRequestBodySize(cfg.Security.MaxRequestBodyBytes),
 	)
+	engine.Use(middleware.SecurityHeaders())
+	engine.Use(middleware.RequestBodyLimit(cfg.Security.MaxRequestBodyBytes))
+	engine.Use(middleware.CORS(cfg.CORS.AllowOrigins...))
+	RegisterWithOptions(engine, services, jwtpkg.NewManager(cfg.Security.JWTSecret, cfg.Security.JWTDuration), Options{
+		RateLimitRPS:   cfg.Security.RateLimitRPS,
+		RateLimitBurst: cfg.Security.RateLimitBurst,
+	})
 	return engine
 }
 
 // Register 注册 API v1 路由骨架。
 func Register(engine *server.Hertz, services Services, jwtManager *jwtpkg.Manager) {
+	RegisterWithOptions(engine, services, jwtManager, Options{})
+}
+
+// RegisterWithOptions 按指定安全选项注册 API v1 路由骨架。
+func RegisterWithOptions(engine *server.Hertz, services Services, jwtManager *jwtpkg.Manager, opts Options) {
 	v1 := engine.Group("/api/v1")
 	v1.GET("/ping", ping)
-	registerUserRoutes(v1, services.User, jwtManager)
+	registerUserRoutes(v1, services.User, jwtManager, opts)
 	registerImageRoutes(v1, services.Image, jwtManager)
 	registerTagRoutes(v1, services.Tag, jwtManager)
 	registerRatingRoutes(v1, services.Rating, jwtManager)
@@ -50,11 +65,15 @@ func Register(engine *server.Hertz, services Services, jwtManager *jwtpkg.Manage
 }
 
 // registerUserRoutes 注册用户认证路由。
-func registerUserRoutes(group *route.RouterGroup, userService *service.UserService, jwtManager *jwtpkg.Manager) {
+func registerUserRoutes(group *route.RouterGroup, userService *service.UserService, jwtManager *jwtpkg.Manager, opts Options) {
 	userHandler := handler.NewUserHandler(userService)
 	users := group.Group("/users")
-	users.POST("/register", userHandler.Register)
-	users.POST("/login", userHandler.Login)
+	var loginLimiter *middleware.RateLimiter
+	if opts.RateLimitRPS > 0 && opts.RateLimitBurst > 0 {
+		loginLimiter = middleware.NewRateLimiter(opts.RateLimitRPS, opts.RateLimitBurst)
+	}
+	users.POST("/register", middleware.RateLimit(loginLimiter), userHandler.Register)
+	users.POST("/login", middleware.RateLimit(loginLimiter), userHandler.Login)
 	users.GET("/me", middleware.Auth(jwtManager), userHandler.Me)
 	users.PUT("/me", middleware.Auth(jwtManager), userHandler.UpdateMe)
 	users.PUT("/password", middleware.Auth(jwtManager), userHandler.ChangePassword)
