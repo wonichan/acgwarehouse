@@ -8,7 +8,7 @@ import { useToast } from '@/composables/useToast'
 const { show } = useToast()
 const { isLoggedIn, loading: authLoading } = useAuth()
 
-const albumName = ref('雨夜角色参考')
+const albumName = ref('')
 const albumVisibility = ref<CollectionResponse['visibility']>('private')
 const collections = ref<readonly CollectionResponse[]>([])
 const loading = ref(false)
@@ -94,14 +94,6 @@ async function handleCreateAlbum(): Promise<void> {
   } finally {
     creating.value = false
   }
-}
-
-function handleBatchUnavailable(): void {
-  if (!isLoggedIn.value) {
-    show('请先登录后再管理收藏夹')
-    return
-  }
-  show('批量下载和批量打标后端流程尚未接入，未执行操作')
 }
 
 onMounted(() => {
@@ -222,23 +214,6 @@ watch(isLoggedIn, () => {
       </div>
     </section>
 
-    <!-- Batch Section -->
-    <section class="section" data-od-id="collection-batch">
-      <div class="container grid-main">
-        <div class="panel panel-raised">
-          <p class="eyebrow">收藏内容</p>
-          <h3>展示真实收藏条目</h3>
-          <p class="meta">收藏夹列表现在展示后端返回的真实 collection item，并按 image_id 跳转到作品详情；不使用 mock 图片卡片。</p>
-        </div>
-        <aside class="panel">
-          <p class="eyebrow">批量操作面板</p>
-          <h3>真实接口优先</h3>
-          <p class="meta">批量下载与批量打标签缺少完整后端/UI 流程，因此不会伪造成功提示。</p>
-          <div class="divider"></div>
-          <button class="btn btn-secondary" type="button" @click="handleBatchUnavailable">查看功能状态</button>
-        </aside>
-      </div>
-    </section>
   </main>
 </template>
 
