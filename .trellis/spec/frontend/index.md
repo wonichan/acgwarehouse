@@ -47,3 +47,18 @@ All backend APIs are under `/api/v1/*`:
 - Image tags: `/api/v1/images/tags` (`POST` assign, `DELETE` unassign)
 - Rankings: `/api/v1/rankings`
 - Collections: `/api/v1/collections` (auth required)
+
+### Deployment Fallback Contract
+
+Vue Router uses history mode, so every frontend-only route must be served by the SPA entrypoint on static hosts.
+
+Keep `frontend/vue-gallery/public/_redirects` in sync with route/deployment changes:
+
+```text
+/api/* /api/:splat 200
+/* /index.html 200
+```
+
+- The `/api/*` rule must appear before the catch-all rule so backend API paths are not served as `index.html`.
+- The `/* /index.html 200` rule is required for direct public access to clean URLs such as `/account`, `/search`, `/trending`, `/collections`, and `/detail`.
+- Do not switch to hash routing (`/#/...`) to hide missing static-host fallback configuration.
