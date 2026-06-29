@@ -14,12 +14,18 @@ type UserRole string
 
 // User 表示用户领域对象。
 type User struct {
-	ID           int64
-	Username     string
-	Password     string
-	PasswordHash string
-	Role         UserRole
-	CreatedAt    time.Time
+	ID                 int64
+	Username           string
+	Password           string
+	PasswordHash       string
+	Role               UserRole
+	Nickname           string
+	FavoriteTags       string
+	Bio                string
+	PublicProfile      bool
+	EmailNotifications bool
+	SyncCollections    bool
+	CreatedAt          time.Time
 }
 
 // LoginResult 表示登录业务结果。
@@ -32,9 +38,12 @@ func (r UserRole) IsValid() bool {
 	return r == UserRoleUser || r == UserRoleAdmin
 }
 
-// Public 清除不应向外暴露的敏感字段。
+// Public 清除不应向外暴露的敏感字段并补齐公开默认值。
 func (u User) Public() User {
 	u.Password = ""
 	u.PasswordHash = ""
+	if u.Nickname == "" {
+		u.Nickname = u.Username
+	}
 	return u
 }

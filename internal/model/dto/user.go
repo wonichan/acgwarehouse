@@ -11,10 +11,32 @@ type LoginResponse struct {
 	Token string `json:"token"`
 }
 
+// UserProfileUpdateRequest 表示当前用户资料与偏好更新请求体。
+type UserProfileUpdateRequest struct {
+	Nickname           string `json:"nickname"`
+	FavoriteTags       string `json:"favorite_tags"`
+	Bio                string `json:"bio"`
+	PublicProfile      bool   `json:"public_profile"`
+	EmailNotifications bool   `json:"email_notifications"`
+	SyncCollections    bool   `json:"sync_collections"`
+}
+
+// UserPasswordUpdateRequest 表示当前用户密码修改请求体。
+type UserPasswordUpdateRequest struct {
+	OldPassword string `json:"old_password" vd:"len($) >= 6"`
+	NewPassword string `json:"new_password" vd:"len($) >= 6"`
+}
+
 // UserResponse 表示用户公开响应数据。
 type UserResponse struct {
-	ID        int64  `json:"id"`
-	Username  string `json:"username"`
-	Role      string `json:"role"`
-	CreatedAt string `json:"created_at"`
+	ID                 int64  `json:"id"`
+	Username           string `json:"username"`
+	Role               string `json:"role"`
+	CreatedAt          string `json:"created_at"`
+	Nickname           string `json:"nickname"`
+	FavoriteTags       string `json:"favorite_tags"`
+	Bio                string `json:"bio"`
+	PublicProfile      bool   `json:"public_profile"`
+	EmailNotifications bool   `json:"email_notifications"`
+	SyncCollections    bool   `json:"sync_collections"`
 }

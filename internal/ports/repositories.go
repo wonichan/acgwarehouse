@@ -119,6 +119,8 @@ type UserRepository interface {
 	FindByUsername(ctx context.Context, username string) (do.User, error)
 	FindByID(ctx context.Context, id int64) (do.User, error)
 	Create(ctx context.Context, user do.User) (do.User, error)
+	UpdateProfile(ctx context.Context, user do.User) (do.User, error)
+	UpdatePasswordHash(ctx context.Context, userID int64, passwordHash string) error
 }
 
 // ImageEventRepository 定义图片行为事件持久化访问能力。
