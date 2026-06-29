@@ -31,6 +31,7 @@ const imageHeaderTimeout = 15 * time.Second
 // syncStats 记录本次同步任务统计。
 type syncStats struct {
 	Listed  int
+	Skipped int
 	Upsert  int
 	Indexed int
 }
@@ -112,6 +113,10 @@ func syncFromCOS(ctx context.Context, cfg conf.Config, repo *repository.ImageRep
 	}
 	stats := syncStats{Listed: len(objects)}
 	for _, object := range objects {
+		if shouldSkipObject(object.Key) {
+			stats.Skipped++
+			continue
+		}
 		stored, err := upsertObject(ctx, client, repo, object)
 		if err != nil {
 			return pkgerrors.WithMessage(err, "upsert cos object")
@@ -129,10 +134,15 @@ func syncFromCOS(ctx context.Context, cfg conf.Config, repo *repository.ImageRep
 	}
 	logger.Info(ctx, "cos sync completed",
 		zap.Int("listed", stats.Listed),
+		zap.Int("skipped", stats.Skipped),
 		zap.Int("upsert", stats.Upsert),
 		zap.Int("indexed", stats.Indexed),
 	)
 	return nil
+}
+
+func shouldSkipObject(key string) bool {
+	return strings.Contains(filepath.Base(key), "small")
 }
 
 // upsertObject 解析单个 COS 对象展示元数据并落库。

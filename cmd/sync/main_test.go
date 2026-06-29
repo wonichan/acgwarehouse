@@ -10,6 +10,32 @@ import (
 	"testing"
 )
 
+func Test_shouldSkipObject_returns_true_when_filename_contains_small(t *testing.T) {
+	// Given
+	key := "thumbnails/gallery/1-(28)-small.jpg"
+
+	// When
+	skipped := shouldSkipObject(key)
+
+	// Then
+	if !skipped {
+		t.Fatal("shouldSkipObject() = false, want true")
+	}
+}
+
+func Test_shouldSkipObject_returns_false_when_filename_does_not_contain_small(t *testing.T) {
+	// Given
+	key := "thumbnails/gallery/1-(28)-large.jpg"
+
+	// When
+	skipped := shouldSkipObject(key)
+
+	// Then
+	if skipped {
+		t.Fatal("shouldSkipObject() = true, want false")
+	}
+}
+
 func Test_decodeRemoteSize_returns_dimensions_from_remote_image_header(t *testing.T) {
 	// Given
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
