@@ -1,0 +1,11 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer quick reference for Vue Gallery auth/API conventions and endpoint list."}
+{"file":".trellis/spec/frontend/api-client.md","reason":"Auth API contracts, token handling, error envelope behavior, and required validation commands."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Component and accessibility guideline placeholder; use alongside discovered project patterns."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Type-safety guideline placeholder and reminder to avoid any/type suppression."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend quality and review guideline placeholder for implementation discipline."}
+{"file":".trellis/spec/backend/index.md","reason":"Backend spec index for required Go layer guidelines."}
+{"file":".trellis/spec/backend/architecture-layers.md","reason":"Required handler/service/ports/repository dependency direction for new user APIs."}
+{"file":".trellis/spec/backend/go-http-api.md","reason":"HTTP route, envelope, status/code mapping, and API contract rules."}
+{"file":".trellis/spec/backend/go-error-handling.md","reason":"Error wrapping and layer logging rules for backend user service/handler changes."}
+{"file":".trellis/spec/backend/go-naming-and-style.md","reason":"Go naming, comments, line width, and formatting rules."}
+{"file":".trellis/spec/backend/go-best-practices.md","reason":"Function size, parameter, interface, and test expectations for backend implementation."}

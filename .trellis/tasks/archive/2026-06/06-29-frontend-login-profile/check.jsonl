@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Check auth endpoint usage, type import rule, and frontend layer scope."}
+{"file":".trellis/spec/frontend/api-client.md","reason":"Verify auth/API behavior, no mock fallbacks, and required build/API/browser checks."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Quality review context for frontend changes."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Check TypeScript safety and absence of any/type suppression."}
+{"file":".trellis/spec/backend/architecture-layers.md","reason":"Check backend dependency direction and layer purity."}
+{"file":".trellis/spec/backend/go-http-api.md","reason":"Check route signatures, response envelopes, and status/code mappings."}
+{"file":".trellis/spec/backend/go-error-handling.md","reason":"Check error wrapping and handler-level error mapping."}
+{"file":".trellis/spec/backend/go-best-practices.md","reason":"Check backend code quality, function sizing, and tests."}
