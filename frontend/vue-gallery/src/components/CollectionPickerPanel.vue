@@ -29,21 +29,22 @@ const newCollectionName = ref('')
 const newCollectionVisibility = ref<CollectionVisibility>('private')
 
 async function open(): Promise<void> {
+  visible.value = true
   if (collections.value.length === 0 && !loading.value) {
     await loadCollections()
   }
 }
 
 function toggle(): void {
-  visible.value = !visible.value
   if (visible.value) {
-    open()
+    close()
   } else {
-    emit('close')
+    open()
   }
 }
 
 function close(): void {
+  if (!visible.value) return
   visible.value = false
   emit('close')
 }
@@ -73,7 +74,7 @@ async function handleCreateAndAdd(): Promise<void> {
   }
 }
 
-defineExpose({ toggle })
+defineExpose({ open, close, toggle })
 </script>
 
 <template>

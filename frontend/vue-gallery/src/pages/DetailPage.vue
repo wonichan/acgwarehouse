@@ -108,7 +108,7 @@ function handleFavorite(): void {
     show(collectionAuthRequired.value)
     return
   }
-  collectionPickerRef.value?.toggle()
+  collectionPickerRef.value?.open()
 }
 
 function handleTagging(): void {

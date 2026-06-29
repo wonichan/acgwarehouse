@@ -42,7 +42,7 @@ function openCollectionPicker(): void {
     batchActionError.value = '没有有效的图片 ID 可供操作'
     return
   }
-  collectionPickerRef.value?.toggle()
+  collectionPickerRef.value?.open()
 }
 
 function openTagPicker(): void {
