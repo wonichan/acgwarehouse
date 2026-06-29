@@ -4,16 +4,17 @@
  */
 
 import { ref, computed } from 'vue'
-import { 
+import {
   login as apiLogin,
   register as apiRegister,
   getCurrentUser,
+  updateCurrentUserProfile,
   setToken,
   clearToken,
   isAuthenticated,
-  ApiError
+  ApiError,
 } from '@/api/client'
-import type { UserResponse } from '@/api/client'
+import type { UserProfileUpdateRequest, UserResponse } from '@/api/client'
 
 // Reactive state
 const user = ref<UserResponse | null>(null)
@@ -27,11 +28,16 @@ async function initAuth() {
     try {
       user.value = await getCurrentUser()
     } catch (e) {
-      // Token invalid, clear it
+      if (e instanceof ApiError) {
+        error.value = e.message
+      } else {
+        error.value = '登录状态已失效，请重新登录'
+      }
       clearToken()
       user.value = null
+    } finally {
+      loading.value = false
     }
-    loading.value = false
   }
 }
 
@@ -39,21 +45,21 @@ async function initAuth() {
 async function login(username: string, password: string): Promise<boolean> {
   loading.value = true
   error.value = null
-  
+
   try {
     const result = await apiLogin(username, password)
     setToken(result.token)
     user.value = await getCurrentUser()
-    loading.value = false
     return true
   } catch (e) {
-    loading.value = false
     if (e instanceof ApiError) {
       error.value = e.message
     } else {
       error.value = '登录失败，请稍后重试'
     }
     return false
+  } finally {
+    loading.value = false
   }
 }
 
@@ -61,23 +67,22 @@ async function login(username: string, password: string): Promise<boolean> {
 async function register(username: string, password: string): Promise<boolean> {
   loading.value = true
   error.value = null
-  
+
   try {
-    const newUser = await apiRegister(username, password)
-    // Auto login after register
+    await apiRegister(username, password)
     const result = await apiLogin(username, password)
     setToken(result.token)
-    user.value = newUser
-    loading.value = false
+    user.value = await getCurrentUser()
     return true
   } catch (e) {
-    loading.value = false
     if (e instanceof ApiError) {
       error.value = e.message
     } else {
       error.value = '注册失败，请稍后重试'
     }
     return false
+  } finally {
+    loading.value = false
   }
 }
 
@@ -86,6 +91,48 @@ function logout() {
   clearToken()
   user.value = null
   error.value = null
+}
+
+async function refreshCurrentUser(): Promise<boolean> {
+  if (!isAuthenticated()) {
+    user.value = null
+    return false
+  }
+  loading.value = true
+  error.value = null
+  try {
+    user.value = await getCurrentUser()
+    return true
+  } catch (e) {
+    if (e instanceof ApiError) {
+      error.value = e.message
+    } else {
+      error.value = '刷新用户信息失败'
+    }
+    clearToken()
+    user.value = null
+    return false
+  } finally {
+    loading.value = false
+  }
+}
+
+async function updateProfile(input: UserProfileUpdateRequest): Promise<boolean> {
+  loading.value = true
+  error.value = null
+  try {
+    user.value = await updateCurrentUserProfile(input)
+    return true
+  } catch (e) {
+    if (e instanceof ApiError) {
+      error.value = e.message
+    } else {
+      error.value = '保存资料失败'
+    }
+    return false
+  } finally {
+    loading.value = false
+  }
 }
 
 // Computed properties
@@ -109,5 +156,7 @@ export function useAuth() {
     register,
     logout,
     initAuth,
+    refreshCurrentUser,
+    updateProfile,
   }
 }

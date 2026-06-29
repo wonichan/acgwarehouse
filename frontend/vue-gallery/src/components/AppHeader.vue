@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
+const { user, isLoggedIn } = useAuth()
 
 const currentPath = computed(() => route.path)
+const accountLabel = computed(() => {
+  if (!isLoggedIn.value) return '登录'
+  return user.value?.nickname || user.value?.username || '我的'
+})
 
 const navItems = [
   { path: '/', label: '图库' },
@@ -12,7 +18,7 @@ const navItems = [
   { path: '/trending', label: '热榜' },
   { path: '/collections', label: '收藏夹' },
   { path: '/account', label: '我的' }
-]
+] as const
 </script>
 
 <template>
@@ -36,7 +42,7 @@ const navItems = [
       </nav>
       <div class="nav-actions">
         <input class="search-mini" aria-label="快速搜索" placeholder="搜索标签、文件名" />
-        <RouterLink class="btn btn-secondary btn-small" to="/account">登录</RouterLink>
+        <RouterLink class="btn btn-secondary btn-small" to="/account">{{ accountLabel }}</RouterLink>
       </div>
     </div>
   </header>
