@@ -9,6 +9,7 @@ const { show } = useToast()
 const { isLoggedIn, loading: authLoading } = useAuth()
 
 const albumName = ref('雨夜角色参考')
+const albumVisibility = ref<CollectionResponse['visibility']>('private')
 const collections = ref<readonly CollectionResponse[]>([])
 const loading = ref(false)
 const creating = ref(false)
@@ -69,7 +70,7 @@ async function handleCreateAlbum(): Promise<void> {
 
   creating.value = true
   try {
-    await createCollection(name, 'private')
+    await createCollection(name, albumVisibility.value)
     show('收藏夹已创建')
     albumName.value = ''
     await loadCollections()
@@ -116,7 +117,14 @@ watch(isLoggedIn, () => {
             相册名称
             <input class="input" v-model="albumName" :disabled="!isLoggedIn || creating" />
           </label>
-          <p class="meta">新建收藏夹会按后端契约创建为 private；后端当前不接收描述或默认标签字段。</p>
+          <label class="field">
+            可见性
+            <select class="select" v-model="albumVisibility" :disabled="!isLoggedIn || creating">
+              <option value="private">私有</option>
+              <option value="public">公开</option>
+            </select>
+          </label>
+          <p class="meta">新建收藏夹按后端契约创建为所选可见性；后端当前不接收描述或默认标签字段。</p>
           <button class="btn btn-primary" type="button" :disabled="!isLoggedIn || creating" @click="handleCreateAlbum">
             {{ creating ? '创建中...' : '创建相册' }}
           </button>
