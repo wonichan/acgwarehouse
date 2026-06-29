@@ -1,0 +1,1 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Verify SPA fallback does not rewrite /api/v1 backend API paths"}

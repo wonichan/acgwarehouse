@@ -1,0 +1,5 @@
+# Keep backend API paths outside the SPA history-mode fallback.
+/api/* /api/:splat 200
+
+# Serve Vue Router history-mode routes from the SPA entrypoint.
+/* /index.html 200
