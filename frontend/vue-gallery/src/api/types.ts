@@ -8,6 +8,26 @@ export interface UserResponse {
   readonly username: string
   readonly role: string
   readonly created_at: string
+  readonly nickname: string
+  readonly favorite_tags: string
+  readonly bio: string
+  readonly public_profile: boolean
+  readonly email_notifications: boolean
+  readonly sync_collections: boolean
+}
+
+export interface UserProfileUpdateRequest {
+  readonly nickname: string
+  readonly favorite_tags: string
+  readonly bio: string
+  readonly public_profile: boolean
+  readonly email_notifications: boolean
+  readonly sync_collections: boolean
+}
+
+export interface UserPasswordUpdateRequest {
+  readonly old_password: string
+  readonly new_password: string
 }
 
 export interface ImageItem {

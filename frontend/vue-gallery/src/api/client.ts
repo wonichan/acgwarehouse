@@ -12,6 +12,8 @@ import type {
   RatingResponse,
   SearchQuery,
   TagResponse,
+  UserPasswordUpdateRequest,
+  UserProfileUpdateRequest,
   UserResponse,
 } from './types'
 import type { ApiResponse } from './transport'
@@ -33,6 +35,8 @@ export type {
   SearchQuery,
   SortOrder,
   TagResponse,
+  UserPasswordUpdateRequest,
+  UserProfileUpdateRequest,
   UserResponse,
 } from './types'
 
@@ -94,6 +98,24 @@ export async function register(username: string, password: string): Promise<User
 export async function getCurrentUser(): Promise<UserResponse> {
   return unwrapResponse(
     apiCall<ApiResponse<UserResponse>>('/users/me')
+  )
+}
+
+export async function updateCurrentUserProfile(input: UserProfileUpdateRequest): Promise<UserResponse> {
+  return unwrapResponse(
+    apiCall<ApiResponse<UserResponse>>(
+      '/users/me',
+      { method: 'PUT', body: JSON.stringify(input) }
+    )
+  )
+}
+
+export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest): Promise<void> {
+  await unwrapResponse(
+    apiCall<ApiResponse<null>>(
+      '/users/password',
+      { method: 'PUT', body: JSON.stringify(input) }
+    )
   )
 }
 
@@ -198,6 +220,8 @@ export const api = {
   login,
   register,
   getCurrentUser,
+  updateCurrentUserProfile,
+  changeCurrentUserPassword,
   getImages,
   getImage,
   searchImages,
