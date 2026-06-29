@@ -41,7 +41,7 @@ import type { ImageItem, UserResponse } from '@/api/client'
 ### API Endpoints
 
 All backend APIs are under `/api/v1/*`:
-- Auth: `/api/v1/users/login`, `/api/v1/users/register`, `/api/v1/users/me`
+- Auth/Profile: `/api/v1/users/login`, `/api/v1/users/register`, `/api/v1/users/me`, `/api/v1/users/password`
 - Images: `/api/v1/images`, `/api/v1/images/:id`, `/api/v1/search`
 - Tags: `/api/v1/tags`
 - Rankings: `/api/v1/rankings`

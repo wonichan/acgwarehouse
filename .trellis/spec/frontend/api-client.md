@@ -90,7 +90,7 @@ export class ApiError extends Error {
 
 #### 1. Scope / Trigger
 
-- Trigger：前端页面或 composable 调用 `/api/v1/*` 后端接口，尤其是图片列表、搜索、热榜、详情、标签、收藏夹、评分。
+- Trigger：前端页面或 composable 调用 `/api/v1/*` 后端接口，尤其是认证/账户资料、图片列表、搜索、热榜、详情、标签、收藏夹、评分。
 - Scope：`frontend/vue-gallery/src/api/client.ts` 只暴露前端友好的方法；`transport.ts` 只处理 fetch/envelope/token/error；`types.ts` 只声明后端 DTO 与 query 类型。
 - Goal：页面层不直接知道后端端口、响应 envelope、后端字段名差异，也不能伪造后端未支持的筛选或业务成功。
 
@@ -119,6 +119,9 @@ export async function getRankings(params?: RankingQuery): Promise<readonly Ranki
 export async function getCollections(): Promise<readonly CollectionResponse[]>
 export async function createCollection(name: string, visibility?: 'private' | 'public'): Promise<CollectionResponse>
 export async function rateImage(imageId: number, score: number): Promise<RatingResponse>
+export async function getCurrentUser(): Promise<UserResponse>
+export async function updateCurrentUserProfile(input: UserProfileUpdateRequest): Promise<UserResponse>
+export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest): Promise<void>
 ```
 
 #### 3. Contracts
@@ -139,6 +142,8 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 - `CollectionResponse` 字段是 `{id,user_id,name,visibility,created_at,updated_at?,items}`；`items` 是 `{collection_id,image_id,created_at}`，不是完整图片卡片。
 - `createCollection()` body 是 `{name,visibility}`，`visibility` 默认 `private`；不要发送旧 `description`。
 - 评分使用后端百分制整数 `0-100`；展示为 `/100`，不要在真实数据页面显示五分制如 `4.8 分`。
+- 用户资料字段必须与后端字符计数语义一致：nickname 1-20 个字符、favorite_tags 0-120 个字符、bio 0-200 个字符。前端校验 CJK 时用字符计数（如 `Array.from(value).length`），不要用字节长度假设。
+- 账户中心保存资料/偏好必须调用 `PUT /api/v1/users/me`；不得用 localStorage 伪造 profile 持久化。密码修改必须调用 `PUT /api/v1/users/password`。
 
 #### 4. Validation & Error Matrix
 
@@ -155,6 +160,9 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 | 排名/推荐列表包含目录占位或零尺寸图片 | 页面过滤该条目；如果过滤后为空，显示 empty state，不渲染 broken image 或目录名 |
 | 缺少有效 detail `id` | 详情页显示“请选择一张作品”，不渲染固定示例 |
 | 评分值来自均分小数 | 提交前 round 并 clamp 到 `0-100` |
+| profile nickname/tags/bio 超出字符限制 | 阻止提交，显示字段级错误，不发送 API |
+| `PUT /users/me` 返回 400/401/500 | 保留表单输入，显示 inline status，不写 localStorage fallback |
+| `PUT /users/password` 旧密码错误 | 显示后端错误，旧/新密码字段仍可编辑 |
 
 #### 5. Good / Base / Bad Cases
 
@@ -163,6 +171,8 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 - Good：热榜 period UI `每日/每周/每月` 映射为 `day/week/month`，切换后重新请求 `/rankings`。
 - Good：社区焦点需要 10 张可展示作品时，可以请求 `getRankings({period: 'week', limit: 20})` 作为缓冲，先过滤不可展示图片项，再 `slice(0, 10)` 渲染真实作品。
 - Good：未登录收藏页展示登录 required 状态，并说明 `/collections` 需要 Bearer token。
+- Good：账户中心注册成功后自动登录，`GET /users/me` 同步 expanded `UserResponse`；保存资料/偏好后刷新仍保留。
+- Good：20 个中文字符 nickname 前端校验通过，后端也按字符数接受。
 - Base：后端 `similar_images: []` 时详情页显示 empty state。
 - Base：排名接口返回 `filename=thumbnails`、`size=0`、`width=0`、`height=0` 或 URL 以 `/` 结尾时，该条目被跳过，剩余真实图片继续展示。
 - Bad：搜索页展示“标签/评分筛选”并发送后端不消费的 `tags/min_score`，会误导用户以为筛选生效。
@@ -175,6 +185,7 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 - API smoke：`curl http://localhost:2018/api/v1/images?size=2` 断言 `data.size=2`；`/rankings?period=day&size=3` 断言 envelope/list shape；需要固定展示数量的页面额外断言过滤后 displayable 数量和首个展示项不是目录占位；`/search?q=<term>&size=2` 断言 envelope/list shape；`/collections` 未登录断言 401/`msg`。
 - Proxy smoke：Vite dev server 下访问 `/api/v1/images?size=1` 必须代理到后端，前端源码不得硬编码端口。
 - Page/E2E：浏览图库、热榜、`/detail?id=<known id>`、未登录收藏页，断言真实 API 请求和 loading/error/empty/login-required 状态。
+- Account E2E：注册自动登录、保存资料、保存偏好、修改密码、退出后用新密码登录并恢复资料；断言 `/users/me` 与 `/users/password` 真实请求返回 200。
 - Gallery pagination：图库页必须验证滚动到底部会发出 `page=2&size=<pageSize>` 请求；重复 sentinel 触发不会并发请求同一页；`items.length >= total` 后不会继续请求；下一页失败时已加载卡片仍保留并出现重试入口。
 
 #### 7. Wrong vs Correct
@@ -258,7 +269,32 @@ async function loadInitialGallery(): Promise<void> {
 **当前用户**: `GET /api/v1/users/me` (需认证)
 ```typescript
 // Response
-{ code: 0, data: { id, username, role, created_at }, msg: "" }
+{ code: 0, data: UserResponse, msg: "" }
+```
+
+**更新当前用户资料与偏好**: `PUT /api/v1/users/me` (需认证)
+```typescript
+// Request
+{
+  nickname: string,
+  favorite_tags: string,
+  bio: string,
+  public_profile: boolean,
+  email_notifications: boolean,
+  sync_collections: boolean
+}
+
+// Response
+{ code: 0, data: UserResponse, msg: "" }
+```
+
+**修改密码**: `PUT /api/v1/users/password` (需认证)
+```typescript
+// Request
+{ old_password: string, new_password: string }
+
+// Response
+{ code: 0, data: null, msg: "" }
 ```
 
 ### 图片接口

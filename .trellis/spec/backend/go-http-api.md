@@ -35,7 +35,69 @@ type Response struct {
 | **目标数据不存在**    | 404             | 40401              | 例如："用户不存在" |
 | **服务器内部错误**    | 500             | 50001              | 系统异常提示       |
 
-## 4. 场景：图片查询 / 详情 / 搜索 / 软删除 API
+## 4. 场景：用户账户资料 / 偏好 / 密码 API
+
+### 1. Scope / Trigger
+- 触发：登录用户需要读取/更新个人资料、偏好设置和登录密码，涉及 HTTP API、service 校验、SQLite `user` 表和前端账户中心。
+- 目标：注册/登录/当前用户/资料保存/偏好保存/密码修改形成真实闭环，刷新页面后资料仍由后端恢复。
+
+### 2. Signatures
+- `POST /api/v1/users/register`，Request：`{"username": string, "password": string}`。
+- `POST /api/v1/users/login`，Request：`{"username": string, "password": string}`，Response：`{"token": string}`。
+- `GET /api/v1/users/me`，需 `Auth`。
+- `PUT /api/v1/users/me`，需 `Auth`，Request：`{"nickname": string, "favorite_tags": string, "bio": string, "public_profile": bool, "email_notifications": bool, "sync_collections": bool}`。
+- `PUT /api/v1/users/password`，需 `Auth`，Request：`{"old_password": string, "new_password": string}`。
+- DB：`user` 必须持久化 `nickname/favorite_tags/bio/public_profile/email_notifications/sync_collections/password_hash`。
+
+### 3. Contracts
+- `UserResponse` 必须包含：`id, username, role, created_at, nickname, favorite_tags, bio, public_profile, email_notifications, sync_collections`，不得暴露 `password_hash`。
+- 新注册用户默认：`nickname=username`，`public_profile=true`，`email_notifications=true`，`sync_collections=true`。
+- profile 字段是面向中文/日文/韩文用户的字符限制，不能在 DTO 上用 `vd:"len($)"` 这类字节长度校验拦截；handler 只 bind，service/domain 用 `utf8.RuneCountInString()` 校验字符数。
+- service 更新 profile 前必须 `strings.TrimSpace`；repository 只保存已规范化后的字段。
+- 密码修改必须先校验旧密码 bcrypt hash，再写入新 bcrypt hash；成功后当前 JWT 会话可继续使用。
+
+### 4. Validation & Error Matrix
+- 未登录调用 `/users/me` / `/users/password` -> HTTP 401 / Code 40101。
+- `username` 长度不在 3-32 或 `password/new_password` 少于 6 -> HTTP 400 / Code 40001。
+- `nickname` trim 后为空或超过 20 个字符 -> HTTP 400 / Code 40001。
+- `favorite_tags` 超过 120 个字符、`bio` 超过 200 个字符 -> HTTP 400 / Code 40001。
+- 旧密码不匹配 -> HTTP 401 / Code 40101。
+- 用户不存在 -> HTTP 404 / Code 40401。
+
+### 5. Good/Base/Bad Cases
+- Good：20 个 CJK 字符的 nickname 可通过 handler bind，并由 service 按 rune 计数接受。
+- Good：`PUT /users/me` 保存 `email_notifications=false` 后，下一次 `GET /users/me` 返回 false。
+- Good：密码修改后，旧密码登录失败，新密码登录成功。
+- Base：空 `favorite_tags` / `bio` 合法；空 nickname 不合法。
+- Bad：DTO 使用 `vd:"len($) <= 20"` 校验 nickname，导致 20 个中文字符因字节数超过 20 被错误拒绝。
+
+### 6. Tests Required
+- Service：profile trim、CJK 字符边界、nickname/tags/bio 超限、旧密码错误、新密码过短、密码 hash 更新。
+- Repository：profile/preference 字段持久化、password_hash 持久化。
+- Route smoke：`GET /users/me` 返回扩展字段；`PUT /users/me` 支持 CJK 边界；`PUT /users/password` 成功/旧密码错误/新密码过短。
+- Browser/E2E：注册自动登录、保存资料、保存偏好、修改密码、退出后用新密码登录并恢复资料。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```go
+type UserProfileUpdateRequest struct {
+    Nickname string `json:"nickname" vd:"len($) <= 20"`
+}
+```
+
+#### Correct
+```go
+type UserProfileUpdateRequest struct {
+    Nickname string `json:"nickname"`
+}
+
+if profile.Nickname == "" || utf8.RuneCountInString(profile.Nickname) > maxNicknameLength {
+    return do.User{}, pkgerrors.WithMessage(ErrInvalidUserInput, "validate nickname")
+}
+```
+
+## 5. 场景：图片查询 / 详情 / 搜索 / 软删除 API
 
 ### 1. Scope / Trigger
 - 触发：新增图片公开查询、搜索、详情浏览事件、管理员软删除/恢复 API。
@@ -107,7 +169,7 @@ image.ViewCount++
 return newDetailResponse(image)
 ```
 
-## 5. 场景：图片评分 API
+## 6. 场景：图片评分 API
 
 ### 1. Scope / Trigger
 - 触发：新增用户对图片评分能力，涉及 HTTP API、service 校验、SQLite `rating` 表、`image` 冗余聚合字段和 `image_event` 行为流水。
@@ -165,7 +227,7 @@ result, err := h.ratingService.Upsert(c, do.Rating{
 })
 ```
 
-## 6. 场景：收藏夹 API
+## 7. 场景：收藏夹 API
 
 ### 1. Scope / Trigger
 - 触发：新增多收藏夹能力，涉及 HTTP API、owner/visibility 权限、SQLite `collection` / `collection_item` 表、`image.favorite_count` 去重聚合和 `image_event` 行为流水。
@@ -231,7 +293,7 @@ if created && !hadFavorite {
 }
 ```
 
-## 7. 场景：热榜 API
+## 8. 场景：热榜 API
 
 ### 1. Scope / Trigger
 - 触发：新增日/周/月热榜能力，涉及定时 job、`ranking` 缓存表、`image_event` 聚合、贝叶斯评分与热度公式、HTTP 查询接口。
