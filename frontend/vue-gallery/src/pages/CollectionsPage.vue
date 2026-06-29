@@ -32,6 +32,17 @@ function formatDate(value: string): string {
   return date.toLocaleDateString('zh-CN')
 }
 
+function formatDateTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 async function loadCollections(): Promise<void> {
   if (!isLoggedIn.value) {
     collections.value = []
@@ -194,6 +205,18 @@ watch(isLoggedIn, () => {
               <span class="tag">Owner {{ collection.user_id }}</span>
               <span class="tag">{{ collection.visibility }}</span>
             </div>
+            <div v-if="collection.items.length > 0" class="collection-items">
+              <RouterLink
+                v-for="item in collection.items"
+                :key="`${item.collection_id}-${item.image_id}`"
+                class="collection-item"
+                :to="`/detail?id=${item.image_id}`"
+              >
+                <span class="collection-item__id">Image {{ item.image_id }}</span>
+                <span class="collection-item__time">{{ formatDateTime(item.created_at) }}</span>
+              </RouterLink>
+            </div>
+            <p v-else class="meta">这个收藏夹还没有真实收藏条目。</p>
           </article>
         </div>
       </div>
@@ -204,8 +227,8 @@ watch(isLoggedIn, () => {
       <div class="container grid-main">
         <div class="panel panel-raised">
           <p class="eyebrow">收藏内容</p>
-          <h3>未展示伪造作品卡片</h3>
-          <p class="meta">后端收藏夹详情当前返回 collection item 的 image_id，而不是完整图片对象。本页先展示真实收藏夹元数据；图片卡片可在后续按 image_id 拉取详情后增强。</p>
+          <h3>展示真实收藏条目</h3>
+          <p class="meta">收藏夹列表现在展示后端返回的真实 collection item，并按 image_id 跳转到作品详情；不使用 mock 图片卡片。</p>
         </div>
         <aside class="panel">
           <p class="eyebrow">批量操作面板</p>
@@ -218,3 +241,50 @@ watch(isLoggedIn, () => {
     </section>
   </main>
 </template>
+
+<style scoped>
+.collection-items {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.collection-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
+}
+
+.collection-item:hover {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent), transparent 94%);
+}
+
+.collection-item__id {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.collection-item__time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 560px) {
+  .collection-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>

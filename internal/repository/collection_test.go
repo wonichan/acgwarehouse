@@ -57,6 +57,32 @@ func Test_CollectionRepository_FindVisible_allows_public_viewer_and_blocks_priva
 	}
 }
 
+func Test_CollectionRepository_ListByOwner_returns_collection_items(t *testing.T) {
+	// Given
+	database := openTestDatabase(t)
+	imageRepo := repository.NewImageRepository(database.Read, database.Write)
+	repo := repository.NewCollectionRepository(database.Read, database.Write)
+	image := mustCreateImage(t, imageRepo, "thumbnails/list-owner-item.png")
+	collection := mustCreateCollection(t, repo, do.CollectionVisibilityPrivate, 7, "favorites")
+	if _, err := repo.AddItem(context.Background(), collection.ID, 7, image.ID); err != nil {
+		t.Fatalf("add collection item: %v", err)
+	}
+
+	// When
+	collections, err := repo.ListByOwner(context.Background(), 7)
+
+	// Then
+	if err != nil {
+		t.Fatalf("list owner collections: %v", err)
+	}
+	if len(collections) != 1 {
+		t.Fatalf("collections = %#v, want one collection", collections)
+	}
+	if len(collections[0].Items) != 1 || collections[0].Items[0].ImageID != image.ID {
+		t.Fatalf("items = %#v, want image %d", collections[0].Items, image.ID)
+	}
+}
+
 func Test_CollectionRepository_Update_rejects_non_owner_management(t *testing.T) {
 	// Given
 	database := openTestDatabase(t)

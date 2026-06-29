@@ -44,7 +44,7 @@ func (r *CollectionRepository) Create(ctx context.Context, collection do.Collect
 // ListByOwner 查询指定用户的收藏夹列表。
 func (r *CollectionRepository) ListByOwner(ctx context.Context, userID int64) ([]do.Collection, error) {
 	var collections []po.Collection
-	err := r.readDB.WithContext(ctx).Where("user_id = ?", userID).Order("created_at desc").Find(&collections).Error
+	err := r.readDB.WithContext(ctx).Preload("Items").Where("user_id = ?", userID).Order("created_at desc").Find(&collections).Error
 	if err != nil {
 		return nil, pkgerrors.WithMessage(err, "list owner collections")
 	}
