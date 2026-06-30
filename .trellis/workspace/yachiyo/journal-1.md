@@ -558,3 +558,38 @@ Added SPA fallback metadata for Vue history routes, documented the fallback and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 收藏夹封面与详情页重构
+
+**Date**: 2026-06-30
+**Task**: 收藏夹封面与详情页重构
+**Branch**: `master`
+
+### Summary
+
+后端新增 cover_image_id/cover_image_url 字段与 CoverImageIDSet 区分省略/清空语义，CollectionItem 嵌套 Image 并 Preload 过滤不可展示图片，CollectionService 注入 cosBase 生成封面 URL fallback。前端新增 /collections/:id 详情页（masonry + ArtCard + 设为封面），重构列表页卡片显示封面、移除 ID/Owner/imageID 标签。通过 trellis-check 两轮复查后拆分 CollectionDetailPage 为 CollectionMasonryGrid + useMasonryLayout 以满足 250 LOC 上限，并修复设计 token 与 focus 可访问性。Playwright E2E 在本地 2017/2018 端口验证通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `96c041a` | (see git log) |
+| `f08eae7` | (see git log) |
+| `998919b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

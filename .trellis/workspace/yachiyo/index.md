@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 14
+- **Total Sessions**: 15
 - **Last Active**: 2026-06-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~560 | Active |
+| `journal-1.md` | ~595 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 15 | 2026-06-30 | 收藏夹封面与详情页重构 | `96c041a`, `f08eae7`, `998919b` | `master` |
 | 14 | 2026-06-30 | 完成每日推荐 | `4035e26`, `f4142c3`, `c46507c`, `5e8bc22`, `f31f669`, `eaec4ad`, `a20354b`, `09d02f7`, `d323270` | `master` |
 | 13 | 2026-06-29 | 修复前端快速搜索 | `c51901f`, `57883c0` | `master` |
 | 12 | 2026-06-29 | Fix frontend public route 404 | `64448b4`, `05ad482`, `1842727` | `master` |
