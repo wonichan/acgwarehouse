@@ -76,6 +76,9 @@ func AutoMigrate(database *gorm.DB) error {
 		&po.Collection{},
 		&po.CollectionItem{},
 		&po.Ranking{},
+		&po.DailyRecommendation{},
+		&po.DailyRecommendationPool{},
+		&po.DailyRecommendationState{},
 	); err != nil {
 		return pkgerrors.WithMessage(err, "migrate models")
 	}
@@ -101,7 +104,9 @@ func openPool(cfg conf.DatabaseConfig, maxOpenConns int) (*gorm.DB, error) {
 	sqlDB.SetMaxIdleConns(maxOpenConns)
 	sqlDB.SetConnMaxLifetime(sqliteConnMaxAge)
 
-	database, err := gorm.Open(&sqlite.Dialector{Conn: sqlDB}, &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	database, err := gorm.Open(&sqlite.Dialector{Conn: sqlDB}, &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
 	if err != nil {
 		_ = sqlDB.Close()
 		return nil, pkgerrors.WithMessage(err, "open gorm sqlite")
