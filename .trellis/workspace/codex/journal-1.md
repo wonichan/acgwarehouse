@@ -44,3 +44,36 @@ Added code-level backend protections: strong JWT secret validation, safe CORS de
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: 修复图库瀑布流加载抖动
+
+**Date**: 2026-06-30
+**Task**: 修复图库瀑布流加载抖动
+**Branch**: `main`
+
+### Summary
+
+用稳定 JS 分列替换 CSS columns 瀑布流，透传图片宽高并用 aspect-ratio 稳定卡片占位；补充分页布局回归测试、前端规范和图片展示调研。验证通过 node --test GalleryPage.pagination.test.mjs 与 npm run build。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e90ebe8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
