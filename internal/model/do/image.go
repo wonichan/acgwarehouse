@@ -52,6 +52,7 @@ type Image struct {
 	DeletedAt     time.Time
 	CreatedAt     time.Time
 	Tags          []string
+	URL           string
 }
 
 // ImageEvent 表示图片行为事件领域对象。

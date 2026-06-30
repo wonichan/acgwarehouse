@@ -44,7 +44,11 @@ func (r *CollectionRepository) Create(ctx context.Context, collection do.Collect
 // ListByOwner 查询指定用户的收藏夹列表。
 func (r *CollectionRepository) ListByOwner(ctx context.Context, userID int64) ([]do.Collection, error) {
 	var collections []po.Collection
-	err := r.readDB.WithContext(ctx).Preload("Items").Where("user_id = ?", userID).Order("created_at desc").Find(&collections).Error
+	err := r.readDB.WithContext(ctx).
+		Preload("Items.Image", activeImagesPreloadScope).
+		Where("user_id = ?", userID).
+		Order("created_at desc").
+		Find(&collections).Error
 	if err != nil {
 		return nil, pkgerrors.WithMessage(err, "list owner collections")
 	}
@@ -76,6 +80,14 @@ func (r *CollectionRepository) Update(ctx context.Context, collection do.Collect
 		}
 		stored.Name = collection.Name
 		stored.Visibility = string(collection.Visibility)
+		if collection.CoverImageIDSet {
+			if collection.CoverImageID > 0 {
+				value := collection.CoverImageID
+				stored.CoverImageID = &value
+			} else {
+				stored.CoverImageID = nil
+			}
+		}
 		if err := tx.WithContext(ctx).Save(&stored).Error; err != nil {
 			return pkgerrors.WithMessage(err, "save collection")
 		}
@@ -186,7 +198,10 @@ func (r *CollectionRepository) RemoveItem(ctx context.Context, collectionID int6
 // findByID 按 ID 查询收藏夹并预加载条目。
 func (r *CollectionRepository) findByID(ctx context.Context, database *gorm.DB, collectionID int64) (po.Collection, error) {
 	var collection po.Collection
-	err := database.WithContext(ctx).Preload("Items").Where("id = ?", collectionID).First(&collection).Error
+	err := database.WithContext(ctx).
+		Preload("Items.Image", activeImagesPreloadScope).
+		Where("id = ?", collectionID).
+		First(&collection).Error
 	if stderrors.Is(err, gorm.ErrRecordNotFound) {
 		return po.Collection{}, pkgerrors.WithMessage(ErrCollectionNotFound, "find collection")
 	}
@@ -194,6 +209,11 @@ func (r *CollectionRepository) findByID(ctx context.Context, database *gorm.DB, 
 		return po.Collection{}, pkgerrors.WithMessage(err, "find collection")
 	}
 	return collection, nil
+}
+
+// activeImagesPreloadScope 在预加载收藏条目图片时限定为可展示状态。
+func activeImagesPreloadScope(db *gorm.DB) *gorm.DB {
+	return db.Where("status = ? AND deleted_at IS NULL", string(do.ImageStatusActive))
 }
 
 // canViewCollection 判断访问者是否可读取收藏夹。

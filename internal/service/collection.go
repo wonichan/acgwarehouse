@@ -29,12 +29,13 @@ type CollectionRepository interface {
 
 // CollectionService 提供收藏夹管理能力。
 type CollectionService struct {
-	repo CollectionRepository
+	repo    CollectionRepository
+	cosBase string
 }
 
 // NewCollectionService 创建收藏服务。
-func NewCollectionService(repo CollectionRepository) *CollectionService {
-	return &CollectionService{repo: repo}
+func NewCollectionService(repo CollectionRepository, cosBase string) *CollectionService {
+	return &CollectionService{repo: repo, cosBase: strings.TrimRight(cosBase, "/")}
 }
 
 // Create 创建用户收藏夹。
@@ -47,7 +48,7 @@ func (s *CollectionService) Create(ctx context.Context, collection do.Collection
 	if err != nil {
 		return do.Collection{}, mapCollectionError(err, "create collection")
 	}
-	return created, nil
+	return s.attachCoverImageURL(created), nil
 }
 
 // ListByOwner 返回用户自己的收藏夹列表。
@@ -58,6 +59,9 @@ func (s *CollectionService) ListByOwner(ctx context.Context, userID int64) ([]do
 	collections, err := s.repo.ListByOwner(ctx, userID)
 	if err != nil {
 		return nil, mapCollectionError(err, "list collections")
+	}
+	for i := range collections {
+		collections[i] = s.attachCoverImageURL(collections[i])
 	}
 	return collections, nil
 }
@@ -71,7 +75,7 @@ func (s *CollectionService) FindVisible(ctx context.Context, collectionID int64,
 	if err != nil {
 		return do.Collection{}, mapCollectionError(err, "find visible collection")
 	}
-	return collection, nil
+	return s.attachCoverImageURL(collection), nil
 }
 
 // Update 更新用户自己的收藏夹。
@@ -83,11 +87,70 @@ func (s *CollectionService) Update(ctx context.Context, collection do.Collection
 	if prepared.ID < 1 {
 		return do.Collection{}, pkgerrors.WithMessage(ErrInvalidCollectionInput, "validate collection id")
 	}
+	if prepared.CoverImageIDSet && prepared.CoverImageID > 0 {
+		existing, err := s.repo.FindVisible(ctx, prepared.ID, prepared.UserID)
+		if err != nil {
+			return do.Collection{}, mapCollectionError(err, "validate collection cover")
+		}
+		if !collectionContainsImage(existing, prepared.CoverImageID) {
+			return do.Collection{}, pkgerrors.WithMessage(ErrInvalidCollectionInput, "validate collection cover image")
+		}
+	}
 	updated, err := s.repo.Update(ctx, prepared)
 	if err != nil {
 		return do.Collection{}, mapCollectionError(err, "update collection")
 	}
-	return updated, nil
+	return s.attachCoverImageURL(updated), nil
+}
+
+// collectionContainsImage 判断指定图片是否在收藏夹条目中。
+func collectionContainsImage(collection do.Collection, imageID int64) bool {
+	for _, item := range collection.Items {
+		if item.ImageID == imageID {
+			return true
+		}
+	}
+	return false
+}
+
+// attachCoverImageURL 为收藏夹计算封面图片 URL 并填充条目图片 URL。
+func (s *CollectionService) attachCoverImageURL(collection do.Collection) do.Collection {
+	for i := range collection.Items {
+		if collection.Items[i].Image.ID > 0 && collection.Items[i].Image.COSKey != "" {
+			collection.Items[i].Image.URL = s.imageURL(collection.Items[i].Image.COSKey)
+		}
+	}
+	collection.CoverImageURL = s.resolveCoverImageURL(collection)
+	return collection
+}
+
+// resolveCoverImageURL 解析收藏夹封面图片 URL。
+// 优先使用 CoverImageID 指定的图片；未设置时 fallback 第一张条目图片。
+func (s *CollectionService) resolveCoverImageURL(collection do.Collection) string {
+	var target do.Image
+	if collection.CoverImageID > 0 {
+		for _, item := range collection.Items {
+			if item.ImageID == collection.CoverImageID {
+				target = item.Image
+				break
+			}
+		}
+	}
+	if target.ID == 0 && len(collection.Items) > 0 {
+		target = collection.Items[0].Image
+	}
+	if target.ID == 0 || target.COSKey == "" {
+		return ""
+	}
+	return s.imageURL(target.COSKey)
+}
+
+// imageURL 拼接图片 COS 公开访问地址。
+func (s *CollectionService) imageURL(cosKey string) string {
+	if s.cosBase == "" {
+		return cosKey
+	}
+	return s.cosBase + "/" + strings.TrimLeft(cosKey, "/")
 }
 
 // Delete 删除用户自己的收藏夹。

@@ -62,11 +62,18 @@ func (h *CollectionHandler) Update(c context.Context, ctx *app.RequestContext) {
 	if !ok {
 		return
 	}
+	coverImageID := int64(0)
+	coverImageIDSet := input.CoverImageID != nil
+	if coverImageIDSet {
+		coverImageID = *input.CoverImageID
+	}
 	collection, err := h.collectionService.Update(c, do.Collection{
-		ID:         id,
-		UserID:     currentUserID(ctx),
-		Name:       input.Name,
-		Visibility: do.CollectionVisibility(input.Visibility),
+		ID:              id,
+		UserID:          currentUserID(ctx),
+		Name:            input.Name,
+		Visibility:      do.CollectionVisibility(input.Visibility),
+		CoverImageID:    coverImageID,
+		CoverImageIDSet: coverImageIDSet,
 	})
 	if err != nil {
 		writeCollectionError(c, ctx, err)
@@ -199,12 +206,14 @@ func collectionsToResponse(collections []do.Collection) []dto.CollectionResponse
 // collectionToResponse 将收藏夹领域对象转换为 HTTP 响应 DTO。
 func collectionToResponse(collection do.Collection) dto.CollectionResponse {
 	return dto.CollectionResponse{
-		ID:         collection.ID,
-		UserID:     collection.UserID,
-		Name:       collection.Name,
-		Visibility: string(collection.Visibility),
-		CreatedAt:  FormatTime(collection.CreatedAt),
-		Items:      collectionItemsToResponse(collection.Items),
+		ID:            collection.ID,
+		UserID:        collection.UserID,
+		Name:          collection.Name,
+		Visibility:    string(collection.Visibility),
+		CreatedAt:     FormatTime(collection.CreatedAt),
+		CoverImageID:  collection.CoverImageID,
+		CoverImageURL: collection.CoverImageURL,
+		Items:         collectionItemsToResponse(collection.Items),
 	}
 }
 
@@ -219,10 +228,34 @@ func collectionItemsToResponse(items []do.CollectionItem) []dto.CollectionItemRe
 
 // collectionItemToResponse 将收藏夹条目领域对象转换为 HTTP 响应 DTO。
 func collectionItemToResponse(item do.CollectionItem) dto.CollectionItemResponse {
-	return dto.CollectionItemResponse{
+	resp := dto.CollectionItemResponse{
 		CollectionID: item.CollectionID,
 		ImageID:      item.ImageID,
 		CreatedAt:    FormatTime(item.CreatedAt),
+	}
+	if item.Image.ID > 0 {
+		resp.Image = imageToCollectionItemResponse(item.Image)
+	}
+	return resp
+}
+
+// imageToCollectionItemResponse 将收藏条目图片领域对象转换为 HTTP 响应 DTO。
+func imageToCollectionItemResponse(image do.Image) *dto.ImageResponse {
+	return &dto.ImageResponse{
+		ID:            image.ID,
+		COSKey:        image.COSKey,
+		Filename:      image.Filename,
+		URL:           image.URL,
+		Size:          image.Size,
+		LastModified:  FormatTime(image.LastModified),
+		Width:         image.Width,
+		Height:        image.Height,
+		Category:      image.Category,
+		AvgScore:      image.AvgScore,
+		RatingCount:   image.RatingCount,
+		FavoriteCount: image.FavoriteCount,
+		ViewCount:     image.ViewCount,
+		CreatedAt:     FormatTime(image.CreatedAt),
 	}
 }
 

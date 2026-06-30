@@ -14,12 +14,15 @@ type CollectionVisibility string
 
 // Collection 表示用户命名收藏夹领域对象。
 type Collection struct {
-	ID         int64
-	UserID     int64
-	Name       string
-	Visibility CollectionVisibility
-	CreatedAt  time.Time
-	Items      []CollectionItem
+	ID              int64
+	UserID          int64
+	Name            string
+	Visibility      CollectionVisibility
+	CoverImageID    int64
+	CoverImageIDSet bool
+	CoverImageURL   string
+	CreatedAt       time.Time
+	Items           []CollectionItem
 }
 
 // CollectionItem 表示收藏夹内图片条目领域对象。
@@ -27,6 +30,7 @@ type CollectionItem struct {
 	CollectionID int64
 	ImageID      int64
 	CreatedAt    time.Time
+	Image        Image
 }
 
 // IsValid 判断收藏夹可见性是否受支持。

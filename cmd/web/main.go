@@ -80,7 +80,7 @@ func run(ctx context.Context) error {
 	searcher := search.NewSearcher(searchIndex)
 	tagService := service.NewTagService(tagRepo, searcher)
 	ratingService := service.NewRatingService(ratingRepo)
-	collectionService := service.NewCollectionService(collectionRepo)
+	collectionService := service.NewCollectionService(collectionRepo, cfg.COS.Domain)
 	rankingService := service.NewRankingService(rankingRepo, cfg.COS.Domain)
 	dailyRecommendationService := service.NewDailyRecommendationService(dailyRecommendationRepo, cfg.COS.Domain)
 	rankingJob := job.NewRankingJob(rankingRepo, cfg.Ranking)

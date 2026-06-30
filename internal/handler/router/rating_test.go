@@ -194,7 +194,7 @@ func Test_RatingRoute_upserts_rating_when_authenticated(t *testing.T) {
 func Test_CollectionRoute_creates_collection_when_authenticated(t *testing.T) {
 	// Given
 	collectionRepo := newMemoryRouterCollectionRepository()
-	engine := routerTestEngineWithServices(t, router.Services{Collection: service.NewCollectionService(collectionRepo)})
+	engine := routerTestEngineWithServices(t, router.Services{Collection: service.NewCollectionService(collectionRepo, "")})
 	body := &ut.Body{Body: strings.NewReader(`{"name":"miku","visibility":"public"}`), Len: len(`{"name":"miku","visibility":"public"}`)}
 
 	// When
@@ -220,7 +220,7 @@ func Test_CollectionRoute_returns_forbidden_when_non_owner_adds_item(t *testing.
 	// Given
 	collectionRepo := newMemoryRouterCollectionRepository()
 	collectionRepo.collections[9] = do.Collection{ID: 9, UserID: 7, Name: "owner", Visibility: do.CollectionVisibilityPrivate}
-	engine := routerTestEngineWithServices(t, router.Services{Collection: service.NewCollectionService(collectionRepo)})
+	engine := routerTestEngineWithServices(t, router.Services{Collection: service.NewCollectionService(collectionRepo, "")})
 	body := &ut.Body{Body: strings.NewReader(`{"image_id":5}`), Len: len(`{"image_id":5}`)}
 
 	// When
@@ -243,7 +243,7 @@ func Test_CollectionRoute_allows_guest_to_view_public_collection(t *testing.T) {
 	// Given
 	collectionRepo := newMemoryRouterCollectionRepository()
 	collectionRepo.collections[3] = do.Collection{ID: 3, UserID: 7, Name: "public", Visibility: do.CollectionVisibilityPublic}
-	engine := routerTestEngineWithServices(t, router.Services{Collection: service.NewCollectionService(collectionRepo)})
+	engine := routerTestEngineWithServices(t, router.Services{Collection: service.NewCollectionService(collectionRepo, "")})
 
 	// When
 	recorder := ut.PerformRequest(engine.Engine.Engine, consts.MethodGet, "/api/v1/collections/3", nil)

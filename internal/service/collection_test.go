@@ -111,7 +111,7 @@ func (r *memoryCollectionRepository) RemoveItem(_ context.Context, collectionID 
 func Test_CollectionService_Create_accepts_multiple_named_collections_for_user(t *testing.T) {
 	// Given
 	repo := newMemoryCollectionRepository()
-	svc := service.NewCollectionService(repo)
+	svc := service.NewCollectionService(repo, "")
 
 	// When
 	first, firstErr := svc.Create(context.Background(), do.Collection{UserID: 7, Name: "miku"})
@@ -133,7 +133,7 @@ func Test_CollectionService_Create_accepts_multiple_named_collections_for_user(t
 func Test_CollectionService_Update_returns_forbidden_when_user_is_not_owner(t *testing.T) {
 	// Given
 	repo := newMemoryCollectionRepository()
-	svc := service.NewCollectionService(repo)
+	svc := service.NewCollectionService(repo, "")
 	created, err := svc.Create(context.Background(), do.Collection{UserID: 7, Name: "owner"})
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
@@ -156,7 +156,7 @@ func Test_CollectionService_Update_returns_forbidden_when_user_is_not_owner(t *t
 func Test_CollectionService_View_allows_public_guest_and_rejects_private_guest(t *testing.T) {
 	// Given
 	repo := newMemoryCollectionRepository()
-	svc := service.NewCollectionService(repo)
+	svc := service.NewCollectionService(repo, "")
 	publicCollection, err := svc.Create(context.Background(), do.Collection{
 		UserID:     7,
 		Name:       "public",
@@ -186,7 +186,7 @@ func Test_CollectionService_View_allows_public_guest_and_rejects_private_guest(t
 func Test_CollectionService_AddItem_returns_forbidden_when_user_is_not_owner(t *testing.T) {
 	// Given
 	repo := newMemoryCollectionRepository()
-	svc := service.NewCollectionService(repo)
+	svc := service.NewCollectionService(repo, "")
 	collection, err := svc.Create(context.Background(), do.Collection{UserID: 7, Name: "owner"})
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
