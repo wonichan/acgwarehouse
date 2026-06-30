@@ -42,6 +42,8 @@ Questions to answer:
 - Task-specific component affordances belong in the component's `<style scoped>` block. Do not add narrow feature selectors to the oversized global `app.css` unless the class is intentionally reusable across the whole app.
 - Scoped styles must use existing CSS variables such as `--space-*`, `--radius-*`, `--border`, `--accent`, and motion tokens; do not introduce one-off colors or hard-coded pixel systems.
 - Frontend layout changes must remain responsive for desktop, tablet, and mobile. Prefer fluid grids/flex, `minmax()`, `clamp()`, wrapping, and existing spacing tokens over fixed-width layouts that only fit one viewport.
+- Components rendered inside narrow sidebars or cards should respond to their own container width, not only the page viewport. Use `container-type: inline-size` plus `@container` for local layout switches when a desktop viewport can still provide a narrow component slot.
+- Image-led UI should carry backend `width` / `height` through its presentation type and use the real aspect ratio in CSS. Prefer `object-fit: contain` when users need to inspect the whole image; add min/max height bounds for extreme ratios instead of forcing one fixed crop.
 
 ```vue
 <style scoped>

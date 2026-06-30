@@ -34,6 +34,8 @@ function rankingToSlide(ranking: RankingResponse, index: number): CarouselSlide 
     score,
     favorites: ranking.favorite_count,
     artVariant: carouselVariants[index % carouselVariants.length],
+    imageWidth: image.width,
+    imageHeight: image.height,
     imageUrl: image.url,
   }
 }

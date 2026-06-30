@@ -21,6 +21,8 @@ export interface CarouselSlide {
   score: number
   favorites: number
   artVariant: 'rain' | 'character' | 'album'
+  imageWidth?: number
+  imageHeight?: number
   imageUrl?: string
 }
 
