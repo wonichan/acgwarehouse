@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/go-naming-and-style.md", "reason": "Go 命名风格规范，后端新增字段和方法需遵循"}
+{"file": ".trellis/spec/backend/go-error-handling.md", "reason": "收藏夹封面校验的错误处理模式"}
+{"file": ".trellis/spec/backend/go-http-api.md", "reason": "DTO 契约和 HTTP API 规范，新增 cover_image_id/cover_image_url 字段"}
+{"file": ".trellis/spec/backend/architecture-layers.md", "reason": "service/repo/handler 分层规范，CollectionService 注入 cosBase"}
+{"file": ".trellis/spec/frontend/api-client.md", "reason": "前端 API 层类型定义和封装规范，扩展 CollectionResponse 类型"}
+{"file": ".trellis/tasks/06-30-collection-cover-and-detail-page/design.md", "reason": "本任务技术设计：数据契约、数据流、关键设计决策"}
