@@ -6,6 +6,7 @@ Language: TypeScript + Vue 3 + Vite
 ## Available Specs
 
 - `api-client.md` - API调用层封装、类型定义、composables使用
+- `component-guidelines.md` - 组件结构、样式模式、响应式布局契约、UI/UX design skills 使用指引
 - `design.md` - UI设计规范（如果存在）
 
 ## Quick Reference

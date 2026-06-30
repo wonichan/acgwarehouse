@@ -51,6 +51,26 @@ Questions to answer:
 </style>
 ```
 
+### Design Skills (UI/UX Work)
+
+When writing or redesigning UI/UX code (new pages, major layout changes, visual rework, component restyling), consider loading one or more of these skills before writing the visual code:
+
+- `/redesign-existing-projects` — Upgrades existing UI to premium quality without breaking functionality. Use when redesigning a page that already exists (e.g., restyling `CollectionsPage.vue` or building a new detail page that should match premium design standards).
+- `/design-taste-frontend-v1` — The original taste-skill. Enforces anti-slop design rules and blocks generic AI defaults. Use as the baseline taste gate for any visible UI work.
+- `/high-end-visual-design` — Defines exact fonts, spacing, shadows, card structures, and animations that make a site feel expensive. Use when adding new visual components that need polish (e.g., the collection cover card, the detail page image grid).
+
+**When to load**:
+- New page or major section → load at least `/design-taste-frontend-v1`.
+- Redesigning an existing page → load `/redesign-existing-projects` + `/design-taste-frontend-v1`.
+- New visual component needing polish (cards, grids, covers, modals) → load `/high-end-visual-design`.
+
+**Not required for**:
+- Pure logic changes with no visible UI delta.
+- Adding a type or API method.
+- Backend-only work.
+
+Load via the `skill` tool. Do not skip loading when the work is visibly user-facing — these skills block generic AI defaults that the project's design system exists to prevent.
+
 ### Responsive Layout Contract
 
 **What**: When editing pages, panels, lists, forms, modals, or navigation, verify the layout at desktop, tablet, and mobile widths.

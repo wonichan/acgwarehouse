@@ -117,7 +117,9 @@ export async function getTags(): Promise<readonly TagResponse[]>
 export async function suggestTags(q: string, limit?: number): Promise<readonly TagResponse[]>
 export async function getRankings(params?: RankingQuery): Promise<readonly RankingResponse[]>
 export async function getCollections(): Promise<readonly CollectionResponse[]>
+export async function getCollection(id: number): Promise<CollectionDetailResponse>
 export async function createCollection(name: string, visibility?: 'private' | 'public'): Promise<CollectionResponse>
+export async function updateCollection(id: number, input: CollectionUpdateInput): Promise<CollectionResponse>
 export async function addImageToCollection(collectionId: number, imageId: number): Promise<void>
 export async function createTag(name: string): Promise<TagResponse>
 export async function assignTagsToImages(imageIds: readonly number[], tagIds: readonly number[]): Promise<readonly ImageTagResponse[]>
@@ -146,8 +148,12 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - 面向图片展示的排名列表必须在页面边界过滤不可展示图片项后再渲染：`image.size > 0`、`image.width > 0`、`image.height > 0`、`image.url.trim().length > 0`、且 `!image.url.trim().endsWith('/')`。目录占位项（例如 `filename=thumbnails`、URL 以 `/` 结尾）不能进入轮播、瀑布流或详情推荐卡片。
 - `getImage(id)` 返回嵌套 detail：`{image,tags,avg_score,rating_count,favorite_count,my_rating,is_collected,similar_images}`。
 - `TagResponse` 字段是 `{id,name,usage_count,created_at,updated_at}`。
-- `CollectionResponse` 字段是 `{id,user_id,name,visibility,created_at,updated_at?,items}`；`items` 是 `{collection_id,image_id,created_at}`，不是完整图片卡片。
+- `CollectionResponse` 字段是 `{id,user_id,name,visibility,created_at,updated_at?,cover_image_id,cover_image_url,items}`。
+- `CollectionItemResponse` 字段是 `{collection_id,image_id,created_at,image?}`；`image` 存在时是完整 `ImageItem`，用于收藏详情页和列表封面，不要再用静态图片或 mock 卡片填充。
+- `cover_image_id=0` 表示未显式设置封面；`cover_image_url` 是后端计算后的最终封面 URL，前端列表页直接用它渲染封面。空字符串表示空收藏夹/无可展示图片，显示占位状态。
+- `getCollection(id)` -> `GET /api/v1/collections/:id`，公开收藏夹可匿名读取；私有收藏夹按后端权限返回错误。
 - `createCollection()` body 是 `{name,visibility}`，`visibility` 默认 `private`；不要发送旧 `description`。
+- `updateCollection(id,input)` -> `PUT /api/v1/collections/:id`。`input` 必须包含当前 `name` 与 `visibility`；`cover_image_id` 省略表示不改封面，`0` 表示清空显式封面，`>0` 表示设为该图片。
 - `addImageToCollection(collectionId, imageId)` -> `POST /api/v1/collections/:id/items`，body 是 `{image_id}`。
 - `createTag(name)` -> `POST /api/v1/tags`，body 是 `{name}`。
 - `assignTagsToImages(imageIds, tagIds)` -> `POST /api/v1/images/tags`，body 是 `{image_ids,tag_ids}`。
@@ -164,6 +170,10 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 | HTTP 非 2xx，body 非 JSON | throw `ApiError('API Error: <status>', status)` |
 | HTTP 200 但 `code !== 0` | throw `ApiError(msg || '请求失败', 200, code)` |
 | `/collections` 未登录返回 401 / 40101 | 页面显示登录提示，不渲染 mock 收藏夹 |
+| `GET /collections/:id` 返回 `items[].image` | 收藏详情页用真实 `ImageItem` 渲染 ArtCard，不显示 raw imageID |
+| `cover_image_url` 为空 | 收藏夹列表显示占位封面，不显示数字封面或空白破图 |
+| `PUT /collections/:id` 设置封面成功 | 详情页刷新返回的 collection，并让当前封面按钮变为 disabled 状态 |
+| `PUT /collections/:id` 返回 400（cover 不在夹内） | 显示后端错误，不本地伪造封面已更新 |
 | 收藏夹/标签/评分 mutation 未登录 | 阻止调用 mutation API，显示持久 inline 登录提示与 `/account` 链接；toast 只能作为补充 |
 | 批量标签移除 | 发送选中图片 ID 和选中标签 ID 到 `DELETE /images/tags`；不要伪造本地成功 |
 | 后端返回空 `list` | 页面显示 empty state，不使用 fallback mock |
@@ -186,6 +196,9 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - Good：热榜 period UI `每日/每周/每月` 映射为 `day/week/month`，切换后重新请求 `/rankings`。
 - Good：社区焦点需要 10 张可展示作品时，可以请求 `getRankings({period: 'week', limit: 20})` 作为缓冲，先过滤不可展示图片项，再 `slice(0, 10)` 渲染真实作品。
 - Good：未登录收藏页展示登录 required 状态，并说明 `/collections` 需要 Bearer token。
+- Good：收藏夹列表页使用 `cover_image_url` 渲染封面，卡片跳转 `/collections/:id`，不显示 `ID/Owner/raw imageID`。
+- Good：收藏详情页使用 `items[].image` 经 `imageToArtItem` 转成 ArtCard，owner 可调用 `updateCollection(...,{cover_image_id})` 设置封面。
+- Good：未登录访问公开收藏详情页可浏览图片，但不显示“设为封面”按钮。
 - Good：详情页点击“收藏到相册/管理标签/保存评分”且未登录时，渲染 inline `role="alert"` 登录状态与 `/account` 链接，不发送 mutation 请求。
 - Good：批量打标签的移除操作使用真实 `DELETE /images/tags`，body 同时包含 `image_ids` 与 `tag_ids`。
 - Good：账户中心注册成功后自动登录，`GET /users/me` 同步 expanded `UserResponse`；保存资料/偏好后刷新仍保留。
@@ -196,6 +209,8 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - Bad：顶栏显示“快速搜索”输入框但没有 `v-model`、提交处理、路由导航或 API 请求，用户输入后无任何搜索行为。
 - Bad：搜索页只在按钮点击时调用 API，直接打开 `/search?q=miku` 不自动搜索，导致可分享 URL 与页面结果脱节。
 - Bad：收藏夹详情只返回 image_id 时，用静态图片卡片填充 masonry，这是 mock fallback。
+- Bad：收藏夹列表页把 `items[].image_id` 渲染成可见文本，暴露实现 ID 而不是让用户进入详情页看图。
+- Bad：设置封面时只在前端替换图片 URL，不调用 `PUT /collections/:id`。
 - Bad：点击“加入收藏夹/批量打标签”后只显示成功 toast，不调用真实收藏夹或标签 API。
 - Bad：批量移除标签只更新本地 chip，不调用 `DELETE /images/tags`。
 - Bad：将目录占位排名项直接映射成轮播 slide，导致主图显示 broken image alt 文本（如 `thumbnails`）。
@@ -208,6 +223,7 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - Page/E2E：浏览图库、热榜、`/detail?id=<known id>`、未登录收藏页，断言真实 API 请求和 loading/error/empty/login-required 状态。
 - Account E2E：注册自动登录、保存资料、保存偏好、修改密码、退出后用新密码登录并恢复资料；断言 `/users/me` 与 `/users/password` 真实请求返回 200。
 - Favorites/tags E2E：未登录点击详情/批量 mutation action 时断言 inline 登录状态；登录后断言收藏夹列表、创建收藏夹、加入收藏夹、创建标签、批量添加标签、批量移除标签均发出对应 `/collections`、`/tags`、`/images/tags` 请求。
+- Collections cover E2E：登录后访问 `/collections` 断言卡片有封面 `<img>` 且无 ID/Owner/imageID 文本；点击卡片进入 `/collections/:id`；点击“设为封面”断言 `PUT /collections/:id` 200；清 token 后访问公开详情页断言可读但无设置按钮。
 - Gallery pagination：图库页必须验证滚动到底部会发出 `page=2&size=<pageSize>` 请求；重复 sentinel 触发不会并发请求同一页；`items.length >= total` 后不会继续请求；下一页失败时已加载卡片仍保留并出现重试入口。
 
 #### 7. Wrong vs Correct

@@ -230,20 +230,27 @@ result, err := h.ratingService.Upsert(c, do.Rating{
 ## 7. 场景：收藏夹 API
 
 ### 1. Scope / Trigger
-- 触发：新增多收藏夹能力，涉及 HTTP API、owner/visibility 权限、SQLite `collection` / `collection_item` 表、`image.favorite_count` 去重聚合和 `image_event` 行为流水。
-- 目标：用户可管理多个命名收藏夹；公开收藏夹可被任何人浏览；私有收藏夹仅 owner 可见；图片收藏数按去重用户数维护。
+- 触发：新增/修改多收藏夹能力，涉及 HTTP API、owner/visibility 权限、SQLite `collection` / `collection_item` 表、收藏夹封面、`image.favorite_count` 去重聚合和 `image_event` 行为流水。
+- 目标：用户可管理多个命名收藏夹；公开收藏夹可被任何人浏览；私有收藏夹仅 owner 可见；列表/详情响应能直接渲染封面与图片卡片；图片收藏数按去重用户数维护。
 
 ### 2. Signatures
 - `GET /api/v1/collections`，需 `Auth`，返回当前用户收藏夹列表。
 - `POST /api/v1/collections`，需 `Auth`，Request：`{"name": <string>, "visibility": "private"|"public"}`。
 - `GET /api/v1/collections/:id`，公开收藏夹任意访问；私有仅 owner。
-- `PUT /api/v1/collections/:id` / `DELETE /api/v1/collections/:id`，需 `Auth` 且 owner。
+- `PUT /api/v1/collections/:id`，需 `Auth + owner`，Request：`{"name": <string>, "visibility": "private"|"public", "cover_image_id"?: <int64>}`。
+- `DELETE /api/v1/collections/:id`，需 `Auth + owner`。
 - `POST /api/v1/collections/:id/items`，需 owner，Request：`{"image_id": <int64>}`。
 - `DELETE /api/v1/collections/:id/items/:imageId`，需 owner。
-- DB：`collection(id,user_id,name,visibility,created_at,updated_at)`；`collection_item(collection_id,image_id,created_at)`，同夹同图唯一；`image.favorite_count` 为去重用户数；`image_event(type='favorite', value=1|-1)` 记录收藏/取消收藏事件。
+- DB：`collection(id,user_id,name,visibility,cover_image_id nullable,created_at,updated_at)`；`collection_item(collection_id,image_id,created_at)`，同夹同图唯一；`image.favorite_count` 为去重用户数；`image_event(type='favorite', value=1|-1)` 记录收藏/取消收藏事件。
 
 ### 3. Contracts
 - `visibility` 缺省为 `private`；只允许 `private` / `public`。
+- `CollectionResponse` 必须包含 `id,user_id,name,visibility,created_at,cover_image_id,cover_image_url,items`。
+- `items[]` 必须包含 `collection_id,image_id,created_at,image`；`image` 使用 `ImageResponse` 字段集：`id,cos_key,filename,url,size,last_modified,width,height,category,avg_score,rating_count,favorite_count,view_count,created_at`。
+- `cover_image_id=0` 表示未显式设置封面；`cover_image_url` 必须 fallback 到第一张可展示 `items[].image.url`；空收藏夹返回空字符串。
+- `PUT /collections/:id` 省略 `cover_image_id` 时不得修改已有封面；显式 `cover_image_id:0` 清空封面；`cover_image_id>0` 设置封面。
+- 设置封面时，目标图片必须属于该收藏夹且是 active 图片；否则返回参数错误。
+- 查询收藏夹时必须过滤软删除/不可展示图片条目：不要返回 `image` 为空的 `items[]`，封面 fallback 也必须跳过这些条目。
 - 同一收藏夹内同一图片只能存在一条 `collection_item`；重复加入应幂等，不重复增加 `favorite_count`。
 - `favorite_count` 统计某图片被多少个不同用户收藏，而不是被多少个收藏夹收藏。
 - 用户删除收藏夹时，必须按被删除 item 的图片逐一重算该 owner 是否仍收藏该图；只有 owner 对该图无剩余收藏时才递减 `favorite_count` 并发 `favorite value=-1` 事件。
@@ -253,6 +260,7 @@ result, err := h.ratingService.Upsert(c, do.Rating{
 ### 4. Validation & Error Matrix
 - 未登录管理收藏夹或 item -> HTTP 401 / Code 40101。
 - 非法 `:id` / `:imageId` / body 绑定失败 / 非法 visibility -> HTTP 400 / Code 40001。
+- `cover_image_id` 不属于该收藏夹或对应图片不可展示 -> HTTP 400 / Code 40001。
 - 收藏夹不存在，或私有收藏夹被非 owner 读取 -> HTTP 404 / Code 40401（避免泄露私有资源存在性）。
 - 非 owner 更新/删除/添加/移除 item -> HTTP 403 / Code 40301。
 - DB 事务、聚合重算或事件写入失败 -> HTTP 500 / Code 50001，由 handler 统一记录日志。
@@ -260,15 +268,21 @@ result, err := h.ratingService.Upsert(c, do.Rating{
 ### 5. Good/Base/Bad Cases
 - Good：用户 A 将图片 1 加入第一个收藏夹，`favorite_count +1` 且发 `favorite value=1`。
 - Good：用户 A 又将图片 1 加入第二个收藏夹，`favorite_count` 不变，不重复发 +1 事件。
-- Good：用户 A 删除第一个收藏夹但第二个收藏夹仍含图片 1，`favorite_count` 不变。
-- Good：用户 A 删除最后一个包含图片 1 的收藏夹，`favorite_count -1` 且发 `favorite value=-1`。
+- Good：`GET /collections` 返回 `cover_image_url`，前端列表页无需二次请求即可显示收藏夹封面。
+- Good：`PUT /collections/:id` 省略 `cover_image_id` 只改名称/可见性，不清空已设置封面。
+- Good：`PUT /collections/:id` 传 `cover_image_id:0` 清空显式封面，响应继续 fallback 第一张可展示图片。
+- Good：某收藏条目图片被软删除后，`items[]` 不返回该条目，封面 fallback 选择后续 active 图片。
 - Base：公开收藏夹未登录可读；私有收藏夹非 owner 读取按不存在处理。
 - Bad：按 `collection_item` 行数维护 `favorite_count`，导致同一用户多收藏夹收藏同图时重复计数。
+- Bad：把 `cover_image_id` 省略和 `cover_image_id:0` 都解析为 0，导致普通更新误清空封面。
+- Bad：`Preload("Items.Image")` 后仍返回 `Image.ID==0` 的 item，导致前端出现无图卡片或封面 URL 为空。
 
 ### 6. Tests Required
 - Repository：同夹同图唯一；同用户多夹收藏同图只计数一次；删除 item / 删除 collection 时只在最后一份收藏消失后递减；favorite event value=1/-1。
-- Service：visibility 默认值与非法值；非 owner 管理返回 forbidden；public/private 读取边界。
-- Route smoke：未登录管理 401；非 owner 管理 403；公开收藏夹可读；私有收藏夹非 owner/游客不可读。
+- Repository：`cover_image_id` 持久化；省略 cover 字段更新时保留已有值；显式 0 清空；预加载时不可展示图片不进入领域 `Items`。
+- Service：visibility 默认值与非法值；非 owner 管理返回 forbidden；public/private 读取边界；封面必须属于收藏夹；封面 URL fallback 跳过不可展示图片。
+- Route smoke：未登录管理 401；非 owner 管理 403；公开收藏夹可读；私有收藏夹非 owner/游客不可读；`GET /collections/:id` 返回 `items[].image.url`；非法 cover 返回 400。
+- Browser/E2E：登录后列表页显示封面且不显示 ID/Owner/imageID；详情页列出图片并可设封面；未登录可读公开详情且不显示设封面按钮。
 
 ### 7. Wrong vs Correct
 
@@ -281,6 +295,17 @@ if err := tx.Create(&po.CollectionItem{CollectionID: cid, ImageID: imageID}).Err
 }
 ```
 
+#### Wrong
+```go
+// 省略 cover_image_id 的普通更新会误清空封面。
+collection.CoverImageID = derefInt64(input.CoverImageID)
+if collection.CoverImageID > 0 {
+    stored.CoverImageID = &collection.CoverImageID
+} else {
+    stored.CoverImageID = nil
+}
+```
+
 #### Correct
 ```go
 // 先判断该用户此前是否已收藏该图；只有首次用户收藏才递增。
@@ -290,6 +315,21 @@ created, err := createCollectionItem(ctx, tx, collectionID, imageID)
 if err != nil { return err }
 if created && !hadFavorite {
     return incrementFavoriteCountAndEvent(ctx, tx, imageID, ownerID, 1)
+}
+```
+
+#### Correct
+```go
+// 用显式 set 标志区分“字段省略”和“清空封面”。
+coverImageIDSet := input.CoverImageID != nil
+if coverImageIDSet {
+    collection.CoverImageID = *input.CoverImageID
+}
+if collection.CoverImageIDSet {
+    stored.CoverImageID = nil
+    if collection.CoverImageID > 0 {
+        stored.CoverImageID = &collection.CoverImageID
+    }
 }
 ```
 
