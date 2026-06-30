@@ -1,5 +1,6 @@
 import { ref } from 'vue'
-import { ApiError, assignTagsToImages, createTag, getTags, unassignTagsFromImages } from '@/api/client'
+import { ApiError } from '@/api/client'
+import { assignTagsToImages, createTag, getTags, unassignTagsFromImages } from '@/api/tags'
 import type { ImageTagResponse, TagResponse } from '@/api/client'
 
 export function useTagPicker() {

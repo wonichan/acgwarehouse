@@ -1,4 +1,12 @@
 import { apiCall, unwrapResponse } from './transport'
+import { getDailyRecommendations } from './dailyRecommendations'
+import {
+  assignTagsToImages,
+  createTag,
+  getTags,
+  suggestTags,
+  unassignTagsFromImages,
+} from './tags'
 import type {
   CollectionDetailResponse,
   CollectionItemResponse,
@@ -8,23 +16,30 @@ import type {
   ImageItem,
   ImageListResponse,
   ImageQuery,
-  ImageTagResponse,
   RankingQuery,
   RankingResponse,
   RatingResponse,
   SearchQuery,
-  TagResponse,
   UserPasswordUpdateRequest,
   UserProfileUpdateRequest,
   UserResponse,
 } from './types'
 import type { ApiResponse } from './transport'
 export { ApiError, clearToken, isAuthenticated, setToken } from './transport'
+export { getDailyRecommendations } from './dailyRecommendations'
+export {
+  assignTagsToImages,
+  createTag,
+  getTags,
+  suggestTags,
+  unassignTagsFromImages,
+} from './tags'
 export type {
   CollectionDetailResponse,
   CollectionItemResponse,
   CollectionResponse,
   CollectionVisibility,
+  DailyRecommendationListResponse,
   ImageDetailResponse,
   ImageItem,
   ImageListResponse,
@@ -166,20 +181,6 @@ export async function searchImages(params: SearchQuery): Promise<ImageListRespon
   return normalizeListResponse(response)
 }
 
-export async function getTags(): Promise<readonly TagResponse[]> {
-  return unwrapResponse(apiCall<ApiResponse<readonly TagResponse[]>>('/tags'))
-}
-
-export async function suggestTags(queryText: string, limit?: number): Promise<readonly TagResponse[]> {
-  const query = new URLSearchParams()
-  appendStringParam(query, 'q', queryText)
-  appendNumberParam(query, 'limit', limit)
-
-  return unwrapResponse(
-    apiCall<ApiResponse<readonly TagResponse[]>>(queryPath('/tags/suggest', query))
-  )
-}
-
 export async function getRankings(params?: RankingQuery): Promise<readonly RankingResponse[]> {
   const query = new URLSearchParams()
   appendStringParam(query, 'period', params?.period ?? 'day')
@@ -233,39 +234,6 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
   )
 }
 
-export async function createTag(name: string): Promise<TagResponse> {
-  return unwrapResponse(
-    apiCall<ApiResponse<TagResponse>>(
-      '/tags',
-      { method: 'POST', body: JSON.stringify({ name }) }
-    )
-  )
-}
-
-export async function assignTagsToImages(
-  imageIds: readonly number[],
-  tagIds: readonly number[]
-): Promise<readonly ImageTagResponse[]> {
-  return unwrapResponse(
-    apiCall<ApiResponse<readonly ImageTagResponse[]>>(
-      '/images/tags',
-      { method: 'POST', body: JSON.stringify({ image_ids: imageIds, tag_ids: tagIds }) }
-    )
-  )
-}
-
-export async function unassignTagsFromImages(
-  imageIds: readonly number[],
-  tagIds: readonly number[]
-): Promise<readonly ImageTagResponse[]> {
-  return unwrapResponse(
-    apiCall<ApiResponse<readonly ImageTagResponse[]>>(
-      '/images/tags',
-      { method: 'DELETE', body: JSON.stringify({ image_ids: imageIds, tag_ids: tagIds }) }
-    )
-  )
-}
-
 export const api = {
   login,
   register,
@@ -275,14 +243,15 @@ export const api = {
   getImages,
   getImage,
   searchImages,
-  getTags,
-  suggestTags,
   getRankings,
+  getDailyRecommendations,
   getCollections,
   getCollection,
   createCollection,
   addImageToCollection,
   rateImage,
+  getTags,
+  suggestTags,
   createTag,
   assignTagsToImages,
   unassignTagsFromImages,

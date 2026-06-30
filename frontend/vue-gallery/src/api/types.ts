@@ -65,6 +65,13 @@ export interface ImageListResponse {
   readonly limit: number
 }
 
+export interface DailyRecommendationListResponse {
+  readonly date: string
+  readonly timezone: string
+  readonly total: number
+  readonly list: readonly ImageItem[]
+}
+
 export interface TagResponse {
   readonly id: number
   readonly name: string
