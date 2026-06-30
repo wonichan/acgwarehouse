@@ -96,6 +96,7 @@ export interface CollectionItemResponse {
   readonly collection_id: number
   readonly image_id: number
   readonly created_at: string
+  readonly image?: ImageItem
 }
 
 export interface CollectionResponse {
@@ -105,6 +106,8 @@ export interface CollectionResponse {
   readonly visibility: CollectionVisibility
   readonly created_at: string
   readonly updated_at?: string
+  readonly cover_image_id: number
+  readonly cover_image_url: string
   readonly items: readonly CollectionItemResponse[]
 }
 

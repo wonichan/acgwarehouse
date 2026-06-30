@@ -32,17 +32,6 @@ function formatDate(value: string): string {
   return date.toLocaleDateString('zh-CN')
 }
 
-function formatDateTime(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 async function loadCollections(): Promise<void> {
   if (!isLoggedIn.value) {
     collections.value = []
@@ -179,37 +168,32 @@ watch(isLoggedIn, () => {
         <div v-else-if="collections.length === 0" class="panel">
           <p class="eyebrow">暂无收藏夹</p>
           <h3>还没有创建收藏夹</h3>
-          <p class="meta">创建后会显示后端返回的收藏夹元数据和 items.length 统计。</p>
+          <p class="meta">创建后会显示收藏夹封面与统计信息，点击卡片进入详情页管理收藏图片。</p>
         </div>
 
         <div v-else class="album-grid">
-          <article v-for="collection in collections" :key="collection.id" class="card album-card">
-            <div class="album-cover album-cover--meta">
-              <strong class="num">{{ collection.items.length }}</strong>
-              <span>真实收藏条目</span>
+          <RouterLink
+            v-for="collection in collections"
+            :key="collection.id"
+            class="card album-card"
+            :to="`/collections/${collection.id}`"
+          >
+            <div class="album-cover" :class="{ 'album-cover--placeholder': !collection.cover_image_url }">
+              <img
+                v-if="collection.cover_image_url"
+                :src="collection.cover_image_url"
+                :alt="collection.name"
+                loading="lazy"
+              />
+              <span v-else class="album-cover__empty">空相册</span>
             </div>
-            <h3>{{ collection.name }}</h3>
-            <p class="meta">
-              {{ collection.items.length }} 张作品 · {{ formatVisibility(collection.visibility) }} · 创建于 {{ formatDate(collection.created_at) }}
-            </p>
-            <div class="kicker-row">
-              <span class="tag">ID {{ collection.id }}</span>
-              <span class="tag">Owner {{ collection.user_id }}</span>
-              <span class="tag">{{ collection.visibility }}</span>
+            <div class="album-body">
+              <h3>{{ collection.name }}</h3>
+              <p class="meta">
+                {{ collection.items.length }} 张作品 · {{ formatVisibility(collection.visibility) }} · 创建于 {{ formatDate(collection.created_at) }}
+              </p>
             </div>
-            <div v-if="collection.items.length > 0" class="collection-items">
-              <RouterLink
-                v-for="item in collection.items"
-                :key="`${item.collection_id}-${item.image_id}`"
-                class="collection-item"
-                :to="`/detail?id=${item.image_id}`"
-              >
-                <span class="collection-item__id">Image {{ item.image_id }}</span>
-                <span class="collection-item__time">{{ formatDateTime(item.created_at) }}</span>
-              </RouterLink>
-            </div>
-            <p v-else class="meta">这个收藏夹还没有真实收藏条目。</p>
-          </article>
+          </RouterLink>
         </div>
       </div>
     </section>
@@ -218,48 +202,76 @@ watch(isLoggedIn, () => {
 </template>
 
 <style scoped>
-.collection-items {
+.album-grid {
   display: grid;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
 }
 
-.collection-item {
+.album-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition:
+    transform var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+.album-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 12px 24px -12px color-mix(in oklab, var(--accent), transparent 70%);
+}
+
+.album-card:active {
+  transform: translateY(0);
+}
+
+.album-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--surface-muted, color-mix(in oklab, var(--border), transparent 60%));
+  overflow: hidden;
+}
+
+.album-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.album-cover--placeholder {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: inherit;
-  text-decoration: none;
-  transition:
-    border-color var(--motion-fast) var(--ease-standard),
-    background var(--motion-fast) var(--ease-standard);
+  justify-content: center;
 }
 
-.collection-item:hover {
-  border-color: var(--accent);
-  background: color-mix(in oklab, var(--accent), transparent 94%);
-}
-
-.collection-item__id {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-weight: 700;
-}
-
-.collection-item__time {
-  flex: 0 0 auto;
+.album-cover__empty {
   color: var(--muted);
   font-size: var(--text-sm);
+  letter-spacing: 0.04em;
+}
+
+.album-body {
+  padding: var(--space-3) var(--space-4);
+}
+
+.album-body h3 {
+  margin: 0 0 var(--space-1) 0;
+}
+
+.album-body .meta {
+  margin: 0;
 }
 
 @media (max-width: 560px) {
-  .collection-item {
-    align-items: flex-start;
-    flex-direction: column;
+  .album-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

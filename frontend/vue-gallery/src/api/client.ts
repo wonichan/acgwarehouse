@@ -216,6 +216,22 @@ export async function createCollection(
   return normalizeCollectionResponse(response)
 }
 
+export interface CollectionUpdateInput {
+  readonly name: string
+  readonly visibility: CollectionVisibility
+  readonly cover_image_id?: number
+}
+
+export async function updateCollection(id: number, input: CollectionUpdateInput): Promise<CollectionResponse> {
+  const response = await unwrapResponse(
+    apiCall<ApiResponse<BackendCollectionResponse>>(
+      `/collections/${id}`,
+      { method: 'PUT', body: JSON.stringify(input) }
+    )
+  )
+  return normalizeCollectionResponse(response)
+}
+
 export async function addImageToCollection(collectionId: number, imageId: number): Promise<void> {
   await unwrapResponse(
     apiCall<ApiResponse<null>>(

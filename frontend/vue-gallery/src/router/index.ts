@@ -33,6 +33,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'ACGWarehouse · 收藏夹' }
   },
   {
+    path: '/collections/:id',
+    name: 'collection-detail',
+    component: () => import('@/pages/CollectionDetailPage.vue'),
+    meta: { title: 'ACGWarehouse · 收藏夹详情' }
+  },
+  {
     path: '/account',
     name: 'account',
     component: () => import('@/pages/AccountPage.vue'),
