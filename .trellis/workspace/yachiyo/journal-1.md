@@ -517,3 +517,44 @@ Added SPA fallback metadata for Vue history routes, documented the fallback and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 完成每日推荐
+
+**Date**: 2026-06-30
+**Task**: 完成每日推荐
+**Branch**: `master`
+
+### Summary
+
+实现全站统一的每日随机推荐：新增后端数据模型、公平随机池、服务和公开 API；前端首页增加图片优先的每日随机推荐区块；补充 backend/frontend code-spec 与 Trellis 规划上下文。验证通过 go test ./...、frontend npm run build、gopls、API smoke 与 Playwright smoke。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4035e26` | (see git log) |
+| `f4142c3` | (see git log) |
+| `c46507c` | (see git log) |
+| `5e8bc22` | (see git log) |
+| `f31f669` | (see git log) |
+| `eaec4ad` | (see git log) |
+| `a20354b` | (see git log) |
+| `09d02f7` | (see git log) |
+| `d323270` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
