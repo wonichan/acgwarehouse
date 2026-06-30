@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/go-http-api.md","reason":"Check backend API response shape, status mapping, ranking compatibility, and required route smoke tests."}
+{"file":".trellis/spec/backend/architecture-layers.md","reason":"Check new code respects dependency direction and service/repository test seams."}
+{"file":".trellis/spec/frontend/api-client.md","reason":"Check frontend build/type safety, API path/query conventions, error handling, and displayable-image filtering."}
+{"file":".trellis/spec/backend/go-naming-and-style.md","reason":"Check Go formatting, naming, and line width on new backend files and tests."}

@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/architecture-layers.md","reason":"Backend implementation must preserve handler -> service -> repository layering and avoid PO/GORM leakage."}
+{"file":".trellis/spec/backend/go-http-api.md","reason":"New public daily recommendations endpoint must follow route naming, envelope, list response, and error contracts."}
+{"file":".trellis/spec/backend/go-naming-and-style.md","reason":"New Go files, types, and tests must follow project naming, line width, and gofmt requirements."}
+{"file":".trellis/spec/frontend/api-client.md","reason":"Frontend API client and GalleryPage integration must follow /api/v1 envelope, type import, displayable-image filtering, and build contracts."}
+{"file":".trellis/spec/guides/go-project-layout.md","reason":"Feature spans cmd, handler, service, repository, model, and frontend; use project layout guidance to place files correctly."}
