@@ -77,3 +77,36 @@ Added code-level backend protections: strong JWT secret validation, safe CORS de
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 重设计社区焦点轮播
+
+**Date**: 2026-06-30
+**Task**: 重设计社区焦点轮播
+**Branch**: `main`
+
+### Summary
+
+重设计本周社区焦点轮播，移除文件名展示，点击图片进入详情页，并按后端宽高适配不同图片比例。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `99f8a97` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
