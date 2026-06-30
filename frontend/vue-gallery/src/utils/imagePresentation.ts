@@ -26,6 +26,8 @@ export function imageToArtItem(img: ImageItem): ArtItem {
     score,
     favorites: img.favorite_count,
     previewVariant,
+    imageWidth: img.width > 0 ? img.width : undefined,
+    imageHeight: img.height > 0 ? img.height : undefined,
     imageUrl: img.url,
   }
 }

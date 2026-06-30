@@ -77,6 +77,34 @@ Questions to answer:
 }
 ```
 
+### Image Feed Layout Contract
+
+**What**: Infinite image feeds must reserve image space before the image file loads.
+
+**Why**: Lazy-loaded images without known dimensions cause layout shift. CSS multi-column masonry also lets the browser rebalance old cards when new cards arrive, which makes the visible scroll position jump.
+
+**Required**:
+- Carry backend `width` / `height` through the presentation type used by image cards.
+- Set card preview space with `aspect-ratio` or equivalent stable dimensions before the image loads.
+- For infinite masonry feeds, append new cards to explicit stable columns or a position cache. Do not use CSS `columns` as the primary layout for paginated image feeds.
+- Rebuild columns only for explicit layout changes such as viewport column-count changes or filter resets; next-page append must not redistribute already-rendered cards.
+
+**Wrong**:
+```css
+.masonry {
+  columns: 4 240px;
+}
+```
+
+**Correct**:
+```vue
+<div class="masonry" :style="{ '--masonry-columns': String(columnCount) }">
+  <div v-for="column in columns" class="masonry-column">
+    <ArtCard v-for="item in column" :key="item.id" :item="item" />
+  </div>
+</div>
+```
+
 ---
 
 ## Accessibility

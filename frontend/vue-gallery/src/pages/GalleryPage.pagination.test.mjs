@@ -8,8 +8,16 @@ test('GalleryPage requests and appends the next image page when the masonry sent
   assert.match(source, /ref<HTMLElement \| null>\(null\)/, 'bottom sentinel element is tracked with a template ref')
   assert.match(source, /IntersectionObserver/, 'an IntersectionObserver triggers loading near the bottom of the masonry feed')
   assert.match(source, /getImages\(galleryImageQuery\(nextPage\)\)/, 'next-page image requests reuse the active sort query')
-  assert.match(source, /artItems\.value\s*=\s*\[\.\.\.artItems\.value, \.\.\.nextItems\]/, 'next page items append to the existing masonry list')
+  assert.match(source, /artItems\.value\s*=\s*appendArtItems\(artItems\.value,\s*nextItems\)/, 'next page items append to the existing masonry list')
+  assert.match(source, /appendMasonryItems\(nextItems\)/, 'next page items append to stable masonry columns without rebuilding old cards')
   assert.match(source, /loadingMore\.value/, 'next-page requests are guarded against duplicate concurrent loads')
+})
+
+test('GalleryPage uses stable JS masonry columns instead of CSS multi-column reflow', () => {
+  assert.match(source, /masonryColumns\s*=\s*ref<ArtItem\[\]\[\]>/, 'masonry columns are tracked as explicit item arrays')
+  assert.match(source, /shortestColumnIndex/, 'new cards are assigned to the shortest current column')
+  assert.match(source, /ResizeObserver/, 'the masonry container is remeasured on responsive width changes')
+  assert.match(source, /class="masonry-column"/, 'the template renders explicit stable masonry columns')
 })
 
 test('GalleryPage maps visible filters to real backend image sort parameters', () => {

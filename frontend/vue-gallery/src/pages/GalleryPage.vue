@@ -12,6 +12,15 @@ import { imageToArtItem } from '@/utils/imagePresentation'
 
 const GALLERY_PAGE_SIZE = 20
 const INFINITE_SCROLL_ROOT_MARGIN = '480px 0px'
+const MASONRY_MIN_COLUMN_WIDTH = 240
+const MASONRY_MAX_COLUMNS = 4
+const MASONRY_COLUMN_GAP = 16
+const ART_CARD_BODY_ESTIMATED_HEIGHT = 104
+const ART_CARD_FALLBACK_HEIGHTS: Record<ArtItem['previewVariant'], number> = {
+  default: 210,
+  tall: 320,
+  wide: 180,
+}
 
 const loading = ref(true)
 const loadingMore = ref(false)
@@ -23,8 +32,13 @@ const carouselSlides = ref<CarouselSlide[]>([])
 const currentPage = ref(1)
 const totalItems = ref(0)
 const hasMore = ref(false)
+const galleryMasonry = ref<HTMLElement | null>(null)
 const gallerySentinel = ref<HTMLElement | null>(null)
+const masonryColumnCount = ref(1)
+const masonryColumns = ref<ArtItem[][]>([[]])
+const masonryColumnHeights = ref<number[]>([0])
 let galleryObserver: IntersectionObserver | null = null
+let masonryResizeObserver: ResizeObserver | null = null
 
 const filters = ['推荐', '最新', '高分参考', '收藏热度'] as const
 
@@ -43,6 +57,80 @@ function updatePagination(page: number, total: number): void {
   currentPage.value = page
   totalItems.value = total
   hasMore.value = artItems.value.length < total
+}
+
+function emptyMasonryColumns(count: number): ArtItem[][] {
+  return Array.from({ length: count }, () => [])
+}
+
+function columnWidthFor(count: number): number {
+  const containerWidth = galleryMasonry.value?.clientWidth ?? MASONRY_MIN_COLUMN_WIDTH
+  const totalGap = Math.max(0, count - 1) * MASONRY_COLUMN_GAP
+  return Math.max(MASONRY_MIN_COLUMN_WIDTH, (containerWidth - totalGap) / count)
+}
+
+function estimateArtItemHeight(item: ArtItem, columnWidth: number): number {
+  if (item.imageWidth !== undefined && item.imageHeight !== undefined && item.imageWidth > 0 && item.imageHeight > 0) {
+    return (columnWidth * item.imageHeight / item.imageWidth) + ART_CARD_BODY_ESTIMATED_HEIGHT
+  }
+  return ART_CARD_FALLBACK_HEIGHTS[item.previewVariant] + ART_CARD_BODY_ESTIMATED_HEIGHT
+}
+
+function shortestColumnIndex(heights: readonly number[]): number {
+  return heights.reduce((shortest, height, index) => height < heights[shortest] ? index : shortest, 0)
+}
+
+function appendMasonryItems(nextItems: readonly ArtItem[]): void {
+  const columnCount = masonryColumnCount.value
+  const nextColumns = masonryColumns.value.length === columnCount
+    ? masonryColumns.value.map(column => [...column])
+    : emptyMasonryColumns(columnCount)
+  const nextHeights = masonryColumnHeights.value.length === columnCount
+    ? [...masonryColumnHeights.value]
+    : Array.from({ length: columnCount }, () => 0)
+  const itemColumnWidth = columnWidthFor(columnCount)
+
+  for (const item of nextItems) {
+    const targetColumn = shortestColumnIndex(nextHeights)
+    nextColumns[targetColumn].push(item)
+    nextHeights[targetColumn] += estimateArtItemHeight(item, itemColumnWidth) + MASONRY_COLUMN_GAP
+  }
+
+  masonryColumns.value = nextColumns
+  masonryColumnHeights.value = nextHeights
+}
+
+function rebuildMasonryColumns(items: readonly ArtItem[] = artItems.value): void {
+  const columnCount = masonryColumnCount.value
+  masonryColumns.value = emptyMasonryColumns(columnCount)
+  masonryColumnHeights.value = Array.from({ length: columnCount }, () => 0)
+  appendMasonryItems(items)
+}
+
+function calculateMasonryColumnCount(width: number): number {
+  if (width <= 0) return masonryColumnCount.value
+  const nextCount = Math.floor((width + MASONRY_COLUMN_GAP) / (MASONRY_MIN_COLUMN_WIDTH + MASONRY_COLUMN_GAP))
+  return Math.max(1, Math.min(MASONRY_MAX_COLUMNS, nextCount))
+}
+
+function updateMasonryColumnCount(width: number): void {
+  const nextColumnCount = calculateMasonryColumnCount(width)
+  if (nextColumnCount === masonryColumnCount.value) return
+  masonryColumnCount.value = nextColumnCount
+  rebuildMasonryColumns()
+}
+
+function observeMasonryContainer(): void {
+  if (!galleryMasonry.value || masonryResizeObserver !== null) return
+
+  updateMasonryColumnCount(galleryMasonry.value.clientWidth)
+  if (typeof ResizeObserver === 'undefined') return
+
+  masonryResizeObserver = new ResizeObserver(entries => {
+    const width = entries[0]?.contentRect.width ?? galleryMasonry.value?.clientWidth ?? 0
+    updateMasonryColumnCount(width)
+  })
+  masonryResizeObserver.observe(galleryMasonry.value)
 }
 
 function galleryImageQuery(page: number): ImageQuery {
@@ -66,6 +154,7 @@ async function loadNextGalleryPage(): Promise<void> {
     const imagesData = await getImages(galleryImageQuery(nextPage))
     const nextItems = imagesData.items.map(imageToArtItem)
     artItems.value = appendArtItems(artItems.value, nextItems)
+    appendMasonryItems(nextItems)
     updatePagination(imagesData.page, imagesData.total)
   } catch (e) {
     if (e instanceof ApiError) {
@@ -92,7 +181,7 @@ function observeGallerySentinel(): void {
   galleryObserver.observe(gallerySentinel.value)
 }
 
-async function loadGallery() {
+async function loadGallery(): Promise<void> {
   loading.value = true
   error.value = null
   nextPageError.value = null
@@ -106,7 +195,9 @@ async function loadGallery() {
       getImages(galleryImageQuery(1)),
       getCommunityFocusSlides(),
     ])
-    artItems.value = imagesData.items.map(imageToArtItem)
+    const firstPageItems = imagesData.items.map(imageToArtItem)
+    artItems.value = firstPageItems
+    rebuildMasonryColumns(firstPageItems)
     updatePagination(imagesData.page, imagesData.total)
     carouselSlides.value = slides
     await dailyResult
@@ -123,7 +214,7 @@ async function loadGallery() {
   }
 }
 
-async function handleFilter(filter: GalleryFilter) {
+async function handleFilter(filter: GalleryFilter): Promise<void> {
   activeFilter.value = filter
   await loadGallery()
 }
@@ -131,6 +222,7 @@ async function handleFilter(filter: GalleryFilter) {
 async function loadInitialGallery(): Promise<void> {
   await loadGallery()
   await nextTick()
+  observeMasonryContainer()
   observeGallerySentinel()
 }
 
@@ -141,6 +233,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   galleryObserver?.disconnect()
   galleryObserver = null
+  masonryResizeObserver?.disconnect()
+  masonryResizeObserver = null
 })
 </script>
 
@@ -219,8 +313,19 @@ onBeforeUnmount(() => {
         </div>
 
         <template v-else>
-          <div class="masonry" aria-label="图库瀑布流">
-            <ArtCard v-for="item in artItems" :key="item.id" :item="item" />
+          <div
+            ref="galleryMasonry"
+            class="masonry"
+            aria-label="图库瀑布流"
+            :style="{ '--masonry-columns': String(masonryColumnCount) }"
+          >
+            <div
+              v-for="(column, columnIndex) in masonryColumns"
+              :key="`masonry-column-${masonryColumnCount}-${columnIndex}`"
+              class="masonry-column"
+            >
+              <ArtCard v-for="item in column" :key="item.id" :item="item" />
+            </div>
           </div>
           <div ref="gallerySentinel" class="panel" aria-live="polite">
             <p v-if="loadingMore" class="meta">正在加载更多作品...</p>

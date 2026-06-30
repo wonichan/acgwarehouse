@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ArtItem } from '@/types'
 import { useSelection } from '@/composables/useSelection'
 
@@ -10,6 +11,17 @@ const props = withDefaults(defineProps<{
 })
 
 const { isSelected, toggle } = useSelection()
+
+const imageWidth = computed(() => (
+  props.item.imageWidth !== undefined && props.item.imageWidth > 0 ? props.item.imageWidth : undefined
+))
+const imageHeight = computed(() => (
+  props.item.imageHeight !== undefined && props.item.imageHeight > 0 ? props.item.imageHeight : undefined
+))
+const previewStyle = computed(() => {
+  if (imageWidth.value === undefined || imageHeight.value === undefined) return undefined
+  return { aspectRatio: `${imageWidth.value} / ${imageHeight.value}` }
+})
 
 const handleClick = (event: MouseEvent) => {
   // Don't toggle if clicking on a link or button
@@ -29,10 +41,26 @@ const handleClick = (event: MouseEvent) => {
     @click="handleClick"
   >
     <RouterLink :to="`/detail?id=${item.id}`" :aria-label="`查看${item.title}详情`">
-      <div v-if="item.imageUrl" class="art-preview" :class="item.previewVariant">
-        <img :src="item.imageUrl" :alt="item.title" loading="lazy" />
+      <div
+        v-if="item.imageUrl"
+        class="art-preview"
+        :class="[item.previewVariant, { 'has-stable-ratio': previewStyle !== undefined }]"
+        :style="previewStyle"
+      >
+        <img
+          :src="item.imageUrl"
+          :alt="item.title"
+          :width="imageWidth"
+          :height="imageHeight"
+          loading="lazy"
+        />
       </div>
-      <div v-else class="art-preview" :class="item.previewVariant"></div>
+      <div
+        v-else
+        class="art-preview"
+        :class="[item.previewVariant, { 'has-stable-ratio': previewStyle !== undefined }]"
+        :style="previewStyle"
+      ></div>
     </RouterLink>
     <button
       v-if="selectable"

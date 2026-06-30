@@ -6,6 +6,8 @@ export interface ArtItem {
   score: number
   favorites: number
   previewVariant: 'default' | 'tall' | 'wide'
+  imageWidth?: number
+  imageHeight?: number
   imageUrl?: string
 }
 

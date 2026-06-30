@@ -135,10 +135,11 @@ h3 { font-size: var(--text-xl); }
 .divider { height: 1px; background: var(--border); margin: var(--space-5) 0; }
 .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-.art-card { position: relative; overflow: hidden; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--border); box-shadow: var(--elev-ring); break-inside: avoid; margin: 0 0 var(--space-4); transition: transform var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard); }
+.art-card { position: relative; overflow: hidden; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--border); box-shadow: var(--elev-ring); transition: transform var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard); }
 .art-card:hover { transform: translateY(-4px); box-shadow: var(--elev-raised); }
 .art-card.is-selected { box-shadow: var(--focus-ring), var(--elev-raised); }
 .art-preview { min-height: 210px; position: relative; overflow: hidden; background: linear-gradient(135deg, color-mix(in oklab, var(--surface-warm), var(--surface) 28%), color-mix(in oklab, var(--accent), var(--surface) 82%)); }
+.art-preview.has-stable-ratio { min-height: 0; }
 .art-preview img { width: 100%; height: 100%; min-height: inherit; object-fit: cover; display: block; }
 .art-preview.tall { min-height: 320px; }
 .art-preview.wide { min-height: 180px; }
@@ -147,7 +148,8 @@ h3 { font-size: var(--text-xl); }
 .art-body { padding: var(--space-4); }
 .art-title { margin: 0; font-size: var(--text-base); font-weight: 900; line-height: 1.28; }
 .art-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); color: var(--muted); font-size: var(--text-sm); }
-.masonry { columns: 4 240px; column-gap: var(--space-4); }
+.masonry { display: grid; grid-template-columns: repeat(var(--masonry-columns, 1), minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.masonry-column { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
 .select-check { position: absolute; top: var(--space-3); right: var(--space-3); width: 30px; height: 30px; border-radius: var(--radius-pill); border: 2px solid var(--surface); background: color-mix(in oklab, var(--fg), transparent 42%); color: var(--surface); display: grid; place-items: center; font-weight: 900; opacity: 0; transition: opacity var(--motion-fast) var(--ease-standard); }
 .art-card:hover .select-check, .art-card.is-selected .select-check { opacity: 1; }
 .art-card.is-selected .select-check { background: var(--accent); }
