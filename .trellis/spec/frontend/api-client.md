@@ -418,10 +418,111 @@ if (result.length > 0) {
 
 - `GET /api/v1/tags` - 标签列表
 - `GET /api/v1/rankings` - 热榜
+- `GET /api/v1/daily-recommendations` - 每日随机推荐
 - `GET /api/v1/collections` - 收藏夹（需认证）
 - `PUT /api/v1/images/:id/rating` - 评分（需认证）
 
 ---
+
+---
+
+### 场景：每日随机推荐首页区块
+
+#### 1. Scope / Trigger
+
+- Trigger：前端接入 `/api/v1/daily-recommendations`，在图库首页展示与社区精选/热榜不同的每日随机推荐。
+- Scope：API client 类型与方法、首页加载编排、图片展示过滤、独立 loading/empty/error UI。
+- Goal：每日推荐以图片为主、必要文字辅助；daily API 失败不影响图库瀑布流或社区精选。
+
+#### 2. Signatures
+
+```typescript
+export interface DailyRecommendationListResponse {
+  readonly date: string
+  readonly timezone: string
+  readonly total: number
+  readonly list: readonly ImageItem[]
+}
+
+export async function getDailyRecommendations(): Promise<DailyRecommendationListResponse>
+```
+
+Backend endpoint：`GET /api/v1/daily-recommendations`，返回 `{date,timezone,total,list}`，外层仍为 `{code,data,msg}`。
+
+#### 3. Contracts
+
+- `getDailyRecommendations()` 必须请求相对路径 `/daily-recommendations`，由 transport 拼成 `/api/v1/daily-recommendations`。
+- `client.ts` 作为业务 API facade，应 re-export `getDailyRecommendations`，并在 `api` 对象中包含该方法，避免调用方必须知道拆分文件路径。
+- 首页 daily block 使用接口返回的 `list`，先过滤不可展示图片，再 `slice(0, 10)`，再映射为 `ArtItem`。
+- 不可展示图片判定与热榜/图库一致：`size > 0`、`width > 0`、`height > 0`、`url.trim()` 非空且不以 `/` 结尾。
+- Daily block 与社区精选并存：社区精选继续走 `/rankings?period=week&size=20`，daily block 走 `/daily-recommendations`。
+- Daily block 文案保持最小：允许 “北京时间今日更新”“每日随机推荐” 和一条短说明；不得展示 inline note、timezone 字符串、刷新机制等运营/调试文字。
+- Daily API 错误只写入 daily-local state；不得把整个 GalleryPage 置为 full-page error。
+- Daily card 使用现有 `ArtCard` 时应传 `selectable=false`，避免推荐区点击触发批量选择。
+
+#### 4. Validation & Error Matrix
+
+| Condition | Frontend behavior |
+|-----------|-------------------|
+| `/daily-recommendations` 返回 200 且 `list=[]` | 显示每日推荐 empty panel，不使用 mock 图片 |
+| `/daily-recommendations` 返回 4xx/5xx | 显示 daily-local error panel 和可选重试；图库主体仍继续展示 |
+| daily list 含目录占位/零尺寸/空 URL | 过滤该项；正常 UI 不展示调试说明 |
+| daily 请求慢于图库/热榜 | daily block 保持自身 loading，不阻塞图库主体渲染 |
+| 移动端 375px | 无水平滚动；daily grid 单列展示 |
+
+#### 5. Good / Base / Bad Cases
+
+- Good：首页同时发起 `/daily-recommendations`、`/images?page=1&size=20...`、`/rankings?period=week&size=20`，三个区域各自渲染。
+- Good：后端 daily 返回空 list 时，页面显示“今日还没有可展示作品”，而不是隐藏整个区块或用示例图填充。
+- Good：daily API 500 时，社区精选和图库仍可用，daily 区块显示“每日推荐暂时不可用”。
+- Base：daily 返回 3 张 displayable 图片时只展示 3 张，不补 mock 卡片。
+- Bad：把 daily 请求放进主 `Promise.all`，导致 daily 失败触发整页 `error`。
+- Bad：在 daily 区块展示 `Asia/Shanghai`、`每日 00:00 刷新` 等非必要 inline note，破坏图片优先的信息层级。
+- Bad：复用社区精选轮播文案或 hot/rank 标签，让用户误以为 daily 来自热榜算法。
+
+#### 6. Tests Required
+
+- Build/type：`npm run build` 必须通过，覆盖 `vue-tsc -b`。
+- Browser smoke：生产前端代理下访问首页，断言 daily section 可见、请求 `/api/v1/daily-recommendations`、console errors 为 0。
+- Responsive smoke：375px 宽度断言 `document.body.scrollWidth === window.innerWidth`。
+- API smoke：`curl /api/v1/daily-recommendations` 返回 200/envelope，并包含 `date/timezone/total/list`。
+- Regression：确认社区精选仍请求 `/rankings`，不被 daily endpoint 替代。
+
+#### 7. Wrong vs Correct
+
+##### Wrong
+
+```typescript
+const [images, rankings, daily] = await Promise.all([
+  getImages(query),
+  getRankings({ period: 'week', limit: 20 }),
+  getDailyRecommendations(),
+])
+// daily 失败会进入主 catch，整页图库失败。
+```
+
+##### Correct
+
+```typescript
+const dailyResult = dailyRecommendations.load() // catches into daily-local state
+const [imagesData, slides] = await Promise.all([
+  getImages(galleryImageQuery(1)),
+  getCommunityFocusSlides(),
+])
+await dailyResult
+```
+
+##### Wrong
+
+```vue
+<p>今日随机池 · Asia/Shanghai · 每日 00:00 刷新</p>
+```
+
+##### Correct
+
+```vue
+<p class="daily-random-copy">随机抽取今日可展示作品，让冷门作品也有机会被看见。</p>
+```
 
 ## Composables 使用
 

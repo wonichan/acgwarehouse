@@ -50,6 +50,7 @@ All backend APIs are under `/api/v1/*`:
 - Tags: `/api/v1/tags`
 - Image tags: `/api/v1/images/tags` (`POST` assign, `DELETE` unassign)
 - Rankings: `/api/v1/rankings`
+- Daily recommendations: `/api/v1/daily-recommendations`
 - Collections: `/api/v1/collections` (auth required)
 
 ### Deployment Fallback Contract

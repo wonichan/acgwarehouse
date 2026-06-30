@@ -350,3 +350,79 @@ func (h *RankingHandler) List(c context.Context, ctx *app.RequestContext) {
     Success(ctx, rankings)
 }
 ```
+
+## 9. 场景：每日随机推荐 API
+
+### 1. Scope / Trigger
+- 触发：新增全站统一“今日每日推荐”，涉及公开 HTTP API、SQLite 持久化随机池、service 日期边界、前端首页展示。
+- 目标：每天按北京时间自然日提供最多 10 张 active 图片；推荐来源是公平随机池，不复用热榜/社区精选算法。
+
+### 2. Signatures
+- API：`GET /api/v1/daily-recommendations`，公开无 Auth。
+- Response：`{date,timezone,total,list:[ImageResponse...]}`，外层仍为 `Response{Code,Data,Msg}`。
+- DB：
+  - `daily_recommendation(date,image_id,position,cycle,created_at)`，`date + image_id` 唯一表示某日推荐项。
+  - `daily_recommendation_pool(image_id,cycle,position,created_at)` 保存当前随机周期剩余池。
+  - `daily_recommendation_state(key,cycle,updated_at)` 保存全局周期，`key='global'`。
+
+### 3. Contracts
+- `date` 使用 Asia/Shanghai 自然日，格式 `YYYY-MM-DD`；数据库时间戳仍存 UTC。
+- `timezone` 固定返回 `Asia/Shanghai`。
+- `total` 表示本次返回 `list` 长度，不表示全站图片总数。
+- `list` 只包含 active 图片：`image.status='active' AND image.deleted_at IS NULL`。
+- 同一 `date` 多次请求必须返回稳定结果；若已有当日结果中的图片被软删除，允许同日补齐，但不得重复返回当天已有 image_id。
+- 新增或恢复的 active 图片进入当前 cycle 的剩余池；当剩余池不足以补齐当日数量时，开启下一 cycle 并重新洗牌 active 图片。
+- active 图片少于 10 张时返回全部 active 图片，不重复填充。
+- `/api/v1/rankings` 与 ranking job 不得因每日推荐改动而改变行为。
+
+### 4. Validation & Error Matrix
+- SQLite 读写失败 / AutoMigrate 缺表 / pool 维护失败 -> HTTP 500 / Code 50001，handler 统一记录日志。
+- active 图片为空 -> HTTP 200 / Code 0，`total=0,list=[]`。
+- 今日已有推荐但部分图片软删除 -> HTTP 200 / Code 0，过滤软删除并尝试补齐。
+- 同日并发首次请求遇到唯一键冲突 -> 不消费 pool row；通过插入 `RowsAffected` 判断后再删除 pool row。
+
+### 5. Good/Base/Bad Cases
+- Good：`GET /daily-recommendations` 首次请求生成 10 张 active 图片，第二次同日请求返回相同顺序。
+- Good：第 1 天返回 1-10，第 2 天返回 11-20；当 cycle 剩余不足 10 时，用下一 cycle 补齐但不复用同日已展示图片。
+- Good：今日推荐项被软删除后再次请求，软删除项消失并由 pool 中下一张 active 图片补齐。
+- Good：恢复一张 deleted 图片后，该图片进入当前 cycle 剩余池，有机会在下一次生成中出现。
+- Base：图库只有 3 张 active 图片时返回 3 张且无重复。
+- Bad：请求时直接 `ORDER BY RANDOM()`，导致同一天刷新频繁变化且无法保证长期公平。
+- Bad：`ON CONFLICT DO NOTHING` 后仍删除 pool row，导致并发下消耗了候选但没有生成推荐行。
+
+### 6. Tests Required
+- Repository：同日稳定、跨日 cycle 推进、小池无重复、软删除过滤并补齐、恢复图片加入当前 pool、同日补齐不复用已有 row、AutoMigrate 创建表。
+- Service：UTC 时间跨北京时间 00:00 时 date key 正确；COS URL 拼接与 `{date,timezone,total,list}` DTO 正确。
+- Route smoke：`GET /daily-recommendations` 成功返回 200/envelope/shape；repository/service 错误返回 500。
+- Regression：保留 `/rankings?period=week` 等既有 route 测试，确认热榜不受影响。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```go
+// 每次请求实时随机，刷新页面会变化，也无法保证每张图片长期有机会出现。
+db.Order("RANDOM()").Limit(10).Find(&images)
+```
+
+#### Correct
+```go
+inserted, err := createTodayRow(ctx, tx, date, imageID, nextPosition, cycle, nowUTC)
+if err != nil {
+    return err
+}
+if inserted {
+    return deletePoolRow(ctx, tx, imageID)
+}
+```
+
+#### Wrong
+```go
+// 同日补齐新 cycle 时没有排除当日已展示图片，可能重复返回同一 image_id。
+rows := listPoolRows(ctx, tx, cycle)
+```
+
+#### Correct
+```go
+rows := listPoolRows(ctx, tx, cycle, date) // excludes image_id already used for this date
+```
+
