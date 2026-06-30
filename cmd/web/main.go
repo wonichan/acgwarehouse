@@ -76,11 +76,13 @@ func run(ctx context.Context) error {
 	ratingRepo := repository.NewRatingRepository(sqliteDB.Read, sqliteDB.Write)
 	collectionRepo := repository.NewCollectionRepository(sqliteDB.Read, sqliteDB.Write)
 	rankingRepo := repository.NewRankingRepository(sqliteDB.Read, sqliteDB.Write)
+	dailyRecommendationRepo := repository.NewDailyRecommendationRepository(sqliteDB.Read, sqliteDB.Write)
 	searcher := search.NewSearcher(searchIndex)
 	tagService := service.NewTagService(tagRepo, searcher)
 	ratingService := service.NewRatingService(ratingRepo)
 	collectionService := service.NewCollectionService(collectionRepo)
 	rankingService := service.NewRankingService(rankingRepo, cfg.COS.Domain)
+	dailyRecommendationService := service.NewDailyRecommendationService(dailyRecommendationRepo, cfg.COS.Domain)
 	rankingJob := job.NewRankingJob(rankingRepo, cfg.Ranking)
 	rankingJob.Start(ctx)
 	addRankingJobStop(hooks, rankingJob)
@@ -96,12 +98,13 @@ func run(ctx context.Context) error {
 	)
 
 	engine := router.New(cfg, router.Services{
-		User:       userService,
-		Image:      imageService,
-		Tag:        tagService,
-		Rating:     ratingService,
-		Collection: collectionService,
-		Ranking:    rankingService,
+		User:                userService,
+		Image:               imageService,
+		Tag:                 tagService,
+		Rating:              ratingService,
+		Collection:          collectionService,
+		Ranking:             rankingService,
+		DailyRecommendation: dailyRecommendationService,
 	})
 	engine.SetCustomSignalWaiter(newSignalWaiter(ctx))
 	engine.OnShutdown = append(engine.OnShutdown, runShutdownHooks(hooks))

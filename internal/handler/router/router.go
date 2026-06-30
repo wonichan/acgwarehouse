@@ -17,12 +17,13 @@ import (
 
 // Services 聚合路由层依赖的业务服务。
 type Services struct {
-	User       *service.UserService
-	Image      *service.ImageService
-	Tag        *service.TagService
-	Rating     *service.RatingService
-	Collection *service.CollectionService
-	Ranking    *service.RankingService
+	User                *service.UserService
+	Image               *service.ImageService
+	Tag                 *service.TagService
+	Rating              *service.RatingService
+	Collection          *service.CollectionService
+	Ranking             *service.RankingService
+	DailyRecommendation *service.DailyRecommendationService
 }
 
 // Options 保存路由安全中间件配置。
@@ -62,10 +63,16 @@ func RegisterWithOptions(engine *server.Hertz, services Services, jwtManager *jw
 	registerRatingRoutes(v1, services.Rating, jwtManager)
 	registerCollectionRoutes(v1, services.Collection, jwtManager)
 	registerRankingRoutes(v1, services.Ranking)
+	registerDailyRecommendationRoutes(v1, services.DailyRecommendation)
 }
 
 // registerUserRoutes 注册用户认证路由。
-func registerUserRoutes(group *route.RouterGroup, userService *service.UserService, jwtManager *jwtpkg.Manager, opts Options) {
+func registerUserRoutes(
+	group *route.RouterGroup,
+	userService *service.UserService,
+	jwtManager *jwtpkg.Manager,
+	opts Options,
+) {
 	userHandler := handler.NewUserHandler(userService)
 	users := group.Group("/users")
 	var loginLimiter *middleware.RateLimiter
@@ -108,7 +115,11 @@ func registerRatingRoutes(group *route.RouterGroup, ratingService *service.Ratin
 }
 
 // registerCollectionRoutes 注册收藏夹路由。
-func registerCollectionRoutes(group *route.RouterGroup, collectionService *service.CollectionService, jwtManager *jwtpkg.Manager) {
+func registerCollectionRoutes(
+	group *route.RouterGroup,
+	collectionService *service.CollectionService,
+	jwtManager *jwtpkg.Manager,
+) {
 	collectionHandler := handler.NewCollectionHandler(collectionService)
 	group.GET("/collections", middleware.Auth(jwtManager), collectionHandler.ListMine)
 	group.POST("/collections", middleware.Auth(jwtManager), collectionHandler.Create)
@@ -123,6 +134,12 @@ func registerCollectionRoutes(group *route.RouterGroup, collectionService *servi
 func registerRankingRoutes(group *route.RouterGroup, rankingService *service.RankingService) {
 	rankingHandler := handler.NewRankingHandler(rankingService)
 	group.GET("/rankings", rankingHandler.List)
+}
+
+// registerDailyRecommendationRoutes 注册每日推荐查询路由。
+func registerDailyRecommendationRoutes(group *route.RouterGroup, dailyService *service.DailyRecommendationService) {
+	dailyHandler := handler.NewDailyRecommendationHandler(dailyService)
+	group.GET("/daily-recommendations", dailyHandler.Today)
 }
 
 // ping 返回服务健康检查响应。
