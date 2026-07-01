@@ -309,6 +309,7 @@ export async function unassignTagsFromImages(imageIds: readonly number[], tagIds
 - `POST /images/tags` request：`{image_ids:number[], tag_ids:number[]}`。
 - `DELETE /images/tags` request：`{image_ids:number[], tag_ids:number[]}`。
 - `ImageTagResponse` response：`{image: ImageItem, tags: string[]}`；前端可用 `tags` 刷新可移除标签状态，但详情页最终状态必须以重新 `getImage(id)` 为准。
+- 详情页 mutation 成功后的静默刷新必须保留本次已确认成功的用户态字段（例如 `rateImage()` 返回的 `score`、收藏添加成功后的 `is_collected=true`），同时采用 `getImage(id)` 返回的服务端聚合字段（`avg_score`、`rating_count`、`favorite_count`、`tags`、`similar_images`）。不要让刷新响应里的 `my_rating:null` 或 `is_collected:false` 覆盖刚刚成功的用户操作反馈。
 
 #### 4. Validation & Error Matrix
 
@@ -319,7 +320,8 @@ export async function unassignTagsFromImages(imageIds: readonly number[], tagIds
 | 创建收藏夹名称为空 | 禁用创建提交，不发送 API |
 | 标签选择为空 | 禁用添加/移除提交，不发送 API |
 | mutation 返回 `ApiError` | 保持 picker 打开，显示后端错误，不清空 selection |
-| mutation 成功 | 详情页重新加载 detail；批量面板只在成功后清空 selection |
+| mutation 成功后静默刷新详情 | 调用 `getImage(id)` 刷新服务端聚合字段；保留本次 mutation 已确认成功的 `my_rating` / `is_collected` 用户态反馈，不出现详情骨架屏闪烁 |
+| 后端详情刷新返回 `my_rating:null` / `is_collected:false` 但本次 mutation 已成功 | 不覆盖刚确认的用户态反馈；继续使用响应中的 `avg_score` / `rating_count` / `favorite_count` 等聚合字段 |
 
 #### 5. Good / Base / Bad Cases
 
