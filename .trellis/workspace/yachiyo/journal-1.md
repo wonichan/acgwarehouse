@@ -701,3 +701,36 @@ Added SPA fallback metadata for Vue history routes, documented the fallback and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: 社区精选轮播 3s 自动播放与淡入淡出
+
+**Date**: 2026-07-01
+**Task**: 社区精选轮播 3s 自动播放与淡入淡出
+**Branch**: `master`
+
+### Summary
+
+useCarousel 增加 3s 自动播放、pause/resume、visibilitychange 与 prefers-reduced-motion 监听、KeepAlive 生命周期清理；Carousel.vue 由 flex+translateX 改为 grid 叠层，opacity+scale+blur 720ms cubic-bezier 淡入淡出，非活动 slide 加 inert；同步落地 .trellis/spec/frontend 的自动播放/动效契约。vue-tsc + vite build 通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7a1a24b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
