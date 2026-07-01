@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/go-logging.md","reason":"Project logging rules: structured logging, allowed levels, and forbidden sensitive or large body logging."}
+{"file":".trellis/spec/backend/go-http-api.md","reason":"HTTP route and response contracts that access logging must not alter."}
+{"file":".trellis/spec/backend/go-best-practices.md","reason":"Backend Go design and testing constraints for focused functions and safe logging changes."}
+{"file":".trellis/spec/backend/architecture-layers.md","reason":"Layering boundaries for logger, middleware, router, and cmd/web changes."}
+{"file":".trellis/spec/guides/go-project-layout.md","reason":"Project layout guidance for placing logger and middleware code."}

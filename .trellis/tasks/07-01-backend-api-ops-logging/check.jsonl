@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/go-logging.md","reason":"Verify implementation follows logging rules and does not emit sensitive or oversized data."}
+{"file":".trellis/spec/backend/go-http-api.md","reason":"Verify middleware preserves existing HTTP route behavior, status codes, and response contracts."}
+{"file":".trellis/spec/backend/go-best-practices.md","reason":"Verify Go code shape, test coverage, and function responsibilities."}
+{"file":".trellis/spec/backend/architecture-layers.md","reason":"Verify logging/middleware changes stay in correct layers."}
+{"file":".trellis/spec/guides/go-project-layout.md","reason":"Verify new files are placed according to project layout conventions."}
