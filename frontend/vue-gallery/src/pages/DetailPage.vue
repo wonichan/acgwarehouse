@@ -30,6 +30,8 @@ const ratingScoreDefault = 50
 const collectionPickerRef = ref<InstanceType<typeof CollectionPickerPanel> | null>(null)
 const tagPickerRef = ref<InstanceType<typeof TagPickerPanel> | null>(null)
 
+type DetailRefreshOverrides = Partial<Pick<ImageDetailResponse, 'my_rating' | 'is_collected'>>
+
 const imageId = computed<number | null>(() => {
   const v = route.query['id']
   const raw = typeof v === 'string' ? v : Array.isArray(v) && typeof v[0] === 'string' ? v[0] : null
@@ -81,6 +83,33 @@ async function loadDetail(): Promise<void> {
   }
 }
 
+function applyDetailRefreshOverrides(
+  response: ImageDetailResponse,
+  overrides: DetailRefreshOverrides,
+): ImageDetailResponse {
+  const current = detail.value
+  const myRating = overrides.my_rating ?? response.my_rating ?? current?.my_rating ?? null
+  const refreshedCollected = overrides.is_collected ?? response.is_collected
+  const isCollected = refreshedCollected || current?.is_collected === true
+  return {
+    ...response,
+    my_rating: myRating,
+    is_collected: isCollected,
+  }
+}
+
+async function refreshDetailSilently(overrides: DetailRefreshOverrides = {}): Promise<void> {
+  if (imageId.value === null) return
+  try {
+    const response = await getImage(imageId.value)
+    const nextDetail = applyDetailRefreshOverrides(response, overrides)
+    detail.value = nextDetail
+    selectedScore.value = clampRatingScore(nextDetail.my_rating ?? nextDetail.avg_score)
+  } catch {
+    // 静默刷新失败不覆盖已展示数据，也不设 error，用户可继续操作或手动重试
+  }
+}
+
 async function handleSaveRating(): Promise<void> {
   if (imageId.value === null) return
   if (!isLoggedIn.value) {
@@ -91,8 +120,13 @@ async function handleSaveRating(): Promise<void> {
   savingRating.value = true
   try {
     const result = await rateImage(imageId.value, clampRatingScore(selectedScore.value))
+    // 乐观更新 my_rating，让"我的评分"标签立即反馈
+    if (detail.value) {
+      detail.value = { ...detail.value, my_rating: result.score }
+    }
     show(`评分已更新为 ${result.score}/100`)
-    await loadDetail()
+    // 静默刷新 avg_score / rating_count，不闪骨架屏
+    await refreshDetailSilently({ my_rating: result.score })
   } catch (e) {
     if (e instanceof ApiError) {
       show(e.message)
@@ -124,11 +158,15 @@ function handleTagging(): void {
   tagPickerRef.value?.toggle()
 }
 
-async function onPickerSuccess(message: string): Promise<void> {
+async function onPickerSuccess(message: string, overrides: DetailRefreshOverrides = {}): Promise<void> {
   collectionAuthRequired.value = null
   tagAuthRequired.value = null
   show(message)
-  await loadDetail()
+  await refreshDetailSilently(overrides)
+}
+
+async function onCollectionSuccess(): Promise<void> {
+  await onPickerSuccess('已添加到收藏夹', { is_collected: true })
 }
 
 onMounted(() => {
@@ -215,7 +253,7 @@ watch(imageId, () => {
               v-if="imageId !== null"
               ref="collectionPickerRef"
               :image-ids="[imageId]"
-              @success="onPickerSuccess('已添加到收藏夹')"
+              @success="onCollectionSuccess"
             />
           </div>
 
