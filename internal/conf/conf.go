@@ -2,7 +2,6 @@ package conf
 
 import (
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -58,19 +57,6 @@ type ServerConfig struct {
 // Address 返回 Hertz 监听地址。
 func (c ServerConfig) Address() string {
 	return ":" + c.Port
-}
-
-// DatabaseConfig 保存 SQLite 双连接池配置。
-type DatabaseConfig struct {
-	Path              string
-	BusyTimeoutMS     int
-	ReadMaxOpenConns  int
-	WriteMaxOpenConns int
-}
-
-// SearchConfig 保存搜索索引配置。
-type SearchConfig struct {
-	BlevePath string
 }
 
 // COSConfig 保存腾讯云 COS 访问配置。
@@ -162,16 +148,6 @@ func loadServerConfig() ServerConfig {
 	return ServerConfig{
 		Port:            envString("PORT", defaultPort),
 		ShutdownTimeout: 10 * time.Second,
-	}
-}
-
-// loadDatabaseConfig 读取 SQLite 配置。
-func loadDatabaseConfig() DatabaseConfig {
-	return DatabaseConfig{
-		Path:              envString("SQLITE_PATH", defaultDBPath),
-		BusyTimeoutMS:     envInt("SQLITE_BUSY_TIMEOUT_MS", defaultSQLiteTimeout),
-		ReadMaxOpenConns:  envIntWithFallback("SQLITE_READ_MAX_OPEN_CONNS", runtime.NumCPU()*4), // 增加读连接池，提升并发能力
-		WriteMaxOpenConns: 1,
 	}
 }
 
