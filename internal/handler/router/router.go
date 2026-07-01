@@ -56,6 +56,7 @@ func Register(engine *server.Hertz, services Services, jwtManager *jwtpkg.Manage
 // RegisterWithOptions 按指定安全选项注册 API v1 路由骨架。
 func RegisterWithOptions(engine *server.Hertz, services Services, jwtManager *jwtpkg.Manager, opts Options) {
 	v1 := engine.Group("/api/v1")
+	v1.Use(middleware.AccessLog())
 	v1.GET("/ping", ping)
 	registerUserRoutes(v1, services.User, jwtManager, opts)
 	registerImageRoutes(v1, services.Image, jwtManager)
