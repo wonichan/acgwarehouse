@@ -593,3 +593,38 @@ Added SPA fallback metadata for Vue history routes, documented the fallback and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: 修复详情刷新与图库滚动恢复
+
+**Date**: 2026-07-01
+**Task**: 修复详情刷新与图库滚动恢复
+**Branch**: `master`
+
+### Summary
+
+修复图片详情页评分/收藏/标签操作后的整页刷新闪烁；使用 KeepAlive 保留图库返回时的滚动位置与已加载瀑布流；补充详情静默刷新用户态字段保留约定，并完成构建、Playwright 浏览器验证与 trellis-check 复核。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f242b26` | (see git log) |
+| `d87130d` | (see git log) |
+| `d6a8e95` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
-- **Last Active**: 2026-06-30
+- **Total Sessions**: 16
+- **Last Active**: 2026-07-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~595 | Active |
+| `journal-1.md` | ~630 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-07-01 | 修复详情刷新与图库滚动恢复 | `f242b26`, `d87130d`, `d6a8e95` | `master` |
 | 15 | 2026-06-30 | 收藏夹封面与详情页重构 | `96c041a`, `f08eae7`, `998919b` | `master` |
 | 14 | 2026-06-30 | 完成每日推荐 | `4035e26`, `f4142c3`, `c46507c`, `5e8bc22`, `f31f669`, `eaec4ad`, `a20354b`, `09d02f7`, `d323270` | `master` |
 | 13 | 2026-06-29 | 修复前端快速搜索 | `c51901f`, `57883c0` | `master` |
