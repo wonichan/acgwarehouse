@@ -75,3 +75,60 @@ clause.AssignmentColumns([]string{"filename", "size", "status", "deleted_at"})
 ```go
 clause.AssignmentColumns([]string{"filename", "size", "last_modified", "width", "height", "category"})
 ```
+
+## 5. 场景：本地维护型 CLI 只加载所需配置
+
+### 1. Scope / Trigger
+- 触发：新增 `cmd/<tool>` 本地维护命令，用于直接维护 SQLite、索引、缓存等基础设施数据。
+- 原因：维护命令通常不启动 HTTP 服务，不应被 JWT、COS、CORS 等无关服务配置阻塞。
+
+### 2. Signatures
+- 命令入口：`go run ./cmd/<tool> <flags>`。
+- DB-only 配置入口：`conf.LoadDatabase() conf.DatabaseConfig`。
+- SQLite 初始化：`db.NewSQLite(conf.LoadDatabase())`。
+
+### 3. Contracts
+- 环境变量：
+  - `SQLITE_PATH`：可选，默认 `data/acgwarehouse.db`。
+  - `SQLITE_BUSY_TIMEOUT_MS`：可选，默认 `5000`。
+  - `SQLITE_READ_MAX_OPEN_CONNS`：可选，默认 `CPU * 4`。
+- 维护型 CLI 不得调用 `conf.Load()`，除非确实需要完整服务配置。
+- 维护型 CLI 不得要求 `JWT_SECRET`、COS 密钥或 CORS 配置。
+
+### 4. Validation & Error Matrix
+- 未提供操作 flag -> 返回非零错误，不落库。
+- 同时提供多个操作 flag -> 返回非零错误，不落库。
+- 提供操作 flag 但值为空白 -> 返回非零错误，不落库。
+- 数据库打开失败 -> 返回带上下文错误。
+- 资源关闭失败且主流程成功 -> 返回关闭错误。
+
+### 5. Good/Base/Bad Cases
+- Good：`SQLITE_PATH=/tmp/tool.db go run ./cmd/tagctl -a "调月莉音"` 只打开 SQLite 并写入 tag。
+- Base：未设置 `SQLITE_PATH` 时使用 `data/acgwarehouse.db`。
+- Bad：CLI 调用 `conf.Load()`，导致未配置 `JWT_SECRET` 时无法执行本地数据库维护。
+
+### 6. Tests Required
+- Config 单测：`JWT_SECRET` 为空时 `LoadDatabase()` 仍返回 `SQLITE_PATH` 配置。
+- CLI 单测：零操作、多操作、空白操作值都返回错误。
+- Repository 回归：删除数据时验证关联表清理契约。
+- Smoke：用临时 `SQLITE_PATH` 执行 add/update/delete。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```go
+cfg, err := conf.Load()
+if err != nil {
+	return errors.WithMessage(err, "load config")
+}
+sqliteDB, err := db.NewSQLite(cfg.Database)
+```
+
+#### Correct
+```go
+sqliteDB, err := db.NewSQLite(conf.LoadDatabase())
+if err != nil {
+	return errors.WithMessage(err, "init sqlite")
+}
+```
+
