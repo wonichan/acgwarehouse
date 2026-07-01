@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import type { ArtItem, CarouselSlide } from '@/types'
 import Carousel from '@/components/Carousel.vue'
 import ArtCard from '@/components/ArtCard.vue'
@@ -9,6 +9,8 @@ import type { ImageQuery, ImageSort, SortOrder } from '@/api/client'
 import { useDailyRecommendations } from '@/composables/useDailyRecommendations'
 import { appendArtItems, getCommunityFocusSlides } from '@/utils/galleryPresentation'
 import { imageToArtItem } from '@/utils/imagePresentation'
+
+defineOptions({ name: 'GalleryPage' })
 
 const GALLERY_PAGE_SIZE = 20
 const INFINITE_SCROLL_ROOT_MARGIN = '480px 0px'
@@ -39,6 +41,7 @@ const masonryColumns = ref<ArtItem[][]>([[]])
 const masonryColumnHeights = ref<number[]>([0])
 let galleryObserver: IntersectionObserver | null = null
 let masonryResizeObserver: ResizeObserver | null = null
+let initialized = false
 
 const filters = ['推荐', '最新', '高分参考', '收藏热度'] as const
 
@@ -227,7 +230,24 @@ async function loadInitialGallery(): Promise<void> {
 }
 
 onMounted(() => {
-  void loadInitialGallery()
+  void loadInitialGallery().then(() => { initialized = true })
+})
+
+onActivated(() => {
+  if (!initialized) return
+  // KeepAlive 恢复：DOM 与数据已保留，只需重新挂载观察者
+  nextTick(() => {
+    observeMasonryContainer()
+    observeGallerySentinel()
+  })
+})
+
+onDeactivated(() => {
+  // KeepAlive 缓存：断开观察者，保留数据与 DOM
+  galleryObserver?.disconnect()
+  galleryObserver = null
+  masonryResizeObserver?.disconnect()
+  masonryResizeObserver = null
 })
 
 onBeforeUnmount(() => {

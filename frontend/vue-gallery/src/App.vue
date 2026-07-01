@@ -8,7 +8,11 @@ import BatchPanel from '@/components/BatchPanel.vue'
 <template>
   <div class="shell">
     <AppHeader />
-    <RouterView />
+    <RouterView v-slot="{ Component }">
+      <KeepAlive :include="['GalleryPage']">
+        <component :is="Component" />
+      </KeepAlive>
+    </RouterView>
     <BatchPanel />
     <Toast />
     <AppFooter />
