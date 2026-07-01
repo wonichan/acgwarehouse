@@ -49,17 +49,24 @@ func run(ctx context.Context) error {
 	if err := setupLogger(cfg, hooks); err != nil {
 		return err
 	}
+	logger.Info(ctx, "web config loaded",
+		zap.String("addr", cfg.Server.Address()),
+		zap.String("log_level", cfg.Log.Level),
+		zap.String("log_dir", "data/log"),
+	)
 
 	sqliteDB, err := db.NewSQLite(cfg.Database)
 	if err != nil {
 		return pkgerrors.WithMessage(err, "init sqlite")
 	}
+	logger.Info(ctx, "sqlite opened")
 	addSQLiteClose(hooks, sqliteDB)
 
 	searchIndex, err := search.Open(cfg.Search.BlevePath)
 	if err != nil {
 		return pkgerrors.WithMessage(err, "open search index")
 	}
+	logger.Info(ctx, "search index opened", zap.String("path", cfg.Search.BlevePath))
 	addSearchClose(hooks, searchIndex)
 
 	userRepo := repository.NewUserRepository(sqliteDB.Read, sqliteDB.Write)
@@ -85,9 +92,11 @@ func run(ctx context.Context) error {
 	dailyRecommendationService := service.NewDailyRecommendationService(dailyRecommendationRepo, cfg.COS.Domain)
 	rankingJob := job.NewRankingJob(rankingRepo, cfg.Ranking)
 	rankingJob.Start(ctx)
+	logger.Info(ctx, "ranking job started", zap.Duration("interval", cfg.Ranking.RecomputeInterval))
 	addRankingJobStop(hooks, rankingJob)
 	viewBuffer := service.NewViewBuffer(imageRepo, cfg.View.FlushInterval)
 	viewBuffer.Start(ctx)
+	logger.Info(ctx, "view buffer started", zap.Duration("flush_interval", cfg.View.FlushInterval))
 	addViewBufferFlush(hooks, viewBuffer)
 	imageService := service.NewImageServiceWithTags(
 		imageRepo,
@@ -129,13 +138,13 @@ func bootstrapAdmin(ctx context.Context, cfg conf.AdminConfig, userService *serv
 	return nil
 }
 
-// setupLogger 初始化全局日志并注册刷新钩子。
+// setupLogger 初始化全局文件日志并注册刷新钩子。
 func setupLogger(cfg conf.Config, hooks *shutdownHooks) error {
-	zapLogger, err := logger.New(cfg.Log.Level)
+	loggers, err := logger.NewFiles(logger.FileConfig{Level: cfg.Log.Level})
 	if err != nil {
 		return pkgerrors.WithMessage(err, "create logger")
 	}
-	logger.ReplaceGlobal(zapLogger)
+	logger.ReplaceGlobals(loggers)
 	addLoggerSync(hooks)
 	return nil
 }
@@ -182,6 +191,7 @@ func newSignalWaiter(ctx context.Context) func(chan error) error {
 // runShutdownHooks 执行服务优雅关闭钩子。
 func runShutdownHooks(hooks *shutdownHooks) func(context.Context) {
 	return func(ctx context.Context) {
+		logger.Info(ctx, "shutdown hooks starting")
 		if err := hooks.run(ctx); err != nil {
 			logger.Error(ctx, "shutdown hooks failed", zap.Error(err))
 			return
