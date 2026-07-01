@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/go-naming-and-style.md","reason":"Check new Go CLI naming, package layout, and formatting."}
+{"file":".trellis/spec/backend/go-error-handling.md","reason":"Check invalid input and database errors are wrapped/reported consistently."}
+{"file":".trellis/spec/backend/go-best-practices.md","reason":"Check tests, gofmt, and minimal idiomatic Go implementation."}
+{"file":".trellis/spec/backend/architecture-layers.md","reason":"Check CLI preserves backend layering and avoids duplicated SQL."}

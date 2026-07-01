@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/go-naming-and-style.md","reason":"Go naming, package layout, and style expectations for new cmd/tagctl code."}
+{"file":".trellis/spec/backend/go-error-handling.md","reason":"Error wrapping and user-facing failure conventions for CLI and repository interactions."}
+{"file":".trellis/spec/backend/go-best-practices.md","reason":"Backend Go implementation practices and testing expectations."}
+{"file":".trellis/spec/backend/architecture-layers.md","reason":"Layering guidance for reusing conf/db/repository from a CLI entrypoint."}

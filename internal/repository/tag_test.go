@@ -146,6 +146,33 @@ func Test_TagRepository_Update_and_delete_return_not_found_when_missing(t *testi
 	}
 }
 
+func Test_TagRepository_Delete_removes_image_tag_links(t *testing.T) {
+	// Given
+	database := openTestDatabase(t)
+	imageRepo := repository.NewImageRepository(database.Read, database.Write)
+	tagRepo := repository.NewTagRepository(database.Read, database.Write, imageRepo)
+	image := mustCreateImage(t, imageRepo, "thumbnails/tagged.png")
+	tag := mustCreateTag(t, tagRepo, "待删除")
+	if _, err := tagRepo.AssignToImages(context.Background(), []int64{image.ID}, []int64{tag.ID}); err != nil {
+		t.Fatalf("assign tag: %v", err)
+	}
+
+	// When
+	err := tagRepo.Delete(context.Background(), tag.ID)
+	imageTags, listErr := tagRepo.ListByImageID(context.Background(), image.ID)
+
+	// Then
+	if err != nil {
+		t.Fatalf("delete tag: %v", err)
+	}
+	if listErr != nil {
+		t.Fatalf("list image tags: %v", listErr)
+	}
+	if len(imageTags) != 0 {
+		t.Fatalf("imageTags = %#v, want empty after tag delete", imageTags)
+	}
+}
+
 func mustCreateImage(t *testing.T, repo *repository.ImageRepository, key string) do.Image {
 	t.Helper()
 	image, err := repo.UpsertByCOSKey(context.Background(), do.Image{
