@@ -270,13 +270,6 @@ onBeforeUnmount(() => {
             <RouterLink class="btn btn-primary" to="/search">开始智能搜索</RouterLink>
             <RouterLink class="btn btn-secondary" to="/trending">查看今日热榜</RouterLink>
           </div>
-          <div class="kicker-row" aria-label="热门标签">
-            <span class="pill is-active">全部</span>
-            <span class="pill">真实图片</span>
-            <span class="pill">热榜缓存</span>
-            <span class="pill">百分制评分</span>
-            <span class="pill">高评分</span>
-          </div>
         </div>
         <Carousel v-if="carouselSlides.length > 0" :slides="carouselSlides" />
         <aside v-else class="panel panel-raised community-carousel-panel community-carousel-empty">

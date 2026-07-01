@@ -23,7 +23,6 @@ const emit = defineEmits<{
           <div>
             <p class="eyebrow">北京时间今日更新</p>
             <h2>每日随机推荐</h2>
-            <p class="daily-random-copy">随机抽取今日可展示作品，让冷门作品也有机会被看见。</p>
           </div>
           <div class="daily-random-stats" aria-label="每日推荐摘要">
             <span class="tag is-hot">10 张</span>
