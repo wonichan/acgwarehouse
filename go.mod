@@ -48,6 +48,8 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gookit/goutil v0.7.6 // indirect
+	github.com/gookit/rotatefile v0.3.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v0.0.0-20171115153421-f7279a603ede // indirect
