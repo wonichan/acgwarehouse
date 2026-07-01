@@ -628,3 +628,39 @@ Added SPA fallback metadata for Vue history routes, documented the fallback and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: 实现标签管理 CLI
+
+**Date**: 2026-07-01
+**Task**: 实现标签管理 CLI
+**Branch**: `master`
+
+### Summary
+
+新增 tagctl 命令行工具，支持按名称新增、删除、更新标签；删除复用仓储事务清理 image_tag 关联；新增 DB-only 配置入口并记录本地维护 CLI 配置规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ee2511e` | (see git log) |
+| `a2a26df` | (see git log) |
+| `70e95db` | (see git log) |
+| `fef5c9f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
