@@ -129,6 +129,29 @@ Load via the `skill` tool. Do not skip loading when the work is visibly user-fac
 
 ---
 
+### Autoplay / Motion Contract (Carousels, Marquees, Auto-Advance)
+
+**What**: Any component that automatically advances slides, rows, or media on a timer must respect user context: hover, focus, viewport visibility, motion preferences, and Vue lifecycles.
+
+**Why**: Autoplay that ignores these signals steals attention, drains battery in background tabs, breaks screen readers, and leaks timers across `<KeepAlive>` reactivation.
+
+**Required in the composable that owns the timer** (see `useCarousel.ts` for the reference implementation):
+
+- Expose `pause()` / `resume()` for pointer interaction and `pauseByFocus()` / `resumeByFocus()` for keyboard focus. The component template binds `@mouseenter/leave` and `@focusin/focusout` on the root.
+- Any user-driven `next` / `prev` / `goto` must **reset** the pending timer, not stack a new one on top.
+- Listen to `document.visibilitychange` and stop the timer while `document.visibilityState === 'hidden'`.
+- Listen to `window.matchMedia('(prefers-reduced-motion: reduce)')`, including its `change` event, and refuse to autoplay while it matches.
+- Bail out when `slides.length <= 1`.
+- Register the listeners in `onMounted` **and** `onActivated`; tear them down in `onBeforeUnmount` **and** `onDeactivated`. Never leave a `setTimeout` handle live across `<KeepAlive>` deactivation.
+
+**Required in the SFC**:
+
+- Fade-based transitions (`opacity` + `transform` + `filter`) are preferred over sliding `translateX` because they compose better with `position: grid` overlays and don't require known viewport widths.
+- Custom cubic-bezier only (e.g. `cubic-bezier(0.32, 0.72, 0, 1)`). Do not use `linear` or `ease-in-out` for the main transition. Under `prefers-reduced-motion`, a short (≤ 120ms) opacity-only fade with `linear` is acceptable because it minimises perceived motion.
+- Non-active slides must be `aria-hidden="true"` and set `pointer-events: none` (or `inert`) so keyboard users cannot focus into off-screen content.
+
+---
+
 ## Accessibility
 
 - Mutation actions that require login must render durable visible state, not toast-only feedback.

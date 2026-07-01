@@ -6,7 +6,16 @@ const props = defineProps<{
   slides: CarouselSlide[]
 }>()
 
-const { currentIndex, offset, next, prev, goto } = useCarousel(props.slides)
+const {
+  currentIndex,
+  next,
+  prev,
+  goto,
+  pause,
+  resume,
+  pauseByFocus,
+  resumeByFocus,
+} = useCarousel(props.slides)
 
 function carouselStatus(index: number, total: number): string {
   return `第 ${index + 1} 张，共 ${total} 张社区焦点作品`
@@ -47,6 +56,10 @@ const handleKeydown = (event: KeyboardEvent) => {
     aria-roledescription="carousel"
     tabindex="0"
     @keydown="handleKeydown"
+    @mouseenter="pause"
+    @mouseleave="resume"
+    @focusin="pauseByFocus"
+    @focusout="resumeByFocus"
   >
     <div class="panel-head community-carousel-head">
       <div>
@@ -60,7 +73,7 @@ const handleKeydown = (event: KeyboardEvent) => {
     </div>
 
     <div class="carousel-viewport">
-      <div class="carousel-track" :style="{ '--carousel-offset': offset }">
+      <div class="carousel-track">
         <article
           v-for="(slide, index) in slides"
           :key="slide.id"
@@ -70,6 +83,7 @@ const handleKeydown = (event: KeyboardEvent) => {
           aria-roledescription="slide"
           :aria-label="`${index + 1} / ${slides.length}：本周社区焦点作品`"
           :aria-hidden="index !== currentIndex"
+          :inert="index !== currentIndex"
         >
           <div class="focus-card">
             <RouterLink
@@ -208,22 +222,32 @@ const handleKeydown = (event: KeyboardEvent) => {
 }
 
 .carousel-track {
-  display: flex;
-  transform: translateX(var(--carousel-offset, 0%));
-  transition: transform 440ms cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
 }
 
 .carousel-slide {
-  flex: 0 0 100%;
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
   min-width: 0;
   padding: clamp(var(--space-4), 3vw, var(--space-6));
-  opacity: 0.5;
-  transition: opacity var(--motion-base) var(--ease-standard);
+  opacity: 0;
+  transform: scale(0.985);
+  filter: blur(4px);
+  pointer-events: none;
+  will-change: opacity, transform, filter;
+  transition:
+    opacity 720ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 720ms cubic-bezier(0.32, 0.72, 0, 1),
+    filter 720ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .carousel-slide.is-active {
   opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+  pointer-events: auto;
 }
 
 .carousel-slide[aria-hidden="true"] {
@@ -679,6 +703,17 @@ const handleKeydown = (event: KeyboardEvent) => {
   .carousel-progress-bar,
   .carousel-rail-dot {
     transition-duration: 1ms;
+  }
+
+  .carousel-slide {
+    transform: none;
+    filter: none;
+    transition: opacity 120ms linear;
+  }
+
+  .carousel-slide.is-active {
+    transform: none;
+    filter: none;
   }
 }
 </style>
