@@ -664,3 +664,40 @@ Added SPA fallback metadata for Vue history routes, documented the fallback and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: 后端运维与接口访问日志落盘
+
+**Date**: 2026-07-01
+**Task**: 后端运维与接口访问日志落盘
+**Branch**: `master`
+
+### Summary
+
+为 Go 后端接入 gookit/rotatefile，日志按日期切分落盘到 data/log，单文件 100MB 触发轮转并压缩历史文件；应用日志与 /api/v1 接口访问日志分别写入 app.YYYYMMDD.log 与 access.YYYYMMDD.log，接口日志记录 route/method/path/client_ip/user_agent/request_body_bytes/response_body_bytes/duration_ms/status_code，禁记 query/请求体/响应体/Authorization/Cookie；cmd/web 切换到文件日志并补充生命周期日志，同时更新后端日志规范文档。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `722625a` | (see git log) |
+| `93e496e` | (see git log) |
+| `56b05dd` | (see git log) |
+| `d0135ba` | (see git log) |
+| `c42c12c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
