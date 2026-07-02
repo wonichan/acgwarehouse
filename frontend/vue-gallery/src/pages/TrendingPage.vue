@@ -7,6 +7,12 @@ import type { RankingPeriod, RankingResponse } from '@/api/client'
 const periodLabels: string[] = ['每日', '每周', '每月']
 type PeriodLabel = '每日' | '每周' | '每月'
 
+const rankingPeriodLimits: Record<RankingPeriod, number> = {
+  day: 20,
+  week: 50,
+  month: 100,
+}
+
 const activePeriod = ref<PeriodLabel>('每日')
 const rankings = ref<readonly RankingResponse[]>([])
 const loading = ref(true)
@@ -36,7 +42,10 @@ async function loadRankings(): Promise<void> {
   error.value = null
 
   try {
-    rankings.value = await getRankings({ period: backendPeriod.value, limit: 20 })
+    rankings.value = await getRankings({
+      period: backendPeriod.value,
+      limit: rankingPeriodLimits[backendPeriod.value],
+    })
   } catch (e) {
     if (e instanceof ApiError) {
       error.value = e.message
