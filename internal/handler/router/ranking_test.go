@@ -46,6 +46,46 @@ func Test_RankingRoute_returns_bad_request_when_period_invalid(t *testing.T) {
 	}
 }
 
+func Test_RankingRoute_uses_period_image_count_limit_when_size_omitted(t *testing.T) {
+	// Given
+	tests := []struct {
+		name     string
+		period   string
+		wantSize float64
+	}{
+		{name: "daily rankings show twenty images", period: "day", wantSize: 20},
+		{name: "weekly rankings show fifty images", period: "week", wantSize: 50},
+		{name: "monthly rankings show one hundred images", period: "month", wantSize: 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := rankingRouterTestEngine(t, do.RankingListResult{})
+
+			// When
+			recorder := ut.PerformRequest(
+				engine.Engine.Engine,
+				consts.MethodGet,
+				"/api/v1/rankings?period="+tt.period,
+				nil,
+			)
+
+			// Then
+			if recorder.Code != consts.StatusOK {
+				t.Fatalf("status = %d body=%s, want 200", recorder.Code, recorder.Body.String())
+			}
+			var response handler.Response
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			data, ok := response.Data.(map[string]interface{})
+			if !ok || data["size"].(float64) != tt.wantSize {
+				t.Fatalf("response = %#v, want size %.0f", response, tt.wantSize)
+			}
+		})
+	}
+}
+
 func Test_RankingRoute_reads_cached_rankings_when_period_valid(t *testing.T) {
 	// Given
 	engine := rankingRouterTestEngine(t, do.RankingListResult{
