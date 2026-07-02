@@ -13,8 +13,6 @@ import (
 	"github.com/yachiyo/acgwarehouse/pkg/logger"
 )
 
-const defaultRankingTopN = 100
-
 // RankingRepository 定义热榜任务依赖的仓储能力。
 type RankingRepository interface {
 	AggregateMetrics(ctx context.Context, period do.RankingPeriod, from time.Time) ([]do.RankingMetrics, error)
@@ -25,7 +23,6 @@ type RankingRepository interface {
 type RankingJob struct {
 	repo     RankingRepository
 	cfg      conf.RankingConfig
-	topN     int
 	stopOnce sync.Once
 	stop     chan struct{}
 	done     chan struct{}
@@ -36,7 +33,6 @@ func NewRankingJob(repo RankingRepository, cfg conf.RankingConfig) *RankingJob {
 	return &RankingJob{
 		repo: repo,
 		cfg:  cfg,
-		topN: defaultRankingTopN,
 		stop: make(chan struct{}),
 		done: make(chan struct{}),
 	}
@@ -131,5 +127,5 @@ func (j *RankingJob) rankScores(period do.RankingPeriod, metrics []do.RankingMet
 		})
 	}
 	sortRankingScores(scores)
-	return trimRankingScores(scores, j.topN)
+	return trimRankingScores(scores, period.DefaultSize())
 }

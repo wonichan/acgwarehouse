@@ -11,6 +11,12 @@ const (
 	RankingPeriodMonth RankingPeriod = "month"
 )
 
+const (
+	rankingPeriodDayDefaultSize   = 20
+	rankingPeriodWeekDefaultSize  = 50
+	rankingPeriodMonthDefaultSize = 100
+)
+
 // RankingPeriod 定义热榜时间窗口。
 type RankingPeriod string
 
@@ -73,6 +79,20 @@ func (p RankingPeriod) Window() time.Duration {
 		return 30 * 24 * time.Hour
 	default:
 		return 0
+	}
+}
+
+// DefaultSize 返回热榜周期默认展示数量。
+func (p RankingPeriod) DefaultSize() int {
+	switch p {
+	case "", RankingPeriodDay:
+		return rankingPeriodDayDefaultSize
+	case RankingPeriodWeek:
+		return rankingPeriodWeekDefaultSize
+	case RankingPeriodMonth:
+		return rankingPeriodMonthDefaultSize
+	default:
+		return rankingPeriodDayDefaultSize
 	}
 }
 
