@@ -8,6 +8,8 @@ import { useToast } from '@/composables/useToast'
 import { useZoom } from '@/composables/useZoom'
 import AuthRequiredStatus from '@/components/AuthRequiredStatus.vue'
 import CollectionPickerPanel from '@/components/CollectionPickerPanel.vue'
+import DetailLoadingState from '@/components/DetailLoadingState.vue'
+import DetailStatusPanel from '@/components/DetailStatusPanel.vue'
 import SimilarImagesPanel from '@/components/SimilarImagesPanel.vue'
 import TagPickerPanel from '@/components/TagPickerPanel.vue'
 
@@ -25,7 +27,6 @@ const collectionAuthRequired = ref<string | null>(null)
 const tagAuthRequired = ref<string | null>(null)
 const ratingScoreMin = 0
 const ratingScoreMax = 100
-const ratingScoreDefault = 50
 
 const collectionPickerRef = ref<InstanceType<typeof CollectionPickerPanel> | null>(null)
 const tagPickerRef = ref<InstanceType<typeof TagPickerPanel> | null>(null)
@@ -54,7 +55,7 @@ function formatBytes(value: number): string {
 }
 
 function clampRatingScore(value: number | null): number {
-  if (value === null || !Number.isFinite(value)) return ratingScoreDefault
+  if (value === null || !Number.isFinite(value)) return 50
   return Math.min(ratingScoreMax, Math.max(ratingScoreMin, Math.round(value)))
 }
 
@@ -184,37 +185,11 @@ watch(imageId, () => {
 <template>
   <main>
     <section class="section" data-od-id="detail-viewer">
-      <div v-if="imageId === null" class="container">
-        <article class="panel panel-raised">
-          <p class="eyebrow">作品详情</p>
-          <h1>请选择一张作品</h1>
-          <p class="lead">详情页需要有效的图片 ID，例如从图库、搜索结果或热榜进入 /detail?id=5149。</p>
-          <div class="hero-actions">
-            <RouterLink class="btn btn-primary" to="/">返回图库</RouterLink>
-            <RouterLink class="btn btn-secondary" to="/search">去搜索作品</RouterLink>
-          </div>
-        </article>
-      </div>
+      <DetailStatusPanel v-if="imageId === null" variant="missing-id" />
 
-      <div v-else-if="loading" class="container">
-        <article class="panel panel-raised">
-          <p class="eyebrow">正在加载</p>
-          <h1>读取真实作品详情</h1>
-          <p class="lead">正在通过 /api/v1/images/{{ imageId }} 获取图片、标签、评分和相似推荐。</p>
-        </article>
-      </div>
+      <DetailLoadingState v-else-if="loading" />
 
-      <div v-else-if="error" class="container">
-        <article class="panel panel-raised">
-          <p class="eyebrow">加载失败</p>
-          <h1>无法展示作品</h1>
-          <p class="lead">{{ error }}</p>
-          <div class="hero-actions">
-            <button class="btn btn-primary" type="button" @click="loadDetail">重试</button>
-            <RouterLink class="btn btn-secondary" to="/">返回图库</RouterLink>
-          </div>
-        </article>
-      </div>
+      <DetailStatusPanel v-else-if="error" variant="error" :message="error" @retry="loadDetail" />
 
       <div v-else-if="detail && image" class="container detail-stage">
         <article class="panel viewer panel-raised" aria-label="图片放大查看器">
@@ -301,4 +276,5 @@ watch(imageId, () => {
       </div>
     </section>
   </main>
+
 </template>
