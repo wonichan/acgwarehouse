@@ -51,6 +51,14 @@ Questions to answer:
 </style>
 ```
 
+### Loading States
+
+- Do not expose backend route names, proxy details, or fetch internals in user-visible loading UI. Keep API paths such as `/api/v1/...` out of normal loading copy.
+- For image-led pages, prefer a layout-preserving skeleton that reserves the eventual media area (`.viewer-art`, `.thumb`, or a component-specific equivalent) so loading does not collapse into a text-only panel.
+- If the product decision is animation-only loading, visible explanatory text should be omitted; use `role="status"` with an `aria-label` or `.sr-only` text for assistive technology instead.
+- Prefer local CSS using existing design tokens and motion tokens before adding a UI library or dependency for a single loading state.
+- Loading animation must communicate loading state and respect `prefers-reduced-motion`; shimmer, pulse, and float effects should disable continuous motion under reduced-motion settings.
+
 ### Design Skills (UI/UX Work)
 
 When writing or redesigning UI/UX code (new pages, major layout changes, visual rework, component restyling), consider loading one or more of these skills before writing the visual code:
