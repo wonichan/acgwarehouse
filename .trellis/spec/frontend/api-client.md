@@ -144,7 +144,7 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - 顶栏或其他全局“快速搜索”输入不能只渲染静态 `<input>`；必须是可提交的 `role="search"` 表单或等价可访问控件，非空提交导航到 `/search?q=<keyword>`，空提交导航到 `/search`。
 - 同步搜索输入时 watcher 不能只监听 `route.query.q`；如果同一个组件跨路由常驻（例如全局 header），应同时关注 `route.path` 和 `route.query.q`，避免从其他页面进入 `/search` 时保留旧关键词。
 - `suggestTags(text, limit)` -> `GET /api/v1/tags/suggest?q=<text>&limit=<limit>`；不要发送旧 `prefix`。
-- `getRankings({period,page,limit})` -> `GET /api/v1/rankings?period=day|week|month&page=&size=`。
+- `getRankings({period,page,limit})` -> `GET /api/v1/rankings?period=day|week|month&page=&size=`；热榜页按周期显式请求展示数量：`day=20`、`week=50`、`month=100`，并与后端省略 `size` 时的默认数量保持一致。
 - 面向图片展示的排名列表必须在页面边界过滤不可展示图片项后再渲染：`image.size > 0`、`image.width > 0`、`image.height > 0`、`image.url.trim().length > 0`、且 `!image.url.trim().endsWith('/')`。目录占位项（例如 `filename=thumbnails`、URL 以 `/` 结尾）不能进入轮播、瀑布流或详情推荐卡片。
 - `getImage(id)` 返回嵌套 detail：`{image,tags,avg_score,rating_count,favorite_count,my_rating,is_collected,similar_images}`。
 - `TagResponse` 字段是 `{id,name,usage_count,created_at,updated_at}`。
@@ -194,6 +194,7 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
 - Good：顶栏快速搜索输入 `miku` 后提交，URL 变为 `/search?q=miku`，搜索页输入同步为 `miku`，network query 是 `/api/v1/search?q=miku&size=20`。
 - Good：直接访问 `/search?q=miku`，页面无需额外点击即可请求 `/api/v1/search?q=miku&size=20` 并更新搜索摘要。
 - Good：热榜 period UI `每日/每周/每月` 映射为 `day/week/month`，切换后重新请求 `/rankings`。
+- Good：热榜页请求每日/每周/每月时分别发送 `size=20/50/100`，侧栏“返回数量”和列表长度来自真实响应，不使用静态补齐。
 - Good：社区焦点需要 10 张可展示作品时，可以请求 `getRankings({period: 'week', limit: 20})` 作为缓冲，先过滤不可展示图片项，再 `slice(0, 10)` 渲染真实作品。
 - Good：未登录收藏页展示登录 required 状态，并说明 `/collections` 需要 Bearer token。
 - Good：收藏夹列表页使用 `cover_image_url` 渲染封面，卡片跳转 `/collections/:id`，不显示 `ID/Owner/raw imageID`。

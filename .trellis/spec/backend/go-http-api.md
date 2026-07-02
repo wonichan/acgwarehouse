@@ -341,9 +341,10 @@ if collection.CoverImageIDSet {
 
 ### 2. Signatures
 - `GET /api/v1/rankings?period=day|week|month&page=&size=`，公开无 Auth。
+- `size` 省略时使用周期默认展示数量：`day=20`、`week=50`、`month=100`；显式传入 `size` 时尊重请求值。
 - Response：`{total,page,size,list:[{rank,image_id,cos_key,filename,url,size,width,height,category,avg_score,rating_count,favorite_count,view_count,created_at}]}`。
 - DB：`ranking(image_id,period,score,bayes_score,favorite_count,view_count,computed_at)`，按 `(period, score desc)` 排序缓存；`image_event(type=view|rating|favorite, value, user_id, image_id, created_at)` 作为源数据。
-- Job：`internal/job/ranking_job.go`，默认 10min 调度，聚合 day/week/month 窗口，写 ranking，排除软删除。
+- Job：`internal/job/ranking_job.go`，默认 10min 调度，聚合 day/week/month 窗口，按周期默认展示数量裁剪后写 ranking，排除软删除。
 
 ### 3. Contracts
 - `period` 必须为 `day` / `week` / `month`；其他值返回 HTTP 400 / Code 40001。
@@ -354,6 +355,7 @@ if collection.CoverImageIDSet {
   - 热度：`score = w1*bayes + w2*log(1+fav) + w3*log(1+view)`，权重可配置。
   - 排除 `image.status=deleted`。
 - handler 只接收 query param 并返回 `dto`；job/repository 使用 `do`/`po`；禁止 `po` 穿透 HTTP 响应。
+- 周期默认展示数量必须集中在 `do.RankingPeriod` 领域层（例如 `DefaultSize()`）；handler 默认分页、job 缓存裁剪、前端请求数量都引用或镜像同一契约，禁止在各层散落互不一致的 magic number。
 
 ### 4. Validation & Error Matrix
 - 非法 `period` / 缺失 -> HTTP 400 / Code 40001。
@@ -361,14 +363,15 @@ if collection.CoverImageIDSet {
 
 ### 5. Good/Base/Bad Cases
 - Good：job 运行后 `ranking` 表包含 day/week/month 各 top-N，且软删除图片不在其中。
+- Good：job 运行后 day/week/month 分别最多缓存 20/50/100 张；`GET /rankings?period=week` 省略 `size` 时响应 `data.size=50`。
 - Good：`GET /rankings?period=day` 返回按 score 降序的图片列表，前端可渲染。
 - Base：无事件数据时 ranking 表为空，接口返回空列表。
 - Bad：查询接口实时聚合 image_event，导致高并发下响应变慢。
 
 ### 6. Tests Required
 - Repository：day/week/month 窗口聚合、view 不去重、favorite 去重、贝叶斯与热度公式排序、软删除排除、缓存读写。
-- Job：定时触发后 ranking 表被刷新。
-- Route smoke：合法 period 返回 200；非法 period 返回 400。
+- Job：定时触发后 ranking 表被刷新，并断言 day/week/month 裁剪数量分别为 20/50/100。
+- Route smoke：合法 period 返回 200；非法 period 返回 400；省略 `size` 时 day/week/month 响应 `size` 分别为 20/50/100。
 
 ### 7. Wrong vs Correct
 
@@ -465,4 +468,3 @@ rows := listPoolRows(ctx, tx, cycle)
 ```go
 rows := listPoolRows(ctx, tx, cycle, date) // excludes image_id already used for this date
 ```
-
