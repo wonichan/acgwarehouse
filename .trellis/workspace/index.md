@@ -25,9 +25,9 @@ workspace/
 
 ## Active Developers
 
-| Developer | Last Active | Sessions | Active File |
-|-----------|-------------|----------|-------------|
-| (none yet) | - | - | - |
+| Developer  | Last Active | Sessions | Active File |
+| ---------- | ----------- | -------- | ----------- |
+| (none yet) | -           | -        | -           |
 
 ---
 
@@ -102,8 +102,8 @@ Use this template when recording sessions:
 
 ### Git Commits
 
-| Hash | Message |
-|------|---------|
+| Hash      | Message          |
+| --------- | ---------------- |
 | `abc1234` | {commit message} |
 
 ### Testing
@@ -122,4 +122,4 @@ Use this template when recording sessions:
 
 ---
 
-**Language**: All documentation must be written in **English**.
+**Language**: 所有 documentation 都应使用 **Chinese** 编写。

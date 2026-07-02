@@ -69,3 +69,6 @@ Keep `frontend/vue-gallery/public/_redirects` in sync with route/deployment chan
 - The `/* /index.html 200` rule is required for direct public access to clean URLs such as `/account`, `/search`, `/trending`, `/collections`, and `/detail`.
 - The production frontend service must run the Go frontend proxy server (`bin/frontend-server`) so `/api/v1/*` reaches the backend before the SPA fallback; do not use plain `serve -s dist -l 2017` because it serves API paths as `index.html`.
 - Do not switch to hash routing (`/#/...`) to hide missing static-host fallback configuration.
+
+
+**Language**: 所有 documentation 都应使用 **Chinese** 编写。
