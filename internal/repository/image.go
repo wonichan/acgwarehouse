@@ -126,6 +126,43 @@ func (r *ImageRepository) FindActiveByIDs(ctx context.Context, ids []int64) ([]d
 	return orderImagesByIDs(ids, imagesToDO(images)), nil
 }
 
+// FindSimilarByTagIDs 按标签重叠数查询相似图片，排除 excludeImageID，按重叠数降序、view_count 降序排序。
+func (r *ImageRepository) FindSimilarByTagIDs(ctx context.Context, tagIDs []int64, excludeImageID int64, limit int) ([]do.Image, error) {
+	if len(tagIDs) == 0 || limit <= 0 || excludeImageID < 1 {
+		return []do.Image{}, nil
+	}
+	var images []po.Image
+	err := activeImages(r.readDB.WithContext(ctx)).
+		Joins("JOIN image_tag ON image_tag.image_id = image.id").
+		Where("image_tag.tag_id IN ?", tagIDs).
+		Where("image.id != ?", excludeImageID).
+		Group("image.id").
+		Order("COUNT(image_tag.tag_id) DESC, image.view_count DESC").
+		Limit(limit).
+		Find(&images).Error
+	if err != nil {
+		return nil, pkgerrors.WithMessage(err, "find similar images by tag ids")
+	}
+	return imagesToDO(images), nil
+}
+
+// FindSimilarByCategory 按分类查询相似图片，排除 excludeImageIDs，按 view_count 降序排序。
+func (r *ImageRepository) FindSimilarByCategory(ctx context.Context, category string, excludeImageIDs []int64, limit int) ([]do.Image, error) {
+	category = strings.TrimSpace(category)
+	if category == "" || limit <= 0 {
+		return []do.Image{}, nil
+	}
+	query := activeImages(r.readDB.WithContext(ctx)).Where("image.category = ?", category)
+	if len(excludeImageIDs) > 0 {
+		query = query.Where("image.id NOT IN ?", excludeImageIDs)
+	}
+	var images []po.Image
+	if err := query.Order("image.view_count DESC").Limit(limit).Find(&images).Error; err != nil {
+		return nil, pkgerrors.WithMessage(err, "find similar images by category")
+	}
+	return imagesToDO(images), nil
+}
+
 // SoftDelete 将图片标记为已删除。
 func (r *ImageRepository) SoftDelete(ctx context.Context, id int64, deletedAt time.Time) error {
 	updates := map[string]interface{}{

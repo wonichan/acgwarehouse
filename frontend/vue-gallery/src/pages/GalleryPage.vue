@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import type { ArtItem, CarouselSlide } from '@/types'
 import Carousel from '@/components/Carousel.vue'
 import ArtCard from '@/components/ArtCard.vue'
@@ -55,6 +56,17 @@ const gallerySortByFilter: Record<GalleryFilter, { readonly sort: ImageSort, rea
   高分参考: { sort: 'avg_score', order: 'desc' },
   收藏热度: { sort: 'favorite_count', order: 'desc' },
 }
+
+const route = useRoute()
+
+// activeTag 从路由 query 读取，支持 /?tag=<tag> 深链。
+const activeTag = computed<string>(() => {
+  const raw = route.query['tag']
+  return typeof raw === 'string' ? raw : ''
+})
+
+// lastLoadedTag 记录上次加载所用 tag，用于 KeepAlive 恢复时检测 tag 是否变化。
+const lastLoadedTag = ref<string>('')
 
 function updatePagination(page: number, total: number): void {
   currentPage.value = page
@@ -138,11 +150,13 @@ function observeMasonryContainer(): void {
 
 function galleryImageQuery(page: number): ImageQuery {
   const sort = gallerySortByFilter[activeFilter.value] ?? gallerySortByFilter['推荐']
+  const tag = activeTag.value.trim()
   return {
     page,
     limit: GALLERY_PAGE_SIZE,
     sort: sort.sort,
     order: sort.order,
+    ...(tag.length > 0 ? { tag } : {}),
   }
 }
 
@@ -202,6 +216,7 @@ async function loadGallery(): Promise<void> {
     artItems.value = firstPageItems
     rebuildMasonryColumns(firstPageItems)
     updatePagination(imagesData.page, imagesData.total)
+    lastLoadedTag.value = activeTag.value.trim()
     carouselSlides.value = slides
     await dailyResult
     dailyRecommendations.loading.value = false
@@ -233,9 +248,18 @@ onMounted(() => {
   void loadInitialGallery().then(() => { initialized = true })
 })
 
+// 路由 tag 变化时重新加载图库，支持 /?tag=a → /?tag=b 导航。
+watch(() => route.query['tag'], () => {
+  void loadInitialGallery()
+})
+
 onActivated(() => {
   if (!initialized) return
-  // KeepAlive 恢复：DOM 与数据已保留，只需重新挂载观察者
+  // KeepAlive 恢复：若 tag 在 deactivated 期间变化（watcher 被暂停），需重新加载。
+  if (activeTag.value.trim() !== lastLoadedTag.value) {
+    void loadInitialGallery()
+    return
+  }
   nextTick(() => {
     observeMasonryContainer()
     observeGallerySentinel()

@@ -42,6 +42,10 @@ type ImageRepository interface {
 	CountActiveByQuery(ctx context.Context, query RepositoryImageQuery) (int64, error)
 	FindActiveByID(ctx context.Context, id int64) (do.Image, error)
 	FindActiveByIDs(ctx context.Context, ids []int64) ([]do.Image, error)
+	// FindSimilarByTagIDs 按标签重叠数查询相似图片，排除 excludeImageID，按重叠数降序、view_count 降序排序，limit 控制数量。
+	FindSimilarByTagIDs(ctx context.Context, tagIDs []int64, excludeImageID int64, limit int) ([]do.Image, error)
+	// FindSimilarByCategory 按分类查询相似图片，排除 excludeImageIDs，按 view_count 降序排序，limit 控制数量。
+	FindSimilarByCategory(ctx context.Context, category string, excludeImageIDs []int64, limit int) ([]do.Image, error)
 	SoftDelete(ctx context.Context, id int64, deletedAt time.Time) error
 	Restore(ctx context.Context, id int64) (do.Image, error)
 }
@@ -190,39 +194,82 @@ func (s *ImageService) newListResult(total int64, page int, size int, images []d
 	return ImageListResult{Total: total, Page: page, Size: size, List: list}
 }
 
-// newDetailResponse 创建阶段三稳定的图片详情响应。
+// similarImageLimit 控制详情页相似推荐返回数量。
+const similarImageLimit = 6
+
+// newDetailResponse 组装图片详情响应，包含标签与相似推荐。
 func (s *ImageService) newDetailResponse(ctx context.Context, image do.Image) (dto.ImageDetailResponse, error) {
 	response := s.toImageResponse(image)
-	tags, err := s.imageTagNames(ctx, image.ID)
+	// 单次标签查询同时派生名称（给 Tags 字段）和 ID（给相似推荐查询）。
+	tags, err := s.imageTags(ctx, image.ID)
+	if err != nil {
+		return dto.ImageDetailResponse{}, err
+	}
+	tagNames := make([]string, 0, len(tags))
+	tagIDs := make([]int64, 0, len(tags))
+	for _, tag := range tags {
+		tagNames = append(tagNames, tag.Name)
+		tagIDs = append(tagIDs, tag.ID)
+	}
+	similar, err := s.findSimilarImages(ctx, image, tagIDs, similarImageLimit)
 	if err != nil {
 		return dto.ImageDetailResponse{}, err
 	}
 	return dto.ImageDetailResponse{
 		Image:         response,
-		Tags:          tags,
+		Tags:          tagNames,
 		AvgScore:      image.AvgScore,
 		RatingCount:   image.RatingCount,
 		FavoriteCount: image.FavoriteCount,
 		MyRating:      nil,
 		IsCollected:   false,
-		SimilarImages: []dto.ImageResponse{},
+		SimilarImages: similar,
 	}, nil
 }
 
-// imageTagNames 查询图片标签名称。
-func (s *ImageService) imageTagNames(ctx context.Context, imageID int64) ([]string, error) {
+// imageTags 查询图片关联标签，返回领域标签对象。
+func (s *ImageService) imageTags(ctx context.Context, imageID int64) ([]do.Tag, error) {
 	if s.tags == nil {
-		return []string{}, nil
+		return []do.Tag{}, nil
 	}
 	tags, err := s.tags.ListByImageID(ctx, imageID)
 	if err != nil {
 		return nil, pkgerrors.WithMessage(err, "list image tags")
 	}
-	names := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		names = append(names, tag.Name)
+	return tags, nil
+}
+
+// findSimilarImages 按标签重叠为主、分类回退为辅查询相似图片。
+func (s *ImageService) findSimilarImages(ctx context.Context, image do.Image, tagIDs []int64, limit int) ([]dto.ImageResponse, error) {
+	byTag, err := s.repo.FindSimilarByTagIDs(ctx, tagIDs, image.ID, limit)
+	if err != nil {
+		return nil, pkgerrors.WithMessage(err, "find similar by tags")
 	}
-	return names, nil
+	if len(byTag) >= limit {
+		return s.toImageResponseList(byTag[:limit]), nil
+	}
+	// 标签重叠不足时，用同 category 按 view_count 降序补足，排除当前图片与已选结果。
+	remaining := limit - len(byTag)
+	excludeIDs := make([]int64, 0, len(byTag)+1)
+	excludeIDs = append(excludeIDs, image.ID)
+	for _, img := range byTag {
+		excludeIDs = append(excludeIDs, img.ID)
+	}
+	byCategory, err := s.repo.FindSimilarByCategory(ctx, image.Category, excludeIDs, remaining)
+	if err != nil {
+		return nil, pkgerrors.WithMessage(err, "find similar by category")
+	}
+	byTag = append(byTag, byCategory...)
+	return s.toImageResponseList(byTag), nil
+}
+
+// toImageResponseList 将图片领域对象列表转换为响应 DTO 列表。
+func (s *ImageService) toImageResponseList(images []do.Image) []dto.ImageResponse {
+	list := make([]dto.ImageResponse, 0, len(images))
+	for _, image := range images {
+		list = append(list, s.toImageResponse(image))
+	}
+	return list
 }
 
 // toImageResponse 将图片领域对象转换为公开响应 DTO。

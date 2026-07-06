@@ -1,9 +1,19 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ImageItem } from '@/api/client'
 
-defineProps<{
+const props = defineProps<{
   images: readonly ImageItem[]
+  moreLinkTag?: string
 }>()
+
+const moreLink = computed<string>(() => {
+  const tag = props.moreLinkTag?.trim()
+  if (tag && tag.length > 0) {
+    return `/?tag=${encodeURIComponent(tag)}`
+  }
+  return '/search'
+})
 </script>
 
 <template>
@@ -13,11 +23,11 @@ defineProps<{
         <p class="eyebrow">相似推荐</p>
         <h3>同类作品</h3>
       </div>
-      <RouterLink class="btn btn-secondary btn-small" to="/search">更多</RouterLink>
+      <RouterLink class="btn btn-secondary btn-small" :to="moreLink">更多</RouterLink>
     </div>
     <div v-if="images.length === 0" class="activity-empty">
       <p class="activity-empty__title">暂无相似作品</p>
-      <p class="activity-empty__desc">后端返回 similar_images 为空时显示此状态。</p>
+      <p class="activity-empty__desc">还没有相关的作品推荐</p>
     </div>
     <div v-else class="grid-2">
       <RouterLink

@@ -271,7 +271,7 @@ watch(imageId, () => {
             </div>
           </div>
 
-          <SimilarImagesPanel :images="detail.similar_images" />
+          <SimilarImagesPanel :images="detail.similar_images" :more-link-tag="detail.tags[0]" />
         </aside>
       </div>
     </section>

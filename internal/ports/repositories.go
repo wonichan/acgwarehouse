@@ -33,6 +33,10 @@ type ImageRepository interface {
 	CountActiveByQuery(ctx context.Context, query ImageListQuery) (int64, error)
 	FindActiveByID(ctx context.Context, id int64) (do.Image, error)
 	FindActiveByIDs(ctx context.Context, ids []int64) ([]do.Image, error)
+	// FindSimilarByTagIDs 按标签重叠数查询相似图片，排除 excludeImageID，按重叠数降序、view_count 降序排序，limit 控制数量。
+	FindSimilarByTagIDs(ctx context.Context, tagIDs []int64, excludeImageID int64, limit int) ([]do.Image, error)
+	// FindSimilarByCategory 按分类查询相似图片，排除 excludeImageIDs，按 view_count 降序排序，limit 控制数量。
+	FindSimilarByCategory(ctx context.Context, category string, excludeImageIDs []int64, limit int) ([]do.Image, error)
 	SoftDelete(ctx context.Context, id int64, deletedAt time.Time) error
 	Restore(ctx context.Context, id int64) (do.Image, error)
 }
