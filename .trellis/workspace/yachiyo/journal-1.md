@@ -734,3 +734,36 @@ useCarousel 增加 3s 自动播放、pause/resume、visibilitychange 与 prefers
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: 实现图片详情相似推荐功能
+
+**Date**: 2026-07-06
+**Task**: 实现图片详情相似推荐功能
+**Branch**: `master`
+
+### Summary
+
+新建任务 07-06-similar-recommendations 并完成全流程：Phase 1 规划（prd/design/implement + jsonl 清单），Phase 2 实现（后端新增 FindSimilarByTagIDs/FindSimilarByCategory 仓储方法 + service findSimilarImages 编排：标签重叠为主、category 按 view_count desc 回退、去重排除自身；前端 SimilarImagesPanel 清理调试文案 + moreLinkTag prop、DetailPage 传参、GalleryPage 加 tag 深链支持），trellis-check 质检 0 issues，go test 与 npm run build 全绿。Phase 3 提交 7a4c085 后执行 deploy-production.sh 部署到生产（后端+前端+frontend-server 构建、systemd 重启、健康检查通过），实调接口验证 similar_images 返回真实数据，最后 push 到 origin/main。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7a4c085` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
