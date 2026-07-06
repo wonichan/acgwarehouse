@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/architecture-layers.md", "reason": "新增仓储方法须遵循 ports 接口 → repository 实现的分层；service 依赖接口不依赖实现；DI 通过构造函数"}
+{"file": ".trellis/spec/backend/go-best-practices.md", "reason": "Go 代码风格、命名、GORM 用法、边界处理规范"}
+{"file": ".trellis/spec/backend/go-error-handling.md", "reason": "仓储方法与服务编排的错误包装须用 pkgerrors.WithMessage 风格"}
+{"file": ".trellis/spec/frontend/api-client.md", "reason": "前端类型导入须用 import type；API 调用层封装规范"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "SimilarImagesPanel 改动与 GalleryPage 改动须符合组件结构与响应式布局契约"}

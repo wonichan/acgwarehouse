@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/architecture-layers.md", "reason": "校验 service 不导入 repository 包（类型别名除外）；新方法在 ports + service 两接口同步；repository 通过构造函数注入"}
+{"file": ".trellis/spec/backend/go-best-practices.md", "reason": "校验命名、GORM 查询、空入参边界处理符合规范"}
+{"file": ".trellis/spec/backend/go-error-handling.md", "reason": "校验错误包装链路完整、不吞错误"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "校验组件 prop 定义、响应式布局未被破坏"}
+{"file": ".trellis/spec/frontend/api-client.md", "reason": "校验类型导入用 import type、API 调用模式合规"}
