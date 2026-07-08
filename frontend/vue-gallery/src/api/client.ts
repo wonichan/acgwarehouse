@@ -16,6 +16,7 @@ import type {
   ImageItem,
   ImageListResponse,
   ImageQuery,
+  MonthlyCheckInsResponse,
   RankingQuery,
   RankingResponse,
   RatingResponse,
@@ -46,6 +47,7 @@ export type {
   ImageQuery,
   ImageSort,
   ImageTagResponse,
+  MonthlyCheckInsResponse,
   RankingPeriod,
   RankingQuery,
   RankingResponse,
@@ -145,6 +147,15 @@ export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest
       '/users/password',
       { method: 'PUT', body: JSON.stringify(input) }
     )
+  )
+}
+
+export async function getMonthlyCheckIns(year: number, month: number): Promise<MonthlyCheckInsResponse> {
+  const query = new URLSearchParams()
+  query.set('year', String(year))
+  query.set('month', String(month))
+  return unwrapResponse(
+    apiCall<ApiResponse<MonthlyCheckInsResponse>>(queryPath('/users/me/check-ins', query))
   )
 }
 
@@ -256,6 +267,7 @@ export const api = {
   getCurrentUser,
   updateCurrentUserProfile,
   changeCurrentUserPassword,
+  getMonthlyCheckIns,
   getImages,
   getImage,
   searchImages,

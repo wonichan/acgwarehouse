@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/architecture-layers.md", "reason": "校验后端分层：service 不导入 repository、ports 接口定义、构造函数注入、DO 无业务规则"}
+{"file": ".trellis/spec/backend/go-naming-and-style.md", "reason": "校验命名风格与注释规范"}
+{"file": ".trellis/spec/backend/go-error-handling.md", "reason": "校验错误包装与哨兵错误映射"}
+{"file": ".trellis/spec/backend/go-http-api.md", "reason": "校验路由注册、统一响应结构、参数校验"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "校验组件用 design-system 类、CSS 变量、响应式布局、无硬编码颜色"}
+{"file": ".trellis/spec/frontend/api-client.md", "reason": "校验 API 客户端类型导入用 import type、错误处理模式"}

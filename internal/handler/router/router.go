@@ -24,6 +24,7 @@ type Services struct {
 	Collection          *service.CollectionService
 	Ranking             *service.RankingService
 	DailyRecommendation *service.DailyRecommendationService
+	CheckIn             *service.CheckInService
 }
 
 // Options 保存路由安全中间件配置。
@@ -58,7 +59,7 @@ func RegisterWithOptions(engine *server.Hertz, services Services, jwtManager *jw
 	v1 := engine.Group("/api/v1")
 	v1.Use(middleware.AccessLog())
 	v1.GET("/ping", ping)
-	registerUserRoutes(v1, services.User, jwtManager, opts)
+	registerUserRoutes(v1, services.User, services.CheckIn, jwtManager, opts)
 	registerImageRoutes(v1, services.Image, jwtManager)
 	registerTagRoutes(v1, services.Tag, jwtManager)
 	registerRatingRoutes(v1, services.Rating, jwtManager)
@@ -71,10 +72,11 @@ func RegisterWithOptions(engine *server.Hertz, services Services, jwtManager *jw
 func registerUserRoutes(
 	group *route.RouterGroup,
 	userService *service.UserService,
+	checkInService *service.CheckInService,
 	jwtManager *jwtpkg.Manager,
 	opts Options,
 ) {
-	userHandler := handler.NewUserHandler(userService)
+	userHandler := handler.NewUserHandler(userService, checkInService)
 	users := group.Group("/users")
 	var loginLimiter *middleware.RateLimiter
 	if opts.RateLimitRPS > 0 && opts.RateLimitBurst > 0 {
@@ -85,6 +87,7 @@ func registerUserRoutes(
 	users.GET("/me", middleware.Auth(jwtManager), userHandler.Me)
 	users.PUT("/me", middleware.Auth(jwtManager), userHandler.UpdateMe)
 	users.PUT("/password", middleware.Auth(jwtManager), userHandler.ChangePassword)
+	users.GET("/me/check-ins", middleware.Auth(jwtManager), userHandler.ListCheckIns)
 }
 
 // registerImageRoutes 注册图片查询与生命周期路由。

@@ -79,6 +79,7 @@ func AutoMigrate(database *gorm.DB) error {
 		&po.DailyRecommendation{},
 		&po.DailyRecommendationPool{},
 		&po.DailyRecommendationState{},
+		&po.CheckIn{},
 	); err != nil {
 		return pkgerrors.WithMessage(err, "migrate models")
 	}

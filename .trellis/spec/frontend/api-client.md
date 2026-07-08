@@ -128,6 +128,7 @@ export async function rateImage(imageId: number, score: number): Promise<RatingR
 export async function getCurrentUser(): Promise<UserResponse>
 export async function updateCurrentUserProfile(input: UserProfileUpdateRequest): Promise<UserResponse>
 export async function changeCurrentUserPassword(input: UserPasswordUpdateRequest): Promise<void>
+export async function getMonthlyCheckIns(year: number, month: number): Promise<MonthlyCheckInsResponse>
 ```
 
 #### 3. Contracts
@@ -440,6 +441,7 @@ if (result.length > 0) {
 - `GET /api/v1/daily-recommendations` - 每日随机推荐
 - `GET /api/v1/collections` - 收藏夹（需认证）
 - `PUT /api/v1/images/:id/rating` - 评分（需认证）
+- `GET /api/v1/users/me/check-ins?year=&month=` - 月度签到记录（需认证），返回 `{dates: string[], total_points: number}`；`UserResponse.points` 为累计积分，`GET /users/me` 触发幂等自动签到
 
 ---
 

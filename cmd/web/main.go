@@ -78,6 +78,9 @@ func run(ctx context.Context) error {
 		return pkgerrors.WithMessage(err, "bootstrap admin")
 	}
 
+	checkInRepo := repository.NewCheckInRepository(sqliteDB.Read, sqliteDB.Write)
+	checkInService := service.NewCheckInService(checkInRepo, userRepo)
+
 	imageRepo := repository.NewImageRepository(sqliteDB.Read, sqliteDB.Write)
 	tagRepo := repository.NewTagRepository(sqliteDB.Read, sqliteDB.Write, imageRepo)
 	ratingRepo := repository.NewRatingRepository(sqliteDB.Read, sqliteDB.Write)
@@ -114,6 +117,7 @@ func run(ctx context.Context) error {
 		Collection:          collectionService,
 		Ranking:             rankingService,
 		DailyRecommendation: dailyRecommendationService,
+		CheckIn:             checkInService,
 	})
 	engine.SetCustomSignalWaiter(newSignalWaiter(ctx))
 	engine.OnShutdown = append(engine.OnShutdown, runShutdownHooks(hooks))

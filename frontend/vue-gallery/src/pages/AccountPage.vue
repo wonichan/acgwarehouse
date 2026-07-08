@@ -4,6 +4,7 @@ import { ApiError, changeCurrentUserPassword } from '@/api/client'
 import { useTabs } from '@/composables/useTabs'
 import { useToast } from '@/composables/useToast'
 import { useAuth } from '@/composables/useAuth'
+import CheckInCalendar from '@/components/CheckInCalendar.vue'
 import {
   setStatus,
   statusClass,
@@ -216,9 +217,10 @@ function handleTabKeydown(event: KeyboardEvent): void {
             <h2 id="account-profile-title">{{ displayName }}</h2>
             <p class="meta">{{ isLoggedIn ? `${accountRole} · 注册于 ${formattedCreatedAt}` : '登录后可查看资料、偏好和收藏同步状态' }}</p>
           </div>
-          <div v-if="isLoggedIn" class="grid-2" aria-label="账户摘要">
+          <div v-if="isLoggedIn" class="grid-3" aria-label="账户摘要">
             <div class="panel"><strong class="num">{{ user?.public_profile ? '公开' : '私密' }}</strong><p class="meta">资料</p></div>
             <div class="panel"><strong class="num">{{ user?.sync_collections ? '开启' : '关闭' }}</strong><p class="meta">同步</p></div>
+            <div class="panel"><strong class="num">{{ user?.points ?? 0 }}</strong><p class="meta">积分</p></div>
           </div>
           <div v-if="isLoggedIn" class="status-row">
             <span class="status-badge status-synced"><span class="status-dot" aria-hidden="true"></span>{{ user?.sync_collections ? '同步正常' : '同步关闭' }}</span>
@@ -251,6 +253,8 @@ function handleTabKeydown(event: KeyboardEvent): void {
           </div>
 
           <div v-if="isLoggedIn" class="panel"><div class="panel-head"><div><p class="eyebrow">登录状态</p><h3>已登录</h3></div><span class="tag">{{ displayName }}</span></div><p class="lead">账户资料来自后端 /users/me，刷新页面后会通过已保存 token 自动恢复。</p></div>
+
+          <CheckInCalendar v-if="isLoggedIn" />
 
           <div v-if="isLoggedIn" class="panel">
             <div class="panel-head"><div><p class="eyebrow">资料编辑</p><h3>社区展示信息</h3></div><span class="tag">公开资料</span></div>

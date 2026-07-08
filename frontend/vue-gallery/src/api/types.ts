@@ -14,6 +14,12 @@ export interface UserResponse {
   readonly public_profile: boolean
   readonly email_notifications: boolean
   readonly sync_collections: boolean
+  readonly points: number
+}
+
+export interface MonthlyCheckInsResponse {
+  readonly dates: readonly string[]
+  readonly total_points: number
 }
 
 export interface UserProfileUpdateRequest {

@@ -39,4 +39,11 @@ type UserResponse struct {
 	PublicProfile      bool   `json:"public_profile"`
 	EmailNotifications bool   `json:"email_notifications"`
 	SyncCollections    bool   `json:"sync_collections"`
+	Points             int64  `json:"points"`
+}
+
+// MonthlyCheckInsResponse 表示用户月度签到查询响应数据。
+type MonthlyCheckInsResponse struct {
+	Dates       []string `json:"dates"`
+	TotalPoints int64    `json:"total_points"`
 }

@@ -25,6 +25,7 @@ type User struct {
 	PublicProfile      bool
 	EmailNotifications bool
 	SyncCollections    bool
+	Points             int64
 	CreatedAt          time.Time
 }
 

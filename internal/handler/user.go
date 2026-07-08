@@ -3,25 +3,33 @@ package handler
 import (
 	"context"
 	stderrors "errors"
+	"strconv"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"go.uber.org/zap"
 
 	"github.com/yachiyo/acgwarehouse/internal/model/do"
 	"github.com/yachiyo/acgwarehouse/internal/model/dto"
 	"github.com/yachiyo/acgwarehouse/internal/repository"
 	"github.com/yachiyo/acgwarehouse/internal/service"
 	apperrors "github.com/yachiyo/acgwarehouse/pkg/errors"
+	"github.com/yachiyo/acgwarehouse/pkg/logger"
 )
+
+// cstLocation 表示亚洲/上海时区（UTC+8）。
+var cstLocation = time.FixedZone("CST", 8*3600)
 
 // UserHandler 处理用户与认证 HTTP 请求。
 type UserHandler struct {
-	userService *service.UserService
+	userService    *service.UserService
+	checkInService *service.CheckInService
 }
 
 // NewUserHandler 创建用户处理器。
-func NewUserHandler(userService *service.UserService) *UserHandler {
-	return &UserHandler{userService: userService}
+func NewUserHandler(userService *service.UserService, checkInService *service.CheckInService) *UserHandler {
+	return &UserHandler{userService: userService, checkInService: checkInService}
 }
 
 // Register 处理用户注册请求。
@@ -61,6 +69,9 @@ func (h *UserHandler) Me(c context.Context, ctx *app.RequestContext) {
 	id, ok := requiredCurrentUserID(c, ctx)
 	if !ok {
 		return
+	}
+	if _, err := h.checkInService.CheckInToday(c, id); err != nil {
+		logger.Warn(c, "auto check-in failed", zap.Error(err))
 	}
 	user, err := h.userService.CurrentUser(c, id)
 	if err != nil {
@@ -168,5 +179,44 @@ func toUserResponse(user do.User) dto.UserResponse {
 		PublicProfile:      user.PublicProfile,
 		EmailNotifications: user.EmailNotifications,
 		SyncCollections:    user.SyncCollections,
+		Points:             user.Points,
 	}
+}
+
+// ListCheckIns 查询当前登录用户月度签到记录。
+func (h *UserHandler) ListCheckIns(c context.Context, ctx *app.RequestContext) {
+	id, ok := requiredCurrentUserID(c, ctx)
+	if !ok {
+		return
+	}
+	now := time.Now().In(cstLocation)
+	year := parseYear(query(ctx, "year"), now.Year())
+	month := parseMonth(query(ctx, "month"), int(now.Month()))
+	result, err := h.checkInService.ListMonthly(c, id, year, month)
+	if err != nil {
+		writeUserError(c, ctx, err)
+		return
+	}
+	Success(ctx, dto.MonthlyCheckInsResponse{
+		Dates:       result.Dates,
+		TotalPoints: result.TotalPoints,
+	})
+}
+
+// parseYear 解析年份查询参数，缺失或非法时回退到默认值。
+func parseYear(raw string, fallback int) int {
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 {
+		return fallback
+	}
+	return value
+}
+
+// parseMonth 解析月份查询参数，缺失或非法时回退到默认值。
+func parseMonth(raw string, fallback int) int {
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 || value > 12 {
+		return fallback
+	}
+	return value
 }

@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/architecture-layers.md", "reason": "后端分层契约：handler->service->ports->repository，CheckIn 新领域须遵循此分层与依赖注入规则"}
+{"file": ".trellis/spec/backend/go-naming-and-style.md", "reason": "Go 命名与风格规范，新增 CheckIn DO/PO/Service/Repository 须遵循"}
+{"file": ".trellis/spec/backend/go-error-handling.md", "reason": "错误处理规范，签到幂等与唯一约束冲突的错误映射须遵循"}
+{"file": ".trellis/spec/backend/go-http-api.md", "reason": "HTTP API 规范，新增 GET /users/me/check-ins 路由与响应结构须遵循"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "前端组件与样式规范，CheckInCalendar 组件须用 design-system 类与 CSS 变量、保持响应式"}
+{"file": ".trellis/spec/frontend/api-client.md", "reason": "前端 API 客户端封装模式，新增 getMonthlyCheckIns 与类型须遵循"}

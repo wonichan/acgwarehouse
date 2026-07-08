@@ -50,7 +50,7 @@ type Response struct {
 - DB：`user` 必须持久化 `nickname/favorite_tags/bio/public_profile/email_notifications/sync_collections/password_hash`。
 
 ### 3. Contracts
-- `UserResponse` 必须包含：`id, username, role, created_at, nickname, favorite_tags, bio, public_profile, email_notifications, sync_collections`，不得暴露 `password_hash`。
+- `UserResponse` 必须包含：`id, username, role, created_at, nickname, favorite_tags, bio, public_profile, email_notifications, sync_collections, points`，不得暴露 `password_hash`。
 - 新注册用户默认：`nickname=username`，`public_profile=true`，`email_notifications=true`，`sync_collections=true`。
 - profile 字段是面向中文/日文/韩文用户的字符限制，不能在 DTO 上用 `vd:"len($)"` 这类字节长度校验拦截；handler 只 bind，service/domain 用 `utf8.RuneCountInString()` 校验字符数。
 - service 更新 profile 前必须 `strings.TrimSpace`；repository 只保存已规范化后的字段。
@@ -320,7 +320,7 @@ if created && !hadFavorite {
 
 #### Correct
 ```go
-// 用显式 set 标志区分“字段省略”和“清空封面”。
+// 用显式 set 标志区分"字段省略"和"清空封面"。
 coverImageIDSet := input.CoverImageID != nil
 if coverImageIDSet {
     collection.CoverImageID = *input.CoverImageID
@@ -330,6 +330,112 @@ if collection.CoverImageIDSet {
     if collection.CoverImageID > 0 {
         stored.CoverImageID = &collection.CoverImageID
     }
+}
+```
+
+## 10. 场景：用户每日签到 API
+
+### 1. Scope / Trigger
+- 触发：新增每日自动签到与积分累计能力，涉及 HTTP API、service 签到逻辑、SQLite `check_in` 表、`user.points` 字段、前端签到日历组件。
+- 目标：用户每日首次访问个人中心时自动签到获得 10 积分；个人中心展示签到日历与累计积分；不支持补签。
+
+### 2. Signatures
+- `GET /api/v1/users/me`，需 `Auth`——在返回用户信息前**触发幂等自动签到**（best-effort 副作用）。
+- `GET /api/v1/users/me/check-ins?year=&month=`，需 `Auth`——返回指定月份签到日期列表与累计积分。
+- DB：`check_in(id,user_id,check_in_date,points_awarded,created_at)`，`(user_id,check_in_date)` 复合唯一索引保证同日幂等；`user.points int64 not null default 0` 存累计积分。
+- Service：`CheckInService.CheckInToday(ctx, userID)` 计算亚洲/上海时区当日日期，调 repository 原子签到；`CheckInService.ListMonthly(ctx, userID, year, month)` 查月度记录 + 用户积分。
+
+### 3. Contracts
+- 签到日期以**亚洲/上海时区（UTC+8）**计算"今日"：`time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02")`。
+- `check_in_date` 字符串格式 `YYYY-MM-DD`，与 `daily_recommendation.date` 一致。
+- `CheckInToday` 必须在**单事务**内完成：查 `(user_id, date)` 是否存在 → 不存在则 INSERT check_in 记录 + `UPDATE user SET points = points + 10 WHERE id = ?`；存在则跳过。返回 `(checkedIn bool, err error)`。
+- `(user_id, check_in_date)` 复合唯一索引是幂等最终防线：并发请求至多一条 INSERT 成功，冲突时返回 `checkedIn=false`。
+- `GET /users/me` 中的自动签到是 **best-effort**：签到失败仅 `logger.Warn` 记录，**不得**导致 `/users/me` 请求失败。
+- `UserResponse.points` 必须反映签到后的最新累计积分。
+- `GET /users/me/check-ins` 缺省 `year`/`month` 时回退到当前 CST 年/月。
+- `MonthlyCheckInsResponse`：`{dates: []string, total_points: int64}`，`dates` 按日期升序。
+- 每次签到固定发放 `10` 积分（service 常量 `pointsPerDay`）；不支持补签，不提供手动签到按钮。
+
+### 4. Validation & Error Matrix
+- 未登录调用 `/users/me` / `/users/me/check-ins` -> HTTP 401 / Code 40101。
+- 签到事务失败（DB 异常）-> `/users/me` 仍返回 200（best-effort），错误仅写日志；`/users/me/check-ins` 返回 HTTP 500 / Code 50001。
+- `year`/`month` 参数非法或缺省 -> 回退当前 CST 年/月，不返回 400。
+
+### 5. Good/Base/Bad Cases
+- Good：用户当日首次 `GET /users/me` -> `points` 增加 10，`check_in` 表新增一行。
+- Good：同日再次 `GET /users/me` -> `points` 不变，`check_in` 表无新增。
+- Good：跨日（CST 00:00 后）首次 `GET /users/me` -> `points` 再加 10。
+- Good：`GET /users/me/check-ins?year=2026&month=7` 返回当月所有签到日期升序排列。
+- Base：新注册用户 `points=0`，首次访问后 `points=10`。
+- Bad：签到与积分更新不在同一事务，导致 check_in 有记录但 points 未增加。
+- Bad：自动签到失败导致 `/users/me` 返回 500，用户无法查看个人资料。
+- Bad：用 UTC 计算"今日"，导致中国用户 UTC 16:00（CST 00:00）后签到日期错位。
+
+### 6. Tests Required
+- Repository（真实 SQLite）：首签加分、同日幂等不加分、跨日累加、`ListByMonth` 升序且只返回当月、唯一索引防并发。
+- Service（mock repo）：`CheckInToday` 首签返回 `PointsAwarded=10`、重复返回 `PointsAwarded=0`、`ListMonthly` 返回日期列表 + 用户积分。
+- Route smoke：`/users/me/check-ins` 需 Auth；缺省参数回退当前月。
+- 前端：`CheckInCalendar` 日历网格渲染、月份切换、积分展示、loading skeleton、`prefers-reduced-motion`。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```go
+// 签到与积分更新分开执行，不在同一事务，可能不一致。
+func (r *CheckInRepository) CheckInToday(ctx context.Context, userID int64, date string, points int) (bool, error) {
+    var existing po.CheckIn
+    if err := r.db.Where("user_id = ? AND check_in_date = ?", userID, date).First(&existing).Error; err == nil {
+        return false, nil
+    }
+    r.db.Create(&po.CheckIn{UserID: userID, CheckInDate: date, PointsAwarded: points})
+    r.db.Model(&po.User{}).Where("id = ?", userID).UpdateColumn("points", gorm.Expr("points + ?", points))
+    return true, nil
+}
+```
+
+#### Wrong
+```go
+// 自动签到失败导致 /users/me 整体失败，用户无法查看资料。
+func (h *UserHandler) Me(c context.Context, ctx *app.RequestContext) {
+    if _, err := h.checkInService.CheckInToday(c, id); err != nil {
+        Fail(c, ctx, consts.StatusInternalServerError, apperrors.CodeInternal, "签到失败", err)
+        return
+    }
+    // ...
+}
+```
+
+#### Correct
+```go
+// 签到与积分更新在同一事务内完成，唯一索引冲突时返回 false。
+func (r *CheckInRepository) CheckInToday(ctx context.Context, userID int64, date string, pointsAwarded int) (bool, error) {
+    checkedIn := false
+    err := r.writeDB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+        var existing po.CheckIn
+        if err := tx.Where("user_id = ? AND check_in_date = ?", userID, date).First(&existing).Error; err == nil {
+            return nil // 已签到
+        } else if !errors.Is(err, gorm.ErrRecordNotFound) {
+            return err
+        }
+        if err := tx.Create(&po.CheckIn{UserID: userID, CheckInDate: date, PointsAwarded: pointsAwarded}).Error; err != nil {
+            if isUniqueConstraintError(err) { return nil } // 并发幂等
+            return err
+        }
+        return tx.Model(&po.User{}).Where("id = ?", userID).
+            UpdateColumn("points", gorm.Expr("points + ?", pointsAwarded)).Error
+    })
+    return checkedIn, err
+}
+
+// 自动签到 best-effort：失败仅 warn，不影响 /users/me 正常返回。
+func (h *UserHandler) Me(c context.Context, ctx *app.RequestContext) {
+    id, ok := requiredCurrentUserID(c, ctx)
+    if !ok { return }
+    if _, err := h.checkInService.CheckInToday(c, id); err != nil {
+        logger.Warn(c, "auto check-in failed", zap.Error(err))
+    }
+    user, err := h.userService.CurrentUser(c, id)
+    // ...
 }
 ```
 

@@ -131,3 +131,12 @@ type UserRepository interface {
 type ImageEventRepository interface {
 	CreateImageEvents(ctx context.Context, events []do.ImageEvent) error
 }
+
+// CheckInRepository 定义用户签到持久化访问能力。
+type CheckInRepository interface {
+	// CheckInToday 原子地完成当日签到：若 (userID, date) 已存在返回 (false, nil)；
+	// 否则插入签到记录并在同一事务内给 user.points 加 pointsAwarded，返回 (true, nil)。
+	CheckInToday(ctx context.Context, userID int64, date string, pointsAwarded int) (bool, error)
+	// ListByMonth 查询指定用户某年某月的全部签到记录，按日期升序。
+	ListByMonth(ctx context.Context, userID int64, year int, month int) ([]do.CheckIn, error)
+}

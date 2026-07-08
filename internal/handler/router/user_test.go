@@ -3,6 +3,7 @@ package router_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/yachiyo/acgwarehouse/internal/handler"
 	"github.com/yachiyo/acgwarehouse/internal/handler/router"
 	"github.com/yachiyo/acgwarehouse/internal/model/do"
+	"github.com/yachiyo/acgwarehouse/internal/ports"
 	"github.com/yachiyo/acgwarehouse/internal/service"
 	jwtpkg "github.com/yachiyo/acgwarehouse/pkg/jwt"
 )
@@ -82,6 +84,33 @@ func (r *memoryRouterUserRepository) UpdatePasswordHash(_ context.Context, userI
 	return nil
 }
 
+type memoryRouterCheckInRepository struct {
+	records map[string]bool
+}
+
+func newMemoryRouterCheckInRepository() *memoryRouterCheckInRepository {
+	return &memoryRouterCheckInRepository{records: make(map[string]bool)}
+}
+
+func (r *memoryRouterCheckInRepository) CheckInToday(_ context.Context, userID int64, date string, _ int) (bool, error) {
+	key := fmt.Sprintf("%d|%s", userID, date)
+	if r.records[key] {
+		return false, nil
+	}
+	r.records[key] = true
+	return true, nil
+}
+
+func (r *memoryRouterCheckInRepository) ListByMonth(_ context.Context, _ int64, _ int, _ int) ([]do.CheckIn, error) {
+	return nil, nil
+}
+
+var _ ports.CheckInRepository = (*memoryRouterCheckInRepository)(nil)
+
+func newRouterCheckInService(userRepo *memoryRouterUserRepository) *service.CheckInService {
+	return service.NewCheckInService(newMemoryRouterCheckInRepository(), userRepo)
+}
+
 func Test_UserRoute_returns_current_user_profile_when_authenticated(t *testing.T) {
 	// Given
 	repo := newMemoryRouterUserRepository()
@@ -90,7 +119,7 @@ func Test_UserRoute_returns_current_user_profile_when_authenticated(t *testing.T
 	if _, err := svc.Register(context.Background(), do.User{Username: "alice", Password: "secret1"}); err != nil {
 		t.Fatalf("register user: %v", err)
 	}
-	engine := routerTestEngineWithServices(t, router.Services{User: svc})
+	engine := routerTestEngineWithServices(t, router.Services{User: svc, CheckIn: newRouterCheckInService(repo)})
 
 	// When
 	recorder := ut.PerformRequest(
@@ -123,7 +152,7 @@ func Test_UserRoute_updates_profile_when_authenticated(t *testing.T) {
 	if _, err := svc.Register(context.Background(), do.User{Username: "alice", Password: "secret1"}); err != nil {
 		t.Fatalf("register user: %v", err)
 	}
-	engine := routerTestEngineWithServices(t, router.Services{User: svc})
+	engine := routerTestEngineWithServices(t, router.Services{User: svc, CheckIn: newRouterCheckInService(repo)})
 	bodyText := `{"nickname":"Alice","favorite_tags":"雨景","bio":"收藏整理","public_profile":true,"email_notifications":false,"sync_collections":true}`
 	body := &ut.Body{Body: strings.NewReader(bodyText), Len: len(bodyText)}
 
@@ -158,7 +187,7 @@ func Test_UserRoute_updates_profile_when_cjk_values_reach_character_limit(t *tes
 	if _, err := svc.Register(context.Background(), do.User{Username: "alice", Password: "secret1"}); err != nil {
 		t.Fatalf("register user: %v", err)
 	}
-	engine := routerTestEngineWithServices(t, router.Services{User: svc})
+	engine := routerTestEngineWithServices(t, router.Services{User: svc, CheckIn: newRouterCheckInService(repo)})
 	bodyText := `{"nickname":"画师收藏观察记录员甲乙丙丁戊己庚辛壬癸","favorite_tags":"雨景, 制服","bio":"收藏整理","public_profile":true,"email_notifications":false,"sync_collections":true}`
 	body := &ut.Body{Body: strings.NewReader(bodyText), Len: len(bodyText)}
 
@@ -186,7 +215,7 @@ func Test_UserRoute_changes_password_when_old_password_matches(t *testing.T) {
 	if _, err := svc.Register(context.Background(), do.User{Username: "alice", Password: "secret1"}); err != nil {
 		t.Fatalf("register user: %v", err)
 	}
-	engine := routerTestEngineWithServices(t, router.Services{User: svc})
+	engine := routerTestEngineWithServices(t, router.Services{User: svc, CheckIn: newRouterCheckInService(repo)})
 	bodyText := `{"old_password":"secret1","new_password":"secret2"}`
 	body := &ut.Body{Body: strings.NewReader(bodyText), Len: len(bodyText)}
 
@@ -221,7 +250,7 @@ func Test_UserRoute_returns_unauthorized_when_password_old_password_mismatches(t
 	if _, err := svc.Register(context.Background(), do.User{Username: "alice", Password: "secret1"}); err != nil {
 		t.Fatalf("register user: %v", err)
 	}
-	engine := routerTestEngineWithServices(t, router.Services{User: svc})
+	engine := routerTestEngineWithServices(t, router.Services{User: svc, CheckIn: newRouterCheckInService(repo)})
 	bodyText := `{"old_password":"wrong1","new_password":"secret2"}`
 	body := &ut.Body{Body: strings.NewReader(bodyText), Len: len(bodyText)}
 
@@ -249,7 +278,7 @@ func Test_UserRoute_returns_bad_request_when_new_password_too_short(t *testing.T
 	if _, err := svc.Register(context.Background(), do.User{Username: "alice", Password: "secret1"}); err != nil {
 		t.Fatalf("register user: %v", err)
 	}
-	engine := routerTestEngineWithServices(t, router.Services{User: svc})
+	engine := routerTestEngineWithServices(t, router.Services{User: svc, CheckIn: newRouterCheckInService(repo)})
 	bodyText := `{"old_password":"secret1","new_password":"short"}`
 	body := &ut.Body{Body: strings.NewReader(bodyText), Len: len(bodyText)}
 

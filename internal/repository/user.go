@@ -114,6 +114,7 @@ func toDO(user po.User) do.User {
 		PublicProfile:      user.PublicProfile,
 		EmailNotifications: user.EmailNotifications,
 		SyncCollections:    user.SyncCollections,
+		Points:             user.Points,
 		CreatedAt:          user.CreatedAt,
 	}
 }
@@ -131,6 +132,7 @@ func toPO(user do.User) po.User {
 		PublicProfile:      user.PublicProfile,
 		EmailNotifications: user.EmailNotifications,
 		SyncCollections:    user.SyncCollections,
+		Points:             user.Points,
 		CreatedAt:          user.CreatedAt,
 	}
 }

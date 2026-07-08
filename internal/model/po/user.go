@@ -16,6 +16,7 @@ type User struct {
 	PublicProfile      bool      `gorm:"not null;default:true"`
 	EmailNotifications bool      `gorm:"not null;default:true"`
 	SyncCollections    bool      `gorm:"not null;default:true"`
+	Points             int64     `gorm:"not null;default:0"`
 	CreatedAt          time.Time `gorm:"not null"`
 }
 
