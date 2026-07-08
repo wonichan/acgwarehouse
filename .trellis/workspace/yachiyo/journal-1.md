@@ -767,3 +767,36 @@ useCarousel 增加 3s 自动播放、pause/resume、visibilitychange 与 prefers
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: 个人中心新增每日签到功能
+
+**Date**: 2026-07-08
+**Task**: 个人中心新增每日签到功能
+**Branch**: `master`
+
+### Summary
+
+新增用户每日签到功能：GET /users/me 触发幂等自动签到（CST 时区，10 积分/次，best-effort），(user_id, check_in_date) 复合唯一索引保证幂等。新增 CheckIn 领域（DO/PO/Repository/Service）+ User.Points 字段。新增 GET /users/me/check-ins 月度查询接口。前端新增 CheckInCalendar 日历组件（月度网格、月份切换、积分展示、响应式）并集成到 AccountPage。8 个测试（4 repo 集成 + 4 service 单元）全部通过。Spec 更新：go-http-api 场景 10 + api-client 签到接口契约。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0e08626` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
