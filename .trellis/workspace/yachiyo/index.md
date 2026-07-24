@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 21
-- **Last Active**: 2026-07-08
+- **Total Sessions**: 22
+- **Last Active**: 2026-07-24
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~802 | Active |
+| `journal-1.md` | ~835 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 22 | 2026-07-24 | Finish image-detail-loading-state | `08dffa8` | `master` |
 | 21 | 2026-07-08 | 个人中心新增每日签到功能 | `0e08626` | `master` |
 | 20 | 2026-07-06 | 实现图片详情相似推荐功能 | `7a4c085` | `master` |
 | 19 | 2026-07-01 | 社区精选轮播 3s 自动播放与淡入淡出 | `7a1a24b` | `master` |

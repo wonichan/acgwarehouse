@@ -800,3 +800,36 @@ useCarousel 增加 3s 自动播放、pause/resume、visibilitychange 与 prefers
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Finish image-detail-loading-state
+
+**Date**: 2026-07-24
+**Task**: Finish image-detail-loading-state
+**Branch**: `master`
+
+### Summary
+
+Verified detail loading skeleton (DetailLoadingState) against PRD ACs; npm build + loading tests green; filled implement/check jsonl; no new specs needed (Loading States already in component-guidelines). Archived task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `08dffa8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
