@@ -6,8 +6,27 @@ Language: TypeScript + Vue 3 + Vite
 ## Available Specs
 
 - `api-client.md` - API调用层封装、类型定义、composables使用
-- `component-guidelines.md` - 组件结构、样式模式、响应式布局契约、UI/UX design skills 使用指引
-- `design.md` - UI设计规范（如果存在）
+- `component-guidelines.md` - 组件结构、Lucide/`AppIcon`、影院衬、移动折叠菜单 a11y、样式模式、响应式/masonry/loading 契约、UI/UX design skills
+- 根目录 `DESIGN.md` - 色板、字号、间距、motion、组件视觉身份（token 源）
+- 根目录 `AGENTS.md` frontend 段 - 双轨视觉规则（主身份 + 旗舰页例外）
+
+## Pre-Development Checklist
+
+改 `frontend/vue-gallery` UI 前至少阅读：
+
+1. `DESIGN.md`（token / 身份）
+2. `component-guidelines.md`（图标、影院衬、响应式、loading、masonry、skills）
+3. 若动导航/Header：Mobile Disclosure Menu 契约
+4. 若动详情主图：Cinema Backdrop 契约
+
+## Quality Check
+
+- [ ] 无 emoji；交互图标来自 Lucide + `AppIcon`（按名 import）
+- [ ] 新色仅 token `color-mix`；feature 样式优先 scoped
+- [ ] 三端布局可用；图流保持 stable masonry + aspect-ratio
+- [ ] 折叠菜单：aria-expanded / controls / Esc / inert-when-closed
+- [ ] 详情影院衬未污染全站 `:root`
+- [ ] `npm run build`（vue-tsc + vite）通过
 
 ## Quick Reference
 

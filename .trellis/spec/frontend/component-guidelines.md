@@ -6,33 +6,114 @@
 
 ## Overview
 
-<!--
-Document your project's component conventions here.
+- 栈：Vue 3 SFC + TypeScript + Vite；页面在 `src/pages/`，可复用 UI 在 `src/components/`，逻辑在 `src/composables/`。
+- 视觉身份：根目录 `DESIGN.md` + `src/assets/app.css` tokens；旗舰页（首页 hero、详情观影）可更沉浸，工具页保持清晰（见根目录 `AGENTS.md` frontend 段）。
+- 图标：统一 Lucide（见下节）；禁止 emoji / Unicode 符号当图标。
+- 无障碍：交互控件保留可见 focus；仅图标按钮必须有 `aria-label`；折叠菜单见「Mobile Disclosure Menu」。
 
-Questions to answer:
-- What component patterns do you use?
-- How are props defined?
-- How do you handle composition?
-- What accessibility standards apply?
--->
+---
 
-(To be filled by the team)
+## Icons (Lucide)
+
+**What**: 用户可见交互图标统一使用 `lucide-vue-next`，经薄封装 `src/components/AppIcon.vue` 引用。
+
+**Why**: 避免 emoji 渲染不一致与字符图标（如 `✓`）的 a11y/对齐问题；按名 import 便于 tree-shake。
+
+**Rules**:
+- 依赖：`lucide-vue-next`（禁止 `import * as Icons`）。
+- 用法：`import { Search } from 'lucide-vue-next'` + `<AppIcon :icon="Search" :size="16" />`。
+- 邻接可见文案时图标 `aria-hidden`（`AppIcon` 默认）；仅图标按钮由父级提供 `aria-label`。
+- 禁止：界面 emoji；用 `✓` / `×` 等字符冒充图标。
+
+```vue
+<script setup lang="ts">
+import { Check } from 'lucide-vue-next'
+import AppIcon from '@/components/AppIcon.vue'
+</script>
+
+<template>
+  <button type="button" aria-label="选择图片">
+    <AppIcon :icon="Check" :size="16" />
+  </button>
+</template>
+```
+
+---
+
+## Cinema Backdrop (详情沉浸衬)
+
+**What**: 详情主图区默认「影院衬」——局部更深背景，不是全站 dark theme。
+
+**Why**: 旗舰观影与暖色档案侧栏形成双轨；改 `:root` 会污染 Header 与其它路由。
+
+**Rules**:
+- 作用域：详情 viewer / loading 主图区的 scoped 样式（或明确的局部 class），**不**改 `:root` 为 dark。
+- 颜色：仅用现有 token 的 `color-mix`（如 `--fg` / `--accent` / `--surface`），禁止新 raw 色板。
+- 侧栏元数据/评分/标签/收藏保持可读 surface；主图用真实 `width`/`height` + `object-fit: contain`。
+- Loading 骨架（`DetailLoadingState`）须与影院衬同调，避免亮骨架闪白。
+- 动效仅 `transform` / `opacity`，尊重 `prefers-reduced-motion`。
+
+```css
+/* Correct: local cinema surface */
+.cinema-viewer {
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--fg), transparent 10%),
+    color-mix(in oklab, var(--fg), transparent 4%)
+  );
+}
+
+/* Wrong: global dark theme for one page */
+:root { --bg: #111; }
+```
+
+---
+
+## Mobile Disclosure Menu (Header)
+
+**What**: ≤1180px 时桌面 `nav-links` 隐藏，改用菜单按钮展开的 disclosure 面板。
+
+**Why**: 仅用 CSS 隐藏桌面导航会导致无入口；仅用 `hidden` 时若媒体查询写了 `display:block`，关闭态链接仍可被 Tab 聚焦。
+
+**Required**:
+- 触发器：`aria-expanded`、`aria-controls`、明确 `aria-label`（打开/关闭）。
+- Esc 关闭；路由变化时关闭。
+- 关闭态：对面板使用 `:inert`（或等价），避免 `display:block` 覆盖 `hidden` 后仍可键盘聚焦。
+- 动效：`max-height`/`opacity`/`transform` + reduced-motion 全局契约。
+- Focus trap 非 MVP 必做；打开后至少保证 Esc 与 inert-when-closed。
+
+```vue
+<button
+  type="button"
+  :aria-expanded="menuOpen"
+  aria-controls="mobile-nav-panel"
+  :aria-label="menuOpen ? '关闭导航菜单' : '打开导航菜单'"
+  @click="toggleMenu"
+/>
+<div
+  id="mobile-nav-panel"
+  :hidden="!menuOpen"
+  :inert="!menuOpen || undefined"
+  :class="{ 'is-open': menuOpen }"
+>
+  <!-- links -->
+</div>
+```
 
 ---
 
 ## Component Structure
 
-<!-- Standard structure of a component file -->
-
-(To be filled by the team)
+- 单文件组件：`<script setup lang="ts">` + template + 可选 `<style scoped>`。
+- 页面级路由组件放 `pages/`；跨页复用放 `components/`。
+- 类型从 `@/api/client` 等处以 `import type` 引入。
 
 ---
 
 ## Props Conventions
 
-<!-- How props should be defined and typed -->
-
-(To be filled by the team)
+- 使用 `defineProps` + TypeScript 泛型或接口；可选 props 用 `withDefaults`。
+- 布尔 props 默认值显式写出；事件用 `defineEmits` 声明载荷类型。
 
 ---
 
@@ -178,3 +259,6 @@ Load via the `skill` tool. Do not skip loading when the work is visibly user-fac
 
 - Do not replace real mutation workflows with success toasts. If the backend route exists, call it and only show success after it resolves.
 - Do not keep feature-specific picker/list styles in `app.css` just to share them between two components; extract a small component or duplicate a few scoped token-backed rules.
+- Do not use emoji or Unicode glyphs (`✓`, `×`) as UI icons; use Lucide via `AppIcon`.
+- Do not implement page-local dark mode by changing `:root` tokens; use scoped cinema backdrop `color-mix` instead.
+- Do not hide desktop nav with CSS alone without a mobile disclosure entry; when the open panel uses `display:block` in a media query, closed state must use `:inert` (or remove from tab order), not only `hidden`/`opacity`/`pointer-events`.
