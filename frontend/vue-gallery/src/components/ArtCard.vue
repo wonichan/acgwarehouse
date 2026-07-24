@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Check } from 'lucide-vue-next'
 import type { ArtItem } from '@/types'
 import { useSelection } from '@/composables/useSelection'
+import AppIcon from '@/components/AppIcon.vue'
 
 const props = withDefaults(defineProps<{
   item: ArtItem
@@ -24,7 +26,6 @@ const previewStyle = computed(() => {
 })
 
 const handleClick = (event: MouseEvent) => {
-  // Don't toggle if clicking on a link or button
   if ((event.target as HTMLElement).closest('a, button')) return
   if (props.selectable) {
     toggle(props.item.id)
@@ -40,7 +41,7 @@ const handleClick = (event: MouseEvent) => {
     :data-id="item.id"
     @click="handleClick"
   >
-    <RouterLink :to="`/detail?id=${item.id}`" :aria-label="`查看${item.title}详情`">
+    <RouterLink class="art-card-link" :to="`/detail?id=${item.id}`" :aria-label="`查看${item.title}详情`">
       <div
         v-if="item.imageUrl"
         class="art-preview"
@@ -65,16 +66,53 @@ const handleClick = (event: MouseEvent) => {
     <button
       v-if="selectable"
       class="select-check"
+      type="button"
       aria-label="选择图片"
+      :aria-pressed="isSelected(item.id)"
       @click.stop="toggle(item.id)"
-    >✓</button>
+    >
+      <AppIcon :icon="Check" :size="16" />
+    </button>
     <div class="art-body">
       <p class="art-title">{{ item.title }}</p>
       <div class="art-meta">
         <span v-for="tag in item.tags.slice(0, 3)" :key="tag">#{{ tag }}</span>
-        <span>#{{ item.score }}/100</span>
+        <span class="art-meta-score">#{{ item.score }}/100</span>
         <span>{{ item.favorites }} 收藏</span>
       </div>
     </div>
   </article>
 </template>
+
+<style scoped>
+.art-card-link {
+  display: block;
+  color: inherit;
+}
+
+.art-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.art-meta-score {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.art-card :deep(.select-check) {
+  color: var(--surface);
+}
+
+.art-card :deep(.select-check .app-icon) {
+  color: inherit;
+}
+
+@media (hover: hover) {
+  .art-card:hover .art-meta {
+    color: var(--fg-2);
+  }
+}
+</style>

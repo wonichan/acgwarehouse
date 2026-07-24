@@ -283,17 +283,21 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main>
-    <section class="section hero" data-od-id="gallery-hero">
+  <main class="gallery-page">
+    <section class="section hero gallery-hero" data-od-id="gallery-hero">
       <div class="container hero-grid">
-        <div>
-          <p class="eyebrow">社区图库 · 瀑布流浏览</p>
+        <div class="hero-copy">
+          <p class="eyebrow">社区图库 · 策展浏览</p>
           <h1>发现值得收藏的二次元灵感图。</h1>
-          <p class="lead">按真实后端图片、评分和热榜缓存浏览社区投稿，把喜欢的作品快速加入后续收藏夹流程。</p>
+          <p class="lead">按真实后端图片、评分和热榜缓存浏览社区投稿。先逛焦点与日推，再沉入瀑布流，把喜欢的作品收进收藏夹。</p>
           <div class="hero-actions">
             <RouterLink class="btn btn-primary" to="/search">开始智能搜索</RouterLink>
             <RouterLink class="btn btn-secondary" to="/trending">查看今日热榜</RouterLink>
           </div>
+          <p v-if="activeTag" class="hero-tag-chip">
+            当前标签筛选
+            <span class="tag is-hot">#{{ activeTag }}</span>
+          </p>
         </div>
         <Carousel v-if="carouselSlides.length > 0" :slides="carouselSlides" />
         <aside v-else class="panel panel-raised community-carousel-panel community-carousel-empty">
@@ -323,9 +327,19 @@ onBeforeUnmount(() => {
       @retry="dailyRecommendations.load"
     />
 
-    <section class="section" data-od-id="gallery-feed">
+    <section class="section gallery-feed" data-od-id="gallery-feed">
       <div class="container">
-        <div class="panel toolbar">
+        <div class="feed-head">
+          <div>
+            <p class="eyebrow">全部作品</p>
+            <h2 class="feed-title">瀑布流图库</h2>
+          </div>
+          <p class="meta feed-count">
+            {{ loading ? '加载中...' : `已展示 ${artItems.length} / ${totalItems} 张作品` }}
+          </p>
+        </div>
+
+        <div class="panel toolbar gallery-toolbar">
           <div class="row" role="list" aria-label="内容筛选">
             <button
               v-for="filter in filters"
@@ -338,9 +352,15 @@ onBeforeUnmount(() => {
               {{ filter }}
             </button>
           </div>
-          <div class="row">
-            <span class="meta">{{ loading ? '加载中...' : `已展示 ${artItems.length} / ${totalItems} 张作品` }}</span>
-            <RouterLink v-if="artItems.length > 0" class="btn btn-secondary btn-small" :to="`/detail?id=${artItems[0]?.id}`">查看最新详情</RouterLink>
+          <div class="row toolbar-meta">
+            <span class="meta">排序：{{ activeFilter }}</span>
+            <RouterLink
+              v-if="artItems.length > 0"
+              class="btn btn-secondary btn-small"
+              :to="`/detail?id=${artItems[0]?.id}`"
+            >
+              查看最新详情
+            </RouterLink>
           </div>
         </div>
 
@@ -364,7 +384,7 @@ onBeforeUnmount(() => {
               <ArtCard v-for="item in column" :key="item.id" :item="item" />
             </div>
           </div>
-          <div ref="gallerySentinel" class="panel" aria-live="polite">
+          <div ref="gallerySentinel" class="panel gallery-sentinel" aria-live="polite">
             <p v-if="loadingMore" class="meta">正在加载更多作品...</p>
             <template v-else-if="nextPageError">
               <p class="meta">{{ nextPageError }}</p>
@@ -379,3 +399,77 @@ onBeforeUnmount(() => {
     </section>
   </main>
 </template>
+
+<style scoped>
+.gallery-hero {
+  padding-top: var(--space-12);
+  padding-bottom: var(--section-y-tablet);
+}
+
+.hero-copy {
+  display: grid;
+  align-content: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.hero-copy h1 {
+  max-width: 11ch;
+}
+
+.hero-tag-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-6) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.gallery-feed {
+  padding-top: var(--space-8);
+}
+
+.feed-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.feed-title {
+  margin-top: var(--space-2);
+}
+
+.feed-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.gallery-toolbar {
+  margin-bottom: var(--space-6);
+}
+
+.toolbar-meta {
+  flex-wrap: wrap;
+}
+
+.gallery-sentinel {
+  margin-top: var(--space-6);
+  text-align: center;
+}
+
+@media (max-width: 744px) {
+  .gallery-hero {
+    padding-top: var(--space-8);
+  }
+
+  .feed-head {
+    align-items: start;
+    flex-direction: column;
+  }
+}
+</style>

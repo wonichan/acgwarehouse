@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { Bookmark, RotateCcw, Tags, ZoomIn, ZoomOut } from 'lucide-vue-next'
 import { ApiError, getImage, rateImage } from '@/api/client'
 import type { ImageDetailResponse, ImageItem } from '@/api/client'
 import { useAuth } from '@/composables/useAuth'
 import { useToast } from '@/composables/useToast'
 import { useZoom } from '@/composables/useZoom'
+import AppIcon from '@/components/AppIcon.vue'
 import AuthRequiredStatus from '@/components/AuthRequiredStatus.vue'
 import CollectionPickerPanel from '@/components/CollectionPickerPanel.vue'
 import DetailLoadingState from '@/components/DetailLoadingState.vue'
@@ -184,7 +186,7 @@ watch(imageId, () => {
 
 <template>
   <main>
-    <section class="section" data-od-id="detail-viewer">
+    <section class="section detail-section" data-od-id="detail-viewer">
       <DetailStatusPanel v-if="imageId === null" variant="missing-id" />
 
       <DetailLoadingState v-else-if="loading" />
@@ -192,22 +194,38 @@ watch(imageId, () => {
       <DetailStatusPanel v-else-if="error" variant="error" :message="error" @retry="loadDetail" />
 
       <div v-else-if="detail && image" class="container detail-stage">
-        <article class="panel viewer panel-raised" aria-label="图片放大查看器">
-          <div class="viewer-art" :style="`--zoom: ${zoom}`" data-viewer-art>
-            <img :src="image.url" :alt="image.filename" />
+        <article class="viewer cinema-viewer" aria-label="图片放大查看器">
+          <div
+            class="viewer-art"
+            :style="{
+              '--zoom': String(zoom),
+              aspectRatio: image.width > 0 && image.height > 0 ? `${image.width} / ${image.height}` : undefined,
+            }"
+            data-viewer-art
+          >
+            <img :src="image.url" :alt="image.filename" :width="image.width" :height="image.height" />
           </div>
           <div class="zoom-controls" aria-label="缩放控制">
-            <button class="btn btn-secondary btn-small" type="button" @click="zoomOut">缩小</button>
-            <button class="btn btn-primary btn-small" type="button" @click="zoomIn">放大</button>
-            <button class="btn btn-secondary btn-small" type="button" @click="reset">复位</button>
+            <button class="btn btn-secondary btn-small zoom-btn" type="button" aria-label="缩小" @click="zoomOut">
+              <AppIcon :icon="ZoomOut" :size="16" />
+              <span>缩小</span>
+            </button>
+            <button class="btn btn-primary btn-small zoom-btn" type="button" aria-label="放大" @click="zoomIn">
+              <AppIcon :icon="ZoomIn" :size="16" />
+              <span>放大</span>
+            </button>
+            <button class="btn btn-secondary btn-small zoom-btn" type="button" aria-label="复位" @click="reset">
+              <AppIcon :icon="RotateCcw" :size="16" />
+              <span>复位</span>
+            </button>
           </div>
         </article>
 
-        <aside class="stack">
+        <aside class="stack detail-sidebar">
           <div class="panel panel-raised">
             <p class="eyebrow">作品详情</p>
             <h1 class="detail-title">{{ image.filename }}</h1>
-            <p class="lead">
+            <p class="lead detail-lead">
               {{ image.width }}×{{ image.height }} · {{ formatBytes(image.size) }} · {{ image.category || '未分类' }} · 浏览 {{ image.view_count }} 次
             </p>
             <div class="kicker-row">
@@ -220,7 +238,10 @@ watch(imageId, () => {
             </div>
             <div class="divider"></div>
             <div class="grid-2">
-              <button class="btn btn-primary" type="button" @click="handleFavorite">收藏到相册</button>
+              <button class="btn btn-primary" type="button" @click="handleFavorite">
+                <AppIcon :icon="Bookmark" :size="16" />
+                <span>收藏到相册</span>
+              </button>
               <button class="btn btn-secondary" type="button" @click="show('当前后端未提供下载接口，可打开原图后手动保存')">下载说明</button>
             </div>
             <AuthRequiredStatus v-if="collectionAuthRequired" :message="collectionAuthRequired" />
@@ -258,7 +279,8 @@ watch(imageId, () => {
                 {{ savingRating ? '保存中...' : '保存评分' }}
               </button>
               <button class="btn btn-secondary" type="button" @click="handleTagging">
-                管理标签
+                <AppIcon :icon="Tags" :size="16" />
+                <span>管理标签</span>
               </button>
               <AuthRequiredStatus v-if="tagAuthRequired" :message="tagAuthRequired" />
               <TagPickerPanel
@@ -276,5 +298,120 @@ watch(imageId, () => {
       </div>
     </section>
   </main>
-
 </template>
+
+<style scoped>
+.detail-section {
+  padding-top: var(--space-8);
+}
+
+.detail-stage {
+  align-items: stretch;
+}
+
+.cinema-viewer {
+  min-height: min(72vh, 760px);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in oklab, var(--fg), transparent 78%);
+  background:
+    radial-gradient(circle at 50% 18%, color-mix(in oklab, var(--accent), transparent 88%), transparent 42%),
+    linear-gradient(
+      160deg,
+      color-mix(in oklab, var(--fg), transparent 10%),
+      color-mix(in oklab, var(--fg), transparent 4%)
+    );
+  box-shadow: var(--elev-raised);
+}
+
+.cinema-viewer .viewer-art {
+  width: min(92%, 720px);
+  max-height: min(68vh, 700px);
+  aspect-ratio: auto;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--fg), transparent 18%);
+  position: relative;
+  overflow: hidden;
+  transform: scale(var(--zoom, 1));
+  transition: transform var(--motion-base) var(--ease-standard);
+  box-shadow: 0 24px 48px color-mix(in oklab, var(--fg), transparent 70%);
+}
+
+.cinema-viewer .viewer-art > img {
+  width: 100%;
+  height: 100%;
+  max-height: min(68vh, 700px);
+  object-fit: contain;
+  position: relative;
+  z-index: 1;
+  background: color-mix(in oklab, var(--fg), transparent 22%);
+}
+
+.cinema-viewer .viewer-art::before,
+.cinema-viewer .viewer-art::after {
+  content: none;
+}
+
+.zoom-controls {
+  position: absolute;
+  left: var(--space-5);
+  bottom: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  z-index: 2;
+}
+
+.zoom-btn {
+  backdrop-filter: blur(10px);
+}
+
+.cinema-viewer .btn-secondary {
+  background: color-mix(in oklab, var(--surface), transparent 12%);
+  color: var(--surface);
+  border: 1px solid color-mix(in oklab, var(--surface), transparent 60%);
+  box-shadow: none;
+}
+
+.cinema-viewer .btn-secondary:hover {
+  background: color-mix(in oklab, var(--surface), transparent 4%);
+}
+
+.detail-lead {
+  margin-top: var(--space-4);
+  max-width: none;
+}
+
+.detail-sidebar {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .cinema-viewer {
+    min-height: 520px;
+  }
+}
+
+@media (max-width: 744px) {
+  .detail-section {
+    padding-top: var(--space-6);
+  }
+
+  .cinema-viewer {
+    min-height: 420px;
+  }
+
+  .zoom-controls {
+    left: var(--space-3);
+    right: var(--space-3);
+    bottom: var(--space-3);
+  }
+
+  .zoom-btn span {
+    display: none;
+  }
+}
+</style>

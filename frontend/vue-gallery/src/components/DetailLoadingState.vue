@@ -1,6 +1,6 @@
 <template>
   <div class="container detail-stage detail-loading" role="status" aria-label="图片加载中" aria-live="polite">
-    <article class="panel viewer panel-raised detail-loading-viewer" aria-hidden="true">
+    <article class="viewer cinema-viewer detail-loading-viewer" aria-hidden="true">
       <div class="viewer-art detail-loading-art" data-viewer-art>
         <span class="detail-loading-sheen" aria-hidden="true"></span>
       </div>
@@ -40,19 +40,37 @@
 
 .detail-loading-viewer {
   isolation: isolate;
+  min-height: min(72vh, 760px);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in oklab, var(--fg), transparent 78%);
+  background:
+    radial-gradient(circle at 50% 18%, color-mix(in oklab, var(--accent), transparent 88%), transparent 42%),
+    linear-gradient(
+      160deg,
+      color-mix(in oklab, var(--fg), transparent 10%),
+      color-mix(in oklab, var(--fg), transparent 4%)
+    );
+  box-shadow: var(--elev-raised);
 }
 
 .detail-loading-art {
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--surface), transparent 46%);
+  width: min(92%, 720px);
+  max-height: min(68vh, 700px);
+  min-height: 280px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--fg), transparent 18%);
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--surface), transparent 72%);
 }
 
 .detail-loading-art::before,
 .detail-loading-art::after {
-  animation: detail-loading-float 1.8s var(--ease-standard) infinite alternate;
-}
-
-.detail-loading-art::after {
-  animation-delay: 180ms;
+  content: none;
 }
 
 .detail-loading-sheen {
@@ -151,40 +169,25 @@
   width: min(100%, 180px);
 }
 
-@keyframes detail-loading-float {
-  from {
-    opacity: 0.72;
-    transform: translate3d(0, 0, 0) scale(0.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, -6px, 0) scale(1.01);
-  }
-}
-
 @keyframes detail-loading-sheen {
   to {
     transform: translateX(100%);
   }
 }
 
+@media (max-width: 744px) {
+  .detail-loading-viewer {
+    min-height: 420px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .detail-loading-art::before,
-  .detail-loading-art::after,
   .detail-loading-sheen,
   .detail-loading-line::after,
   .detail-loading-button::after,
   .detail-loading-control::after,
   .detail-loading-chips span::after {
     animation: none;
-  }
-
-  .detail-loading-sheen,
-  .detail-loading-line::after,
-  .detail-loading-button::after,
-  .detail-loading-control::after,
-  .detail-loading-chips span::after {
     opacity: 0;
   }
 }
