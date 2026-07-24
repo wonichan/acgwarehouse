@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "响应式/loading/masonry/scoped/design skills 契约"}
+{"file": "DESIGN.md", "reason": "色板、字号、间距、motion、组件视觉身份"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层索引与部署/API 边界"}
+{"file": "AGENTS.md", "reason": "frontend 双轨视觉规则与 Lucide 约束"}
